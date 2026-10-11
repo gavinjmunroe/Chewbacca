@@ -20,6 +20,7 @@ const { c, die, say, parseArgs } = require("./output");
 const { db, nowISO } = require("./db");
 const { textsReader, resolvePerson, printable } = require("./texts");
 const { findPerson } = require("./lookup");
+const { quietFor } = require("./quiet-hours");
 
 const { APPS, BRIDGED } = require("./apps");
 
@@ -460,12 +461,27 @@ function cmdSend(argv) {
     (resolvePerson(null, handle, { strict: true }) === person.id ||
       handle === fromCard(person, app));
   const where = `${c.b(P(name))} ${c.dim(`via ${app}, ${P(to)}${owned ? "" : ", not a saved contact"}`)}`;
+  const quiet = quietFor(name);
+  const quietLine = quiet
+    ? `It's ${quiet.local} for ${P(name)}, inside the hours they asked not to get a direct text (${P(quiet.rule.source || "quiet-hours.json")}).`
+    : "";
   if (flags["dry-run"]) {
     say(`  would send to ${where}`);
     say(`  ${P(text)}`);
     if (!owned) say(c.dim(`  to send: add --to ${P(to)}`));
+    if (quiet)
+      say(
+        c.dim(
+          `  ${quietLine} A send now is refused; queue it in people texts drafts.`,
+        ),
+      );
     return;
   }
+  if (quiet && !flags["after-hours"])
+    die(
+      `${quietLine} Nothing was sent.\n` +
+        `  Queue it: people texts drafts add "${P(who)}" "..."   or post it in the group chat.`,
+    );
   if (!owned && String(flags.to || "") !== to)
     die(
       `${P(name)} isn't a saved contact, so ${P(to)} is unconfirmed. Nothing was sent.\n` +

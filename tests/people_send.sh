@@ -83,4 +83,33 @@ out="$(node -e '
 ' "$(dirname "$P")/lib/people/send.js")"
 [ "$out" = "13106946088@s.whatsapp.net 447700900123@s.whatsapp.net 111@lid" ] ||
   fail "WhatsApp JIDs built wrong: $out"
+
+# Quiet hours: a person who asked for no direct texts after a time gets none.
+# Sagar's own rule (2026-10-11): 11pm weeknights, 7pm Friday and Saturday.
+QH="$PEOPLE_DIR/quiet-hours.json"
+printf '[{"name":"Sendy Solo","tz":"UTC","after":"00:00","source":"test"}]' >"$QH"
+out="$("$P" send "sendy solo" "late one" 2>&1)" && fail "a send inside quiet hours went through"
+grep -q "hours they asked not to get a direct text" <<<"$out" || fail "quiet hours refusal did not say why"
+out="$("$P" send "sendy solo" "late one" --dry-run 2>&1)" || fail "a dry run inside quiet hours failed"
+grep -q "A send now is refused" <<<"$out" || fail "the dry run did not warn about quiet hours"
+rm -f "$QH"
+out="$("$P" send "sendy solo" "day one" --to 15550102@s.whatsapp.net 2>&1)"
+grep -q "CHEWBACCA_NO_SEND" <<<"$out" || fail "with no quiet hours the send did not reach the dispatch gate"
+
+out="$(node -e '
+  const { quietFor } = require(process.argv[1]);
+  const r = [{ name: "Sagar Tiwari", tz: "America/Los_Angeles", after: "23:00",
+               after_by_day: { Fri: "19:00", Sat: "19:00" } }];
+  const at = (iso) => (quietFor("sagar tiwari", new Date(iso), r) ? "Q" : "-");
+  console.log([
+    at("2026-10-07T05:30:00Z"),  // Tue 22:30 PDT, before 11pm
+    at("2026-10-07T06:30:00Z"),  // Tue 23:30 PDT
+    at("2026-10-07T13:00:00Z"),  // Wed 06:00 PDT, still the night before
+    at("2026-10-07T16:00:00Z"),  // Wed 09:00 PDT
+    at("2026-10-10T03:48:00Z"),  // Fri 20:48 PDT, the 10/10 texts were Sat but same rule
+    at("2026-10-10T01:00:00Z"),  // Fri 18:00 PDT
+    at("2026-10-11T08:00:00Z"),  // Sun 01:00 PDT, after Saturday 7pm
+  ].join(""));
+' "$(dirname "$P")/lib/people/quiet-hours.js")"
+[ "$out" = "-QQ-Q-Q" ] || fail "quiet hours computed wrong: $out"
 exit 0

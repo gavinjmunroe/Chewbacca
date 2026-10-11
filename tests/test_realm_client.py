@@ -66,7 +66,7 @@ class Peer:
         out, self.buf = self.buf[:n], self.buf[n:]
         return out
 
-    def handshake(self, accept_override=None):
+    def handshake(self, accept_override=None, protocol=None):
         while b"\r\n\r\n" not in self.buf:
             self.buf += self.sock.recv(4096)
         head, _, self.buf = self.buf.partition(b"\r\n\r\n")
@@ -77,8 +77,9 @@ class Peer:
         self.request_headers = headers
         accept = accept_override or base64.b64encode(
             hashlib.sha1((headers["sec-websocket-key"] + GUID).encode()).digest()).decode()
+        chosen = f"Sec-WebSocket-Protocol: {protocol}\r\n" if protocol else ""
         self.sock.sendall(("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n"
-                           f"Connection: Upgrade\r\nSec-WebSocket-Accept: {accept}\r\n\r\n").encode())
+                           f"Connection: Upgrade\r\nSec-WebSocket-Accept: {accept}\r\n{chosen}\r\n").encode())
 
     def read_frame(self):
         b0, b1 = self.take(2)
@@ -661,6 +662,61 @@ def test_engine_file():
             pr.wait()
     rc.port_owner = real_owner
 
+def test_daemon_token():
+    """Realm main since 59afd9e4 refuses a socket without `realm.<token>` as
+    its subprotocol (401 on every call after the 2026-10-10 rebuild)."""
+    def echoing(peer):
+        peer.handshake(protocol=peer_protocol(peer))
+        while True:
+            req = peer.read_request()
+            peer.reply(req, {"ok": True})
+
+    def peer_protocol(peer):
+        # Read the offer before answering, as realm's handleProtocols does.
+        while b"\r\n\r\n" not in peer.buf:
+            peer.buf += peer.sock.recv(4096)
+        for line in peer.buf.split(b"\r\n\r\n")[0].decode().split("\r\n"):
+            if line.lower().startswith("sec-websocket-protocol:"):
+                return line.split(":", 1)[1].strip()
+        return None
+
+    fake = Fake(echoing)
+    with rc.Connection(fake.port, 3.0, _token=rc._PROVEN, secret="s3cret-tok") as conn:
+        conn.call("system.info", timeout=3.0)
+    check("the token is offered as the realm.<token> subprotocol",
+          fake.peers[0].request_headers.get("sec-websocket-protocol") == "realm.s3cret-tok",
+          fake.peers[0].request_headers)
+    fake.close()
+    silent = Fake(lambda peer: peer.handshake())
+    try:
+        rc.Connection(silent.port, 3.0, _token=rc._PROVEN, secret="s3cret-tok").close()
+        e = None
+    except rc.RealmError as err:
+        e = err
+    check("a server that doesn't take the offered subprotocol is refused",
+          isinstance(e, rc.RealmProtocolError) and "s3cret" not in str(e), e)
+    silent.close()
+
+    with tempfile.TemporaryDirectory() as d:
+        home = Path(d)
+        eng = {"pid": 4242, "port": 5151}
+        check("no daemon.json, no token", rc.daemon_token(home, eng) is None)
+        f = home / "daemon.json"
+        f.write_text(json.dumps({"pid": 4242, "port": 5151, "token": "s3cret-tok"}))
+        os.chmod(f, 0o600)
+        check("a 0600 daemon.json naming engine.json's pid and port gives its token",
+              rc.daemon_token(home, eng) == "s3cret-tok")
+        check("one naming another pid gives none", rc.daemon_token(home, {"pid": 1, "port": 5151}) is None)
+        os.chmod(f, 0o644)
+        try:
+            rc.daemon_token(home, eng)
+            e = None
+        except rc.RealmUnavailable as err:
+            e = err
+        check("a daemon.json others can read is refused, without quoting the token",
+              e is not None and "s3cret" not in str(e), e)
+
+
 def test_read_methods_are_reads():
     verbs = {"send", "write", "create", "delete", "ship", "stage", "unstage", "respondPermission",
              "update", "set", "fork", "interrupt", "openPath", "run", "start", "kill", "rename"}
@@ -861,6 +917,7 @@ def main():
     test_protocol_failures()
     test_engine_file()
     test_read_methods_are_reads()
+    test_daemon_token()
     test_engine_cli()
     test_security_review_fixes()
     print(f"\n{'FAILED ' + str(failed) if failed else 'all passed'}")

@@ -225,6 +225,35 @@ def read_engine(home: Path | None = None) -> dict[str, Any]:
     return data
 
 
+def daemon_token(home: Path, eng: dict[str, Any]) -> str | None:
+    """The socket token realm's daemon writes to daemon.json, or None.
+
+    Realm main since 59afd9e4 (apps/server/src/rpc/server.ts) refuses a
+    WebSocket that doesn't offer `realm.<token>` as its subprotocol: the
+    2026-10-10 rebuild answered every call with 401 until this was read. The
+    file must be ours at 0600, like engine.json, and name the same pid and port
+    engine.json does, so a stale or planted file never hands its token to
+    whatever owns the port now. The token is a secret: it is never put in an
+    error message or a log line."""
+    path = home / "daemon.json"
+    try:
+        st = os.lstat(path)
+    except FileNotFoundError:
+        return None
+    if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid() or st.st_mode & 0o077:
+        raise RealmUnavailable(f"{path} must be a regular file owned by you with mode 0600")
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, ValueError):
+        raise RealmUnavailable(f"{path} unreadable") from None
+    if not isinstance(data, dict) or data.get("pid") != eng.get("pid") or data.get("port") != eng.get("port"):
+        return None
+    token = data.get("token")
+    if not isinstance(token, str) or not token or not all(33 <= ord(c) < 127 and c not in ",;" for c in token):
+        raise RealmUnavailable(f"{path} has no usable token")
+    return token
+
+
 _PROVEN = object()
 
 
@@ -236,7 +265,7 @@ class Connection:
     port would, after an engine restart, talk to whatever owns that port now.
     """
 
-    def __init__(self, port: int, timeout: float = 5.0, *, _token: object = None):
+    def __init__(self, port: int, timeout: float = 5.0, *, _token: object = None, secret: str | None = None):
         if _token is not _PROVEN:
             raise RealmError("Connection is not public; use realm_client.connect(), "
                              "which proves the port belongs to this realm home")
@@ -255,6 +284,8 @@ class Connection:
         self._sessions: set[str] | None = None
         self._event_names: set[str] | None = None
         self._closed = False
+        # realm.<token>, offered as the WebSocket subprotocol; never logged.
+        self._protocol = f"realm.{secret}" if secret else None
         try:
             self._sock = socket.create_connection((HOST, port), timeout=timeout)
         except OSError as e:
@@ -277,7 +308,8 @@ class Connection:
         key = base64.b64encode(os.urandom(16)).decode()
         req = (f"GET / HTTP/1.1\r\nHost: {HOST}:{self.port}\r\n"
                "Upgrade: websocket\r\nConnection: Upgrade\r\n"
-               f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n")
+               f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n"
+               + (f"Sec-WebSocket-Protocol: {self._protocol}\r\n" if self._protocol else "") + "\r\n")
         self._sock.sendall(req.encode())
         deadline = time.monotonic() + timeout
         while b"\r\n\r\n" not in self._buf:
@@ -302,6 +334,8 @@ class Connection:
             raise RealmProtocolError("handshake missing Upgrade: websocket")
         if headers.get("sec-websocket-extensions"):
             raise RealmProtocolError("server negotiated an extension we did not offer")
+        if headers.get("sec-websocket-protocol", "") != (self._protocol or ""):
+            raise RealmProtocolError("server answered with a subprotocol we did not offer")
 
     # bytes
     def _fill(self, deadline: float | None) -> None:
@@ -612,7 +646,7 @@ def connect(timeout: float = 5.0, home: Path | None = None) -> Connection:
     if not descends_from(owner, eng["pid"]):
         raise RealmUnavailable(f"port {eng['port']} is held by pid {owner}, not the engine "
                                f"(pid {eng['pid']}); run realm-engine start")
-    conn = Connection(eng["port"], timeout=timeout, _token=_PROVEN)
+    conn = Connection(eng["port"], timeout=timeout, _token=_PROVEN, secret=daemon_token(home, eng))
     try:
         info = conn.call("system.info", timeout=timeout)
         served = info.get("realmHome") if isinstance(info, dict) else None

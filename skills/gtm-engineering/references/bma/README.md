@@ -25,12 +25,14 @@ before re-reading:
 The clones are only for resyncing. Nothing in Chewbacca reads them at run time,
 and a user without them loses nothing.
 
-| Repo            | Distilled into                                                                                                | Maintainer map                           |
-| --------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| togari-platform | scoring.md, vendor-recipes.md, outbound-rules.md, reply-handling.md (code ported to `gtme-reply`)             | [togari-platform.md](togari-platform.md) |
-| togari-sandbox  | scoring.md, clay-playbook.md, outbound-rules.md                                                               | [togari-sandbox.md](togari-sandbox.md)   |
-| bma-website     | offer-and-proof.md                                                                                            |                                          |
-| claude-context  | Nothing. It's a one-commit April fork of Chewbacca itself; every file is older than its Chewbacca counterpart |                                          |
+| Repo            | Distilled into                                                                                                | Maintainer map                                           |
+| --------------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| togari-platform | scoring.md, vendor-recipes.md, outbound-rules.md, reply-handling.md (code ported to `gtme-reply`)             | [togari-platform.md](togari-platform.md)                 |
+| togari-sandbox  | scoring.md, clay-playbook.md, outbound-rules.md                                                               | [togari-sandbox.md](togari-sandbox.md)                   |
+| bma-website     | offer-and-proof.md                                                                                            |                                                          |
+| togari-gtm-os   | objections.md; the rest is mapped, not yet ported                                                             | [togari-gtm-os-and-dedup.md](togari-gtm-os-and-dedup.md) |
+| togari-dedup    | Superset of gtm-os plus the DNC and dedup layer; gtme-dedupe already covers matching                          | [togari-gtm-os-and-dedup.md](togari-gtm-os-and-dedup.md) |
+| claude-context  | Nothing. It's a one-commit April fork of Chewbacca itself; every file is older than its Chewbacca counterpart |                                                          |
 
 scoring.md, vendor-recipes.md, clay-playbook.md and outbound-rules.md each
 carry a "Synced from" line with the commit they were read at. Bump it when you

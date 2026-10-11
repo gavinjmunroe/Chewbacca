@@ -209,13 +209,15 @@ class FakeEngine:
                                "refId": bid})
             return {"browserId": bid, "itemId": iid, "url": p["url"]}
         if method == "items.list":
-            return [dict(i) for i in self.items if i["spaceId"] == p["spaceId"]]
+            # A session's own terminal item is hidden from the list, as in
+            # realm's store/items.ts (list vs listIncludingHidden).
+            return [dict(i) for i in self.items if i["spaceId"] == p["spaceId"] and not i.get("hidden")]
         if method == "sessions.openTerminal":
             s = self.sessions[p["id"]]
             if not s.get("terminalItemId"):
                 tid, iid = self.nid("term"), self.nid("item")
                 self.items.append({"id": iid, "spaceId": s["spaceId"], "kind": "terminal", "title": "Terminal",
-                                   "refId": tid})
+                                   "refId": tid, "hidden": True})
                 self.term[tid] = {"run": "run1", "out": "", "programs": None}
                 s["terminalItemId"] = iid
             item = next(i for i in self.items if i["id"] == s["terminalItemId"])
@@ -1082,6 +1084,16 @@ def terminal(tmp: Path) -> None:
     check("Open makes the session's own terminal through realm",
           r.ok and e.writes == [("sessions.openTerminal", {"id": "s1"})] and a.refresh == SA.REFRESH_BUSY, r)
     tid = next(iter(e.term))
+    b, bctx = world(tmp / "term-restart", e)
+    _, bmodel = view(b, bctx, open="s1")
+    check("a panel that didn't open the terminal (a restarted daemon) offers Open again, never guessing it",
+          bmodel["/agents/termopen"] and not bmodel["/agents/termOn"], bmodel["/agents/termopen"])
+    before = len(e.writes)
+    r = b.term_open(bctx, b.fetch(bctx), {"row": "open:s1"})
+    check("and its Open hands back the same terminal, no second shell",
+          r.ok and len(e.term) == 1 and b.terminal_of(None, b.row(e.sessions["s1"], {}, bctx)) == tid
+          and len(e.writes) == before + 1, (r, list(e.term)))
+    base = len(e.writes)
     e.term[tid]["out"] = "\x1b]0;title\x07\x1b[1;32mjoel@mac\x1b[0m chewbacca % "
     data, model = view(a, ctx)
     layout = " ".join(a.layout())
@@ -1101,14 +1113,14 @@ def terminal(tmp: Path) -> None:
           "chewbacca" in model["/agents/run"][0]["text"] and "can't be taken back" in model["/agents/run"][0]["text"],
           model["/agents/run"])
     r = a.run(ctx, data, {"row": row, "/agents/command": "rm -rf ~"})
-    check("Run with a command other than the one drawn is refused", not r.ok and len(e.writes) == 1, r)
+    check("Run with a command other than the one drawn is refused", not r.ok and len(e.writes) == base, r)
     bad = "ls\u202e"
     model = a.model(data, None, {"/agents/command": bad}, ctx)
     check("a command with a hidden character gets no Run row", model["/agents/run"] == [], model["/agents/run"])
     r = a.run(ctx, data, {"row": SA.command_id(tid, bad), "/agents/command": bad})
-    check("and its press is refused", not r.ok and len(e.writes) == 1, r)
+    check("and its press is refused", not r.ok and len(e.writes) == base, r)
     r = a.run(ctx, data, {"row": "run:term-other:" + row.rsplit(":", 1)[1], "/agents/command": "git status"})
-    check("a Run naming a terminal that isn't this agent's is refused", not r.ok and len(e.writes) == 1, r)
+    check("a Run naming a terminal that isn't this agent's is refused", not r.ok and len(e.writes) == base, r)
     r = a.run(ctx, data, {"row": row, **values})
     check("Run types exactly the command and Return into that terminal, then clears the field",
           r.ok and e.writes[-1] == ("terminals.write", {"terminalId": tid, "data": "git status\r"})

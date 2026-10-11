@@ -887,6 +887,8 @@ class Agents(Provider):
         # program}, and until when a press keeps it read every REFRESH_BUSY.
         self._term: dict | None = None
         self._term_watch = 0.0
+        # session id -> (terminal item id, terminal id), from Open's press.
+        self._term_ids: dict = {}
         # The open agent's space's newest browser pane: (sid, at, {id, url,
         # title, count}) or (sid, at, None).
         self._browser: tuple | None = None
@@ -1129,18 +1131,20 @@ class Agents(Provider):
         with self._lock:
             self._changes = (row["id"], self.clock(), got if isinstance(got, dict) else None)
 
-    @staticmethod
-    def terminal_of(conn, row: dict) -> str:
-        """The terminal id of the session's own terminal panel, read from
-        realm now (the session's terminalItemId, then that item in its space),
-        or "" when it has none. Opening one is a press; this never does."""
-        if not row.get("terminal_item") or not row.get("space_id"):
+    def terminal_of(self, conn, row: dict) -> str:
+        """The terminal id of the session's own terminal panel, or "".
+
+        Realm hides a session's terminal item from items.list (store/items.ts
+        listIncludingHidden is server-only), so its id is known only from
+        the sessions.openTerminal a press made, kept per session with the
+        item it named; it counts only while the session still names that
+        item. Found live on 2026-10-10: the first build looked it up in
+        items.list and never saw the terminal it had just opened."""
+        with self._lock:
+            known = self._term_ids.get(row["id"])
+        if not known or not row.get("terminal_item") or row["terminal_item"] != known[0]:
             return ""
-        items = conn.call("items.list", {"spaceId": row["space_id"]}, timeout=CALL_TIMEOUT)
-        item = next((i for i in items if isinstance(i, dict) and i.get("id") == row["terminal_item"]
-                     and i.get("kind") == "terminal") if isinstance(items, list) else iter(()), None)
-        ref = item.get("refId") if item else None
-        return ref if isinstance(ref, str) and ref and not any(hidden(ch) for ch in ref) else ""
+        return known[1]
 
     def read_terminal(self, conn, row: dict) -> None:
         """What the open agent's terminal printed since the last read
@@ -2100,7 +2104,7 @@ class Agents(Provider):
             return Result(False, "Already opening it.")
         try:
             with self.connect(ctx) as conn:
-                conn.call("sessions.openTerminal", {"id": row["id"]}, timeout=CALL_TIMEOUT, write=True)
+                got = conn.call("sessions.openTerminal", {"id": row["id"]}, timeout=CALL_TIMEOUT, write=True)
         except realm_client.RealmError as err:
             if err.maybe_applied:
                 return Result(False, "The terminal may have opened; the engine didn't confirm.",
@@ -2109,7 +2113,13 @@ class Agents(Provider):
                           refetch=True)
         finally:
             self._release("termopen", row["id"])
+        tid = got.get("terminalId") if isinstance(got, dict) else None
+        item = got.get("itemId") if isinstance(got, dict) else None
+        if not all(isinstance(x, str) and x and not any(hidden(ch) for ch in x) for x in (tid, item)):
+            return Result(False, "The engine opened something but didn't say which terminal.",
+                          updates={self.p("level"): "warning"}, refetch=True)
         with self._lock:
+            self._term_ids[row["id"]] = (item, tid)
             self._term_watch = self.clock() + TERM_WATCH_S
             self._soon = True
         return Result(True, f"Opened a shell in {row['folder'] or 'its folder'}.",

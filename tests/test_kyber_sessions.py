@@ -25,6 +25,8 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parent.parent
 ks = importlib.machinery.SourceFileLoader("kyber_sessions", str(ROOT / "bin" / "kyber-sessions")).load_module()
 ks.RUNS_DIR = Path(tempfile.mkdtemp()) / "kyber-runs"
+ks.KINDS_FILE = Path(tempfile.mkdtemp()) / "kinds.json"
+os.environ["KYBER_NO_JEV"] = "1"
 inbox = ks.sessions_inbox
 
 PASSED = 0
@@ -973,6 +975,28 @@ def test_watch() -> None:
         ks.WATCH_STATE = saved
 
 
+def test_session_kinds() -> None:
+    print("Jev tells a person's tab from a program's one prompt, and the rules stay the floor")
+    def crit_answer(choice, conf):
+        other = "tab" if choice == "run" else "run"
+        return lambda state, q: {"kind": {"type": "choice", "choice": choice, "confidence": conf,
+                                          "probabilities": {choice: conf, other: round(1 - conf, 6)}}}
+    check("a sure 'run' is a run", ks.kind_of("Erik Fish site security review", crit_answer("run", 0.95)) == "run")
+    check("an unsure 'run' hides nothing", ks.kind_of("Warm-up", crit_answer("run", 0.6)) is None)
+    check("a tab is a tab", ks.kind_of("Firm Foundation site", crit_answer("tab", 0.9)) == "tab")
+    boom = lambda state, q: (_ for _ in ()).throw(RuntimeError("down"))
+    check("Jev down decides nothing", ks.kind_of("x", boom) is None)
+    rows = [{"id": "r1", "title": "Partners.tsx landing page security review"}, {"id": "t1", "title": "HUD"}]
+    picks = {"Partners.tsx landing page security review": "run", "HUD": "tab"}
+    ask = lambda state, q: crit_answer(picks[state["title"]], 0.95)(state, q)
+    kinds = ks.classify_now(rows, ask)
+    check("answers are cached per session", kinds == {"r1": "run", "t1": "tab"} and ks.session_kinds() == kinds, kinds)
+    check("the cache is private", oct(ks.KINDS_FILE.stat().st_mode & 0o777) == "0o600")
+    long_tab = {"agent": "claude", "interactive": True, "turns": 40, "origin": "VS Code"}
+    short = {"agent": "claude", "interactive": True, "turns": 1, "origin": "desktop"}
+    check("only short rows are asked about", not ks.borderline(long_tab) and ks.borderline(short))
+
+
 def main() -> int:
     test_classify()
     test_meta_and_rows()
@@ -996,6 +1020,7 @@ def main() -> int:
     test_runs()
     test_serve_start()
     test_watch()
+    test_session_kinds()
     print("all passed" if not FAILED else f"{FAILED} failed")
     return 1 if FAILED else 0
 

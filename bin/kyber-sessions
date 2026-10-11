@@ -357,7 +357,7 @@ def from_transcript(config: Path, path: Path, now: float) -> dict:
         "cwd": cwd, "project": project_of(cwd) if cwd else path.parent.name,
         "interactive": m["interactive"], "mode": m["mode"], "origin": m["origin"],
         "title": m["title"], "model": short_model(m["model"]), "last": mtime,
-        "state": state, "detail": detail, "ask": "",
+        "state": state, "detail": detail, "ask": "", "turns": m.get("turns", 0),
     }
 
 
@@ -454,8 +454,115 @@ def discover(now: float | None = None, board: dict | None = None, everything: bo
     merge_runs(found, runs(now), now)
     for s in codex_sessions(now):
         found.setdefault(s["id"], s)
-    rows = found.values() if everything else (s for s in found.values() if s.get("interactive", True))
+    if not everything:
+        kinds = session_kinds()
+        classify_later([s for s in found.values() if borderline(s) and s["id"] not in kinds])
+    else:
+        kinds = {}
+    rows = found.values() if everything else (
+        s for s in found.values() if s.get("interactive", True) and kinds.get(s["id"]) != "run")
     return order(rows)
+
+
+# ── Which sessions are a person's tab, by meaning (Jev) ──────────────────────
+
+# The rules above (scratch folder, failed on its first message) are the floor.
+# What they miss is a one-prompt program run from a real folder: on 2026-10-10
+# the panel listed "Erik Fish site security review", "Warm-up" and "Partners.tsx
+# landing page security review" as tabs. A title like that is a meaning
+# question, so Jev answers it once per session and the answer is cached.
+KINDS_FILE = Path(os.environ.get("KYBER_KINDS_FILE", str(HOME / ".bob" / "session-kinds.json")))
+# Below this Jev is not sure enough to hide a row; a hidden real tab costs
+# more than one extra row. Measured once on 10 real borderline rows
+# (2026-10-10 midnight): 7 named tab, all right; 3 unsure, including a
+# title-generator prompt and "approval e2e"; none wrongly hidden. Recall on
+# runs is low, so the floor can come down once a sealed set says it is safe.
+RUN_FLOOR = 0.8
+# Sessions asked per pass, and the gap between passes. Guessed, never measured.
+KIND_BATCH = 6
+KIND_EVERY_S = 60.0
+_kind_lock = threading.Lock()
+_kind_last = [0.0]
+
+
+def borderline(s: dict) -> bool:
+    """A Claude row the rules let through but that is short enough to be a
+    program's one prompt. Long conversations are tabs; Jev is not asked."""
+    return s.get("agent") == "claude" and s.get("interactive", True) and 0 < int(s.get("turns") or 0) <= 3 \
+        and s.get("origin") != "Kyber"
+
+
+def session_kinds() -> dict[str, str]:
+    try:
+        got = json.loads(KINDS_FILE.read_text())
+    except (OSError, ValueError):
+        return {}
+    return {k: v for k, v in got.items() if v in ("tab", "run")} if isinstance(got, dict) else {}
+
+
+def save_kinds(kinds: dict[str, str]) -> None:
+    try:
+        KINDS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = KINDS_FILE.with_suffix(".tmp")
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        with os.fdopen(fd, "w") as f:
+            json.dump(kinds, f)
+        tmp.replace(KINDS_FILE)
+    except OSError as err:
+        print(f"kyber-sessions: kinds: {err}", file=sys.stderr)
+
+
+def kind_of(title: str, ask: Callable | None = None) -> str | None:
+    """'run' when Jev is sure a title is a program's one prompt, 'tab' when
+    it is a person's work, None when Jev is down or unsure."""
+    try:
+        if ask is None:
+            import jev  # noqa: PLC0415  bin/lib; only when a borderline row exists
+
+            def ask(state, questions):
+                return jev.ask(state, questions, decision="session-kind")
+        criteria = {
+            "tab": "A person working in a chat tab: a project, a question, a request in their own words",
+            "run": "A program sent one fixed prompt: a security review, a judge, a warm-up, a test, an eval, a probe",
+        }
+        answers = ask({"title": sessions_inbox.clean(title)[:160]}, {"kind": {
+            "type": "choice",
+            "instructions": "Is this AI coding session a person's own tab, or a one-prompt run a program started?",
+            "criteria": criteria,
+        }})
+        answer = answers.get("kind") if isinstance(answers, dict) else None
+        import jev as _jev  # noqa: PLC0415
+        got = _jev.validate_choice(answer, criteria)
+    except Exception:  # noqa: BLE001  Jev is a bonus; the rules still decide
+        return None
+    if not got:
+        return None
+    choice, confidence = got
+    if choice == "run" and confidence < RUN_FLOOR:
+        return None
+    return choice
+
+
+def classify_now(rows: list[dict], ask: Callable | None = None) -> dict[str, str]:
+    kinds = session_kinds()
+    for s in rows[:KIND_BATCH]:
+        got = kind_of(s.get("title") or "", ask)
+        if got:
+            kinds[s["id"]] = got
+    save_kinds(kinds)
+    return kinds
+
+
+def classify_later(rows: list[dict]) -> None:
+    """At most one background pass a minute; never blocks a listing."""
+    if not rows or os.environ.get("KYBER_NO_JEV"):
+        return
+    now = time.monotonic()
+    with _kind_lock:
+        if now - _kind_last[0] < KIND_EVERY_S:
+            return
+        _kind_last[0] = now
+    threading.Thread(target=classify_now, args=(list(rows),), daemon=True).start()
 
 
 def matches(sid: str, now: float | None = None) -> list[dict]:

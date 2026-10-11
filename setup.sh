@@ -73,6 +73,15 @@ _kr_side="$(cd -P "$SCRIPT_DIR" && pwd).kit-runtime.json"
 if [ -f "$_kr_side" ]; then
   _kr_src="$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1])).get("source",""))' "$_kr_side" 2>/dev/null)"
   if [ -n "$_kr_src" ] && [ -f "$_kr_src/setup.sh" ]; then
+    # Catch the checkout up first. On 2026-10-11 it sat 62 commits behind main,
+    # so this exec ran an old setup.sh and a hook landed that hour never
+    # registered. source_sync clears only copies of already-landed files and
+    # leaves real local work alone.
+    _kr_sha="$(git -C "$SCRIPT_DIR" rev-parse HEAD 2>/dev/null)"
+    if [ -n "$_kr_sha" ] && [ -f "$SCRIPT_DIR/tools/source_sync.py" ]; then
+      python3 -I "$SCRIPT_DIR/tools/source_sync.py" "$_kr_src" "$_kr_sha" >&2 \
+        || echo "  ! $_kr_src is behind main, so hooks added since then won't register this run" >&2
+    fi
     exec bash "$_kr_src/setup.sh" "$@"
   fi
 fi

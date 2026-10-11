@@ -169,6 +169,23 @@ To ingest a new one, `~/Chewbacca/apps/texts/ingest/ingest.py scan <pdf>` prints
 chapter plan and writes nothing. Read the plan before `apply` files 500 pages
 under the wrong headings.
 
+## Planning a lock-in when he names only some courses
+
+When he says "lock in on X and Y tonight", the plan still has to account for
+every course, because the ones he didn't name are the ones that blindside him.
+
+- Run `coursework due --days 7` for ALL courses before building any block plan,
+  and put every item due in the next 72 hours into the plan or say why it waits.
+- A course with `deliverables: []` or `meets: []` is a hole, not a quiet class.
+  Pull its schedule (`brightspace-sync files "<course>" --out ~/coursework/slides --apply`)
+  and read the course schedule PDF before saying the week is clear.
+
+Never-dos, from 2026-10-10: a BISC + ACAD 324 lock-in plan left out the WRIT 150
+rough draft due the same Wednesday ("Wait I gotta lock in for writ right?"),
+and the MPGU 120A midterm two days out only surfaced when he asked about it,
+because the guitar ledger had no deliverables at all ("I need a rlllyyyy long
+time to lock in for my guitar midterm I don't know jack").
+
 ## Answering questions about the semester
 
 - **"What's due?"** `coursework due`. Do not editorialize the list into a plan

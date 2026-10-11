@@ -224,6 +224,14 @@ Read them before drafting any club or startup landing page.
   before shipping any intro.
 - "Repeating things is low aura": no image, clip, headline idea or CTA
   appears twice on a page.
+- "What the fuck disgusting ai slop I wanna throw up never do this shit ever
+  again" (2026-10-11, at a card with a 3px pink `borderLeft` on his site): no
+  colored side stripe on a card or callout, no colored bar beside a heading,
+  no pink-to-purple gradient card. Separate with a hairline or space.
+- A chatbot that speaks for him on a site talks in his voice from
+  `core/voice.md`, is fed the site's own data so it can't contradict it, and
+  strips em dashes in code before the reply ships (2026-10-11: "it literally
+  said em dashes"). A prompt rule alone leaked them.
 - "DO NOT USE THE AI GENERATED TEAM": never put an AI-generated group or
   team photo on a real org's site, even when it's sitting in the repo. Real
   headshots only.

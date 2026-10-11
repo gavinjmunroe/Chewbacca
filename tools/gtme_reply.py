@@ -347,8 +347,12 @@ FORM = js_regex(
 DECK = js_regex(
     r"\bdeck\b|(send|share) (me |us )?(over )?(the |a |your |some )?"
     r"(one[- ]pager|more (info|information|details)|materials|numbers)", "i")
+# "I'm happy to chat once they identify a lead for the round, but until then,
+# I have to pass" came out "interested" on 2026-10-11: a yes with a condition
+# is a come-back-later, never a booked call.
 LATER = js_regex(
     r"(back (on|in|after)|in (\d+|a few|two|three|four) weeks|circle back|reach out when"
+    r"|once (they|you|the company) (identify|have|find|land|secure) a lead|until then"
     r"|after the holidays|next quarter|ball (is )?in my court)", "i")
 # A bare "no" (the whole reply, no punctuation) and "It would be a conflict of
 # interest since we have our own" both came out "unclear" on 2026-10-11.

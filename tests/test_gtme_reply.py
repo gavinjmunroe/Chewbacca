@@ -84,6 +84,8 @@ class ReplyIntentRealReplies(unittest.TestCase):
             "It would be a conflict of interest since we have our own fund in the space": "pass",
             "Hey! Thanks for reaching out. This is an automated message. I get a high volume of "
             "messages and may not be able to reply.": "later",
+            "Jonah - I'm happy to chat once they identify a lead for the round, but until then, "
+            "I have to pass.": "later",
         }
         for body, kind in cases.items():
             with self.subTest(body):

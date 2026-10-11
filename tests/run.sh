@@ -1657,6 +1657,10 @@ if group "hud"; then
   check  "native capture deletes each chunk once transcribed, writes 0600 meetings in Anarlog's shapes, and marks every summary a guess" \
     python3 "$ROOT/tests/test_meeting_capture.py"
   check  "room-capture and meeting_capture parse" python3 -m py_compile "$ROOT/bin/room-capture" "$ROOT/bin/lib/meeting_capture.py"
+  check  "a meeting records itself: a call app on the mic 15 s starts it, 20 s quiet stops it, Siri and a lecture never do" \
+    python3 "$ROOT/tests/test_meeting_autopilot.py"
+  check  "granola-import reads Granola's MCP answers into meetings the surface reads, and queues no old action items" \
+    python3 "$ROOT/tests/test_granola_import.py"
   check  "a meeting's items end in one press each: tentative event, text draft or ledger task, read back, never sent" \
     python3 "$ROOT/tests/test_meeting_actions.py"
   check  "capture draws its consent line on the glass before any audio is written, and owns its Stop press" \

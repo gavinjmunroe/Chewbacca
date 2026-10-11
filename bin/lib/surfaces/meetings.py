@@ -68,14 +68,15 @@ REFRESH_S = 30.0
 PURPOSE = "What your calls said, and what you owe from them"
 NO_MEETINGS = "No meetings recorded yet."
 STEPS = [
-    "Press Start capture when a call begins. Chewbacca records this Mac's microphone and the call's "
-    "audio, and nothing else.",
+    "A call records itself: when Zoom, Teams, Webex or a Slack huddle holds the mic for 15 seconds, or a "
+    "browser does with a meeting tab open or a call on your calendar, Chewbacca records this Mac's microphone "
+    "and the call's audio, and stops 20 seconds after the call lets go. Start capture does it by hand.",
     "The first time, macOS asks to allow Microphone and Screen & System Audio Recording for the app "
     "running it. Both live in System Settings > Privacy & Security, and "
     "`chewbacca-permissions guide --for capture` walks you through them.",
-    "Every 15 seconds of audio is transcribed on this Mac, then deleted. Press Stop capture when the "
-    "call ends to record the end of it; Claude then writes a summary and action items from the "
-    "transcript, unless CHEWBACCA_MEETING_SUMMARY=0 keeps it on this Mac.",
+    "Every 15 seconds of audio is transcribed on this Mac, then deleted. When the call ends Claude writes "
+    "a summary and action items from the transcript, and the items go into your work ledger, unless "
+    "CHEWBACCA_MEETING_SUMMARY=0 keeps it on this Mac.",
 ]
 ANARLOG_OPEN_STEP = "Already use Anarlog? Open Anarlog once from Applications and its meetings show here too."
 ANARLOG_READY_STEP = "Anarlog is set up as well, so anything it records shows here too."

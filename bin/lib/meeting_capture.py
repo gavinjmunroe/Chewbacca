@@ -259,7 +259,8 @@ def get(home: Path, meeting_id: str) -> dict | None:
     docs = []
     if summary and str(summary.get("markdown") or "").strip():
         docs.append({"id": f"{meeting_id}-summary", "kind": "summary", "template_id": "",
-                     "title": "Summary (Claude's guess from the transcript)",
+                     "title": "Granola's notes" if summary.get("by") == "Granola"
+                     else "Summary (Claude's guess from the transcript)",
                      "markdown": str(summary["markdown"]), "sort_order": 0,
                      "created_at": summary.get("at") or "", "updated_at": summary.get("at") or ""})
     people = [p for p in m.get("participants") or [] if isinstance(p, dict)]
@@ -428,6 +429,34 @@ def apply_summary(meeting: dict, body: dict, at: datetime) -> None:
     meeting["action_items"] = items
 
 
+LEDGER_OFF = SUMMARY_OFF
+
+
+def queue_action_items(meeting: dict, run, env: dict) -> list[dict]:
+    """Every action item, queued in the work ledger the moment the meeting
+    closes, with the meeting named as the source (Caleb, 2026-10-10: no press
+    after a call). The key is meeting_actions' own, "meeting:<id>:<item>", so a
+    later Go on the same row reads "Already in" instead of adding a twin.
+    CHEWBACCA_MEETING_LEDGER=0 leaves them on the panel for a press instead."""
+    if str(env.get("CHEWBACCA_MEETING_LEDGER", "")).strip().lower() in LEDGER_OFF:
+        return []
+    import meeting_actions as MA  # noqa: PLC0415  it imports this module
+
+    by_human = {p.get("human_id"): p for p in meeting.get("participants") or []}
+    names = [clean(p.get("display_name") or p.get("email"), 40) for p in meeting.get("participants") or []
+             if p.get("role") != "owner" and (p.get("display_name") or p.get("email"))]
+    out = []
+    for item in meeting.get("action_items") or []:
+        who = by_human.get(item.get("assignee_human_id") or "")
+        owner = "" if who is None else ("you" if who.get("role") == "owner"
+                                        else clean(who.get("display_name") or who.get("email"), 40))
+        plan = MA.plan(meeting, item, meeting.get("lines") or [], names, owner)
+        result = MA.make_task(plan, run, env)
+        out.append({"item": item.get("id"), "ok": bool(result.get("ok")), "line": result.get("line", ""),
+                    "ref": result.get("ref", "")})
+    return out
+
+
 # ── the watcher ─────────────────────────────────────────────────────────
 
 
@@ -587,6 +616,7 @@ class Watcher:
             body, note = claude_summary(meeting, self.run)
             if body is not None:
                 apply_summary(meeting, body, self.now())
+                meeting["ledger"] = queue_action_items(meeting, self.run, self.env)
             meeting["summary_note"] = note
         meeting["updated_at"] = iso(self.now())
         self.save(meeting)

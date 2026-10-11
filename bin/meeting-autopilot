@@ -1,0 +1,326 @@
+#!/usr/bin/env python3
+"""Record every meeting with no press: start when it starts, stop when it ends.
+
+    meeting-autopilot run             the loop, in the foreground (what Kyber keeps running)
+    meeting-autopilot start           the same, detached
+    meeting-autopilot stop            end the loop (a recording it started is stopped too)
+    meeting-autopilot status [--json] running, what it sees, what it decided last
+    meeting-autopilot off | on        never record on its own / record again
+
+It watches `room-capture --watch-mic` (Anarlog's detector, ported to Swift),
+decides with bin/lib/meeting_autopilot.py, and drives `room-capture start`
+and `room-capture stop`, which already record the mic and the call audio,
+transcribe on this Mac, summarize, put the consent line on the glass, and
+now queue the action items in the work ledger.
+
+WHY KYBER RUNS IT AND NOT ITS OWN LAUNCH AGENT. macOS charges the Microphone
+and Screen & System Audio Recording grants to the app at the top of the
+launch chain. Kyber (dev.bobthebuilder.hud) already holds both on this Mac
+(TCC, 2026-10-10), and Kyber is itself a KeepAlive launch agent. A separate
+launch agent would be its own TCC client, an unbundled binary whose grant
+breaks on every rebuild, and would need Caleb's hands in Settings twice. So
+Kyber spawns `meeting-autopilot run` at launch and again whenever it exits;
+`run` holds a lock, so a second copy exits at once.
+
+Environment:
+    CHEWBACCA_MEETING_AUTOPILOT=0     the same as `off`
+    CHEWBACCA_MEETING_NO_MIC=1        record the call's audio only, never this Mac's mic
+    MEETING_AUTOPILOT_WATCH_CMD       a command printing --watch-mic lines in place of the
+                                      helper (a replay; the live test drives a fake Zoom with it)
+
+Exit codes: 0 done, 1 failed, 2 usage, 3 status says not running.
+"""
+from __future__ import annotations
+
+import argparse
+import fcntl
+import json
+import os
+import signal
+import subprocess
+import sys
+import threading
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+sys.dont_write_bytecode = True
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "bin" / "lib"))
+
+import meeting_autopilot as AP  # noqa: E402
+import meeting_capture as MC  # noqa: E402
+
+ROOM_CAPTURE = ROOT / "bin" / "room-capture"
+PACKAGE = ROOT / "mac" / "room-capture"
+HELPER = Path(os.environ.get("ROOM_CAPTURE_HELPER") or PACKAGE / ".build" / "release" / "room-capture")
+# The calendar changes rarely and `mac calendar list` takes a second, so it is
+# read at most this often. A call added less than this before it starts is
+# still caught by a meeting window or a work call app. Guessed, never measured.
+CALENDAR_EVERY_S = 300.0
+# How long `room-capture start` may take: it builds the helper on first use
+# (6.6 s on 2026-10-05) and waits for the first status. Its own START_TIMEOUT_S
+# in the meetings surface is the same 180.
+START_TIMEOUT_S = 180.0
+# A watcher line every 2 s while anything changes, and a heartbeat every 60 s
+# from the helper; this long with no line means the helper is gone. Twice the
+# heartbeat, guessed.
+SILENT_S = 120.0
+
+
+def home() -> Path:
+    return Path(os.environ.get("HOME") or Path.home())
+
+
+def state_dir() -> Path:
+    return MC.private_dir(home() / ".chewbacca" / "meeting-autopilot")
+
+
+def now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def log(message: str) -> None:
+    print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} {message}", flush=True)
+
+
+def is_off() -> bool:
+    return (state_dir() / "off").exists() or AP.env_flag("CHEWBACCA_MEETING_AUTOPILOT")
+
+
+def write_state(body: dict) -> None:
+    MC.write_private(state_dir() / "state.json", body)
+
+
+def read_state() -> dict:
+    return MC.load(state_dir() / "state.json") or {}
+
+
+def build_helper() -> str:
+    """'' when the helper exists and is current, else what went wrong."""
+    sources = [PACKAGE / "Package.swift", *PACKAGE.glob("Sources/**/*.swift")]
+    if HELPER.exists() and all(s.stat().st_mtime <= HELPER.stat().st_mtime for s in sources if s.exists()):
+        return ""
+    done = subprocess.run(["swift", "build", "-c", "release", "--package-path", str(PACKAGE)],
+                          stdout=sys.stderr, stderr=sys.stderr)
+    if done.returncode != 0 or not HELPER.exists():
+        return f"the capture helper did not build (swift exited {done.returncode})"
+    os.utime(HELPER)
+    return ""
+
+
+class Loop:
+    def __init__(self) -> None:
+        self.pilot = AP.Autopilot()
+        self.ours_pid = 0
+        self.calendar: list[dict] | None = None
+        self.calendar_at = 0.0
+        self.me = AP.owner_emails(home())
+        self.last: dict = {}
+        self.decided: list[dict] = []
+
+    def events(self) -> list[dict] | None:
+        if time.time() - self.calendar_at >= CALENDAR_EVERY_S:
+            self.calendar = MC.calendar_events(now())
+            self.calendar_at = time.time()
+        return self.calendar
+
+    def capture(self) -> tuple[bool, int]:
+        state = MC.capture_state(home())
+        pid = MC.read_pid(MC.capture_dir(home()) / "helper.pid") if state.get("running") else 0
+        return bool(state.get("running")), pid
+
+    def start_capture(self, trigger: dict) -> None:
+        log(f"start: {trigger.get('why')}")
+        no_mic = ["--no-mic"] if os.environ.get("CHEWBACCA_MEETING_NO_MIC", "").strip() in ("1", "yes", "true") else []
+        done = subprocess.run([sys.executable, str(ROOM_CAPTURE), "start", "--json", *no_mic], capture_output=True,
+                              text=True, timeout=START_TIMEOUT_S, stdin=subprocess.DEVNULL)
+        running, pid = self.capture()
+        self.ours_pid = pid if running else 0
+        tail = (done.stdout or done.stderr or "").strip().splitlines()[-1:] or [""]
+        self.note("start", trigger, ok=running, detail=tail[0][:200])
+
+    def stop_capture(self, trigger: dict | None) -> None:
+        log("stop: the meeting ended")
+        # Detached: stop waits for the last chunk and the summary (minutes),
+        # and the loop has to keep looking for the next call meanwhile.
+        subprocess.Popen([sys.executable, str(ROOM_CAPTURE), "stop", "--json"], stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        self.ours_pid = 0
+        self.note("stop", {"why": f"{(trigger or {}).get('name') or 'the call'} let go of the mic"}, ok=True, detail="")
+
+    def note(self, action: str, trigger: dict | None, ok: bool, detail: str) -> None:
+        self.decided = ([{"at": now().isoformat(), "action": action, "ok": ok,
+                          "why": (trigger or {}).get("why", ""), "detail": detail}] + self.decided)[:10]
+
+    def look(self, snapshot: dict) -> None:
+        self.last = snapshot
+        event = AP.event_now(self.events(), now(), self.me)
+        meeting = AP.meeting_in(snapshot, event)
+        running, pid = self.capture()
+        ours = bool(self.ours_pid) and pid == self.ours_pid
+        if is_off():
+            meeting = None if not ours else meeting
+        # The trigger is read before the step: a stop returns the pilot to
+        # idle, which clears it, and the log line should still say whose call
+        # it was.
+        before = self.pilot.trigger
+        action = self.pilot.step(meeting, running, ours, now())
+        if action == "start":
+            self.start_capture(self.pilot.trigger or meeting or {})
+        elif action == "stop":
+            self.stop_capture(before)
+        self.save()
+
+    def save(self) -> None:
+        mic = [{"id": a.get("id"), "name": a.get("name")} for a in self.last.get("mic") or []]
+        write_state({"pid": os.getpid(), "updated": now().isoformat(), "off": is_off(), **self.pilot.state(),
+                     "mic": mic, "windows": len(self.last.get("windows") or []),
+                     "screen": self.last.get("screen"), "calendar": self.calendar is not None,
+                     "decided": self.decided})
+
+
+def run(args) -> int:
+    lock_path = state_dir() / "run.lock"
+    lock = open(lock_path, "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        # Kyber respawns this whenever it exits, so a refusal is the normal
+        # case and exits 0 (realm-engine's rule).
+        return 0
+    replay = os.environ.get("MEETING_AUTOPILOT_WATCH_CMD", "").strip()
+    problem = "" if replay else build_helper()
+    if problem:
+        log(f"cannot watch: {problem}")
+        return 1
+    loop = Loop()
+    argv = ["/bin/sh", "-c", replay] if replay else [str(HELPER), "--watch-mic", "--interval", "2"]
+    helper = subprocess.Popen(argv, stdout=subprocess.PIPE,
+                              stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL, text=True)
+    stopping = threading.Event()
+
+    def end(*_):
+        stopping.set()
+        try:
+            helper.terminate()
+        except OSError:
+            pass
+
+    signal.signal(signal.SIGTERM, end)
+    signal.signal(signal.SIGINT, end)
+    log(f"watching (pid {os.getpid()}, helper {helper.pid})")
+    last_line = time.time()
+    snapshot: dict = {}
+    # The helper only prints on a change; a timer thread re-feeds the last
+    # snapshot every 2 s so the arming and ending clocks advance in silence.
+    lines: list[str] = []
+    cond = threading.Condition()
+
+    def reader():
+        for line in helper.stdout:
+            with cond:
+                lines.append(line)
+                cond.notify()
+        with cond:
+            cond.notify()
+
+    threading.Thread(target=reader, daemon=True).start()
+    while not stopping.is_set():
+        with cond:
+            cond.wait(timeout=2.0)
+            fresh, lines[:] = list(lines), []
+        for line in fresh:
+            body = AP.snapshot_of(line)
+            if body is not None:
+                snapshot, last_line = body, time.time()
+        if helper.poll() is not None or time.time() - last_line > SILENT_S:
+            log("the mic watcher stopped; exiting so Kyber starts a fresh one")
+            break
+        if snapshot:
+            try:
+                loop.look(snapshot)
+            except Exception as exc:  # noqa: BLE001  one bad look must not end the watch
+                log(f"look failed: {type(exc).__name__}: {exc}")
+    end()
+    if loop.ours_pid and loop.capture()[0]:
+        loop.stop_capture(loop.pilot.trigger)
+    return 0
+
+
+def pid_running() -> int:
+    pid = int(read_state().get("pid") or 0)
+    if pid and MC.pid_alive(pid, "meeting-autopilot"):
+        return pid
+    return 0
+
+
+def start(args) -> int:
+    if pid_running():
+        print("Already watching.")
+        return 0
+    log_path = state_dir() / "autopilot.log"
+    fd = os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    proc = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "run"], stdin=subprocess.DEVNULL,
+                            stdout=fd, stderr=fd, start_new_session=True)
+    os.close(fd)
+    print(f"Watching for meetings (pid {proc.pid}). Log: {log_path}")
+    return 0
+
+
+def stop(args) -> int:
+    pid = pid_running()
+    if not pid:
+        print("Not running.")
+        return 0
+    os.kill(pid, signal.SIGTERM)
+    print(f"Stopped the watcher (pid {pid}). Kyber starts it again on its next launch unless it is off.")
+    return 0
+
+
+def toggle(args) -> int:
+    flag = state_dir() / "off"
+    if args.cmd == "off":
+        flag.write_text("Caleb turned meeting autopilot off\n")
+        print("Off: nothing records on its own. `meeting-autopilot on` turns it back on.")
+    else:
+        flag.unlink(missing_ok=True)
+        print("On: a meeting starts the recording and its end stops it.")
+    return 0
+
+
+def status(args) -> int:
+    body = read_state()
+    pid = pid_running()
+    body["running"] = bool(pid)
+    body["recording"] = bool(MC.capture_state(home()).get("running"))
+    if args.json:
+        print(json.dumps(body, indent=1))
+        return 0 if pid else 3
+    if not pid:
+        print("Not watching." + (" It is off." if is_off() else ""))
+        return 3
+    mic = ", ".join(a.get("name") or a.get("id") or "?" for a in body.get("mic") or []) or "nobody"
+    print(f"Watching (pid {pid}){' but OFF' if body.get('off') else ''}. Phase: {body.get('phase')}. "
+          f"Mic in use by: {mic}. Recording: {'yes' if body['recording'] else 'no'}.")
+    for d in body.get("decided") or []:
+        print(f"  {d['at'][:19]} {d['action']}: {d.get('why')}{'' if d.get('ok') else ' (FAILED ' + d.get('detail', '') + ')'}")
+    return 0
+
+
+def main(argv=None) -> int:
+    p = argparse.ArgumentParser(prog="meeting-autopilot", description=__doc__.split("\n\n")[0])
+    sub = p.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("run")
+    sub.add_parser("start")
+    sub.add_parser("stop")
+    sub.add_parser("off")
+    sub.add_parser("on")
+    s = sub.add_parser("status")
+    s.add_argument("--json", action="store_true")
+    a = p.parse_args(argv)
+    return {"run": run, "start": start, "stop": stop, "off": toggle, "on": toggle, "status": status}[a.cmd](a)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

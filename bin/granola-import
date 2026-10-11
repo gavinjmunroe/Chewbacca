@@ -1,0 +1,521 @@
+#!/usr/bin/env python3
+"""Bring every Granola meeting into Chewbacca's meetings, read only, once.
+
+    granola-import connect [--wait-hours 24]   print one link; after it is approved, import
+    granola-import run                         import (needs a saved connection)
+    granola-import status [--json]             connected, imported, last run
+
+Granola keeps its local copy encrypted (granola.db and cache-v6.json.enc,
+2026-10-10, keyed from the "Granola Safe Storage" keychain item, which only
+Granola may read without a prompt). So this goes the way Anarlog's importer
+goes (MIT, Copyright (c) 2023-present Fastrepl, Inc., github.com/fastrepl/
+anarlog, plugins/importer/src/connected_mcp.rs): Granola's own MCP server at
+https://mcp.granola.ai/mcp, signed in with OAuth, and the tools list_meetings,
+get_meetings and get_meeting_transcript. Argument and record shapes are read
+from the tools' own schemas the way Anarlog reads them, because Granola does
+not publish them. Nothing is ever written to Granola, and its app is never
+opened.
+
+Each meeting lands as ~/.chewbacca/meetings/rc-<start>.json (0600) in the
+shape room-capture writes, so the meetings surface and the OS graph read it
+like a recorded one; its notes are the summary, its transcript the lines, and
+its action items are NOT queued in the work ledger (they are history). The
+raw answers are kept in ~/.chewbacca/granola/raw so a better parser can rerun
+without asking Granola again. The token is ~/.chewbacca/granola/token.json,
+0600.
+"""
+from __future__ import annotations
+
+import argparse
+import base64
+import hashlib
+import http.server
+import json
+import os
+import re
+import secrets
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+sys.dont_write_bytecode = True
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "bin" / "lib"))
+import meeting_capture as MC  # noqa: E402
+
+MCP_URL = "https://mcp.granola.ai/mcp"
+AUTH = "https://mcp-auth.granola.ai"
+PORT = 53682
+REDIRECT = f"http://127.0.0.1:{PORT}/callback"
+SCOPE = "openid email profile offline_access"
+# Anarlog asks list tools for 50 a page (default_list_arguments).
+PAGE = 50
+# Anarlog's MEETING_BATCH_SIZE is not public in that file's excerpt; 10 ids a
+# call keeps one answer small. Guessed, never measured against Granola.
+BATCH = 10
+HTTP_TIMEOUT_S = 60
+LIST_TOOLS = ["list_meetings"]
+DETAIL_TOOLS = ["get_meetings", "get_meeting_transcript"]
+UA = "chewbacca-granola-import/1"
+
+
+def home() -> Path:
+    return Path(os.environ.get("HOME") or Path.home())
+
+
+def gdir() -> Path:
+    return MC.private_dir(home() / ".chewbacca" / "granola")
+
+
+def save(name: str, body) -> None:
+    MC.write_private(gdir() / name, body)
+
+
+def load(name: str):
+    return MC.load(gdir() / name)
+
+
+def log(message: str) -> None:
+    print(f"{datetime.now().strftime('%H:%M:%S')} {message}", flush=True)
+
+
+def http(method: str, url: str, body=None, headers: dict | None = None, form: bool = False):
+    data = None
+    hdrs = {"User-Agent": UA, **(headers or {})}
+    if body is not None:
+        if form:
+            data = urllib.parse.urlencode(body).encode()
+            hdrs["Content-Type"] = "application/x-www-form-urlencoded"
+        else:
+            data = json.dumps(body).encode()
+            hdrs["Content-Type"] = "application/json"
+    req = urllib.request.Request(url, data=data, method=method, headers=hdrs)
+    try:
+        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT_S) as resp:
+            return resp.status, dict(resp.headers), resp.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as err:
+        return err.code, dict(err.headers or {}), err.read().decode("utf-8", "replace")
+
+
+# ── sign in ─────────────────────────────────────────────────────────────
+
+
+def register() -> str:
+    client = load("client.json") or {}
+    if client.get("client_id"):
+        return client["client_id"]
+    code, _, text = http("POST", f"{AUTH}/oauth2/register", {
+        "client_name": "Chewbacca meetings import", "token_endpoint_auth_method": "none",
+        "grant_types": ["authorization_code", "refresh_token"], "response_types": ["code"],
+        "redirect_uris": [REDIRECT]})
+    body = json.loads(text) if code < 300 else {}
+    if not body.get("client_id"):
+        raise SystemExit(f"Granola refused to register this Mac as a client ({code}): {text[:200]}")
+    save("client.json", {"client_id": body["client_id"]})
+    return body["client_id"]
+
+
+def token_from(form: dict) -> dict:
+    code, _, text = http("POST", f"{AUTH}/oauth2/token", form, form=True)
+    body = json.loads(text) if text.strip().startswith("{") else {}
+    if code >= 300 or not body.get("access_token"):
+        raise SystemExit(f"Granola's token endpoint said {code}: {text[:200]}")
+    body["expires_at"] = time.time() + float(body.get("expires_in") or 3600)
+    save("token.json", body)
+    return body
+
+
+def access_token() -> str:
+    token = load("token.json") or {}
+    if not token.get("access_token"):
+        raise SystemExit("Not connected to Granola yet: `granola-import connect` prints the link.")
+    # Refresh a minute early so a call never starts on a token about to die.
+    if time.time() < float(token.get("expires_at") or 0) - 60:
+        return token["access_token"]
+    if not token.get("refresh_token"):
+        raise SystemExit("Granola's sign-in expired and gave no refresh token: connect again.")
+    fresh = token_from({"grant_type": "refresh_token", "refresh_token": token["refresh_token"],
+                        "client_id": register()})
+    fresh.setdefault("refresh_token", token["refresh_token"])
+    save("token.json", fresh)
+    return fresh["access_token"]
+
+
+def connect(args) -> int:
+    client = register()
+    verifier = secrets.token_urlsafe(48)
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+    state = secrets.token_urlsafe(16)
+    url = f"{AUTH}/oauth2/authorize?" + urllib.parse.urlencode({
+        "response_type": "code", "client_id": client, "redirect_uri": REDIRECT, "scope": SCOPE,
+        "state": state, "code_challenge": challenge, "code_challenge_method": "S256", "resource": MCP_URL})
+    save("pending.json", {"url": url, "since": datetime.now(timezone.utc).isoformat(),
+                          "until": (datetime.now(timezone.utc) + timedelta(hours=args.wait_hours)).isoformat()})
+    print(f"Open this once and approve: {url}", flush=True)
+    got: dict = {}
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802  http.server's name
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            ok = self.path.startswith("/callback") and query.get("state", [""])[0] == state
+            if ok and query.get("code"):
+                got["code"] = query["code"][0]
+            elif ok and query.get("error"):
+                got["error"] = query.get("error_description", query["error"])[0]
+            self.send_response(200 if ok else 404)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(b"Granola is connected to Chewbacca. You can close this tab." if got.get("code")
+                             else b"Not connected." if ok else b"")
+
+        def log_message(self, *_):
+            pass
+
+    server = http.server.HTTPServer(("127.0.0.1", PORT), Handler)
+    server.timeout = 5
+    deadline = time.time() + args.wait_hours * 3600
+    while not got and time.time() < deadline:
+        server.handle_request()
+    server.server_close()
+    (gdir() / "pending.json").unlink(missing_ok=True)
+    if not got.get("code"):
+        print(f"Not connected: {got.get('error') or 'nobody approved before the link expired'}.")
+        return 1
+    token_from({"grant_type": "authorization_code", "code": got["code"], "redirect_uri": REDIRECT,
+                "client_id": client, "code_verifier": verifier})
+    log("connected to Granola; importing")
+    return run(args)
+
+
+# ── MCP over streamable HTTP ────────────────────────────────────────────
+
+
+class Mcp:
+    def __init__(self) -> None:
+        self.session = ""
+        self.next_id = 0
+
+    def send(self, method: str, params: dict | None = None, notify: bool = False):
+        body = {"jsonrpc": "2.0", "method": method, **({"params": params} if params is not None else {})}
+        if not notify:
+            self.next_id += 1
+            body["id"] = self.next_id
+        headers = {"Authorization": f"Bearer {access_token()}", "Accept": "application/json, text/event-stream",
+                   "MCP-Protocol-Version": "2025-06-18"}
+        if self.session:
+            headers["Mcp-Session-Id"] = self.session
+        code, hdrs, text = http("POST", MCP_URL, body, headers)
+        sid = next((v for k, v in hdrs.items() if k.lower() == "mcp-session-id"), "")
+        self.session = sid or self.session
+        if notify:
+            return None
+        if code >= 300:
+            raise RuntimeError(f"{method}: HTTP {code}: {text[:200]}")
+        messages = []
+        if text.lstrip().startswith("{"):
+            messages = [json.loads(text)]
+        else:
+            for line in text.splitlines():
+                if line.startswith("data:") and line[5:].strip():
+                    try:
+                        messages.append(json.loads(line[5:].strip()))
+                    except ValueError:
+                        pass
+        reply = next((m for m in messages if m.get("id") == body["id"]), None)
+        if reply is None or "error" in reply:
+            raise RuntimeError(f"{method}: {json.dumps((reply or {}).get('error') or text[:200])}")
+        return reply["result"]
+
+    def open(self) -> list[dict]:
+        self.send("initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
+                                 "clientInfo": {"name": "chewbacca-granola-import", "version": "1"}})
+        self.send("notifications/initialized", notify=True)
+        return self.send("tools/list", {}).get("tools") or []
+
+    def call(self, tool: dict, arguments: dict) -> list:
+        result = self.send("tools/call", {"name": tool["name"], "arguments": arguments})
+        texts = [c.get("text", "").strip() for c in result.get("content") or [] if c.get("type") == "text"]
+        if result.get("isError"):
+            raise RuntimeError(f"{tool['name']}: " + " ".join(texts)[:300])
+        payloads = [result["structuredContent"]] if result.get("structuredContent") is not None else []
+        for text in filter(None, texts):
+            payloads.append(parse_json_text(text))
+        return payloads
+
+
+# ── Anarlog's record reading, in Python ─────────────────────────────────
+
+TITLE_KEYS = ["title", "name", "subject", "meeting_title", "meetingTitle", "topic"]
+ID_KEYS = ["id", "meeting_id", "meetingId", "document_id", "documentId", "uuid"]
+
+
+def parse_json_text(text: str):
+    """JSON, fenced JSON, or the outermost {...}/[...] inside prose; else the text."""
+    t = text.strip()
+    for candidate in (t, re.sub(r"^```(?:json)?|```$", "", t).strip()):
+        try:
+            return json.loads(candidate)
+        except ValueError:
+            pass
+    start, end = min([i for i in (t.find("{"), t.find("[")) if i >= 0] or [-1]), max(t.rfind("}"), t.rfind("]"))
+    if start >= 0 and end > start:
+        try:
+            return json.loads(t[start:end + 1])
+        except ValueError:
+            pass
+    return t
+
+
+def tool_named(tools: list[dict], names: list[str]) -> dict | None:
+    norm = lambda s: re.sub(r"[^a-z0-9]", "", s.lower())  # noqa: E731
+    wanted = {norm(n) for n in names}
+    return next((t for t in tools if norm(t.get("name", "")) in wanted), None)
+
+
+def props(tool: dict) -> dict:
+    return (tool.get("inputSchema") or {}).get("properties") or {}
+
+
+def first_prop(tool: dict, names: list[str]) -> str | None:
+    return next((n for n in names if n in props(tool)), None)
+
+
+def list_arguments(tool: dict, offset: int, cursor: str | None) -> dict:
+    args: dict = {}
+    if (p := first_prop(tool, ["limit", "page_size", "pageSize"])):
+        args[p] = PAGE
+    if (p := first_prop(tool, ["skip", "offset"])):
+        args[p] = offset
+    if (p := first_prop(tool, ["format"])):
+        args[p] = "json"
+    if cursor and (p := first_prop(tool, ["cursor", "next_cursor", "page_token", "pageToken"])):
+        args[p] = cursor
+    for req in (tool.get("inputSchema") or {}).get("required") or []:
+        if req in args:
+            continue
+        if req in ("query", "keyword", "search", "search_query", "searchQuery"):
+            args[req] = ""
+        elif req in ("from", "fromDate", "from_date", "startDate", "start_date"):
+            args[req] = "1970-01-01"
+        elif req in ("to", "toDate", "to_date", "endDate", "end_date"):
+            args[req] = "2100-01-01"
+        elif req == "time_range":
+            args[req] = "all"
+    return args
+
+
+def id_arguments(tool: dict, ids: list[str]) -> list[dict]:
+    p = props(tool)
+    for key in ("meeting_ids", "meetingIds", "document_ids", "documentIds", "ids", "meetings"):
+        if (p.get(key) or {}).get("type") == "array":
+            return [{key: ids[i:i + BATCH]} for i in range(0, len(ids), BATCH)]
+    for key in ("meeting_id", "meetingId", "document_id", "documentId", "uuid", "id"):
+        if key in p:
+            return [{key: i} for i in ids]
+    return []
+
+
+def records(value, out: dict) -> dict:
+    """id -> record for every object with a title and an id, outermost first."""
+    if isinstance(value, list):
+        for v in value:
+            records(v, out)
+    elif isinstance(value, dict):
+        rid = next((str(value[k]) for k in ID_KEYS if isinstance(value.get(k), (str, int)) and value.get(k) != ""),
+                   None)
+        if rid and any(isinstance(value.get(k), str) for k in TITLE_KEYS):
+            out.setdefault(rid, value)
+            return out
+        for v in value.values():
+            records(v, out)
+    elif isinstance(value, str):
+        # Granola may answer in tagged text rather than JSON:
+        # <meeting id="..." title="..." date="...">. Read those too.
+        for m in re.finditer(r"<meeting\b([^>]*)>", value):
+            attrs = dict(re.findall(r'(\w+)="([^"]*)"', m.group(1)))
+            if attrs.get("id") and attrs.get("title"):
+                out.setdefault(attrs["id"], attrs)
+    return out
+
+
+def next_cursor(payloads: list):
+    for p in payloads:
+        if isinstance(p, dict):
+            if p.get("has_more") is False or p.get("hasMore") is False:
+                return None
+            for k in ("next_cursor", "nextCursor", "cursor", "next_page_token", "nextPageToken"):
+                if isinstance(p.get(k), str) and p[k]:
+                    return p[k]
+    return None
+
+
+# ── Granola meeting -> room-capture meeting ─────────────────────────────
+
+
+def find(value, keys: list[str]):
+    if isinstance(value, dict):
+        for k in keys:
+            if value.get(k) not in (None, "", [], {}):
+                return value[k]
+        for v in value.values():
+            hit = find(v, keys)
+            if hit is not None:
+                return hit
+    return None
+
+
+def as_text(value) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        return "\n".join(filter(None, (as_text(v) for v in value)))
+    if isinstance(value, dict):
+        return as_text(value.get("text") or value.get("markdown") or value.get("content") or "")
+    return ""
+
+
+def transcript_lines(value, start: datetime | None) -> list[dict]:
+    lines = []
+    if isinstance(value, str):
+        chunks = [c for c in re.split(r"\n+", value) if c.strip()]
+        items = [{"text": c} for c in chunks]
+    else:
+        items = value if isinstance(value, list) else []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        text = MC.clean(item.get("text") or item.get("content") or "", 2000)
+        if not text:
+            continue
+        who = MC.clean(item.get("speaker") or item.get("source") or "", 40)
+        at = MC.parse_iso(item.get("start_timestamp") or item.get("start_time") or item.get("timestamp"))
+        at = at or start
+        lines.append({"at": MC.iso(at) if at else "", "clock": at.astimezone().strftime("%-I:%M:%S %p") if at else "",
+                      "seconds": 0, "text": (f"{who}: " if who else "") + text, "source": "granola"})
+    return lines
+
+
+def to_meeting(gid: str, record: dict, detail: list, transcript: list, used: set[str]) -> dict:
+    merged = dict(record)
+    for p in detail:
+        hit = records(p, {}).get(gid)
+        if hit:
+            merged.update(hit)
+    start = MC.parse_iso(find(merged, ["start", "start_time", "started_at", "date", "created_at", "createdAt"]))
+    end = MC.parse_iso(find(merged, ["end", "end_time", "ended_at"]))
+    start = start or datetime.now(timezone.utc)
+    stamp = start.astimezone()
+    rid = f"rc-{stamp.strftime('%Y%m%d-%H%M%S')}"
+    while rid in used or ((MC.meetings_dir(home()) / f"{rid}.json").exists() and rid not in used):
+        stamp += timedelta(seconds=1)
+        rid = f"rc-{stamp.strftime('%Y%m%d-%H%M%S')}"
+    used.add(rid)
+    notes = as_text(find(merged, ["summary", "enhanced_notes", "enhancedNotes", "notes", "ai_notes",
+                                  "notes_markdown", "content"]))
+    people = []
+    for n, a in enumerate(find(merged, ["attendees", "participants", "people"]) or []):
+        if isinstance(a, dict):
+            email = MC.clean(a.get("email"), 120)
+            name = MC.clean(a.get("name") or a.get("display_name"), 80)
+        else:
+            email, name = ("", MC.clean(a, 80))
+        if email or name:
+            people.append({"human_id": f"granola-{n}", "display_name": name, "email": email, "role": "attendee"})
+    tx = None
+    for p in transcript:
+        tx = find(p, ["transcript", "segments", "utterances", "sentences"]) if not isinstance(p, str) else p
+        if tx:
+            break
+    lines = transcript_lines(tx, start)
+    title = MC.clean(find(merged, TITLE_KEYS), 120) or "Granola meeting"
+    return {"schema": 1, "id": rid, "title": title, "app": "Granola (imported)",
+            "created_at": MC.iso(start), "updated_at": MC.iso(datetime.now(timezone.utc)),
+            "started_at": MC.iso(start), "ended_at": MC.iso(end or start), "timezone": "",
+            "calendar_event": None, "participants": people, "lines": lines,
+            "summary": {"markdown": notes.strip() + "\n", "at": MC.iso(start), "by": "Granola", "guess": False}
+            if notes.strip() else None,
+            "summary_note": "" if notes.strip() else "Granola had no notes for this meeting.",
+            "action_items": [], "source": {"app": "Granola", "id": gid}}
+
+
+def run(args) -> int:
+    mcp = Mcp()
+    tools = mcp.open()
+    save("tools.json", tools)
+    lister = tool_named(tools, LIST_TOOLS)
+    if lister is None:
+        raise SystemExit(f"Granola's MCP has no list_meetings; it offers {[t.get('name') for t in tools]}")
+    seen: dict = {}
+    offset, cursor, pages = 0, None, 0
+    raw = MC.private_dir(gdir() / "raw")
+    while True:
+        payloads = mcp.call(lister, list_arguments(lister, offset, cursor))
+        MC.write_private(raw / f"list-{pages:03d}.json", {"payloads": payloads})
+        before = len(seen)
+        records(payloads, seen)
+        pages += 1
+        nxt = next_cursor(payloads)
+        paged = first_prop(lister, ["skip", "offset"]) is not None
+        if len(seen) == before or pages > 200 or not (nxt or paged):
+            break
+        cursor, offset = nxt, offset + PAGE
+    imported = load("imported.json") or {}
+    todo = [gid for gid in seen if gid not in imported]
+    log(f"Granola lists {len(seen)} meetings; {len(todo)} are new")
+    getter, transcriber = tool_named(tools, ["get_meetings"]), tool_named(tools, ["get_meeting_transcript"])
+    used: set[str] = set(imported.values())
+    MC.private_dir(MC.meetings_dir(home()))
+    done = 0
+    for gid in todo:
+        detail, transcript = [], []
+        for tool, bucket in ((getter, detail), (transcriber, transcript)):
+            for arguments in (id_arguments(tool, [gid]) if tool else []):
+                try:
+                    bucket.extend(mcp.call(tool, arguments))
+                except RuntimeError as err:
+                    log(f"{tool['name']} {gid}: {err}")
+        MC.write_private(raw / f"meeting-{re.sub(r'[^A-Za-z0-9_-]', '_', gid)[:80]}.json",
+                         {"list": seen[gid], "detail": detail, "transcript": transcript})
+        meeting = to_meeting(gid, seen[gid], detail, transcript, used)
+        MC.write_private(MC.meetings_dir(home()) / f"{meeting['id']}.json", meeting)
+        imported[gid] = meeting["id"]
+        save("imported.json", imported)
+        done += 1
+    save("last.json", {"at": datetime.now(timezone.utc).isoformat(), "listed": len(seen), "imported_now": done,
+                       "imported_total": len(imported)})
+    log(f"imported {done}; {len(imported)} Granola meetings are in Chewbacca's meetings now")
+    return 0
+
+
+def status(args) -> int:
+    body = {"connected": bool((load("token.json") or {}).get("access_token")),
+            "pending_link": (load("pending.json") or {}).get("url", ""),
+            "imported": len(load("imported.json") or {}), "last": load("last.json")}
+    if args.json:
+        print(json.dumps(body, indent=1))
+    else:
+        print(("Connected to Granola." if body["connected"] else "Not connected to Granola.")
+              + f" {body['imported']} meetings imported."
+              + (f" Waiting for approval at: {body['pending_link']}" if body["pending_link"] else ""))
+    return 0 if body["connected"] else 3
+
+
+def main(argv=None) -> int:
+    p = argparse.ArgumentParser(prog="granola-import", description=__doc__.split("\n\n")[0])
+    sub = p.add_subparsers(dest="cmd", required=True)
+    c = sub.add_parser("connect")
+    c.add_argument("--wait-hours", type=float, default=24.0)
+    sub.add_parser("run")
+    s = sub.add_parser("status")
+    s.add_argument("--json", action="store_true")
+    a = p.parse_args(argv)
+    return {"connect": connect, "run": run, "status": status}[a.cmd](a)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1120,8 +1120,11 @@ unset _tool
 # fails halfway. Kyber.app itself runs hud-listen, kyber-sessions and
 # text-command from ~/.local/bin; text-command was missing from this list until
 # 2026-10-05, so a text to yourself woke Kyber and ran a path that did not exist.
+# meeting-autopilot is the same: Kyber keeps it running so a meeting records
+# under Kyber's own Microphone and Screen Recording grants, and it drives
+# room-capture; granola-import brings Granola's past meetings across once.
 _installed_hud=""
-for _tool in hud hud-listen hud-runtime hud-codex hud-gemini hud-ollama hud-accounts hud-context hud-watch hud-speak hud-guide hud-music kyber-sessions text-command superassistant chewbacca-mcp portal hud-autostart; do
+for _tool in hud hud-listen hud-runtime hud-codex hud-gemini hud-ollama hud-accounts hud-context hud-watch hud-speak hud-guide hud-music kyber-sessions text-command superassistant chewbacca-mcp portal hud-autostart meeting-autopilot room-capture granola-import; do
   if [ -f "$SCRIPT_DIR/bin/$_tool" ]; then
     link_tool "$_tool"
     _installed_hud="$_installed_hud $_tool"

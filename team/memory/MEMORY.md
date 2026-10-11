@@ -86,6 +86,8 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - project_ux_engine: ux-engine indexes 74 real design systems by what they refuse, ships the numeric...
 - project_ux_math_layer: The math layer in ux-engine, what each tool computes, and the one number that...
 
+- project_meeting_autopilot: Meetings record themselves: Anarlog's mic detector in Swift, Kyber runs meeting-autopilot, items to the ledger, Granola via MCP
+
 - project_team_memory: Where shared Amber, Chewbacca and Firm Foundation memory lives and what stays private
 
 - feedback_hud_agents_build_on_realm: HUD agent work builds on Carlton's Realm inside the HUD, any LLM or account; agents are tiles, tabs come in silently, no forms ("1 dimensional", 10/10)

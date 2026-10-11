@@ -91,6 +91,7 @@ class FakeRun:
     def __init__(self, calendar=True, claude=True):
         self.calendar, self.claude = calendar, claude
         self.calls: list[list[str]] = []
+        self.ledger: list[dict] = []
 
     def __call__(self, argv, timeout=None):
         self.calls.append(list(argv))
@@ -101,6 +102,13 @@ class FakeRun:
                                           "isAllDay": True}]), ""
         if argv[:2] == ["claude", "-p"]:
             return (0, "Here you go:\n" + json.dumps(SUMMARY), "") if self.claude else (1, "", "not logged in")
+        if argv[0].endswith("work-ledger") and argv[1:2] == ["add"]:
+            key = next(a.split("=", 1)[1] for a in argv if a.startswith("--source-key="))
+            self.ledger.append({"id": f"t{len(self.ledger) + 1}", "source_key": key, "status": "queued",
+                                "argv": list(argv)})
+            return 0, json.dumps({"created": True}), ""
+        if argv[0].endswith("work-ledger") and argv[1:2] == ["list"]:
+            return 0, json.dumps([{k: v for k, v in r.items() if k != "argv"} for r in self.ledger]), ""
         return 2, "", f"unexpected {argv}"
 
 
@@ -176,6 +184,17 @@ def watching(tmp: Path) -> None:
           len(items) == 2 and all(i["guess"] for i in items) and items[1]["due_at"] == "", items)
     check("an owner is an invite email or me, never a name", items[0]["assignee_human_id"] == "cal-0"
           and items[1]["assignee_human_id"] == "owner", items)
+    queued = [r for r in run.ledger if r["source_key"].startswith(f"meeting:{first['id']}:")]
+    check("each action item is queued in the work ledger the moment the meeting closes, keyed like a Go press",
+          sorted(r["source_key"] for r in queued) == [f"meeting:{first['id']}:a1", f"meeting:{first['id']}:a2"]
+          and all("--scope=~" in r["argv"] for r in queued), run.ledger)
+    check("the ledger row names the meeting as its source",
+          all(any(a.startswith("--next-action=From Zeutara check-in") for a in r["argv"]) for r in queued),
+          [r["argv"] for r in queued])
+    check("the meeting file records what was queued and that it read back",
+          [x["ok"] for x in first.get("ledger") or []] == [True, True], first.get("ledger"))
+    check("an injected item is a ledger title, never run",
+          not any("email everyone" in c[0] for c in run.calls), run.calls)
     claude = [c for c in run.calls if c[:2] == ["claude", "-p"]]
     check("claude runs once per meeting with every tool, MCP server and setting off",
           len(claude) == 2 and all(c[c.index("--tools") + 1] == "" and c[c.index("--setting-sources") + 1] == ""
@@ -193,6 +212,11 @@ def watching(tmp: Path) -> None:
     check("CHEWBACCA_MEETING_SUMMARY=0: claude is never run and the meeting says so",
           not any(c[:1] == ["claude"] for c in run2.calls) and m["summary"] is None
           and "nothing left this Mac" in m["summary_note"], (run2.calls, m["summary_note"]))
+
+    home4 = tmp / "noledger"
+    _, run4, _ = recorded(home4, env={"CHEWBACCA_MEETING_LEDGER": "0"})
+    check("CHEWBACCA_MEETING_LEDGER=0: the summary still runs and nothing is queued",
+          any(c[:2] == ["claude", "-p"] for c in run4.calls) and not run4.ledger, run4.ledger)
 
     home3 = tmp / "nocal"
     recorded(home3, calendar=False)

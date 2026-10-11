@@ -161,6 +161,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // A text to yourself starting with "Kyber" is answered as a text.
         TextTrigger.shared.start()
+        // A meeting records itself: start when a call starts, stop when it ends.
+        MeetingAutopilot.shared.start()
         // And kept up after that, so a bridge that dies is back before the
         // next sentence rather than because of it. See `ListenerWatchdog`.
         listenerCheck = Timer.scheduledTimer(
@@ -225,6 +227,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         server?.stop()
+        MeetingAutopilot.shared.stop()
         voice.setMode(.off)
         handTracker.stop()
         let monitors = [

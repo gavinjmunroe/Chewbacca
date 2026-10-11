@@ -200,7 +200,9 @@ if group "site-gate"; then
                   "runs under reduced motion" '"Ghost" text is invisible' 'heading-plus-line grid of 6 cards' \
                   'heading paints nothing (covered or invisible): Covered people' \
                   'twin sections: "Team twin" and "Questions twin"' \
-                  'boring section: "Dead zone"'; do
+                  'boring section: "Dead zone"' \
+                  'boring section: "Poster zone": still image (inline)' \
+                  'boring section: "Slab zone"'; do
       check "bad page flags: $needle" grep -qF -- "$needle" "$TMP/sg.out"
     done
     exits  "clean page passes" 0 "$ROOT/bin/site-gate" check "$SG/good.html"

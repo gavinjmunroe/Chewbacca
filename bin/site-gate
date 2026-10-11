@@ -392,7 +392,10 @@ SECTION_LIST = r"""() => {
   };
   walk(document.body, 0);
   out.forEach((s, i) => s.setAttribute('data-sg-sec', i));
-  return out.map(s => ((s.querySelector('h1, h2, h3') || s).textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40));
+  return out.map((s, i) => { const h = s.querySelector('h1, h2, h3');
+    const t = h ? (h.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 40) : '';
+    return t || 'section ' + (i + 1) + ' of ' + out.length + ', no heading, ' +
+      Math.round((s.getBoundingClientRect().top + scrollY) / innerHeight * 10) / 10 + ' screens down'; });
 }"""
 
 SECTION_STILL = r"""(i) => {
@@ -425,7 +428,7 @@ SECTION_STILL = r"""(i) => {
             (a.effect.target === e || a.effect.target.contains(e))) moving = true;
       if (!moving) stills.push({ x: Math.max(0, b.left), y: Math.max(top, b.top),
         width: Math.min(b.right, W) - Math.max(0, b.left), height: Math.min(b.bottom, bot) - Math.max(top, b.top),
-        src: (e.currentSrc || e.src || '').split('/').pop().slice(0, 50) });
+        src: /^data:/.test(e.currentSrc || e.src || '') ? '' : (e.currentSrc || e.src || '').split('/').pop().slice(0, 50) });
     }
   }
   // Dead space: split the visible band into 6 x 4 cells, mark a cell taken
@@ -487,7 +490,8 @@ def boring_sections(pg):
     names = pg.evaluate(SECTION_LIST)
     out = []
     for i, name in enumerate(names):
-        label = f'"{name or "untitled"}"'
+        label = f'"{name}"'
+        why = []
         try:
             pg.evaluate("i => document.querySelector('[data-sg-sec=\"' + i + '\"]').scrollIntoView({block: 'start'})", i)
             # an entrance that plays once and ends counts, so look early too
@@ -523,25 +527,25 @@ def boring_sections(pg):
         # still clay world in the who-we-are card: "they need to be 3d
         # animated videos like the clay site!!!!!!!! ALL OF THEM".
         for s in still_imgs:
-            out.append(f'{label}: still image {s["src"] or "(inline)"} fills {s["width"] * s["height"] / area:.0%} of it. '
-                       'Make it a looping video or animate it')
+            why.append(f'still image {s["src"] or "(inline)"} fills {s["width"] * s["height"] / area:.0%} of it, '
+                       'make it a looping video or animate it')
         settled = idle_px > max(400, 0.002 * area) or scrolled >= 2
         if not (settled or early > 0 or st["anims"] > 0):
-            out.append(f'{label}: nothing moves on entry, at rest or on scroll '
-                       f'(figures {st["figure"]:.0%}, {st["words"]} words). Give it motion: '
-                       'an entrance, an ambient loop or a scroll-linked scene')
+            why.append(f'nothing moves on entry, at rest or on scroll (figures {st["figure"]:.0%}, '
+                       f'{st["words"]} words), give it an entrance, an ambient loop or a scroll scene')
         # A slab: a near-empty band whose only motion was getting there. The
         # /apply close on 2026-10-10 was one sentence and a button on 1.3
         # screens of flat cardinal; it grew in on scroll, then sat dead.
         elif st["cover"] < 0.15 and not settled:
-            out.append(f'{label}: {st["cover"]:.0%} of it holds anything and nothing moves once it lands. '
-                       'Fill it with a figure or scene, or cut it down to its content')
+            why.append(f'only {st["cover"]:.0%} of it holds anything and it sits dead once it lands, '
+                       'fill it or cut it down to its content')
         # Every region is filled on purpose. Caleb, 2026-10-10, on an advisor
         # band whose right half and top third were empty blue: "Chewb should
         # ALWAYS be intentional with how it chooses to fill EVERY space".
         if st["hole"] >= 0.3 and not settled:
-            out.append(f'{label}: {st["hole"]:.0%} of it is one empty block with nothing in it or moving through it. '
-                       'Fill it on purpose, or size the section to what it holds')
+            why.append(f'{st["hole"]:.0%} of it is one empty block, fill it on purpose or size the section to what it holds')
+        if why:
+            out.append(f'{label}: ' + '; '.join(why))
     return out
 
 

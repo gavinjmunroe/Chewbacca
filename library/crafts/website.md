@@ -413,3 +413,14 @@ right? They're all fun videos???". A still render, however big, is a poster.
 Every section moves on entry, at rest or with the scroll. `site-gate check`
 now fails a section where none of the three happens. Calibrated that day: the
 Lemma reference had 0 such sections, live usctts.com had 5.
+
+**Every space is filled on purpose (TTS, 2026-10-10, that evening).** Three
+more shipped past the first boring check: a still clay world in its card
+("they need to be 3d animated videos like the clay site!!!!!!!! ALL OF
+THEM"), a close that was one sentence on 1.3 screens of flat cardinal, and
+advisor bands whose right half sat empty ("Chewb should ALWAYS be
+intentional with how it chooses to fill EVERY space"). `site-gate check` now
+also fails a still image over 20% of a section, a band under 15% content that
+sits dead once it lands, and one empty block over 30% of a section. It is
+stricter than the Lemma reference on purpose: Lemma's trust and newsletter
+bands fail it too.

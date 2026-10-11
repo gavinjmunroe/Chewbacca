@@ -1,0 +1,195 @@
+{
+  "_about": "Read-only kit commands any MCP agent may run through chewbacca-mcp's kit_read tool. Each entry is a fixed argv; only the listed params are appended, typed and checked. Nothing here writes, sends or spends. A write is added only with its own approval gate, never here.",
+  "reads": [
+    {
+      "id": "coursework.today",
+      "tool": "coursework",
+      "argv": [
+        "today"
+      ],
+      "about": "Today's classes and today's deadlines from the syllabus ledger."
+    },
+    {
+      "id": "coursework.week",
+      "tool": "coursework",
+      "argv": [
+        "week"
+      ],
+      "about": "The days ahead, one block each, classes and deadlines.",
+      "params": {
+        "days": {
+          "type": "number",
+          "flag": "--days"
+        }
+      }
+    },
+    {
+      "id": "coursework.due",
+      "tool": "coursework",
+      "argv": [
+        "due"
+      ],
+      "about": "What is due, soonest first, with the source of each date.",
+      "params": {
+        "days": {
+          "type": "number",
+          "flag": "--days"
+        }
+      }
+    },
+    {
+      "id": "coursework.grade",
+      "tool": "coursework",
+      "argv": [
+        "grade"
+      ],
+      "about": "Where a course grade stands and what score is needed.",
+      "params": {
+        "course": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "id": "coursework.attendance",
+      "tool": "coursework",
+      "argv": [
+        "attendance"
+      ],
+      "about": "Absences used against each course's budget.",
+      "params": {
+        "course": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "id": "people.search",
+      "tool": "people",
+      "argv": [
+        "search"
+      ],
+      "about": "Who the person knows: search their relationship store for people at a company, school, city or role.",
+      "params": {
+        "query": {
+          "type": "string",
+          "required": true
+        }
+      }
+    },
+    {
+      "id": "people.show",
+      "tool": "people",
+      "argv": [
+        "show"
+      ],
+      "about": "Everything recorded about one person.",
+      "params": {
+        "name": {
+          "type": "string",
+          "required": true
+        }
+      }
+    },
+    {
+      "id": "people.reconnect",
+      "tool": "people",
+      "argv": [
+        "reconnect"
+      ],
+      "about": "People past their own contact cadence, worst first.",
+      "params": {
+        "limit": {
+          "type": "number",
+          "flag": "--limit"
+        }
+      }
+    },
+    {
+      "id": "agents.list",
+      "tool": "kyber-sessions",
+      "argv": [],
+      "about": "Every coding agent session on this Mac (Claude Code, Codex, runs started from the HUD), what needs the person first."
+    },
+    {
+      "id": "agents.needs",
+      "tool": "kyber-sessions",
+      "argv": [
+        "needs"
+      ],
+      "about": "Only the agent sessions waiting on the person or failed."
+    },
+    {
+      "id": "tabs.list",
+      "tool": "tabs",
+      "argv": [
+        "list"
+      ],
+      "about": "The shared board of live agent tabs and what each is doing."
+    },
+    {
+      "id": "dead_tabs",
+      "tool": "tab-rescue",
+      "argv": [
+        "--hours",
+        "12"
+      ],
+      "about": "Agent tabs that died on a usage limit in the last 12 hours, with a resume prompt for each."
+    },
+    {
+      "id": "meetings.recorder",
+      "tool": "meeting-autopilot",
+      "argv": [
+        "status"
+      ],
+      "about": "Whether a meeting is recording right now, and which call app holds the mic."
+    },
+    {
+      "id": "glass.walk",
+      "tool": "kyber-surfaces",
+      "argv": [
+        "walk"
+      ],
+      "about": "A HUD surface's rows as text: needs-you, missing, today, tasks, conversations, people, meetings.",
+      "params": {
+        "kind": {
+          "type": "choice",
+          "choices": [
+            "needs-you",
+            "missing",
+            "today",
+            "tasks",
+            "conversations",
+            "people",
+            "meetings",
+            "files",
+            "music"
+          ],
+          "required": true
+        }
+      }
+    },
+    {
+      "id": "ledger.open",
+      "tool": "work-ledger",
+      "argv": [
+        "list",
+        "--scope",
+        "~"
+      ],
+      "about": "The person's open commitments and todos from the work ledger."
+    },
+    {
+      "id": "screen_time",
+      "tool": "screen-time",
+      "argv": [],
+      "about": "Mac Screen Time by app from the Mac's own database.",
+      "params": {
+        "days": {
+          "type": "number",
+          "flag": "--days"
+        }
+      }
+    }
+  ]
+}

@@ -94,6 +94,122 @@ const TOOLS = [
   },
 ];
 
+// ── The rest of the kit, read only ──────────────────────────────────────────
+//
+// HockeyStack "killed its UI" on 2026-10 with about 20 MCP tools for one
+// product and no approval on deletes; Salesforce Headless 360 shipped 60+.
+// The kit has 190 commands and this server exposed 5 of them. Two tools reach
+// the rest without listing 190 schemas into every agent's context (the
+// context-bloat complaint about MCP): find_capability searches, kit_read runs
+// one entry from config/data/mcp-reads.json. Every entry there is a fixed argv
+// plus typed params, read only. A write is never added there; it gets its own
+// tool with its own approval, the way a write on the glass needs a press.
+const READS_FILE = path.join(BIN, "..", "config", "data", "mcp-reads.json");
+function reads() {
+  try {
+    const got = JSON.parse(fs.readFileSync(READS_FILE, "utf8"));
+    return Array.isArray(got.reads) ? got.reads : [];
+  } catch {
+    return [];
+  }
+}
+
+// A model's argument came from whatever page it last read: a value that looks
+// like a flag would reach the CLI as one, so it is refused, not quoted.
+// Lengths and the day cap are guessed, never measured.
+function argFor(spec, value) {
+  if (spec.type === "number") {
+    const n = Number(value);
+    if (!Number.isInteger(n) || n < 1 || n > 365) throw new Error("expected a whole number from 1 to 365");
+    return String(n);
+  }
+  const s = String(value);
+  if (spec.type === "choice") {
+    if (!(spec.choices || []).includes(s)) throw new Error(`expected one of ${(spec.choices || []).join(", ")}`);
+    return s;
+  }
+  if (!s.trim() || s.length > 200 || s.startsWith("-") || /[\x00-\x1f]/.test(s))
+    throw new Error("expected plain text under 200 characters that does not start with a dash");
+  return s;
+}
+
+function readArgv(entry, args) {
+  const argv = [...(entry.argv || [])].map((a) => (a === "~" ? require("node:os").homedir() : a));
+  for (const [name, spec] of Object.entries(entry.params || {})) {
+    const value = args ? args[name] : undefined;
+    if (value === undefined || value === null || value === "") {
+      if (spec.required) throw new Error(`${name} is required`);
+      continue;
+    }
+    const v = argFor(spec, value);
+    if (spec.flag) argv.push(spec.flag, v);
+    else argv.push(v);
+  }
+  return argv;
+}
+
+const STOP = new Set("a about am an and any are at be can do does for from get have i if in is it me my of on or show so the there this to what whats which who with you your".split(" "));
+const words = (s) => (String(s || "").toLowerCase().match(/[a-z0-9]+/g) || []).filter((w) => !STOP.has(w));
+
+TOOLS.push(
+  {
+    name: "find_capability",
+    description:
+      "Search everything this person's Chewbacca kit can read for them: classes and deadlines, grades and attendance, the people they know, every coding agent running on their Mac and which need them, dead agent tabs, meeting recording status, their HUD panels (needs-you, today, tasks, conversations, meetings), their open commitments, and Screen Time. Returns matching capability ids with what each returns and its parameters. Call this first, then kit_read with an id.",
+    inputSchema: {
+      type: "object",
+      properties: { query: { type: "string", description: "What you want to know, in plain words" } },
+      required: ["query"],
+    },
+    run: async (a) => {
+      const q = words(a.query);
+      const scored = reads()
+        .map((r) => {
+          const hay = words(`${r.about} ${r.tool}`);
+          const id = words(r.id);
+          // Five letters is a crude stem: "recording" finds "recorded".
+          const hit = (list, w) => list.some((h) => h.startsWith(w) || w.startsWith(h) || (w.length >= 5 && h.slice(0, 5) === w.slice(0, 5)));
+          // The id names what the capability is; a match there counts double.
+          return { r, score: q.reduce((n, w) => n + (hit(id, w) ? 2 : 0) + (hit(hay, w) ? 1 : 0), 0) };
+        })
+        .filter((x) => x.score > 0)
+        .sort((x, y) => y.score - x.score)
+        .slice(0, 6);
+      const list = (scored.length ? scored.map((x) => x.r) : reads()).map((r) => {
+        const params = Object.entries(r.params || {})
+          .map(([k, v]) => `${k}${v.required ? "" : "?"}: ${v.type}${v.choices ? " (" + v.choices.join("|") + ")" : ""}`)
+          .join(", ");
+        return `${r.id}: ${r.about}${params ? "  params: " + params : ""}`;
+      });
+      return (scored.length ? "" : "Nothing matched those words; everything readable:\n") + list.join("\n");
+    },
+  },
+  {
+    name: "kit_read",
+    description:
+      "Run one read-only capability from the person's Chewbacca kit by its id (get ids from find_capability). Never writes, sends or spends anything.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "A capability id from find_capability, e.g. coursework.due" },
+        params: { type: "object", description: "That capability's params, if any" },
+      },
+      required: ["id"],
+    },
+    run: async (a) => {
+      const entry = reads().find((r) => r.id === String(a.id));
+      if (!entry) return `No capability ${String(a.id).slice(0, 60)}. Call find_capability first.`;
+      let argv;
+      try {
+        argv = readArgv(entry, a.params || {});
+      } catch (e) {
+        return `${entry.id}: ${e.message}`;
+      }
+      return cli(entry.tool, argv);
+    },
+  },
+);
+
 // ── Running a CLI safely ─────────────────────────────────────────────────────
 //
 // execFile, never a shell string. These arguments arrive from a model, which
@@ -181,8 +297,19 @@ function serveStdio() {
 function serveHttp(port) {
   http
     .createServer(async (req, res) => {
-      res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader("Access-Control-Allow-Headers", "content-type, mcp-protocol-version");
+      // A web page can POST to 127.0.0.1 from the person's own browser. With
+      // `Access-Control-Allow-Origin: *` any site they visited could read their
+      // people and messages through this port (found 2026-10-11, before the
+      // kit_read tools widened what it serves). A browser always sends Origin;
+      // an MCP client does not. A rebinding DNS name shows up as a foreign Host.
+      const host = String(req.headers.host || "").replace(/:\d+$/, "");
+      const allowed = String(process.env.CHEWBACCA_MCP_ORIGINS || "").split(",").filter(Boolean);
+      if (!["127.0.0.1", "localhost"].includes(host) || (req.headers.origin && !allowed.includes(req.headers.origin)))
+        return res.writeHead(403, { "content-type": "text/plain" }).end("refused: browser origin or foreign host");
+      if (req.headers.origin) {
+        res.setHeader("Access-Control-Allow-Origin", req.headers.origin);
+        res.setHeader("Access-Control-Allow-Headers", "content-type, mcp-protocol-version");
+      }
       if (req.method === "OPTIONS") return res.writeHead(204).end();
       if (req.method === "GET")
         return res

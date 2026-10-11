@@ -73,4 +73,35 @@ assert "chewbacca" in d["mcpServers"], "did not register itself"
 
 [ -f "$cfg.before-chewbacca" ] || fail "--register did not back the config up"
 
+# 7. find_capability and kit_read reach the rest of the kit, read only.
+#    2026-10-11: HockeyStack shipped ~20 MCP tools and no approval on deletes;
+#    this exposes reads only, through a fixed registry with typed params.
+out="$(rpc '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"find_capability","arguments":{"query":"which agents need me"}}}')"
+echo "$out" | grep -q 'agents.needs' || fail "find_capability did not find agents.needs: $out"
+out="$(rpc '{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"kit_read","arguments":{"id":"people.search","params":{"query":"--help"}}}}')"
+echo "$out" | grep -q 'does not start with a dash' || fail "a flag-shaped value reached a CLI: $out"
+out="$(rpc '{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"kit_read","arguments":{"id":"glass.walk","params":{"kind":"../../etc"}}}}')"
+echo "$out" | grep -q 'expected one of' || fail "a choice param took a value off its list: $out"
+out="$(rpc '{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"kit_read","arguments":{"id":"rm.everything"}}}')"
+echo "$out" | grep -q 'No capability' || fail "an unknown id did not refuse: $out"
+python3 - "$ROOT/config/data/mcp-reads.json" <<'PY' || fail "a registry entry looks like a write"
+import json, sys
+bad = {"send", "add", "apply", "delete", "rm", "write", "set", "on", "off", "start", "stop", "submit", "push", "import"}
+for e in json.load(open(sys.argv[1]))["reads"]:
+    assert not (set(e.get("argv", [])) & bad), e["id"]
+PY
+
+# 8. The HTTP mode refuses a browser page and a rebinding host. Any site the
+#    person visits could otherwise read their people through 127.0.0.1.
+port=$((20000 + RANDOM % 20000))
+"$MCP" --http "$port" 2>/dev/null & srv=$!
+for _ in $(seq 1 30); do curl -s "http://127.0.0.1:$port/" >/dev/null 2>&1 && break; sleep 0.1; done
+code="$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Origin: https://evil.example' -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' "http://127.0.0.1:$port/")"
+host="$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Host: rebind.example' -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' "http://127.0.0.1:$port/")"
+okc="$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' "http://127.0.0.1:$port/")"
+kill "$srv" 2>/dev/null; wait "$srv" 2>/dev/null
+[ "$code" = 403 ] || fail "a browser Origin was served (HTTP $code)"
+[ "$host" = 403 ] || fail "a foreign Host was served (HTTP $host)"
+[ "$okc" = 200 ] || fail "a plain local client was refused (HTTP $okc)"
+
 exit 0

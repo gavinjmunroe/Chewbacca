@@ -38,6 +38,7 @@ and no outcome line here quotes a meeting.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -53,9 +54,11 @@ from . import ACTION_PREFIX, Bind, Context, Provider, Result, SurfaceError, ago,
 # meeting on screen under the list at the right column's height. Guessed,
 # never measured on the glass.
 MOST_ROWS = 6
-SUMMARY_LINES = 6
-DECISION_LINES = 4
+# Granola shows a handful of lines; two or three read at a glance.
+SUMMARY_LINES = 3
+DECISION_LINES = 3
 ITEM_ROWS = 5
+ROW_WIDTH = 60
 LINE_WIDTH = 96
 # One transcript page is TRANSCRIPT_WORDS words; at about 5.5 characters a
 # word (English average) that is ~1,100 characters, so this clips only a page
@@ -65,21 +68,17 @@ PAGE_CHARS = 1400
 # so a 30 s refresh costs nothing measurable; a meeting's summary lands after
 # the call ends, and this is how long the panel can lag it.
 REFRESH_S = 30.0
-PURPOSE = "What your calls said, and what you owe from them"
+PURPOSE = "What your calls said, and what you owe"
 NO_MEETINGS = "No meetings recorded yet."
+# Each step is one glance: the 2026-10-10 versions ran 150 to 190 characters
+# and Caleb called the panel a wall of text (surface_lint.ROW_CHARS is 120).
 STEPS = [
-    "A call records itself: when Zoom, Teams, Webex or a Slack huddle holds the mic for 15 seconds, or a "
-    "browser does with a meeting tab open or a call on your calendar, Chewbacca records this Mac's microphone "
-    "and the call's audio, and stops 20 seconds after the call lets go. Start capture does it by hand.",
-    "The first time, macOS asks to allow Microphone and Screen & System Audio Recording for the app "
-    "running it. Both live in System Settings > Privacy & Security, and "
-    "`chewbacca-permissions guide --for capture` walks you through them.",
-    "Every 15 seconds of audio is transcribed on this Mac, then deleted. When the call ends Claude writes "
-    "a summary and action items from the transcript, and the items go into your work ledger, unless "
-    "CHEWBACCA_MEETING_SUMMARY=0 keeps it on this Mac.",
+    "Zoom, Teams or a Slack huddle on your mic records itself and stops when the call ends.",
+    "Any other call: press Record now.",
+    "Audio is transcribed on this Mac and deleted; Claude writes the summary when it ends.",
 ]
-ANARLOG_OPEN_STEP = "Already use Anarlog? Open Anarlog once from Applications and its meetings show here too."
-ANARLOG_READY_STEP = "Anarlog is set up as well, so anything it records shows here too."
+ANARLOG_OPEN_STEP = "Anarlog's meetings show here once it has run."
+ANARLOG_READY_STEP = "Anarlog's meetings show here too."
 # Kept for anyone importing it; the panel no longer asks anyone to install a
 # second app (Caleb, 2026-10-05: "Anarlog shouldn't be it's own app").
 INSTALL_STEP = "Install Anarlog (github.com/fastrepl/anarlog), which puts an `anarlog` command on this Mac."
@@ -129,6 +128,47 @@ def duration(meeting: dict) -> str:
     return f"{minutes} min" if minutes < 90 else f"{minutes // 60} h {minutes % 60} min"
 
 
+def distinct(lines: list[str], others: list[str]) -> list[str]:
+    """Summary lines that say something a decision or an action item doesn't:
+    the 2026-10-10 panel said "Ship the autopilot tonight" three times. Two
+    lines are the same when most of the shorter one's words are in the other.
+    Half the words is guessed, never measured."""
+    def words(t: str) -> set[str]:
+        return {w for w in re.findall(r"[a-z0-9']+", t.lower()) if len(w) > 2}
+    out = []
+    for line in lines:
+        mine = words(line)
+        if mine and any(len(mine & words(o)) * 2 >= min(len(mine), len(words(o)) or 1) for o in others + out):
+            continue
+        out.append(line)
+    return out
+
+
+def short_day(day: str) -> str:
+    """"2026-10-12" -> "Oct 12"."""
+    try:
+        return datetime.strptime(day[:10], "%Y-%m-%d").strftime("%b %-d")
+    except ValueError:
+        return ""
+
+
+def sentences(text: str) -> list[str]:
+    parts = [p.strip() for p in re.split(r"(?<=[.!?])\s+", text) if p.strip()]
+    return parts or [text]
+
+
+def why_line(n: int, i: dict) -> str:
+    """Where one item's owner and day came from, in one short line."""
+    plan = i["plan"]
+    o = plan["owner"]
+    who = (o["name"] or "no owner") + (" (guessed)" if o["name"] and o["guess"] else " (said)" if o["name"] else "")
+    w = plan.get("when")
+    day = f" · {short_day(w['day'].isoformat())} ({'guessed' if w['guess'] else 'said'})" if w else ""
+    line = plan.get("line")
+    at = re.sub(r":\d\d(\s?[AP]M)", r"\1", str(line.get("clock") or "")) if line else ""
+    return clip(f"{n}. {who}{day}" + (f" · heard at {at}" if at else " · not in the transcript"), 110)
+
+
 class Meetings(Provider):
     name = "meetings"
     title = "MEETINGS"
@@ -141,7 +181,11 @@ class Meetings(Provider):
         super().__init__()
         self.actions = {f"{ACTION_PREFIX}open": self.open, f"{ACTION_PREFIX}add": self.add,
                         f"{ACTION_PREFIX}act": self.act,
-                        f"{ACTION_PREFIX}next": self.next_page, f"{ACTION_PREFIX}capture": self.capture}
+                        f"{ACTION_PREFIX}next": self.next_page, f"{ACTION_PREFIX}capture": self.capture,
+                        f"{ACTION_PREFIX}why": self.why, f"{ACTION_PREFIX}transcript": self.transcript}
+        # Folded by default: where an item came from, and the transcript.
+        self.show_why = False
+        self.show_transcript = False
         # The meeting whose detail shows, by Anarlog id. Set only by open().
         self.opened = ""
         # id -> (updated_at, meeting): an unchanged meeting is not re-read.
@@ -158,7 +202,19 @@ class Meetings(Provider):
             state = MC.capture_state(Path(ctx.home))
         except OSError:
             return {"running": False, "since": None}
-        return {"running": bool(state.get("running")), "since": state.get("since")}
+        out = {"running": bool(state.get("running")), "since": state.get("since")}
+        # What the autopilot says it is doing (bin/meeting-autopilot writes
+        # it every look). Its words are its own, never a meeting's.
+        pilot = MC.load(Path(ctx.home) / ".chewbacca" / "meeting-autopilot" / "state.json") or {}
+        if pilot:
+            fresh = MC.parse_iso(pilot.get("updated"))
+            # The loop writes every 2 s; ten minutes of silence means it is gone.
+            out["watching"] = bool(fresh and (ctx.now() - fresh).total_seconds() < 600)
+            out["off"] = bool(pilot.get("off"))
+            trigger = pilot.get("trigger") if isinstance(pilot.get("trigger"), dict) else {}
+            if pilot.get("phase") in ("recording", "ending"):
+                out["app"] = AM.clean(trigger.get("name"), 30)
+        return out
 
     def fetch(self, ctx: Context) -> dict:
         now = ctx.now()
@@ -294,29 +350,40 @@ class Meetings(Provider):
                 "summary_note": AM.clean(meeting.get("summary_note"), LINE_WIDTH)}
 
     # ── drawing ──────────────────────────────────────────────────────────
+    #
+    # Granola's shape, calmer: one state line, two counts, the meetings, then
+    # the open one as title, one meta line, two or three summary lines,
+    # Decided only when something was, and the items as rows with a date and
+    # one Go. Provenance and the transcript are behind a tap each (Caleb,
+    # 2026-10-10: "its just a wall of text"; surface_lint holds the line).
 
     def layout(self) -> list[str]:
-        ids = ["s", "purpose", "live", "capture", "note", "setup", "doctor", "list", "head", "meta", "summary", "decisions",
-               "items", "why", "transcript", "next", "status"]
+        ids = ["s", "purpose", "state", "capture", "note", "counts", "setup", "list", "head", "meta",
+               "summary", "decisions", "items", "whyBtn", "why", "txBtn", "transcript", "next", "status"]
         return [
             comp(self.cid("s"), "Screen", title=self.title),
             comp(self.cid("purpose"), "Text", value=PURPOSE, tone="muted"),
-            comp(self.cid("live"), "Text", value=Bind(self.p("live"))),
-            comp(self.cid("capture"), "Button", label=Bind(self.p("captureLabel")), action=f"{ACTION_PREFIX}capture",
-                 variant="primary"),
+            comp(self.cid("state"), "Text", value=Bind(self.p("state"))),
+            comp(self.cid("capture"), "Button", label=Bind(self.p("captureLabel")), action=f"{ACTION_PREFIX}capture"),
             comp(self.cid("note"), "Text", value=Bind(self.p("note")), tone="muted"),
+            comp(self.cid("counts"), "Stack", direction="grid", cols=2, gap=3),
+            comp(self.cid("week"), "Metric", label="This week", value=Bind(self.p("week"))),
+            comp(self.cid("owed"), "Metric", label="To look at", value=Bind(self.p("owed")),
+                 thresholds=[{"at": 1, "tone": "warn"}]),
+            f"> {self.cid('counts')} {self.cid('week')} {self.cid('owed')}",
             comp(self.cid("setup"), "List", items=Bind(self.p("setup"))),
-            comp(self.cid("doctor"), "Text", value=Bind(self.p("doctor")), tone="muted"),
-            comp(self.cid("list"), "Events", caption=Bind(self.p("caption")), items=Bind(self.p("rows")),
-                 action=f"{ACTION_PREFIX}open", actionLabel="Open"),
+            comp(self.cid("list"), "Events", items=Bind(self.p("rows")), action=f"{ACTION_PREFIX}open",
+                 actionLabel="Open"),
             comp(self.cid("head"), "Heading", text=Bind(self.p("head")), level=3),
             comp(self.cid("meta"), "Text", value=Bind(self.p("meta")), tone="muted"),
             comp(self.cid("summary"), "List", items=Bind(self.p("summary"))),
             comp(self.cid("decisions"), "List", items=Bind(self.p("decisions"))),
             comp(self.cid("items"), "Events", caption=Bind(self.p("itemsCaption")), items=Bind(self.p("items")),
                  action=f"{ACTION_PREFIX}act", actionLabel="Go"),
+            comp(self.cid("whyBtn"), "Button", label=Bind(self.p("whyLabel")), action=f"{ACTION_PREFIX}why"),
             comp(self.cid("why"), "List", items=Bind(self.p("itemsWhy"))),
-            comp(self.cid("transcript"), "Text", value=Bind(self.p("transcript"))),
+            comp(self.cid("txBtn"), "Button", label=Bind(self.p("txLabel")), action=f"{ACTION_PREFIX}transcript"),
+            comp(self.cid("transcript"), "Transcript", items=Bind(self.p("transcript"))),
             comp(self.cid("next"), "Button", label=Bind(self.p("nextLabel")), action=f"{ACTION_PREFIX}next"),
             comp(self.cid("status"), "Text", value=Bind(self.p("status")), tone="muted"),
             f"> {' '.join(self.cid(i) for i in ids)}",
@@ -327,14 +394,26 @@ class Meetings(Provider):
         return {self.p("status"): ""}
 
     def blank(self) -> dict:
-        return {self.p("live"): "", self.p("setup"): [], self.p("doctor"): "", self.p("caption"): "",
-                self.p("rows"): [], self.p("head"): "", self.p("meta"): "", self.p("summary"): [],
-                self.p("decisions"): [], self.p("itemsCaption"): "", self.p("items"): [], self.p("itemsWhy"): [],
-                self.p("transcript"): "", self.p("nextLabel"): "Next", self.p("captureLabel"): "Start capture"}
+        return {self.p("state"): "", self.p("setup"): [], self.p("rows"): [],
+                self.p("week"): "", self.p("owed"): "", self.p("head"): "", self.p("meta"): "",
+                self.p("summary"): [], self.p("decisions"): [], self.p("itemsCaption"): "", self.p("items"): [],
+                self.p("itemsWhy"): [], self.p("whyLabel"): "", self.p("transcript"): [], self.p("txLabel"): "",
+                self.p("nextLabel"): "", self.p("captureLabel"): "Record now"}
 
     def shown(self, data) -> dict | None:
         rows = (data or {}).get("rows") or []
         return next((r for r in rows if r["id"] == self.opened), None) or (rows[0] if rows else None)
+
+    @staticmethod
+    def state_line(capture: dict, now: datetime) -> str:
+        """The one calm line about recording: never a paragraph."""
+        if capture.get("running"):
+            mins = int((now - capture["since"]).total_seconds() // 60) if capture.get("since") else 0
+            app = capture.get("app") or ""
+            return " · ".join(["Recording"] + ([app] if app else []) + ([f"{mins} min"] if mins else []))
+        if capture.get("watching") is False:
+            return "Not listening for calls"
+        return "Auto-record is off" if capture.get("off") else "Listening for calls"
 
     def model(self, data, error, values, ctx) -> dict:
         out = self.blank()
@@ -343,94 +422,92 @@ class Meetings(Provider):
             return out
         now = ctx.now()
         capture = data.get("capture") or {}
-        out[self.p("captureLabel")] = "Stop capture" if capture.get("running") else "Start capture"
-        if capture.get("running"):
-            since = ago(capture["since"], now) if capture.get("since") else ""
-            began = f", started {since} ago" if since not in ("", "now") else ""
-            out[self.p("live")] = (f"Recording now{began}: this Mac's mic and the call audio. The first lines "
-                                   "show about 15 seconds after someone speaks.")
+        out[self.p("captureLabel")] = "Stop" if capture.get("running") else "Record now"
+        out[self.p("state")] = self.state_line(capture, now)
         setup = data.get("setup")
         if setup:
             out[self.p("note")] = note_for(data, error, setup["headline"], data.get("_at"))
-            out[self.p("setup")] = [{"id": f"step{i}", "text": f"{i + 1}. {s}"} for i, s in enumerate(setup["steps"])]
-            out[self.p("doctor")] = setup["doctor"]
+            out[self.p("setup")] = [{"id": f"step{i}", "text": clip(t, 110)} for i, t in enumerate(setup["steps"])] \
+                + ([{"id": "doctor", "text": clip(setup["doctor"], 110)}] if setup["doctor"] else [])
             return out
         rows = data["rows"]
         live = data.get("live")
         if live and live["native"] and not capture.get("running"):
-            # A native meeting with no end and no capture running: the
-            # watcher is still writing its last lines and summary.
-            out[self.p("live")] = f"Finishing {live['title']}: the last lines and the summary land shortly."
-        elif live and live["native"]:
-            since = ago(live["start"], now) if live["start"] else ""
-            began = f"started {since} ago" if since not in ("", "now") else "just started"
-            out[self.p("live")] = f"Recording now: {live['title']}, {began}. Press Stop capture when it ends."
-        elif live:
-            since = ago(live["start"], now) if live["start"] else ""
-            began = f"started {since} ago" if since not in ("", "now") else "just started"
-            out[self.p("live")] = f"Recording now: {live['title']}, {began}. Anarlog shows no end time yet."
+            out[self.p("state")] = f"Finishing {clip(live['title'], 40)}"
+        elif live and not live["native"]:
+            # Anarlog recording on its own, with no end time yet.
+            mins = int((now - live["start"]).total_seconds() // 60) if live["start"] else 0
+            out[self.p("state")] = " · ".join(["Recording", clip(live["title"], 40)] + ([f"{mins} min"] if mins else []))
         recent = [r for r in rows if r["start"] and (now - r["start"]).days < 7]
-        week = len(recent)
-        owed = sum(1 for r in recent for i in r["items"] if not i["added"] and not i["done"])
-        caption = f"{week} meeting{'s' if week != 1 else ''} this week · {owed} action item{'s' if owed != 1 else ''} to look at"
-        out[self.p("note")] = note_for(data, error, data.get("graph_note") or caption, data.get("_at"))
-        out[self.p("caption")] = "Latest"
+        out[self.p("week")] = len(recent)
+        out[self.p("owed")] = sum(1 for r in recent for i in r["items"] if not i["added"] and not i["done"])
+        out[self.p("note")] = note_for(data, error, data.get("graph_note") or "", data.get("_at"))
+        shown_id = (self.shown(data) or {}).get("id")
         out[self.p("rows")] = [{
-            "id": r["id"], "time": ago(r["start"], now) if r["start"] else "",
-            "accent": r["id"] == (self.shown(data) or {}).get("id"),
-            "text": clip(f"{r['title']}" + (f" · with {', '.join(r['who'][:3])}" if r["who"] else "")
-                         + (f" +{len(r['who']) - 3}" if len(r["who"]) > 3 else ""), 90)} for r in rows]
+            "id": r["id"], "time": ago(r["start"], now) if r["start"] else "", "accent": r["id"] == shown_id,
+            "text": clip(r["title"] + (f" · {', '.join(r['who'][:2])}" if r["who"] else "")
+                         + (f" +{len(r['who']) - 2}" if len(r["who"]) > 2 else ""), ROW_WIDTH)} for r in rows]
         r = self.shown(data)
         if r is None:
             return out
-        when_text = (f"{r['start'].strftime('%a %b %-d')}, {clock(r['start'])}" if r["start"] else "No start time")
-        meta = [when_text] + ([r["length"]] if r["length"] else []) + ([r["folder"]] if r["folder"] else [])
-        out[self.p("head")] = r["title"]
-        out[self.p("meta")] = " · ".join(meta + ([f"with {', '.join(r['who'])}"] if r["who"] else []))
-        if r["native"]:
-            empty = r["summary_note"] or "No summary yet. Claude writes one from the transcript when capture stops."
-            out[self.p("summary")] = ([{"id": "s-guess", "text": "Claude's guess from the transcript:"}]
-                                      + [{"id": f"s{i}", "text": t} for i, t in enumerate(r["summary"])]
-                                      if r["summary"] else [{"id": "s0", "text": empty}])
-        else:
-            out[self.p("summary")] = ([{"id": f"s{i}", "text": t} for i, t in enumerate(r["summary"])]
-                                      or [{"id": "s0", "text": "No summary yet. Anarlog writes one after the call."}])
-        whose = AM.whose(r["meeting"])
-        out[self.p("decisions")] = ([{"id": f"d{i}", "text": f"Decided: {t}"} for i, t in enumerate(r["decisions"])]
-                                    or [{"id": "d0", "text": f"No Decisions section in {whose} summary."}])
-        out[self.p("itemsCaption")] = (f"Action items · {whose} guesses, check before Go" if r["items"]
-                                       else "No open action items.")
+        when_text = r["start"].strftime("%a %b %-d") if r["start"] else ""
+        who = [w for w in r["who"] if not w.endswith("(unverified)")] or r["who"]
+        out[self.p("head")] = clip(r["title"], 60)
+        out[self.p("meta")] = clip(" · ".join(x for x in [when_text, r["length"], ", ".join(who[:3])] if x), 90)
+        summary = distinct(r["summary"], r["decisions"] + [i["text"] for i in r["items"]])[:SUMMARY_LINES]
+        if summary:
+            out[self.p("summary")] = [{"id": f"s{n}", "text": clip(t, 110)} for n, t in enumerate(summary)]
+        elif r["native"]:
+            out[self.p("summary")] = [{"id": "s0", "text": clip(r["summary_note"] or "Summary comes when the call ends.",
+                                                                  110)}]
+        out[self.p("decisions")] = [{"id": f"d{n}", "text": clip(f"Decided: {t}", 110)}
+                                    for n, t in enumerate(r["decisions"])]
+        out[self.p("itemsCaption")] = "Action items" if r["items"] else ""
         out[self.p("items")] = [self.item_row(i) for i in r["items"]]
-        out[self.p("itemsWhy")] = [{"id": f"why-{i['id']}", "text": clip(f"{n + 1}. " + MA.provenance(i["plan"]), 180)}
-                                   for n, i in enumerate(r["items"])]
+        if r["items"]:
+            out[self.p("whyLabel")] = "Hide where these came from" if self.show_why else "Where these came from"
+        if self.show_why:
+            out[self.p("itemsWhy")] = [{"id": f"why-{i['id']}", "text": why_line(n + 1, i)}
+                                       for n, i in enumerate(r["items"])]
         page = self._page if self._page and self._page.get("meeting_id") == r["id"] else None
-        if page is None:
-            out[self.p("transcript")] = "Transcript: open the meeting to read it."
-        elif page.get("error"):
-            out[self.p("transcript")] = f"Transcript: {page['error']}"
-        elif not page["text"]:
-            out[self.p("transcript")] = "No transcript words yet." if page["offset"] == 0 else "End of the transcript."
-        else:
-            start = page["offset"] + 1
-            out[self.p("transcript")] = (f"Transcript, words {start}-{page['offset'] + page['returned']}: "
-                                         + clip(page["text"], PAGE_CHARS))
-        out[self.p("nextLabel")] = f"Next {AM.TRANSCRIPT_WORDS} words" if page and page.get("next") else "Back to the start"
+        out[self.p("txLabel")] = "Hide transcript" if self.show_transcript else "Transcript"
+        if self.show_transcript:
+            if page is None or page.get("error") or not page.get("text"):
+                why = (page or {}).get("error") or ("No transcript yet." if not page or page["offset"] == 0
+                                                    else "End of the transcript.")
+                out[self.p("transcript")] = [{"id": "t0", "role": "assistant", "text": clip(why, 110)}]
+            else:
+                out[self.p("transcript")] = [{"id": f"t{page['offset']}-{n}", "role": "assistant", "text": part}
+                                             for n, part in enumerate(sentences(clip(page["text"], PAGE_CHARS)))]
+            out[self.p("nextLabel")] = "More" if page and page.get("next") else "From the start"
         return out
 
     @staticmethod
     def item_row(i: dict) -> dict:
-        """Before the press the row names what Go will touch; after it, what
-        was read back from where it landed."""
+        """What is owed, by whom, when, and what Go touches: the provenance
+        is behind "Where these came from", never printed in the row."""
         day = i["due"] or (i["plan"]["when"]["day"].isoformat() if i["plan"].get("when") else "")
-        words = clip(i["text"], 70) + (f" · {i['owner']}" if i["owner"] else "")
+        owner = "" if i["owner"] in ("", "you") else i["owner"].replace(" (unverified)", "")
+        words = clip(i["text"], 52) + (f" · {clip(owner, 20)}" if owner else "")
         if i["done"]:
-            text = f"Done · {words} · {i['done']['line']}"
+            text = f"Done · {words}"
         elif i["added"]:
             text = f"Added · {words}"
         else:
-            text = f"(guess) {words} · {i['plan']['touches']}"
-        return {"id": i["id"], "accent": not (i["added"] or i["done"]), "time": day[5:] if day else "",
-                "text": clip(text, 200)}
+            # What Go will touch, in one word (kyber-surfaces rule 4); the
+            # full "Go puts a tentative event on..." sentence was the wall.
+            touch = {"event": "calendar hold", "draft": "text draft", "task": "task"}.get(i["plan"].get("kind"), "")
+            text = words + (f" · {touch}" if touch else "") + (" · guess" if i["item"].get("guess", True) else "")
+        return {"id": i["id"], "accent": not (i["added"] or i["done"]),
+                "time": short_day(day), "text": clip(text, 90)}
+
+    def why(self, ctx: Context, data, values: dict) -> Result:
+        self.show_why = not self.show_why
+        return Result(True, "")
+
+    def transcript(self, ctx: Context, data, values: dict) -> Result:
+        self.show_transcript = not self.show_transcript
+        return Result(True, "")
 
     # ── presses ──────────────────────────────────────────────────────────
 
@@ -488,6 +565,7 @@ class Meetings(Provider):
         if r is None:
             return Result(False, "That meeting isn't on the list any more.")
         self.opened = mid
+        self.show_why = self.show_transcript = False
         try:
             self._page = AM.transcript_page(ctx, mid, 0)
         except AM.AnarlogError as err:

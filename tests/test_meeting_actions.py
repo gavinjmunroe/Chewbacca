@@ -315,15 +315,17 @@ def end_to_end() -> None:
                   not tks.validate(drawn) and any('action="ks-act"' in x and 'actionLabel="Go"' in x for x in drawn),
                   tks.validate(drawn))
             rows = tsm.value(drawn, "/meetings/items")
-            why = [x["text"] for x in tsm.value(drawn, "/meetings/itemsWhy")]
+            check("where each item came from is folded until its tap", tsm.value(drawn, "/meetings/itemsWhy") == [])
+            daemon.handle_line('e ks-why meetings-whyBtn surface="meetings"')
+            why = [x["text"] for x in tsm.value(hud.take(), "/meetings/itemsWhy") or []]
             tids = [AM.task_id(MID, i["id"]) for i in ITEMS]
             texts = {r["id"]: r["text"] for r in rows}
-            check("before any press each row names what Go will touch",
-                  "Go puts a tentative event on Thu Oct 8 3 PM" in texts[tids[0]]
-                  and "Go drafts a text to Maggie" in texts[tids[1]]
-                  and "Go adds it to your work ledger" in texts[tids[2]], texts)
-            check("under them, each item's owner and day say which line, or (guess)",
-                  "said at 2:00:15 PM" in why[0] and "(guess" in why[1] and "from 2:00:30 PM" in why[1], why)
+            check("before any press each row names what Go will touch, in a word",
+                  "calendar hold" in texts[tids[0]] and "text draft" in texts[tids[1]]
+                  and texts[tids[2]].endswith("· task · guess"), texts)
+            check("one tap shows each item's owner and day, said or guessed, at the minute, never the second",
+                  "(said)" in why[0] and "(guessed)" in why[1] and "heard at 2:00 PM" in why[1]
+                  and not any(":15 " in w or ":30 " in w for w in why), why)
             outcomes, pressed = [], []
             for tid in tids:
                 daemon.handle_line(f'e action ks-act row="{tid}" surface="meetings"')

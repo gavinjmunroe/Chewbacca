@@ -163,6 +163,30 @@ struct SnapshotTests {
             .frame(width: width)
     }
 
+    /// Any panel, from the Kyber Lines it actually sends: HUD_LINES_FILE
+    /// names a file of lines (bin/kyber-surfaces' own output), and with
+    /// HUD_SNAPSHOT_DIR the card is kept as <file>-light.png and
+    /// <file>-dark.png; several files are separated by colons. Added 2026-10-11 so the meetings panel could be looked
+    /// at with the Mac locked; Caleb had called it a wall of text from a
+    /// screenshot nobody else had seen.
+    @Test("a Kyber Lines file renders, for review")
+    func linesFile() throws {
+        guard let paths = ProcessInfo.processInfo.environment["HUD_LINES_FILE"] else { return }
+        for path in paths.split(separator: ":").map(String.init) {
+            let lines = try String(contentsOfFile: path, encoding: .utf8)
+                .split(separator: "\n").map(String.init).filter { !$0.hasPrefix("@") }
+            let drawn = store(lines)
+            let stem = URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
+            for ground in Ground.allCases {
+                let covered = coverage("\(stem)-\(ground.rawValue)", size: CGSize(width: 520, height: 1180),
+                                       ground: ground) {
+                    card(drawn, .card, 420)
+                }
+                #expect(covered > 0.05, "\(stem) covered only \(covered) of the frame")
+            }
+        }
+    }
+
     @Test("a card draws, on both grounds", arguments: Ground.allCases)
     func cardDraws(ground: Ground) {
         let drawn = coverage(

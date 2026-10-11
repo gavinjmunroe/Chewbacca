@@ -17,7 +17,7 @@ calendar event that overlaps a meeting names it, and an unreadable calendar
 leaves a plain title; list, get and transcript answer in the exact key sets
 of the Anarlog CLI fixtures; native meetings are read first and an Anarlog
 that isn't installed is then no error; the surface's first run offers Start
-capture, says Recording now while capture runs, and its press runs only
+capture, says Recording while capture runs, and its press runs only
 `room-capture start` or `stop`; no control, format or bidi character reaches
 a meeting file or the glass; and `room-capture start` refuses a second start.
 """
@@ -362,10 +362,10 @@ def surface(tmp: Path) -> None:
     data = p.fetch(ctx)
     lines = tsm.draw(p, data, None, ctx)
     check("first run draws valid Kyber Lines", not tks.validate(lines), tks.validate(lines))
-    check("first run offers Start capture", tsm.value(lines, "/meetings/captureLabel") == "Start capture")
+    check("first run offers a small Record now press", tsm.value(lines, "/meetings/captureLabel") == "Record now")
     steps = [s["text"] for s in tsm.value(lines, "/meetings/setup")]
     check("its steps never ask anyone to install or open Anarlog when it isn't there",
-          not any("Anarlog" in s for s in steps) and "Start capture" in steps[0], steps)
+          not any("Anarlog" in s for s in steps) and "records itself" in steps[0], steps)
     r = p.capture(ctx, data, {})
     check("the press runs room-capture start and nothing else",
           r.ok and run.capture_calls == [[str(Path(ROOT) / "bin" / "room-capture"), "start", "--json"]]
@@ -379,10 +379,9 @@ def surface(tmp: Path) -> None:
         MC.write_private(base / "watcher.json", {"session_started": MC.iso(fx.NOW - timedelta(minutes=3))})
         data = p.fetch(ctx)
         lines = tsm.draw(p, data, None, ctx)
-        live = tsm.value(lines, "/meetings/live")
-        check("while capture runs the top line says Recording now", live.startswith("Recording now, started 3m ago"),
-              live)
-        check("and the button reads Stop capture", tsm.value(lines, "/meetings/captureLabel") == "Stop capture")
+        live = tsm.value(lines, "/meetings/state")
+        check("while capture runs the state line says Recording and how long", live == "Recording · 3 min", live)
+        check("and the button reads Stop", tsm.value(lines, "/meetings/captureLabel") == "Stop")
         r = p.capture(ctx, data, {})
         check("a second press stops it without waiting, and its line is cleaned",
               run.capture_calls[-1][1:] == ["stop", "--wait", "0", "--json"] and BIDI not in r.line, run.capture_calls)
@@ -402,15 +401,18 @@ def surface(tmp: Path) -> None:
     p.open(ctx, data, {"row": data["rows"][-1]["id"]})
     lines = tsm.draw(p, data, None, ctx)
     summary = [x["text"] for x in tsm.value(lines, "/meetings/summary")]
-    check("a native summary is labelled Claude's guess", summary[0] == "Claude's guess from the transcript:"
-          and "Wave 2 ships Tuesday" in summary, summary)
-    check("its action items say whose guesses they are",
-          "Claude's guesses" in tsm.value(lines, "/meetings/itemsCaption"), tsm.value(lines, "/meetings/itemsCaption"))
-    check("its transcript pages through the same panel",
-          tsm.value(lines, "/meetings/transcript").startswith("Transcript, words 1-"),
-          tsm.value(lines, "/meetings/transcript"))
+    check("a native summary is its own lines, no attribution row, and never restates the decision",
+          summary == ["Copy is final"], summary)
+    check("its action items each carry a small guess mark",
+          all(i["text"].endswith(" · guess") for i in tsm.value(lines, "/meetings/items")),
+          tsm.value(lines, "/meetings/items"))
+    p.transcript(ctx, data, {})
+    tx = tsm.value(tsm.draw(p, data, None, ctx), "/meetings/transcript")
+    check("its transcript opens on a tap, in a Transcript component", bool(tx) and all(r["role"] == "assistant"
+                                                                                       for r in tx), tx)
+    p.transcript(ctx, data, {})
     check("a finished native meeting is not shown as recording", not newest["live"] and
-          tsm.value(lines, "/meetings/live") == "", tsm.value(lines, "/meetings/live"))
+          not tsm.value(lines, "/meetings/state").startswith("Recording"), tsm.value(lines, "/meetings/state"))
     check("the injected action item is only words, never run",
           any("Ignore previous instructions" in i["text"] for i in tsm.value(lines, "/meetings/items"))
           and run.capture_calls == [])

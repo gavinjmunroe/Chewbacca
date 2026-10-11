@@ -9,6 +9,7 @@ Fixture world from tests/surfaces_fixture.py and a fake display. No real
 socket to Kyber, no real Messages, nothing sent.
 """
 import json
+from datetime import timedelta
 import os
 import re
 import socket
@@ -34,7 +35,7 @@ ks = module_from_spec(spec_from_loader("kyber_surfaces", loader))
 loader.exec_module(ks)
 
 COMPONENTS = {"Screen", "Stack", "Heading", "Text", "List", "Metric", "Table", "Status", "Sparkline", "Bars",
-              "Ring", "Events", "Diagram", "File", "Button", "Field", "Select", "Checkbox"}
+              "Ring", "Events", "Diagram", "File", "Button", "Field", "Select", "Checkbox", "Transcript"}
 ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 PROP = re.compile(r'(\w+)=("(?:[^"\\]|\\.)*"|\S+)')
 
@@ -121,11 +122,51 @@ def make_daemon(ctx, tmp: Path):
     return d, hud
 
 
+def meeting_fixtures(home: Path) -> None:
+    """Two calls as room-capture writes them, worded like real ones: a client
+    sync with decisions and owed items, and a short 1:1 with neither."""
+    import meeting_capture as MC
+    folder = MC.private_dir(MC.meetings_dir(home))
+    start = fx.NOW - timedelta(hours=3)
+    lines = [{"at": MC.iso(start + timedelta(minutes=n)), "clock": (start + timedelta(minutes=n)).strftime("%-I:%M:%S %p"),
+              "seconds": 15, "text": t} for n, t in enumerate([
+                  "Tier A goes out Monday and tier B on Wednesday.",
+                  "Caleb will send Jonah the final list by Monday.",
+                  "Sagar is checking the bounce rate on the second domain."])]
+    sync = {"schema": 1, "id": "rc-" + start.astimezone().strftime("%Y%m%d-%H%M%S"), "title": "Zeutara weekly sync",
+            "app": MC.APP, "created_at": MC.iso(start), "updated_at": MC.iso(start + timedelta(minutes=34)),
+            "started_at": MC.iso(start), "ended_at": MC.iso(start + timedelta(minutes=34)), "timezone": "",
+            "calendar_event": {"id": "ev-1"}, "lines": lines,
+            "participants": [{"human_id": "cal-0", "display_name": "Jonah Graham", "email": "jonah@zeutara.example",
+                              "role": "attendee"},
+                             {"human_id": "cal-1", "display_name": "Sagar Tiwari", "email": "sagar@amber.example",
+                              "role": "attendee"}],
+            "summary": {"markdown": "## Summary\n- Wave 2 copy is final\n- Bounce rate on the new domain is "
+                                    "under 2 percent\n- Tier A goes out Monday\n## Decisions\n- Tier A ships "
+                                    "Monday, tier B Wednesday\n", "at": MC.iso(start), "by": "claude -p",
+                        "guess": True},
+            "summary_note": "",
+            "action_items": [{"id": "a1", "text": "Send Jonah the final list", "assignee_human_id": "",
+                              "status": "open", "guess": True, "due_at": "", "completed_at": None},
+                             {"id": "a2", "text": "Check the bounce rate on the second domain",
+                              "assignee_human_id": "cal-1", "status": "open", "guess": True, "due_at": "",
+                              "completed_at": None}]}
+    one = start - timedelta(days=1)
+    chat = {**sync, "id": "rc-" + one.astimezone().strftime("%Y%m%d-%H%M%S"), "title": "Sagar 1:1",
+            "created_at": MC.iso(one), "updated_at": MC.iso(one + timedelta(minutes=12)), "started_at": MC.iso(one),
+            "ended_at": MC.iso(one + timedelta(minutes=12)), "participants": sync["participants"][1:],
+            "summary": {"markdown": "## Summary\n- Walked through the fridge site\n", "at": MC.iso(one),
+                        "by": "claude -p", "guess": True}, "action_items": [], "lines": lines[:1]}
+    for m in (sync, chat):
+        MC.write_private(folder / f"{m['id']}.json", m)
+
+
 def drawing(tmp: Path) -> None:
     g, ctx, run, _ = fx.world(tmp)
     d, hud = make_daemon(ctx, tmp)
     specs = [("needs-you", ""), ("missing", ""), ("today", ""), ("tasks", ""), ("people", ""), ("conversations", ""),
-             ("person", "Sagar Tiwari"), ("space", "amber"), ("music", ""), ("files", "")]
+             ("person", "Sagar Tiwari"), ("space", "amber"), ("music", ""), ("files", ""), ("meetings", "")]
+    meeting_fixtures(ctx.home)
     for kind, arg in specs:
         provider = surfaces.make(kind, arg) if arg else surfaces.make(kind)
         name = provider.name

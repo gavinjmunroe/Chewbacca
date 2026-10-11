@@ -81,3 +81,12 @@ friends'. They apply to any prop or mark modeled after a physical object.
   use MANIFOLD on lofted meshes.
 - **A link to a render is relative to the session root.** The shell's cwd
   drifts with every cd; see link-guard.
+- **A wearable shell is an open surface solidified, not a solid minus a
+  cavity.** "How would someone wear this helmet lmao" (2026-10-11): the lofted
+  ring pinched to a knife edge at the bottom. What worked: keep the back neck
+  wide, delete faces with normal z below -0.6, Solidify inward, hollow any
+  unioned band with a plug, then turn inward-facing faces dark so slots still
+  read as dark openings at 128px.
+- **Logos render with no shadow.** "The logo shouldn't hv shadows"
+  (2026-10-11). The reference he named is a single soft-lit rainbow arch with
+  a sculpted texture and no cast shadow, set beside a flat wordmark.

@@ -202,7 +202,9 @@ if group "site-gate"; then
                   'twin sections: "Team twin" and "Questions twin"' \
                   'boring section: "Dead zone"' \
                   'boring section: "Poster zone": still image (inline)' \
-                  'boring section: "Slab zone"'; do
+                  'boring section: "Slab zone"' \
+                  'jitter: span' \
+                  'seam: '; do
       check "bad page flags: $needle" grep -qF -- "$needle" "$TMP/sg.out"
     done
     exits  "clean page passes" 0 "$ROOT/bin/site-gate" check "$SG/good.html"

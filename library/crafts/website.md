@@ -432,3 +432,29 @@ also fails a still image over 20% of a section, a band under 15% content that
 sits dead once it lands, and one empty block over 30% of a section. It is
 stricter than the Lemma reference on purpose: Lemma's trust and newsletter
 bands fail it too.
+
+**The TTS night, every mistake and where it is caught now (2026-10-10).**
+Caleb: "fix chewb to never make the mistakes we've made on this site ever
+again". Each one below is either a `site-gate check` failure or a rule here.
+
+- A section where nothing moves, a still 3D render, a dead slab of flat
+  color, an empty block over 30% of a band: `boring section` lines.
+- A progress point that bounces on every wheel notch, because it rode the page
+  but read a smoothed copy of the scroll: `jitter` lines. Anything meant to
+  hold still on screen reads the real scroll; the smoothed one is only for
+  things that live in a fixed or pinned layer.
+- A looping video whose baked background shows as a box on the paper:
+  `seam` lines. Match the page at the edges or render with alpha.
+- Logo pills louder than the person, a pill holding a bare number, the same
+  mark twice: the person leads, credentials sit one tone at one height.
+- A lone 3D object floating on paper: every loop comes with something, the
+  line and the action it belongs to, in one composed band (the reference is a
+  card whose video fills its whole half, edge to edge).
+- Cards inset far from the edges with the figure a fifth of the card: use the
+  width the content earns, and let the figure fill its half.
+- A headline masked by a vignette: text stays fully readable at every scroll
+  position of a scene.
+- A gray void behind a 3D scene: every scene gets a world, sky, ground,
+  props and small motion across the frame.
+- A stale number: a valuation carries its date and source, and the newest
+  confirmed figure wins; an unconfirmed round never goes on the page.

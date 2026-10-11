@@ -36,6 +36,10 @@ check, at 1440x900 and 390x844, on every url given:
       a section; a band under 15% content that sits
       dead once it lands; an empty block over 30%
       of a section                                  none allowed
+    a small element that should hold still and
+      twitches back and forth under the scroll      none allowed
+    a video or image whose own background shows
+      as a box against the page                     none allowed
 
 Chromium runs on Metal. Without it a WebGL-heavy page fell to about 1 fps
 headless and screenshots timed out after 30 s; with it the same page ran 50 to
@@ -256,6 +260,8 @@ def check_page(pw, url, out):
                     continue
             fails += [f"heading paints nothing (covered or invisible): {x}" for x in covered]
             fails += [f"boring section: {x}" for x in boring_sections(pg)]
+            fails += [f"jitter: {x}" for x in jitter(pg)]
+            fails += [f"seam: {x}" for x in seams(pg)]
         if expect == 404:
             errs = [e for e in errs if "404" not in e]
         fails += [f"{w}: console: {e[:160]}" for e in errs]
@@ -592,6 +598,138 @@ def research(root: Path) -> list[str]:
             if not any(n in text for n in names):
                 fails.append(f"research/SOURCES.md never mentions {' or '.join(names)}: run it and record what it found")
     return fails
+
+
+# Jitter: something that should hold still on screen while the page scrolls,
+# a progress point, a pinned label, a nav, that twitches back and forth
+# instead. Caleb, 2026-10-10: "the scroll circle on the left tweaks and
+# bounces up and down". The cause was an in-flow point offset by a smoothed
+# copy of the scroll, so it led and lagged every wheel notch. Scrub with real
+# wheel notches and sample small elements every frame: one that ends within
+# 40px of where it began after 1,200px of scroll is meant to hold still, and
+# four or more reversals of 3px or more mean it doesn't.
+JIT_TAG = r"""() => {
+  const out = []; let i = 0;
+  for (const e of document.querySelectorAll('body *')) {
+    const r = e.getBoundingClientRect(), c = getComputedStyle(e);
+    if (r.width < 4 || r.height < 4 || r.width > 160 || r.height > 160) continue;
+    if (r.bottom < 0 || r.top > innerHeight || c.visibility === 'hidden' || +c.opacity < 0.1) continue;
+    e.setAttribute('data-sg-j', i); out.push(i++); if (i >= 400) break;
+  }
+  return out.length;
+}"""
+JIT_READ = r"""() => [...document.querySelectorAll('[data-sg-j]')].map(e => e.getBoundingClientRect().top)"""
+JIT_NAME = r"""(i) => { const e = document.querySelector('[data-sg-j="' + i + '"]');
+  return e.tagName.toLowerCase() + (e.className && e.className.baseVal === undefined && e.className ? '.' + String(e.className).split(' ')[0] : ''); }"""
+
+
+def jitter(pg):
+    out = []
+    total = pg.evaluate("document.documentElement.scrollHeight")
+    for start in (900, int(total * 0.4)):
+        if start + 1300 > total:
+            continue
+        pg.evaluate(f"scrollTo(0,{start})"); pg.wait_for_timeout(1200)
+        pg.evaluate("document.querySelectorAll('[data-sg-j]').forEach(e => e.removeAttribute('data-sg-j'))")
+        n = pg.evaluate(JIT_TAG)
+        if not n:
+            continue
+        pg.mouse.move(720, 450)
+        series = [pg.evaluate(JIT_READ)]
+        for _ in range(12):
+            pg.mouse.wheel(0, 100)
+            for _ in range(5):
+                pg.wait_for_timeout(16)
+                series.append(pg.evaluate(JIT_READ))
+        pg.wait_for_timeout(700); series.append(pg.evaluate(JIT_READ))
+        for k in range(n):
+            ys = [s[k] for s in series if k < len(s)]
+            # meant to hold still: it ends where it started, give or take,
+            # after 1,200px of scroll. A lagging point swings up to ~100px
+            # inside a notch (measured on the fixture), so the range is loose
+            # and the net drift is what separates it from page content.
+            if len(ys) < 10 or abs(ys[-1] - ys[0]) > 40 or max(ys) - min(ys) > 250 or max(ys) - min(ys) < 3:
+                continue
+            flips, trend, anchor = 0, 0, ys[0]
+            for y in ys[1:]:
+                d = y - anchor
+                if abs(d) < 3:
+                    continue
+                s = 1 if d > 0 else -1
+                if trend and s != trend:
+                    flips += 1
+                trend, anchor = s, y
+            if flips >= 4:
+                name = pg.evaluate(JIT_NAME, k)
+                out.append(f"{name} near y={round(ys[0])} twitches {flips} times over a steady scroll "
+                           f"(range {round(max(ys) - min(ys))}px). Something meant to hold still must "
+                           "follow the real scroll, never a smoothed copy")
+        if out:
+            break
+    return sorted(set(out))[:5]
+
+
+# A seam: a video or image meant to sit on the page shows its own box,
+# because its baked-in background differs from the paper around it. Caleb,
+# 2026-10-10, on the logo loop: "you can see a boarder around the video".
+# For every square-cornered, borderless figure on a flat ground, compare a
+# strip just inside each edge with a strip just outside; a ground that is
+# even outside and differs inside on two or more sides is a visible box.
+SEAM_LIST = r"""() => {
+  const out = [];
+  for (const e of document.querySelectorAll('video, img, canvas')) {
+    const r = e.getBoundingClientRect(), c = getComputedStyle(e);
+    if (r.width < 120 || r.height < 80 || c.visibility === 'hidden' || +c.opacity < 0.5) continue;
+    if (parseFloat(c.borderTopLeftRadius) > 2 || parseFloat(c.borderTopWidth) > 0 || c.boxShadow !== 'none') continue;
+    let p = e.parentElement, framed = false;
+    for (let k = 0; p && k < 3; k++, p = p.parentElement) {
+      const pc = getComputedStyle(p), pr = p.getBoundingClientRect();
+      if ((parseFloat(pc.borderTopLeftRadius) > 2 || pc.overflow === 'hidden') &&
+          Math.abs(pr.width - r.width) < 4 && Math.abs(pr.height - r.height) < 4) { framed = true; break; }
+    }
+    if (framed) continue;
+    e.setAttribute('data-sg-m', out.length);
+    out.push(/^data:/.test(e.currentSrc || e.src || '') ? 'inline ' + e.tagName.toLowerCase() : (e.currentSrc || e.src || e.tagName).split('/').pop().slice(0, 40));
+  }
+  return out;
+}"""
+
+
+def seams(pg):
+    from PIL import Image, ImageStat
+    out = []
+    for i, name in enumerate(pg.evaluate(SEAM_LIST)[:12]):
+        try:
+            box = pg.evaluate("""i => { const e = document.querySelector('[data-sg-m="' + i + '"]');
+                e.scrollIntoView({block: 'center'}); const r = e.getBoundingClientRect();
+                return {x: r.left, y: r.top, w: r.width, h: r.height, W: innerWidth, H: innerHeight}; }""", i)
+            pg.wait_for_timeout(700)
+            shot = Image.open(io.BytesIO(pg.screenshot())).convert("L")
+        except Exception:
+            continue
+        sx, sy = shot.width / box["W"], shot.height / box["H"]
+        x0, y0, x1, y1 = box["x"], box["y"], box["x"] + box["w"], box["y"] + box["h"]
+        strips = {  # (inside, outside) per edge, 4 css px wide, middle 60% of the edge
+            "top": ((x0 + .2 * box["w"], y0 + 2, x1 - .2 * box["w"], y0 + 6), (x0 + .2 * box["w"], y0 - 6, x1 - .2 * box["w"], y0 - 2)),
+            "bottom": ((x0 + .2 * box["w"], y1 - 6, x1 - .2 * box["w"], y1 - 2), (x0 + .2 * box["w"], y1 + 2, x1 - .2 * box["w"], y1 + 6)),
+            "left": ((x0 + 2, y0 + .2 * box["h"], x0 + 6, y1 - .2 * box["h"]), (x0 - 6, y0 + .2 * box["h"], x0 - 2, y1 - .2 * box["h"])),
+            "right": ((x1 - 6, y0 + .2 * box["h"], x1 - 2, y1 - .2 * box["h"]), (x1 + 2, y0 + .2 * box["h"], x1 + 6, y1 - .2 * box["h"])),
+        }
+        bad = []
+        for edge, (a, b) in strips.items():
+            if b[0] < 0 or b[1] < 0 or b[2] > box["W"] or b[3] > box["H"]:
+                continue
+            ca = shot.crop(tuple(int(v * s) for v, s in zip(a, (sx, sy, sx, sy))))
+            cb = shot.crop(tuple(int(v * s) for v, s in zip(b, (sx, sy, sx, sy))))
+            if ca.width < 2 or ca.height < 2 or cb.width < 2 or cb.height < 2:
+                continue
+            ia, ib = ImageStat.Stat(ca), ImageStat.Stat(cb)
+            if ib.stddev[0] < 3 and abs(ia.mean[0] - ib.mean[0]) > 6:
+                bad.append(f"{edge} {abs(ia.mean[0] - ib.mean[0]):.0f}")
+        if len(bad) >= 2:
+            out.append(f"{name}: its own background shows as a box against the page ({', '.join(bad)} levels off). "
+                       "Match the page exactly at its edges, or render it with alpha")
+    return out
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)

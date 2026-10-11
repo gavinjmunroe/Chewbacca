@@ -43,6 +43,15 @@ Several surfaces can be open at once and that is the normal case. Put the thing
 being asked about where the eye already is and the standing context in a corner.
 Two or three panels is a workspace; six is a mess.
 
+The display keeps panels off the window in front, which is usually the thing
+being asked about. Leave `at=` off and the surface goes to whichever corner
+covers least of that window (top right when nothing is in the way). Give `at=`
+and the corner is yours, with one exception: a surface that would cover the
+whole of the front window, a small dialog under a big card, is drawn beside
+it instead. The window comes from the window server's bounds, read before each
+`@`; no permission is involved. Source: `Occlusion.swift`, tests in
+`OcclusionTests.swift`.
+
 ## How loud to be
 
 `urgency=` is `ambient`, `normal` (the default), `alert`, or `critical`.

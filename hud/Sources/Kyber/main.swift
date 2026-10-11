@@ -214,6 +214,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .line(let line):
             do {
                 if let op = try LineParser.parse(line) {
+                    if case .surface = op, let front = Self.frontWindow() {
+                        model.describe(frontWindow: front)
+                    }
                     model.apply(op)
                     if case .surface(let id, _, _, _, _, _, _) = op {
                         model.attribute(id, owner: event.owner)
@@ -360,6 +363,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Self.noteFront(app)
         }
     }
+
+    /// The front app's front window, in the glass's points, for keeping
+    /// panels off it (bd_2026-Code-0l9). Nil when Kyber itself is in front,
+    /// so its own conversation panel never counts; `.some(nil)` when the
+    /// front app has no window on screen. Bounds only, from the window
+    /// server, so no permission is involved.
+    static func frontWindow() -> CGRect?? {
+        guard let app = NSWorkspace.shared.frontmostApplication,
+              app.processIdentifier != ProcessInfo.processInfo.processIdentifier
+        else { return nil }
+        let list = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+        let glass = OverlayWindow.active?.frame ?? .zero
+        for info in list {
+            guard (info[kCGWindowOwnerPID as String] as? pid_t) == app.processIdentifier,
+                  (info[kCGWindowLayer as String] as? Int) == 0,
+                  let bounds = info[kCGWindowBounds as String] as? NSDictionary,
+                  let rect = CGRect(dictionaryRepresentation: bounds),
+                  rect.width >= minimumWindow, rect.height >= minimumWindow
+            else { continue }
+            // Window-server bounds are top-left from the main display's
+            // corner, the glass's own space when it is on the main display
+            // (`OverlayWindow.active`); a window on another display misses it.
+            let local = rect.offsetBy(dx: -glass.minX, dy: 0)
+            return .some(local.intersects(CGRect(origin: .zero, size: glass.size)) ? local : nil)
+        }
+        return .some(nil)
+    }
+
+    /// Smaller than this is a palette or a tooltip, not a window anyone is
+    /// working in. Guessed, never measured.
+    static let minimumWindow: CGFloat = 80
 
     nonisolated private static func noteFront(_ app: NSRunningApplication) {
         guard app.processIdentifier != ProcessInfo.processInfo.processIdentifier,

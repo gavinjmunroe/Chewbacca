@@ -51,6 +51,10 @@ public struct OverlaySurface: Identifiable, Equatable {
     /// reach (reported 2026-10-04).
     public var instance = 0
     public var viewID: String { "\(id)#\(instance)" }
+    /// Whether the sender chose the region with `at=`. A surface that did
+    /// not is placed in the corner that covers least of the window in front
+    /// (see `Occlusion`); one that did keeps the corner it asked for.
+    public var regionAsked = false
     /// The namespace that claimed this surface and drew it, shown on the
     /// card so a forged panel cannot pass as the real one. Nil for a surface
     /// nobody claimed. Set from the socket on every `@`, never from the
@@ -111,6 +115,18 @@ public final class OverlayModel {
 
     /// Where events from any surface go.
     public var onEvent: ((OutboundEvent) -> Void)?
+
+    /// The window in front, in the glass's own points: the window the
+    /// surfaces are most likely about, kept clear of them (see `Occlusion`).
+    /// Nil when there is none or it is not known.
+    public private(set) var frontWindow: CGRect?
+
+    /// Say which window is in front. The app calls this before each `@`.
+    public func describe(frontWindow next: CGRect?) {
+        guard next != frontWindow else { return }
+        frontWindow = next
+        revision += 1
+    }
 
     private var current: String = "main"
     private var nextDepth = 0
@@ -1065,6 +1081,17 @@ public final class OverlayModel {
             maxHeight: OverlaySurface.ceiling,
             expires: life.map { $0 == 0 ? .distantFuture : Date().addingTimeInterval($0) })
         surface.near = near
+        surface.regionAsked = region != nil
+        // No `at=`: the corner that hides least of the window in front.
+        if region == nil, urgency != .critical, near == nil, let window = frontWindow {
+            let candidates = Occlusion.corners.map { corner -> (region: Region, frame: CGRect) in
+                var trial = surface
+                trial.region = corner
+                trial.slot = surfaces.filter { $0.region == corner && $0.near == nil }.count
+                return (corner, frame(of: trial))
+            }
+            surface.region = Occlusion.leastCovering(candidates, window: window) ?? surface.region
+        }
         surface.touched = nextTouch
         nextInstance += 1
         surface.instance = nextInstance
@@ -1280,13 +1307,28 @@ public final class OverlayModel {
         let bottomY = full.height - bottomInset - margin - barLane
         let maxY = bottomY - height
 
-        let x = minX + max(0, maxX - minX) * anchor.x
+        var x = minX + max(0, maxX - minX) * anchor.x
         let column = surfaces
             .filter { $0.region == surface.region && $0.isRail == surface.isRail }
             .map { (slot: $0.slot, height: drawnHeight($0)) }
-        let y = min(max(Self.columnTop(
+        var y = min(max(Self.columnTop(
             slot: surface.slot, column: column, anchorY: anchor.y,
             top: minY, bottom: bottomY), minY), maxY)
+
+        // Never over the whole of the window in front, wherever it was asked
+        // to go: beside it instead, as `near=` would place it.
+        if let window = frontWindow, !surface.isRail,
+           Occlusion.hidesAll(window, by: CGRect(x: x, y: y, width: width, height: height)) {
+            let bounds = CGRect(
+                x: leftInset + margin, y: topInset + margin,
+                width: full.width - leftInset - rightInset - 2 * margin,
+                height: full.height - topInset - bottomInset - 2 * margin)
+            let beside = Self.besideOrigin(
+                target: window, side: anchor.x < 0.5 ? .left : .right,
+                size: CGSize(width: width, height: height), bounds: bounds, gap: Self.nearGap)
+            x = beside.x
+            y = beside.y
+        }
 
         // `.position` places a centre, so hand back the centre of the frame,
         // plus wherever the person has dragged it. Past the edge of the

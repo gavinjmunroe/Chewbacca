@@ -1146,7 +1146,9 @@ def sessions_surface(rows: list[dict], caption: str = "", n: dict[str, int] | No
         'c start Button label="Start" action=start variant=primary',
         "> new task start",
         "c st Status message=@/sessions/status/message level=@/sessions/status/level",
-        "> s nums lanes l new st",
+        # The Status line joins the layout only once it has words: empty, it
+        # drew a lone blue dot under the panel (screenshot, 2026-10-10).
+        "> s nums lanes l new",
         f"d /n {json.dumps(n)}",
         f"d /lane {json.dumps(lane)}",
         f"d /lanes {json.dumps(lane_options(n))}",
@@ -1517,7 +1519,7 @@ class Serve:
         self.list_status(f"Press Start to run it {where}. Nothing runs until you do.", "info")
 
     def list_status(self, message: str, level: str) -> None:
-        self.send(["@ sessions", f"d /sessions/status {json.dumps({'message': sessions_inbox.clean(message), 'level': level})}"])
+        self.send(["@ sessions", "> s nums lanes l new st", f"d /sessions/status {json.dumps({'message': sessions_inbox.clean(message), 'level': level})}"])
 
     def start_task(self, words: str) -> None:
         """Start: what is typed in the list's New task Field becomes a new

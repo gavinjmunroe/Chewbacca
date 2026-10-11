@@ -762,6 +762,25 @@ def test_tree() -> None:
     check("closing the card takes its tree down", sent[-1] == ["- s-6d901cd1-tree"] and not srv.trees, sent[-1])
 
 
+def test_bypass_never_needs() -> None:
+    print("in bypass mode a long tool call is working, never 'needs you'")
+    tmp = Path(tempfile.mkdtemp()) / "s.jsonl"
+    entries = [user("deploy it", cwd="/x/site", permissionMode="bypassPermissions"),
+               assistant([{"type": "tool_use", "id": "t1", "name": "Bash",
+                           "input": {"command": "for i in $(seq 1 40); do curl -s x; sleep 10; done"}}],
+                         stop="tool_use"),
+               user("go on", uuid="u2", cwd="/x/site", permissionMode="bypassPermissions"),
+               assistant([{"type": "tool_use", "id": "t2", "name": "Bash",
+                           "input": {"command": "for i in $(seq 1 40); do curl -s x; sleep 10; done"}}],
+                         stop="tool_use", uuid="a2")]
+    tmp.write_text("\n".join(json.dumps(e) for e in entries) + "\n")
+    ks._parsed.clear()
+    row = ks.from_transcript(Path("/x/.claude"), tmp, tmp.stat().st_mtime + 600)
+    check("a 10-minute curl loop in bypass is working", row["state"] == "working", row["state"])
+    lines = ks.alerts([{"id": "a", "state": "needs", "project": "site", "detail": "Bash: pkill -f next", "last": 1}], [], {})
+    check("an alert never prints the raw command", "pkill" not in lines[0][1] and "waiting on u" in lines[0][1], lines)
+
+
 def test_one_shots() -> None:
     print("a one-shot run in a temp folder is not a tab, even with a desktop entrypoint")
     one = [user("judge this image", entrypoint="claude-desktop", cwd="/private/var/folders/x/T/judge_1"),
@@ -1017,6 +1036,7 @@ def main() -> int:
     test_tree()
     test_origin()
     test_one_shots()
+    test_bypass_never_needs()
     test_runs()
     test_serve_start()
     test_watch()

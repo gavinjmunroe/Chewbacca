@@ -351,6 +351,12 @@ def from_transcript(config: Path, path: Path, now: float) -> dict:
         # panel as failed tabs.
         m["interactive"] = False
     m["mode"] = effective_mode(path, m["mode"])
+    if state == "needs" and m["mode"] == "bypassPermissions":
+        # Nothing asks in bypass mode, so a tool call that has run a while is
+        # a long command (a deploy wait loop, a build), not a dialog. On
+        # 2026-10-11 at 2:31am two tabs' curl loops toasted "needs u: Bash:
+        # for i in $(seq 1 40)..." over Caleb's work.
+        state = "working"
     cwd = m["cwd"]
     return {
         "id": path.stem, "agent": "claude", "config": str(config), "transcript": str(path),
@@ -1844,8 +1850,11 @@ def alerts(rows: list[dict], dead: list[dict], prev: dict[str, str]) -> list[tup
         sid, state, old = r["id"], r["state"], prev.get(r["id"])
         name = r.get("project") or "an agent"
         if state == "needs" and old != "needs":
-            out.append((f"needs:{sid}:{r.get('ask') or r.get('detail')}",
-                        alert_text(f"{name} needs u: {r.get('ask') or r.get('detail') or 'a permission'}")))
+            # The board's ask is words a person wrote; a raw tool line is a
+            # command, which is noise on the glass and can leak a path or a URL.
+            ask = r.get("ask") or ""
+            out.append((f"needs:{sid}:{ask or r.get('detail')}",
+                        alert_text(f"{name} needs u: {ask}" if ask else f"{name} is waiting on u")))
         elif r.get("origin") == "Kyber" and old in (None, "working", "needs") and state in ("finished", "failed"):
             # None: a short run can start and finish between two looks (a
             # 12 s "pong" did on 2026-10-10 and was never said).

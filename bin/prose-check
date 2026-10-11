@@ -25,8 +25,12 @@ RULES = [
      "Throat-clearing. Open on the point."),
     ("faux-insight", r"(?i)\b(what nobody tells you|the part everyone misses|most people get this wrong|nobody talks about)\b",
      "Faux-insight setup. Make the claim stand alone."),
-    ("banned-word", r"(?i)\b(delve|foster|leverage|utilize|facilitate|empower|streamline|robust|seamless|cutting-edge|game changer|paradigm shift|transformative|elevate|harness|meticulous|intricate|realm|tapestry|ever-evolving)\b",
+    ("banned-word", r"(?i)\b(delve|foster|leverage|utilize|facilitate|empower|streamline|robust|seamless|cutting-edge|game changer|paradigm shift|transformative|elevate|harness|meticulous|intricate|tapestry|ever-evolving)\b",
      "Banned word."),
+    # "realm" the figure of speech, never Realm the product: Carlton's agent
+    # engine is named that, and on 2026-10-10 six replies about it were
+    # refused and rewritten around the name. A capital R is the proper noun.
+    ("banned-word", r"\brealm(?:s)?\b|(?i:\bthe realm of\b)", "Banned word."),
     ("em-dash", r"—", "Em dash. Use a colon, period, or comma."),
     ("ing-clause", r", (?:highlighting|underscoring|showcasing|demonstrating|reflecting|emphasizing|showing) (?:the|his|her|their|its|a|an)\b",
      "Superficial -ing clause."),

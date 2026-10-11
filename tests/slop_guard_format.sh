@@ -37,6 +37,17 @@ else
   echo "FAIL  voice-remind did not surface or clear the pending flag"; fail=1
 fi
 
+# Realm is Carlton's agent engine; six replies naming it were refused on
+# 2026-10-10. The proper noun passes, the figure of speech still does not.
+printf 'Realm runs the agents.\n' >"$TMP/realm-name.md"
+printf 'This is in the realm of possibility.\n' >"$TMP/realm-figure.md"
+if ! prose-check "$TMP/realm-name.md" 2>/dev/null | grep -q banned-word \
+   && prose-check "$TMP/realm-figure.md" 2>/dev/null | grep -q banned-word; then
+  echo "ok    Realm the product passes, realm the figure of speech is still banned"
+else
+  echo "FAIL  Realm handling in prose-check"; fail=1
+fi
+
 EM=$(printf 'Prayer. Amen.\n\nThis is wrong \xe2\x80\x94 very wrong.')
 code=$(run "$EM" p2)
 if [ "$code" = 2 ]; then

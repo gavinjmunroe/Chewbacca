@@ -81,8 +81,14 @@ def lines():
             ["git", "ls-files", "-z"], cwd=REPO, capture_output=True, text=True, check=True
         ).stdout.split("\0")
         files = sorted(set(files) - {""})
+        if not files:
+            raise FileNotFoundError("no tracked files here")
     except (subprocess.CalledProcessError, FileNotFoundError):
-        return 0
+        # Not a checkout: kit-autopush checks a `git archive HEAD` export, where
+        # every file is a tracked file. Returning 0 here made the README read
+        # "About 0 lines" and failed every push (2026-10-11).
+        files = sorted(str(f.relative_to(REPO)) for f in REPO.rglob("*")
+                       if f.is_file() and not f.is_symlink())
     total = 0
     for f in files:
         p = REPO / f

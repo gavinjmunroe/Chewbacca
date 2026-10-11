@@ -1374,6 +1374,27 @@ perms.setdefault("allow", [])
 if "WebSearch" not in perms["allow"]:
     perms["allow"].append("WebSearch")
 
+# Bypass mode alone still prompted for MCP tools. Caleb, 2026-10-04, three
+# times in an hour: "Fix vscode, you shouldn't be asking for permission to do
+# anything", "you just asked for permission again...", "you keep asking for
+# permission when you shouldn't be" (feedback_no_permission_prompts). The fix
+# that held was one `mcp__<server>` allow rule per server, written by hand on
+# this Mac, so every other install still prompted. Every MCP server configured
+# at user scope gets its rule here. `mcp__*` is not a valid rule, so it is one
+# per server (feedback_no_permission_prompts, 2026-10-04).
+if env("D1_BYPASS_PERMS", "no") == "yes":
+    servers = set()
+    for cfg in (os.path.expanduser("~/.claude.json"), os.path.expanduser("~/.claude/.mcp.json")):
+        try:
+            with open(cfg) as f:
+                servers.update((json.load(f).get("mcpServers") or {}).keys())
+        except Exception:
+            pass
+    for name in sorted(servers):
+        rule = "mcp__" + name
+        if name and rule not in perms["allow"]:
+            perms["allow"].append(rule)
+
 # Nothing prompts under bypassPermissions, so the deny list is the only brake
 # left. It covers operations with no undo, and reads that would pull a secret
 # into context where it can be echoed back or logged. deny wins over allow.
@@ -1751,6 +1772,16 @@ _register("PreToolUse", hooks_dir + "/vercel-guard.sh", timeout=5,
 # first. See the hook's header.
 _register("PreToolUse", hooks_dir + "/essay-gate.sh", timeout=15,
           matcher="Bash", status="Checking this reads like a person wrote it...")
+# 2026-10-11: the corrections Caleb repeated most in the fortnight before
+# (docs/plans/REPEAT-MISTAKES.md). A long check in the foreground ("Wtf taking
+# so long?", eight times), 3D work without Nalana, a new project with no look
+# for the existing one. See the hook's header.
+_register("PreToolUse", hooks_dir + "/lesson-guard.sh", timeout=5,
+          matcher="Bash|Agent|Task",
+          status="Checking this isn't a mistake he already corrected...")
+# Same day, the chat repeats: u'll, unasked study nudges, asking for his
+# paper draft. See the hook's header.
+_register("Stop", hooks_dir + "/reply-lessons.sh", timeout=5)
 _register("PreToolUse", hooks_dir + "/zsh-guard.sh", timeout=5,
           matcher="Bash",
           status="Checking this reads right in zsh...")

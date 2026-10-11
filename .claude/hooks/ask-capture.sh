@@ -56,6 +56,17 @@ try:
         "cwd": payload.get("cwd") or "",
         "said": text,
     }
+    # Every link, from the whole prompt, before the trim. Caleb, 2026-10-04:
+    # "There's a ton of links in everything I sent you that you never went
+    # through", and 2026-10-09: "There's a shit ton of links and repos I sent
+    # you ... DONT LOSE THEM" (feedback_catalogued_is_not_read). The 1200-char
+    # trim above dropped every link past it, so a long paste of repos kept only
+    # the first few. `backlog inbox` and any agent can read them from here.
+    import re
+    found = (u.rstrip(".,;:!?") for u in re.findall(r"https?://[^\s<>()\[\]\"'`]+", prompt))
+    links = list(dict.fromkeys(found))[:200]
+    if links:
+        row["links"] = links
     with store.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(row, ensure_ascii=False) + "\n")
 except OSError:

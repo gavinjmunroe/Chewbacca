@@ -346,7 +346,7 @@ init = [e for e in ev if e["event"] == "init"][0]
 assert init["client_id"] == "14d82eec-204b-4c2f-b7e8-296a70dab67e", init
 assert init["authority"] == "https://login.microsoftonline.com/organizations", init
 sc = {s.rsplit("/", 1)[-1] for s in [e for e in ev if e["event"] == "device_flow"][0]["scopes"]}
-assert sc == {"Mail.Read", "Calendars.Read", "Files.Read.All", "Chat.ReadBasic", "User.Read"}, sc
+assert sc == {"Mail.ReadWrite", "Mail.Send", "Calendars.ReadWrite", "Files.ReadWrite.All", "Chat.ReadWrite", "User.Read"}, sc
 PY
 has_item || no "login did not save the cache to the keychain"
 python3 - "$T/keychain.json" <<'PY' || no "the keychain item is not the MSAL cache under the UPN"

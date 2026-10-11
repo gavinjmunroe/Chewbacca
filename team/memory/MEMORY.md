@@ -256,7 +256,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_google_signin_calendar_write: Google sign-in asks for calendar write; never improvise gws auth login, clear token_cache.json after re-login
 - project_chewbacca_refactor_waits_on_b2b_b2c: Audience refactor (private repo, personal docs in docs/plans, first-run surface) waits on the B2B vs B2C call; checklist inside
 - feedback_people_scratch_is_people_dir: people CLI scratch store is PEOPLE_DIR; a guessed PEOPLE_DB wrote a test person into the real store (purged)
-- project_lessons_enforcement_audit: chewbacca lessons, 49 of 190 corrections enforced by code on 10/10; 149,809-token first turn, rules loaded 2-3x
+- project_lessons_enforcement_audit: chewbacca lessons, 79 of 233 corrections enforced by code on 10/11 (was 26%); durable-guard loop now fires; 149,809-token first turn
 - project_bma_site_caleb_rework: Caleb's BMA site redesign, branch Caleb-Rework + separate Railway service bma-rework.up.railway.app; main untouched
 - project_chewbacca_live_genui_service: Chewbacca Live (apps/live) is ours, hosted genui for clients; BMA/Amber is a customer, Togari only a data source (10/10)
 - feedback_hud_lag_is_the_mac: "HUD laggy" 10/10 was load 95 from 14 tabs + builds + Xprotect, Kyber at 1.4%; measure uptime and Kyber CPU before touching HUD code

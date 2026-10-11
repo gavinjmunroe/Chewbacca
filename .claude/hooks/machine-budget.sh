@@ -19,6 +19,11 @@ type hook_init >/dev/null 2>&1 && hook_init machine-budget.sh 5
 #   hot    subagent spawns are refused too: a subagent is a whole claude
 #          process plus its own MCP servers.
 #
+# This is the load half of feedback_too_many_tabs_one_goal (2026-10-09: "Claude
+# was tweaking bc there ws too much stuff on my cpu I think I had to stop all
+# tabs"). The other half of that lesson, one owner per lane so tabs stop racing
+# each other, is repo-overlap-guard.sh and `chewbacca land`, not this.
+#
 # Priority is handled by bin/agent-nice, run from tab-rescue.sh, which keeps every
 # agent process and its children at nice 10 so Caleb's apps win the CPU.
 #

@@ -144,14 +144,29 @@ gate() {
   "$@" >/dev/null 2>&1 || FAILED="$FAILED $name"
 }
 
-gate checksums   python3 tools/checksums.py --check
-# The one above compares disk to disk, so it passes while the commit is
-# already lying. This compares what git would hand a stranger to what the
-# manifest claims, which is the comparison an installer actually makes.
+# The gates read what the push would ship, never the working tree. They used
+# to run on disk, so another tab's uncommitted file failed them for everyone:
+# autopush.log from 2026-09-20 to 2026-10-11 holds 156 BLOCKED pushes against
+# 37 that went out, and 84 of the 156 failed only `checksums` or `counts`,
+# the two that compare disk to disk. That is why "Your 2 commits are still
+# local, they'll push once the other tab commits" kept coming back, and why
+# Caleb kept saying "push everything get it all on main"
+# (feedback_always_land_on_main, 2026-10-05, 10-08, 10-09 twice).
+#
+# So HEAD is exported to a scratch dir (0.6 s for 2,994 files on 2026-10-11)
+# and counts, frontmatter and evals run there. `committed` already checks the
+# manifest against HEAD, which is the comparison an installer makes, so the
+# disk-to-disk `checksums` gate is gone.
 gate committed   python3 tools/committed_checksums.py
-gate counts      python3 tools/counts.py --check
-gate frontmatter python3 tools/frontmatter.py
-gate evals       python3 tools/evals.py
+HEADTREE="$(mktemp -d "${TMPDIR:-/tmp}/autopush-head.XXXXXX")"
+if git archive HEAD 2>/dev/null | tar -x -C "$HEADTREE" 2>/dev/null; then
+  gate counts      python3 "$HEADTREE/tools/counts.py" --check
+  gate frontmatter python3 "$HEADTREE/tools/frontmatter.py"
+  gate evals       python3 "$HEADTREE/tools/evals.py"
+else
+  FAILED="$FAILED export"
+fi
+rm -rf "$HEADTREE"
 # Only the files this push changes. Everything else is already on the remote,
 # so scanning it cannot stop a leak, and the whole-tree scan took 41-54s at
 # load 33 on 2026-10-09: with the 12s checksum gate that put this hook past
@@ -188,7 +203,7 @@ import json, os
 reasons = os.environ.get("REASONS", "").split()
 ahead = os.environ.get("AHEAD", "?")
 hint = {
-    "checksums": "run: python3 tools/checksums.py",
+    "export": "git archive HEAD failed, so nothing was checked",
     "committed": "the committed SHA256SUMS.txt does not describe the committed tree, so an install would refuse. Commit everything, then: python3 tools/checksums.py and amend",
     "counts": "run: python3 tools/counts.py",
     "frontmatter": "a SKILL.md yaml block does not parse, so that skill is silently unregistered",

@@ -1,7 +1,9 @@
 """site-gate's flash and parity verdicts, offline: the pure functions that decide
 whether a frame pair flashed and whether a phone version is thinner than desktop.
 Both came from Caleb on 2026-10-10: "whiplash and flashbangs" on mobile, and
-"the mobile version is 10x lamer than the desktop version"."""
+"the mobile version is 10x lamer than the desktop version" (23:41, after "Bro
+tons of things overflow and overlap like crazy on mobile" at 23:32): the
+lesson feedback_phone_is_never_lesser, said twice in nine minutes."""
 import importlib.machinery
 import importlib.util
 import sys

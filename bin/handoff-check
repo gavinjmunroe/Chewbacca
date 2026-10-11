@@ -40,10 +40,12 @@ import sys
 
 # Second person plus an action. These are handoffs in any framing.
 HANDOFF = [
-    (r"\byou'?ll need to\s+\w+", "'you'll need to ...'"),
-    (r"\byou need to\s+(?:run|install|open|add|set|export|chmod|brew|npm|pip)\b",
+    # (?:you|u): chat replies use "u" since voice.md's 2026-09-18 rule, and
+    # every pattern here was written for "you", so "u'll need to" walked past.
+    (r"\b(?:you|u)'?ll need to\s+\w+", "'you'll need to ...'"),
+    (r"\b(?:you|u) need to\s+(?:run|install|open|add|set|export|chmod|brew|npm|pip)\b",
      "'you need to run/install/...'"),
-    (r"\byou (?:should|can|could) (?:run|execute)\b", "'you should run ...'"),
+    (r"\b(?:you|u) (?:should|can|could) (?:run|execute)\b", "'you should run ...'"),
     # "now run" only at the start of a sentence. Measured against 1051 real
     # replies, the bare form matched "the tests now run clean", which is
     # prose about a state and not an instruction to anybody.
@@ -60,7 +62,7 @@ HANDOFF = [
     # A decision is not a command. On 2026-10-06 "the one call you'll have to make is
     # when someone replies interested" was refused twice and Caleb got the same answer
     # three times; a judgment only he can make is exactly what the rules tell us to name.
-    (r"\byou'?ll have to\s+(?!make\b(?!\s+sure)|decide\b|choose\b)\w+",
+    (r"\b(?:you|u)'?ll have to\s+(?!make\b(?!\s+sure)|decide\b|choose\b)\w+",
      "'you'll have to ...'"),
     (r"\bmake sure (?:you|to)\s+(?:run|install|set|add)\b", "'make sure you run ...'"),
     (r"\bdon'?t forget to\s+(?:run|install|set|add)\b", "'don't forget to run ...'"),
@@ -72,6 +74,45 @@ HANDOFF = [
     (r"(?:^|(?<=[.!?]\s)|(?<=\n))\s*(?:double[- ]?check|check|verify|confirm|look up)\b"
      r"[^\n]{0,100}?\bbefore (?:(?:you|u) )?(?:send|sending|quot|post|submit|buy|text)",
      "'check X before you send'"),
+    # Work handed back in other words (feedback_dont_report_what_you_can_fix,
+    # four times in three days). Each is a reply he answered with "do it urself":
+    # 2026-10-09 "#11 ... still needs you to send the invite";
+    # 2026-10-10 "There's one thing left and it's on you Monday morning";
+    # 2026-10-11 "- Click after ..., hit Enter, then Cmd+V ... Say "done" when
+    # u're finished". A "can u ...?" pattern was tried and dropped: on 14 days
+    # of replies it fired mostly on drafted texts to teammates, not on him.
+    (r"\bneeds? (?:you|u) to (?:send|click|press|add|invite|run|open|check|do|paste|sign(?! ?off)|log ?in|accept)\b",
+     "'needs you to ...'"),
+    (r"\b(?:it'?s|that'?s|is) (?:all )?on (?:you|u)\b", "'it's on you'"),
+    (r"(?:^|\n)[ \t]*(?:[-*]|\d+[.)])[ \t]+(?:click|paste)\b",
+     "a step list of clicks for him"),
+    # Quotes are blanked before matching, so "done" arrives as "".
+    (r'\bsay (?:\W?done\W?|"") when (?:you|u)', "'say done when you're finished'"),
+    # A sign-in handed over as the next step, not named as a blocker. 2026-10-08
+    # 23:56 "Sign into Slack there and leave it open", 2026-10-09 00:01 "Sign
+    # into that one too", answered "do it for me bruh never make me do anything
+    # that is manual" (feedback_never_hand_him_a_command). A sign-in only he can
+    # do is real, and BLOCKED: is how to say so.
+    (r"(?:^|(?<=[.!?]\s)|(?<=\n))\s*(?:sign|log) ?in(?:to)?\b", "'sign in there' as a step"),
+]
+
+# The patterns written before 2026-10-11 were measured on the raw reply.
+ORIGINAL = {p for p, _ in HANDOFF[:HANDOFF.index(next(h for h in HANDOFF if h[1] == "'needs you to ...'"))]}
+
+# Asking leave to do the work. "Never ask permission. The answer is always
+# yes" (feedback_no_confirmation_prompts); he still had to say "Just push bro"
+# (10-01), "Do everything don't ask questions" (10-06) and "YES ALWAYS dont ask
+# that" (10-10), and on 10-04 a reply closed "say the word and I'll kill it".
+# A factual question is fine; these are approval gates.
+PERMISSION = [
+    # "send" stays out: a message going out under his name waits for his
+    # "send" (chat-approval.sh), and asking for it is the sanctioned form.
+    (r"\b(?:want|wanna) me to (?!send\b)[^?\n]{0,160}\?", "'want me to ...?'"),
+    (r"\bshall I\b", "'shall I'"),
+    (r"\bshould I (?:go ahead|proceed|start|continue|keep going|push|ship|run|build|fix|kill|delete|merge)\b[^?\n]{0,120}\?",
+     "'should I go ahead ...?'"),
+    (r"\b(?:lmk|let me know) if (?:you|u) want me to\b", "'let me know if you want me to'"),
+    (r"\bsay the word\b", "'say the word'"),
 ]
 
 # A command block introduced as an instruction rather than a report.
@@ -103,7 +144,7 @@ REPORT = re.compile(
 # names. A permission pane is not here on purpose: that one gets opened for him.
 CREDENTIAL = re.compile(
     r"\b(?:card|payment|pay|checkout|password|passcode|2fa|two[- ]factor|"
-    r"verification code|one[- ]time code|face ?id|touch ?id)\b", re.I)
+    r"verification code|one[- ]time code|face ?id|touch ?id|duo|passkey|qr code)\b", re.I)
 
 
 def sentence_at(message: str, start: int, end: int) -> str:
@@ -130,13 +171,24 @@ def check(message: str, user_text: str = "") -> list[str]:
         return []
 
     found = []
+    # Quoted text and code are somebody else's words: a drafted text he will
+    # send ("can u add me as admin?"), a quote, a command being discussed.
+    prose = re.sub(r"```.*?(?:```|$)", "", message, flags=re.S)
+    prose = re.sub(r"(?m)^\s*>.*$", "", prose)
+    prose = re.sub(r'"[^"\n]*"|\u201c[^\u201d\n]*\u201d', '""', prose)
     for pattern, label in HANDOFF:
-        m = re.search(pattern, message, re.I)
-        if m and CREDENTIAL.search(sentence_at(message, m.start(), m.end())):
+        text = message if pattern in ORIGINAL else prose
+        m = re.search(pattern, text, re.I)
+        if m and CREDENTIAL.search(sentence_at(text, m.start(), m.end())):
             continue
         if m:
-            line = message[:m.start()].count("\n") + 1
+            line = text[:m.start()].count("\n") + 1
             found.append(f"line {line}: {label}  ->  \"{m.group(0)}\"")
+    for pattern, label in PERMISSION:
+        m = re.search(pattern, prose, re.I)
+        if m:
+            line = prose[:m.start()].count("\n") + 1
+            found.append(f"line {line}: asks permission, {label}  ->  \"{m.group(0)[:60]}\"")
     m = BLOCK_LEAD.search(message)
     if m and SHELL_START.match(m.group(1) or "") and not REPORT.search(message):
         found.append("a shell command in a block, introduced as an instruction, "

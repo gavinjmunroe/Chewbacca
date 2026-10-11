@@ -1,0 +1,79 @@
+#!/bin/bash
+# Timing, logging, a watchdog and an output cap. See lib.sh.
+# shellcheck source=/dev/null
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" 2>/dev/null || true
+type hook_init >/dev/null 2>&1 && hook_init reply-lessons.sh 5
+# Stop: refuse a reply that repeats a chat mistake Caleb already corrected.
+#
+# Each rule is one he had to say twice in the fortnight before 2026-10-11
+# (docs/plans/REPEAT-MISTAKES.md), narrow enough to match the reply he
+# objected to and not ordinary chat:
+#
+#   feedback_writing_as_caleb       2026-10-07: "I don't say u'll or u'd or
+#                                   u've". u stands alone; contractions stay
+#                                   spelled out (core/voice.md).
+#   feedback_no_unasked_study_nudges  2026-10-10 23:42: "Bro mind your own
+#                                   business that's rude af to assume I wasn't
+#                                   doing my work", after "u just told the
+#                                   school tab u haven't started yet".
+#   feedback_paper_draft_first_then_compare  2026-10-09 15:16: after "Still
+#                                   waiting on photos of ur paper draft", he
+#                                   said "Bro just do it ... I talked to the
+#                                   teacher it is chill".
+#
+# One perl process, no model, at most one refusal per prompt: a Stop refusal
+# makes him see the reply twice (feedback_duplicate_replies_are_guard_rewrites),
+# so the rules stay narrow and the hook stays quiet when stop_hook_active is set.
+set -uo pipefail
+command -v jq >/dev/null 2>&1 || exit 0
+INPUT=$(cat)
+[ "$(printf '%s' "$INPUT" | jq -r '.stop_hook_active // false' 2>/dev/null)" = "true" ] && exit 0
+MSG=$(printf '%s' "$INPUT" | jq -r '.last_assistant_message // empty' 2>/dev/null)
+[ -n "$MSG" ] || exit 0
+TRANSCRIPT=$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty' 2>/dev/null)
+
+RL_MSG="$MSG" RL_TRANSCRIPT="$TRANSCRIPT" perl - <<'PL'
+use strict; use warnings; use Encode qw(decode_utf8);
+my $m = decode_utf8($ENV{RL_MSG} // "");
+$m =~ s/```.*?(?:```|\z)//sg;   # code is data, not his voice
+$m =~ s/^\s*>.*$//mg;           # a quoted line is somebody's words, not the reply's
+my $q = qr/['\x{2019}]/;
+my @rules = (
+  [qr/\bu${q}(?:ll|d|ve|re)\b/i,
+   "writes u'll, u'd, u've or u're. Caleb, 2026-10-07: \"I don't say u'll or u'd or u've, I say those the normal way you'll you'd you've\" (feedback_writing_as_caleb)."],
+  [qr/\b(?:you|u)\s+(?:just\s+)?(?:told|said)\b[^.\n]{0,60}\b(?:haven${q}?t|didn${q}?t|not)\s+start/i,
+   "guesses whether he has started studying, from another tab. Caleb, 2026-10-10: \"mind your own business that's rude af to assume I wasn't doing my work\" (feedback_no_unasked_study_nudges). Answer what he asked.", 1],
+  [qr/\b(?:go|time to|(?:you|u)\s+should(?:\s+probably)?|i${q}?d)\s+(?:go\s+)?(?:study|start studying|hit the books)\b|\bgive\s+the\s+next\s+(?:hour|few hours|\d+ hours?)\s+to\s+(?:BISC|ACAD|WRIT|MPGU|studying|school|class)/i,
+   "tells him to go study, unasked. Caleb, 2026-10-10: \"mind your own business\" (feedback_no_unasked_study_nudges).", 1],
+  [qr/\b(?:photos?|pics?|pictures?|a scan|scans)\s+of\s+(?:ur|your)\s+(?:paper\s+|handwritten\s+)?draft|\bsend\s+(?:me\s+)?(?:ur|your)\s+(?:paper|handwritten)\s+draft/i,
+   "asks for his paper draft. He hand-writes first and has Claude draft from his picks to compare; never ask for the paper draft (feedback_paper_draft_first_then_compare, 2026-10-09: \"Bro just do it\")."],
+);
+# The last thing he typed, read only when a study rule matched: a study answer
+# to a study question is the job, not a nudge.
+sub asked_about_school {
+  my $path = $ENV{RL_TRANSCRIPT} // "";
+  open(my $fh, "<:raw", $path) or return 0;
+  my $size = -s $fh; seek($fh, $size > 524288 ? $size - 524288 : 0, 0);
+  local $/; my $data = <$fh>; close $fh;
+  for my $line (reverse split /\n/, $data) {
+    next unless index($line, '"user"') >= 0;
+    require JSON::PP;
+    my $row = eval { JSON::PP->new->utf8->decode($line) } or next;
+    next if ($row->{type} // "") ne "user" or $row->{isMeta} or $row->{isSidechain};
+    my $c = ($row->{message} // {})->{content};
+    my $t = ref $c eq "ARRAY" ? join(" ", map { ref $_ eq "HASH" && ($_->{type} // "") eq "text" ? $_->{text} : "" } @$c)
+          : (defined $c && !ref $c ? $c : "");
+    next if ref $c eq "ARRAY" && grep { ref $_ eq "HASH" && ($_->{type} // "") eq "tool_result" } @$c;
+    $t =~ s/^\s+//;
+    next if $t eq "" || $t =~ /^</;
+    return $t =~ /stud|exam|midterm|quiz|homework|due|class|lecture|bisc|acad|writ|mpgu|school/i ? 1 : 0;
+  }
+  return 0;
+}
+for my $r (@rules) {
+  next if $r->[2] && $m =~ $r->[0] && asked_about_school();
+  if ($m =~ $r->[0]) { print STDERR "reply-lessons: this reply $r->[1] Rewrite it without that.\n"; exit 2; }
+}
+exit 0;
+PL
+exit $?

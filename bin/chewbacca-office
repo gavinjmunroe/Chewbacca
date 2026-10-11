@@ -13,7 +13,7 @@
   chewbacca office doc <file id | sharing url>
                     a Word, PowerPoint or Excel file as text (Excel: every sheet)
   chewbacca office teams                     chat list, topic, last updated
-  Every command takes --json. Every command is read-only.
+  Every command takes --json. Every command reads; the token can also write.
 
 Sign-in: MSAL's device-code flow against the "organizations" authority, with
 Microsoft's first-party public client "Microsoft Graph Command Line Tools"
@@ -36,7 +36,7 @@ access token or refreshes it.
 msal and keyring live in a private venv at ~/.chewbacca/venvs/office,
 created on first use (CHEWBACCA_OFFICE_VENV moves it).
 
-Read-only by construction: every request is a GET to the fixed origin
+Every request today is a GET (the token can write; see SCOPES) to the fixed origin
 https://graph.microsoft.com/v1.0, built from a fixed path template with ids
 validated to a strict character set. No send, reply, delete, move, flag,
 accept or edit. `read` fetches a message with GET, which does not mark it
@@ -60,12 +60,19 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 # so it needs no app registration of ours; a tenant can still block it.
 CLIENT_ID = "14d82eec-204b-4c2f-b7e8-296a70dab67e"
 AUTHORITY = "https://login.microsoftonline.com/organizations"
-# Delegated and read-only. offline_access is added by MSAL itself (see above).
+# Delegated, read and write. offline_access is added by MSAL itself (see above).
+# The requests below are still GET only; the token asks for write so the day a
+# write command lands it does not need a second consent. Caleb, 2026-10-11:
+# "CHEWBS SHOULD NEVER BE READ ONLY! ... always literally just ask for full
+# access", after a read-only Google token 403'd a doc write
+# (feedback_never_read_only). tests/test_never_read_only.py holds every scope
+# list in the kit to that.
 SCOPES = [
-    "https://graph.microsoft.com/Mail.Read",
-    "https://graph.microsoft.com/Calendars.Read",
-    "https://graph.microsoft.com/Files.Read.All",
-    "https://graph.microsoft.com/Chat.ReadBasic",
+    "https://graph.microsoft.com/Mail.ReadWrite",
+    "https://graph.microsoft.com/Mail.Send",
+    "https://graph.microsoft.com/Calendars.ReadWrite",
+    "https://graph.microsoft.com/Files.ReadWrite.All",
+    "https://graph.microsoft.com/Chat.ReadWrite",
     "https://graph.microsoft.com/User.Read",
 ]
 KEYCHAIN_SERVICE = "chewbacca-office"

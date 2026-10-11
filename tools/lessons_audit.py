@@ -5,6 +5,10 @@
   chewbacca lessons --list       every lesson with its bucket and what enforces it
   chewbacca lessons --context    only the ones nothing enforces (the fix queue)
   chewbacca lessons --json       the same as data
+  chewbacca lessons --loop       corrections caught this fortnight and what each turn did
+  chewbacca lessons why "<lesson>: <reason>"
+                                 record why code can't catch a correction made
+                                 in this session (bin/durable-check accepts it)
 
 A correction lives in a feedback_*.md memory file. It is enforced when a hook
 the kit installs or a test names it, or when the lesson names that hook or
@@ -22,8 +26,10 @@ errs toward the less flattering number on purpose.
 
 import argparse
 import json
+import os
 import re
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -63,6 +69,11 @@ def wired_hook_names(settings_path=None, setup_path=None):
             names.add(m.group(1) or m.group(2))
     except OSError:
         pass
+    # lib.sh is sourced by the hooks, never registered itself: it runs inside
+    # every registered hook that sources it.
+    if any((HOOKS / n).is_file() and "lib.sh" in (HOOKS / n).read_text(errors="ignore")
+           for n in list(names)):
+        names.add("lib.sh")
     try:
         data = json.loads(settings_path.read_text())
     except (OSError, ValueError):
@@ -142,6 +153,59 @@ def audit(memory_dirs, settings_path=None):
     }
 
 
+def lessons_dir():
+    home = Path(os.environ.get("CHEWBACCA_HOME") or Path.home() / ".chewbacca").expanduser()
+    return Path(os.environ.get("CHEWBACCA_LESSONS_DIR") or home / "lessons").expanduser()
+
+
+# Two weeks, the window the repeat-mistake ranking on 2026-10-11 used, so the
+# loop line and docs/plans/REPEAT-MISTAKES.md count the same stretch.
+LOOP_DAYS = 14
+
+
+def loop(days=LOOP_DAYS, folder=None):
+    """What each correction turn did, newest outcome per prompt.
+
+    bin/durable-check appends a row every Stop that follows a correction; the
+    last row for a prompt is what the turn ended with.
+    """
+    folder = folder or lessons_dir()
+    cut = time.time() - days * 86400
+    last = {}
+    try:
+        lines = (folder / "corrections.jsonl").read_text(encoding="utf-8").splitlines()
+    except OSError:
+        lines = []
+    for line in lines:
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        if r.get("t", 0) >= cut:
+            last[(r.get("session"), r.get("prompt"))] = r
+    rows = sorted(last.values(), key=lambda r: r.get("t", 0))
+    counts = {k: sum(1 for r in rows if r.get("outcome") == k) for k in ("enforced", "why", "prose", "none")}
+    return rows, counts
+
+
+def record_why(reason, folder=None, session=None):
+    """Append a reason this session's correction cannot be enforced in code."""
+    reason = " ".join((reason or "").split())
+    if len(reason) < 12:
+        print("lessons why: say which lesson and why code can't catch it, in a sentence", file=sys.stderr)
+        return 2
+    session = session or os.environ.get("CLAUDE_CODE_SESSION_ID") or os.environ.get("CODEX_SESSION_ID") or ""
+    if not session:
+        print("lessons why: no session id in the environment (CLAUDE_CODE_SESSION_ID)", file=sys.stderr)
+        return 2
+    folder = folder or lessons_dir()
+    folder.mkdir(parents=True, exist_ok=True)
+    with (folder / "why-not.jsonl").open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps({"t": round(time.time(), 3), "session": session, "reason": reason[:400]}) + "\n")
+    print(f"recorded: {reason[:120]}")
+    return 0
+
+
 def summarize(rows):
     total = len(rows)
     counts = {b: sum(1 for r in rows if r["bucket"] == b)
@@ -151,6 +215,9 @@ def summarize(rows):
 
 
 def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv[:1] == ["why"]:
+        return record_why(" ".join(argv[1:]))
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--memory", action="append", type=Path,
                    help="a memory folder to read (repeatable); default team/memory plus ~/second-brain/memory")
@@ -160,6 +227,7 @@ def main(argv=None):
     p.add_argument("--shared-only", action="store_true",
                    help="list team lessons only, so the output is safe to show a teammate")
     p.add_argument("--json", action="store_true")
+    p.add_argument("--loop", action="store_true", help="list this fortnight's correction turns")
     a = p.parse_args(argv)
 
     rows, kit = audit(a.memory or default_memory_dirs(), a.settings)
@@ -168,9 +236,11 @@ def main(argv=None):
     if a.context:
         shown = [r for r in shown if r["bucket"] in ("context", "unwired")]
 
+    turns, outcomes = loop()
     if a.json:
         print(json.dumps({"total": total, "enforced": enforced, "buckets": counts,
-                          "kit": kit, "lessons": shown if (a.list or a.context) else []}, indent=2))
+                          "kit": kit, "loop": outcomes,
+                          "lessons": shown if (a.list or a.context) else []}, indent=2))
         return 0
 
     if not total:
@@ -184,6 +254,15 @@ def main(argv=None):
     print(f"  {counts['context']:>4}  context only: the agent has to read it and choose to obey")
     print(f"kit: {kit['hooks']} hooks ({kit['hooks_wired']} registered, "
           f"{kit['hooks_citing_a_date']} cite a dated incident), {kit['tests']} test files")
+    caught = sum(outcomes.values())
+    print(f"loop, last {LOOP_DAYS} days: {caught} correction turns caught by durable-guard; "
+          f"{outcomes['enforced']} landed a gate or test, {outcomes['why']} recorded why not, "
+          f"{outcomes['prose']} prose only, {outcomes['none']} nothing")
+    if a.loop and not a.shared_only:
+        print()
+        for r in turns:
+            when = time.strftime("%m-%d %H:%M", time.localtime(r.get("t", 0)))
+            print(f"  {when}  {r.get('outcome', '?'):<8}  {(r.get('said') or '').replace(chr(10), ' ')[:70]}")
     if a.list or a.context:
         print()
         for r in sorted(shown, key=lambda r: (r["bucket"], r["lesson"])):

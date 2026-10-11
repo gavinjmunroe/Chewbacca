@@ -42,6 +42,22 @@ MUST_FIRE = [
     # 2026-10-09: a guessed price handed over as a lookup, and it was wrong.
     "Text's queued. Check the $500 edu price on apple.com before u send it.",
     "Check the current price before quoting it to him.",
+    # 2026-10-11, the repeats ranked in docs/plans/REPEAT-MISTAKES.md. Each is
+    # the reply he answered with "do it urself" or "don't ask".
+    # feedback_dont_report_what_you_can_fix:
+    "#11, adding her to the workspace, still needs you to send the invite.",
+    "There's one thing left and it's on you Monday morning: the writes.",
+    "Here's what's open:\n- Click after \"...still relevant today.\", hit Enter, then Cmd+V\n- Fix Miyaki to Miyake",
+    "Say \"done\" when u're finished and I'll check again.",
+    "u'll need to approve it in Settings.",
+    # feedback_never_hand_him_a_command:
+    "I opened a fresh window. Sign into Slack there and leave it open until it closes by itself.",
+    # feedback_no_confirmation_prompts:
+    "Both lists are verified. Want me to start running Wave 2 now?",
+    "The build is mid-upload. It's harmless, but say the word and I'll kill it.",
+    "Shall I merge the six branches?",
+    "Should I go ahead and push it?",
+    "Lmk if you want me to retry.",
 ]
 
 MUST_NOT_FIRE = [
@@ -69,6 +85,17 @@ MUST_NOT_FIRE = [
     # The agent checking before a send is the right shape.
     "I checked the price on apple.com before queueing the draft.",
     "The send gate checks the thread before you send anything.",
+    # A drafted text he will send is his words, not a handoff to him.
+    'Text for Maggie: "can u add me as admin on the GCP project? It needs you to click accept"',
+    # A message going out under his name waits for his send; asking is right.
+    "Draft #41 is queued. Want me to send it?",
+    "Say send and all 5 go out.",
+    # A 2FA push or a QR code is a credential only he holds.
+    "Sign in with Duo on your phone whenever you can.",
+    # A gate that needs his approval by design is not work handed back.
+    "Those need you to sign off on the gate before they start.",
+    # A factual question is not a permission ask.
+    "Which inbox should get business leads?",
 ]
 
 

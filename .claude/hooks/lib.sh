@@ -17,7 +17,16 @@ CHEWBACCA_HOOK_LOG="$CHEWBACCA_LOG_DIR/hooks.log"
 # session-context hook once emitted an unbounded coursework dump.
 CHEWBACCA_HOOK_MAX_BYTES="${CHEWBACCA_HOOK_MAX_BYTES:-8000}"
 
-_hook_ms() { python3 -I -c 'import time;print(int(time.time()*1000))' 2>/dev/null || echo 0; }
+# Perl first, python only where there is no perl. Every hook calls this twice,
+# and a dozen hooks run on every Bash call. Measured 2026-10-11 at load 22:
+# python3 -I took ~62 ms to start and perl ~20 ms, so a hook that did nothing
+# cost ~175 ms with python and ~95 ms with perl. That was the floor under
+# "Bro hurry up" and "Why is it taking that long???" (feedback_slow_means_broken):
+# the tax was paid before any hook did any work.
+_hook_ms() {
+  perl -MTime::HiRes=time -e 'printf "%d\n", time*1000' 2>/dev/null ||
+    python3 -I -c 'import time;print(int(time.time()*1000))' 2>/dev/null || echo 0
+}
 
 hook_init() {
   _HOOK_NAME="${1:-$(basename "${BASH_SOURCE[1]:-hook}")}"

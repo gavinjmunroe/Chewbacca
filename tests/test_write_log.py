@@ -28,7 +28,7 @@ class WriteLogTests(unittest.TestCase):
                         CHEWBACCA_WRITE_LOG=str(self.folder / 'custom.tsv'),
                         TMPDIR=str(self.folder))
         self.git('init')
-        self.policy = self.repo / 'skills/example.md'
+        self.policy = self.repo / 'tests/example_test.py'
         self.policy.parent.mkdir()
         self.policy.write_text('original')
         self.git('add', '.')
@@ -76,7 +76,7 @@ class WriteLogTests(unittest.TestCase):
     def test_bash_cd_into_another_repository_is_logged(self):
         # 2026-10-06: `cd ~/second-brain && cat >> ...` from another cwd never
         # reached the log, so brain-sync committed none of a session's notes.
-        data = {'command': f'cd {self.repo} && echo more >> skills/example.md'}
+        data = {'command': f'cd {self.repo} && echo more >> tests/example_test.py'}
         self.hook('PreToolUse', self.outside, data, tool='Bash')
         self.policy.write_text('appended through cd')
         self.hook('PostToolUse', self.outside, data, tool='Bash')
@@ -116,7 +116,7 @@ class WriteLogTests(unittest.TestCase):
         self.hook('PostToolUse', self.outside, data, tool='Bash')
 
     def test_cd_on_a_later_line_is_seen(self):
-        data = {'command': f'echo start\ncd {self.repo}\necho more >> skills/example.md'}
+        data = {'command': f'echo start\ncd {self.repo}\necho more >> tests/example_test.py'}
         self.hook('PreToolUse', self.outside, data, tool='Bash')
         self.policy.write_text('appended on line three')
         self.hook('PostToolUse', self.outside, data, tool='Bash')
@@ -210,7 +210,7 @@ class WriteLogTests(unittest.TestCase):
 
     def test_new_file_delete_and_revert_are_changes(self):
         self.hook('PreToolUse')
-        new = self.repo / 'skills/new.md'
+        new = self.repo / 'tests/new_test.py'
         new.write_text('new')
         self.hook('PostToolUse')
         self.hook('PreToolUse')
@@ -320,7 +320,9 @@ class WriteLogTests(unittest.TestCase):
 
     def test_tools_and_instructions_only_qualify_inside_kit(self):
         log = Path(self.env['CHEWBACCA_WRITE_LOG'])
-        for name, code in ((ROOT / 'tools/runtime.py', 0), (ROOT / 'config/instructions/agent-neutral.md', 0),
+        # Instructions are prose: since 2026-10-11 a correction needs code that
+        # runs, or a recorded reason, so an instructions edit alone is refused.
+        for name, code in ((ROOT / 'tools/runtime.py', 0), (ROOT / 'config/instructions/agent-neutral.md', 1),
                            (self.outside / 'tools/random.py', 1), (self.outside / 'instructions/note.md', 1)):
             log.write_text(f'{time.time()}\tfixture\t{name}\n')
             result = subprocess.run(['python3', str(ROOT / 'bin/durable-check'), '--session', 'fixture'],

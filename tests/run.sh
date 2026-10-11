@@ -560,6 +560,8 @@ if group "tools"; then
   check  "propose refreshes checksums for the working tree, staging nothing" python3 "$ROOT/tests/test_propose_checksums.py"
   check  "a reply that hands over a command is refused" python3 "$ROOT/tests/test_handoff_check.py"
   check  "a correction must change the kit, not just the reply" python3 "$ROOT/tests/test_durable_check.py"
+  check  "no scope list in the kit asks for read-only access" python3 "$ROOT/tests/test_never_read_only.py"
+  check  "no integration types into or raises an app window" python3 "$ROOT/tests/test_integrations_no_app_windows.py"
   check  "native write tracking observes content and workspace changes" python3 "$ROOT/tests/test_write_log.py"
   check  "no code reaches a folder at its pre-2026-10-05 top-level path" python3 "$ROOT/tests/test_moved_paths.py"
   check  "preflight describes setup.sh accurately" python3 "$ROOT/tests/test_preflight.py"
@@ -853,6 +855,15 @@ if group "installer"; then
     bash "$ROOT/tests/railway_domain_guard.sh"
   check  "vercel-guard refuses Vercel deploys and allows teardown" \
     bash "$ROOT/tests/vercel_guard.sh"
+  # 2026-10-11, the repeats ranked in docs/plans/REPEAT-MISTAKES.md.
+  check  "lesson-guard refuses a foreground suite, headless blender and a blind new repo" \
+    bash "$ROOT/tests/lesson_guard.sh"
+  check  "reply-lessons refuses u'll, unasked study nudges and asking for his paper draft" \
+    bash "$ROOT/tests/reply_lessons.sh"
+  check  "every hook's timer starts perl, never python3" \
+    bash "$ROOT/tests/hook_lib_timer.sh"
+  check  "ask-capture keeps every link past the trim" \
+    bash "$ROOT/tests/ask_capture_links.sh"
 
   check  "essay-gate refuses generated prose into a Google Doc and passes hand-written prose" \
     bash "$ROOT/tests/essay_gate.sh"
@@ -1283,6 +1294,7 @@ if group "windows installer"; then
   fi
 
   check  "hook registration survives a re-run" python3 "$ROOT/tests/test_setup_hooks.py"
+  check  "bypass leaves nothing prompting: CLI, editor and every MCP server" python3 "$ROOT/tests/test_no_permission_prompts.py"
 fi
 
 # ── CLAUDE.md merge ───────────────────────────────────────────────────────────
@@ -1443,12 +1455,27 @@ if group "hooks"; then
   # the remote exactly where it was and says so out loud.
   check "a failed gate blocks the push and leaves the remote alone" bash -c '
     d="$('"$(declare -f autopush_fixture)"'; autopush_fixture main)"
-    echo "import sys; sys.exit(1)" > "$d/work/tools/checksums.py"
+    echo "import sys; sys.exit(1)" > "$d/work/tools/counts.py"
+    git -C "$d/work" commit -qam "a counts gate that fails, committed"
     before="$(git --git-dir="$d/origin.git" rev-parse main)"
     out="$(CHEWBACCA_REPO_DIR="$d/work" bash "'"$ROOT"'/.claude/hooks/kit-autopush.sh" 2>&1)"
     after="$(git --git-dir="$d/origin.git" rev-parse main)"
     [ "$before" = "$after" ] || { echo "it pushed past a failed gate" >&2; exit 1; }
     echo "$out" | grep -q BLOCKED || { echo "said nothing: $out" >&2; exit 1; }
+    exit 0
+  '
+
+  # 2026-10-11, feedback_always_land_on_main: 84 of 156 BLOCKED pushes in
+  # autopush.log failed only a gate that read the working tree, where another
+  # tab's uncommitted edit lived. The gates read HEAD now, so a broken file
+  # nobody committed must not hold committed work off main.
+  check "another tab's uncommitted edit does not block a clean push" bash -c '
+    d="$('"$(declare -f autopush_fixture)"'; autopush_fixture main)"
+    echo "import sys; sys.exit(1)" > "$d/work/tools/counts.py"
+    before="$(git --git-dir="$d/origin.git" rev-parse main)"
+    CHEWBACCA_REPO_DIR="$d/work" bash "'"$ROOT"'/.claude/hooks/kit-autopush.sh" >/dev/null 2>&1
+    after="$(git --git-dir="$d/origin.git" rev-parse main)"
+    [ "$before" != "$after" ] || { echo "an uncommitted file blocked the push" >&2; exit 1; }
     exit 0
   '
 
@@ -1510,7 +1537,8 @@ if group "hooks"; then
   # stop_hook_active, and a different session still hears it.
   check "a blocked push is reported once per session, never on stop_hook_active" bash -c '
     d="$('"$(declare -f autopush_fixture)"'; autopush_fixture main)"
-    echo "import sys; sys.exit(1)" > "$d/work/tools/checksums.py"
+    echo "import sys; sys.exit(1)" > "$d/work/tools/counts.py"
+    git -C "$d/work" commit -qam "a counts gate that fails, committed"
     export CHEWBACCA_REPO_DIR="$d/work" CHEWBACCA_LOG_DIR="$d/logs"
     h="'"$ROOT"'/.claude/hooks/kit-autopush.sh"
     a="$(echo "{\"session_id\":\"s1\",\"stop_hook_active\":true}" | bash "$h" 2>&1)"
@@ -1631,6 +1659,7 @@ if group "hud"; then
   check  "fanout runs the JevBacca kill test with injected judges" python3 "$ROOT/tests/test_fanout.py"
   check  "site-fast types a field value or nothing" python3 "$ROOT/tests/test_site_fast.py"
   check  "site-gate calls a flash a flash, a thin phone thin, a deck a deck and a flat screen flat" python3 "$ROOT/tests/test_site_gate_flash_parity.py"
+  check  "site-gate refuses a wall of text and passes beats and articles" python3 "$ROOT/tests/site_gate_walls.py"
   check  "untrusted-screen flags text aimed at the agent, and only that" python3 "$ROOT/tests/test_screen.py"
   check  "model-route maps Jev's class to the router's targets" python3 "$ROOT/tests/test_model_route.py"
   check  "model-route hands a plan to a cheaper session only with runnable acceptance checks" python3 "$ROOT/tests/test_model_handoff.py"

@@ -56,4 +56,24 @@ check("hooks citing a dated incident are counted", kit["hooks_citing_a_date"] ==
 total, counts, enforced = la.summarize(rows)
 check("summary adds up", total == 5 and enforced == 3 and counts["unwired"] == 1 and counts["context"] == 1)
 
+# The loop (2026-10-11): durable-check records each correction turn, `lessons
+# why` records a reason, and the summary counts the last outcome per prompt.
+import json, time  # noqa: E401,E402
+lessons = root / "lessons"
+rc = la.record_why("feedback_aura: taste, no rule code can check", folder=lessons, session="s1")
+check("lessons why records a reason under the session", rc == 0 and
+      json.loads((lessons / "why-not.jsonl").read_text())["session"] == "s1")
+check("lessons why refuses an empty reason", la.record_why("x", folder=lessons, session="s1") == 2)
+now = time.time()
+(lessons / "corrections.jsonl").write_text("".join(json.dumps(r) + "\n" for r in [
+    {"t": now - 60, "session": "s1", "prompt": "p1", "outcome": "none", "said": "fix chewbs"},
+    {"t": now - 30, "session": "s1", "prompt": "p1", "outcome": "enforced", "said": "fix chewbs"},
+    {"t": now - 20, "session": "s2", "prompt": "p2", "outcome": "why", "said": "never x"},
+    {"t": now - 10, "session": "s3", "prompt": "p3", "outcome": "prose", "said": "never y"},
+    {"t": now - 40 * 86400, "session": "s4", "prompt": "p4", "outcome": "none", "said": "old"},
+]))
+turns, outcomes = la.loop(folder=lessons)
+check("the loop keeps the last outcome per prompt, inside the window",
+      outcomes == {"enforced": 1, "why": 1, "prose": 1, "none": 0} and len(turns) == 3)
+
 sys.exit(1 if failed else 0)

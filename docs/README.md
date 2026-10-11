@@ -80,6 +80,7 @@ relative link in here points nowhere.
 | [EVERY-MAC.md](plans/EVERY-MAC.md)                     | Plan for bugs that stay silent on every Mac but the author's                        |
 | [LEARNING.md](plans/LEARNING.md)                       | Why the learning loop had never closed, 2026-09-21, and what closed later           |
 | [SELF-LEARNING.md](plans/SELF-LEARNING.md)             | How the kit would grow from its own log instead of being taught                     |
+| [REPEAT-MISTAKES.md](plans/REPEAT-MISTAKES.md)         | Corrections ranked by how often he repeated them, 2026-10-11, and what enforces each |
 | [LEARNING-TO-ACT.md](plans/LEARNING-TO-ACT.md)         | Learning an app by doing a task once: procedures, maps, the registry                |
 | [SITE-LEARNING.md](plans/SITE-LEARNING.md)             | How leading web agents read a page, and what Chewbacca takes                        |
 | [WEB-AGENT.md](plans/WEB-AGENT.md)                     | Compiling web tasks instead of interpreting them each time                          |

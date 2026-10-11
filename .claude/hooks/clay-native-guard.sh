@@ -14,6 +14,11 @@ type hook_init >/dev/null 2>&1 && hook_init clay-native-guard.sh 5
 # row, and Caleb: "any gtme would use it better than u." A paragraph did not stop
 # it, so this refuses.
 #
+# This is what enforces feedback_clay_api_vs_ux, the second most repeated
+# correction in docs/plans/REPEAT-MISTAKES.md: seven times on 10-03 and 10-05
+# ("BRO ... WHY AREN'T U USEING THE CLAY UX", "Clay has all the shit you were
+# doing built in bruh"), and none after this hook landed on 10-06.
+#
 # The Clay-native route: Find People (or import) into a TABLE, add enrichment
 # columns (Work email waterfall, Validate email, AI/Claygent with a source
 # field), price ONE row, Run column, then send the table or audience to the

@@ -48,6 +48,7 @@ headless and screenshots timed out after 30 s; with it the same page ran 50 to
 import argparse
 import io
 import json
+import re
 import sys
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
@@ -650,6 +651,34 @@ RESEARCH_TOOLS = [("api-anything",), ("brand-grab",), ("ux-pick", "ux-gen"), ("w
 MIN_INDEX_LINES = 3
 
 
+# Caleb, 2026-10-10, on a map caption keyed to replay a fade-up on every
+# scroll step and four scenes that each slid their text up: "upfade upfade
+# upfade bro it hurts my eyes" and "Make sure chewb NEVER makes annoying
+# unintentional animations". Text that changes in place swaps; motion belongs
+# to the figure. Three or more rise or fade-up entrances in one component is
+# the generic pattern, and an entrance on an element keyed to state replays it
+# on every change.
+REMOUNT = re.compile(r"<[a-zA-Z]+[^>]*\bkey=\{[^}]*\}[^>]*animate-(rise|fade|fade-up|in)\b|<[a-zA-Z]+[^>]*animate-(rise|fade|fade-up|in)\b[^>]*\bkey=\{", re.S)
+RISE = re.compile(r"animate-(rise|fade-up)\b|\brise\(|translateY\(calc\(\(1 - ")
+MAX_RISES = 2
+
+
+def motion_lint(root: Path) -> list[str]:
+    fails = []
+    src = root / "src"
+    if not src.is_dir():
+        return fails
+    for f in sorted(src.rglob("*.tsx")):
+        text = f.read_text(errors="ignore")
+        rel = f.relative_to(root)
+        if REMOUNT.search(text):
+            fails.append(f"{rel}: an entrance animation on an element keyed to state replays every time it changes; swap the text in place")
+        n = len(RISE.findall(text))
+        if n > MAX_RISES:
+            fails.append(f"{rel}: {n} rise or fade-up entrances; one per page at most, and text never slides in beat after beat")
+    return fails
+
+
 def research(root: Path) -> list[str]:
     fails = []
     for rel, what in RESEARCH_FILES.items():
@@ -820,7 +849,7 @@ def main():
     r.add_argument("repo", nargs="?", default=".")
     a = ap.parse_args()
     if a.cmd == "research":
-        fails = research(Path(a.repo).resolve())
+        fails = research(Path(a.repo).resolve()) + motion_lint(Path(a.repo).resolve())
         for f in fails:
             print(f"FAIL  {f}")
         print(f"site-gate research: {len(fails)} problem(s)" if fails else "ok    research receipt complete")

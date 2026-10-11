@@ -29,6 +29,14 @@ subject out (Erik's cover was flattened from the mockup with a perspective
 warp), use an asset whose edge is already dark, or feather it into the ground.
 `site-gate check` fails a bright-edged image on a dark section.
 
+**No unintentional animation.** Caleb, 2026-10-10, on captions that faded up
+on every scroll step: "upfade upfade upfade bro it hurts my eyes" and "NEVER
+makes annoying unintentional animations". Every motion has a job you can name;
+the figure moves and the text holds. Text that changes in place swaps (or
+crossfades without moving), never replays an entrance keyed to state, and a
+page gets one rise entrance at most. `site-gate research` fails a keyed
+entrance and a component with three or more rises.
+
 ## A site is four layers, and a screenshot shows one
 
 1. Layout, meaning positions, sizes and type, the only layer a screenshot judges.

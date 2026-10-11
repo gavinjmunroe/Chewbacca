@@ -38,6 +38,15 @@ def main() -> int:
         write(root, "research/SOURCES.md", "api-anything, brand-grab, ux-pick, website.md, site-gate\n")
         fails = site_gate.research(root)
         assert fails == [], fails
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        write(root, "src/Map.tsx", '<div key={current} className="animate-rise">x</div>')
+        write(root, "src/Hero.tsx", '<h1 className="animate-rise"/><p className="animate-rise"/><a className="animate-fade-up"/>')
+        write(root, "src/Calm.tsx", '<h1 className="animate-fade">x</h1>')
+        fails = site_gate.motion_lint(root)
+        assert any("Map.tsx" in f and "keyed to state" in f for f in fails), fails
+        assert any("Hero.tsx" in f and "3 rise" in f for f in fails), fails
+        assert not any("Calm.tsx" in f for f in fails), fails
     print("site-gate research: ok")
     return 0
 

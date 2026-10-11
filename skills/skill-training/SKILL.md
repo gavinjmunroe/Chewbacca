@@ -85,3 +85,5 @@ by hand, script the rest: poll the page instead of sleeping, and prove the resul
 Keep the script as a procedure (`library/procedures/linkedin-skills`) so the lesson is code, not prose.
 
 Training note, 2026-09-23: mathematical, creative and proprietary standards now require measured transfer, discriminating alternatives and private verified assets. Saving a lesson alone no longer implies future behavior changed.
+
+For building a practitioner corpus in a new domain (one of the mastery lists), read [references/domain-corpora.md](references/domain-corpora.md) first.

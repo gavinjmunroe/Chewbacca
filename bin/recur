@@ -77,6 +77,16 @@ without would your youre caleb his him he her she its it's the for you was were
 never always don't doesn't isn't can't won't one two three use used using says
 said session sessions tab tabs file files reply replies""".split())
 WORD = re.compile(r"[a-z][a-z0-9_-]{3,}")
+QUOTE = re.compile(r'"([^"\n]{12,240})"')
+# His chat filler says nothing about which mistake a message is about.
+FILLER = STOP | set("""bro bruh bruv dawg wtf lol lmao alr plz pls rn abt smth chewb chewbs
+chewbacca fix retard retarded fuck fucking fucker shit literally really rlly
+gotta needa wanna tryna""".split())
+TOKEN = re.compile(r"[a-z][a-z0-9']{2,}")
+
+
+def tokens(text: str) -> list[str]:
+    return [w.strip("'") for w in TOKEN.findall((text or "").lower()) if w.strip("'") not in FILLER]
 
 
 def words(text: str) -> set[str]:
@@ -124,9 +134,16 @@ def corrections() -> list[dict]:
             slug = path.stem
             saved = added.get(path.name) or path.stat().st_mtime
             desc = fm.get("description") or ""
+            # His own words, quoted in the body, are what a repeat sounds like.
+            # Matching on the description alone missed every "Wtf taking so
+            # long" (4 on 10/10) against a lesson described as "nothing you do
+            # should ever take this long"; 2026-10-11.
+            quotes = " ".join(QUOTE.findall(text))
+            doc = " ".join([slug.replace("feedback_", "").replace("_", " "), desc, quotes, quotes, text[:1200]])
             rows.append({"slug": slug, "where": "team" if "team" in d.parts else "brain",
                          "saved": saved, "description": desc,
-                         "keys": words(desc) | words(slug.replace("feedback_", "").replace("_", " "))})
+                         "keys": words(desc) | words(slug.replace("feedback_", "").replace("_", " ")),
+                         "doc": tokens(doc)})
     return rows
 
 
@@ -211,17 +228,6 @@ def asks(days: float) -> list[dict]:
     return sorted(uniq.values(), key=lambda r: r["t"])
 
 
-# Score is the summed rarity of the shared words, where rarity is measured
-# across everything he has typed, not across the corrections: "give", "right"
-# and "need" are in his messages every day and prove nothing. The first cut
-# (rarity across corrections, 2 words, score 6) matched pasted text threads
-# and "give me a text" to the cd rule; 2026-10-10. Guessed, never measured
-# against labelled pairs. `recur <slug>` prints every line so it can be judged.
-# The score threshold is in units of one never-seen word, log(n + 1), so it
-# means the same thing on 30 synthetic messages and on 4,958 real ones: 9.0
-# was the cut on the real corpus, and 9.0 / log(4,959) is 1.06.
-MIN_SHARED = 2
-MIN_SCORE_UNITS = 1.06
 # Pasted material (a text thread, a transcript, a doc) is input he is handing
 # over, not him correcting anything. Measured on the first run: every pasted
 # hit was over 400 characters, and his own repairs run short.
@@ -229,71 +235,144 @@ MAX_LEN = 400
 PASTED = re.compile(r"MESSAGES THIS PERSON SENT|### EPISODE|Transcript:|^\s*[-*] .*\n\s*[-*] ", re.M)
 
 
+# Blocking, then judging, the entity-fusion shape. TF-IDF over each
+# correction's description, quoted words and opening shortlists the TOP_K
+# closest for every repair message; the judge then reads each pair. The old
+# blocking (2+ shared rare description words, score 1.06 units) found 0 repeats
+# of feedback_nothing_takes_this_long on 2026-10-11 while this found 9, so the
+# floor here is low on purpose and precision is left to the judge.
+TOP_K = 3
+MIN_COSINE = 0.12  # guessed, never measured: below it the pair shares filler, not a subject
+
+
+def _vec(toks, idf):
+    tf = collections.Counter(toks)
+    v = {w: (1 + math.log(c)) * idf[w] for w, c in tf.items() if w in idf}
+    norm = math.sqrt(sum(x * x for x in v.values())) or 1.0
+    return {w: x / norm for w, x in v.items()}
+
+
 def match(rows: list[dict], messages: list[dict]) -> None:
     frustration = _mine_asks().FRUSTRATION
     pool = [m for m in messages if len(m["said"]) <= MAX_LEN and not PASTED.search(m["said"])]
-    bags = [words(m["said"]) for m in pool]
-    df = collections.Counter(w for b in bags for w in b)
-    n = max(len(pool), 1)
-    idf = lambda w: math.log((n + 1) / (df.get(w, 0) + 1))
-    floor = MIN_SCORE_UNITS * math.log(n + 1)
+    df = collections.Counter(w for r in rows for w in set(r["doc"]))
+    n = max(len(rows), 1)
+    idf = {w: math.log((n + 1) / (c + 1)) + 1 for w, c in df.items()}
+    vecs = [_vec(r["doc"], idf) for r in rows]
     for r in rows:
         r["hits"] = []
-    for m, mw in zip(pool, bags):
+    for m in pool:
         if not frustration.search(m["said"]):
             continue
-        best, best_score, best_shared = None, 0.0, []
-        for r in rows:
+        q = _vec(tokens(m["said"]), idf)
+        if not q:
+            continue
+        scored = []
+        for r, v in zip(rows, vecs):
             if m["t"] <= r["saved"]:
                 continue
-            shared = sorted(r["keys"] & mw)
-            if len(shared) < MIN_SHARED:
-                continue
-            score = sum(idf(w) for w in shared)
-            if score > best_score:
-                best, best_score, best_shared = r, score, shared
-        if best is not None and best_score >= floor:
-            best["hits"].append({"t": m["t"], "score": round(best_score, 1),
-                                 "shared": best_shared, "said": m["said"]})
+            score = sum(x * v.get(w, 0.0) for w, x in q.items())
+            if score >= MIN_COSINE:
+                scored.append((score, r, sorted(w for w in q if w in v)))
+        scored.sort(key=lambda x: -x[0])
+        for score, r, shared in scored[:TOP_K]:
+            r["hits"].append({"t": m["t"], "score": round(score, 2), "shared": shared, "said": m["said"]})
 
 
-JUDGE_CACHE = CACHE.with_name("verdicts.json")
+JUDGE_CACHE = CACHE.with_name("choices.json")
+# Messages per haiku call. One call held every pair when blocking was strict;
+# with TOP_K candidates per message a single prompt ran past its timeout.
+JUDGE_BATCH = 120
 JUDGE_PROMPT = """You check whether an AI assistant repeated a mistake it had been corrected for.
-Each item has a CORRECTION (a rule the user gave the assistant earlier) and a
-MESSAGE the user typed later. Answer yes only when the message shows the user
-correcting, or complaining about, the assistant breaking that same rule again.
-A message that merely uses the same words, asks for the thing, or is about
-something else is no.
-Reply with only a JSON object mapping each id to "yes" or "no".
+Each item has a MESSAGE the user typed and up to three CORRECTIONS (rules the
+assistant was given earlier), labelled a, b, c. Pick the one correction whose
+exact mistake the message complains about the assistant making again. Answer
+none when the message is about something else, only asks for the thing, shares
+words without naming that mistake, or is a general complaint ("fix it so this
+never happens again") that names no specific mistake.
+Reply with only a JSON object mapping each id to "a", "b", "c" or "none".
 
 """
+
+
+# Jev's pick counts when it holds this share of the probability. All 33 picks
+# were read by hand on 2026-10-11: at 0.73 and up 15 of 19 were the real
+# repeat, from 0.5 to 0.7 about 7 of 13 ("Make chewbs perfect bruh" picked
+# the material-questions rule at 0.5). 0.6 kept 18 of 25 right. It also drops
+# one true "Wtf taking so long?" at 0.51, so the counts are a floor.
+JEV_MIN_P = 0.6
+
+
+def _jev_judge(todo: dict, cache: dict) -> bool:
+    """Judge with Jev (TypeSafe, ~150 ms a message). False when it is unavailable."""
+    if os.environ.get("CHEWBACCA_RECUR_NO_JEV"):
+        return False
+    try:
+        sys.path.insert(0, str(ROOT / "tools"))
+        import jev
+        jev.api_key()
+    except Exception:
+        return False
+    for gid, item in todo.items():
+        criteria = {k: v[:220] for k, v in item.items() if k in "abc"}
+        criteria["none"] = ("None of these: the message is about something else, only asks for the thing, "
+                            "or is a general complaint that names no specific mistake")
+        payload = {"model": jev.MODEL, "state": "The user's message to his AI assistant:\n" + item["message"][:600],
+                   "questions": {"pick": {"type": "choice", "criteria": criteria, "instructions": (
+                       "Each option is a rule the assistant was corrected for earlier. Which rule's exact mistake "
+                       "is this message complaining the assistant made again?")}}}
+        try:
+            ans = jev.evaluate(payload)["answers"]["pick"]
+        except Exception:
+            continue  # unjudged this run, asked again next run
+        pick = ans["choice"]
+        p = float(ans.get("probabilities", {}).get(pick, ans.get("confidence", 0.0)))
+        cache[gid] = [pick, round(p, 2)]
+    try:
+        JUDGE_CACHE.parent.mkdir(parents=True, exist_ok=True)
+        JUDGE_CACHE.write_text(json.dumps(cache))
+    except OSError:
+        pass
+    return True
 
 
 def judge(rows: list[dict]) -> None:
     """Keep only the candidates a model reads as the same mistake again.
 
     Word overlap alone was 5 of 40 right when every candidate was read by
-    hand on 2026-10-10: "Graph engineer harder bruh" is a real repeat of the
-    graph-engineering rule, "give me a list" is not a repeat of the cd rule.
-    Without this step the counts are mostly noise, so --raw says so.
-    One batched haiku call per run, verdicts cached by content, so a rerun
-    costs nothing. Text goes to the same model provider these transcripts
-    came from and nowhere else.
+    hand on 2026-10-10. A yes/no judge shown one pair at a time then kept 2 of
+    8 right on 2026-10-11: shown only the Realm lesson, "Bro we hv NALANA"
+    read as a yes. So the judge sees every candidate for a message at once and
+    picks one or none. Haiku doing that, batched, was about 11 of 23 right and
+    took 6 minutes; Jev (TypeSafe) was 18 of 25 at JEV_MIN_P and took 40
+    seconds for 215 messages, so Jev judges and haiku is the fallback when no
+    Jev key or consent exists. Verdicts are cached by content, so a rerun
+    costs nothing.
     """
     import hashlib
     try:
         cache = json.loads(JUDGE_CACHE.read_text())
     except (OSError, ValueError):
         cache = {}
-    todo = {}
+    per_msg = collections.defaultdict(list)
     for r in rows:
         for h in r["hits"]:
-            hid = hashlib.sha256((r["description"] + "\0" + h["said"]).encode()).hexdigest()[:16]
-            h["id"] = hid
-            if hid not in cache:
-                todo[hid] = {"correction": r["description"], "message": h["said"]}
-    if todo:
-        prompt = JUDGE_PROMPT + json.dumps(todo, indent=1)
+            per_msg[(h["t"], h["said"])].append((h["score"], r, h))
+    todo, groups = {}, {}
+    for (_, said), cands in per_msg.items():
+        cands.sort(key=lambda x: -x[0])
+        labels = dict(zip("abc", cands[:3]))
+        key = said + "\0" + "\0".join(r["description"] for _, r, _ in labels.values())
+        gid = hashlib.sha256(key.encode()).hexdigest()[:16]
+        groups[gid] = labels
+        if gid not in cache:
+            todo[gid] = {"message": said, **{k: r["description"] for k, (_, r, _) in labels.items()}}
+    items = list(todo.items())
+    if items and _jev_judge(todo, cache):
+        items = []
+    for start in range(0, len(items), JUDGE_BATCH):
+        chunk = dict(items[start:start + JUDGE_BATCH])
+        prompt = JUDGE_PROMPT + json.dumps(chunk, indent=1)
         try:
             out = subprocess.run(
                 ["claude", "-p", "--model", "haiku", "--tools", "", "--setting-sources", "",
@@ -302,18 +381,28 @@ def judge(rows: list[dict]) -> None:
             text = json.loads(out).get("result", "")
             verdicts = json.loads(text[text.index("{"):text.rindex("}") + 1])
             for k, v in verdicts.items():
-                if k in todo:
-                    cache[k] = str(v).strip().lower().startswith("y")
+                if k in chunk:
+                    cache[k] = str(v).strip().lower()
         except (OSError, ValueError, subprocess.TimeoutExpired) as e:
             print(f"recur: judge unavailable ({type(e).__name__}); showing unjudged candidates", file=sys.stderr)
             return
         try:
+            JUDGE_CACHE.parent.mkdir(parents=True, exist_ok=True)
             JUDGE_CACHE.write_text(json.dumps(cache))
         except OSError:
             pass
     for r in rows:
         r["unjudged"] = len(r["hits"])
-        r["hits"] = [h for h in r["hits"] if cache.get(h["id"])]
+    keep = collections.defaultdict(list)
+    for gid, labels in groups.items():
+        pick = cache.get(gid)
+        if isinstance(pick, list):  # a Jev verdict carries its probability
+            pick = pick[0] if pick[1] >= JEV_MIN_P else "none"
+        if pick in labels:
+            _, r, h = labels[pick]
+            keep[r["slug"]].append(h)
+    for r in rows:
+        r["hits"] = sorted(keep.get(r["slug"], []), key=lambda h: h["t"])
 
 
 def day(t: float) -> str:
@@ -326,6 +415,8 @@ def main() -> int:
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--days", type=float, default=120)
     ap.add_argument("--raw", action="store_true", help="skip the model check, show every word-overlap candidate")
+    ap.add_argument("--weekly", action="store_true",
+                    help="repeats per week, the mog plan's step 3 finish line (falling three weeks running)")
     a = ap.parse_args()
 
     rows = corrections()
@@ -333,6 +424,18 @@ def main() -> int:
     match(rows, asks(a.days))
     if not a.raw and not os.environ.get("CHEWBACCA_RECUR_NO_JUDGE"):
         judge(rows)
+
+    if a.weekly:
+        weeks = collections.Counter()
+        for r in rows:
+            for h in r["hits"]:
+                weeks[time.strftime("%G-W%V", time.localtime(h["t"]))] += 1
+        if a.json:
+            print(json.dumps(dict(sorted(weeks.items())), indent=1))
+        else:
+            for wk, n in sorted(weeks.items()):
+                print(f"{wk}  {n:>3}  {'#' * n}")
+        return 0
 
     if a.slug:
         want = a.slug if a.slug.startswith("feedback_") else "feedback_" + a.slug

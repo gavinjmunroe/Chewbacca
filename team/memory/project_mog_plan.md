@@ -17,6 +17,13 @@ chewbacca scope. It strings six existing tasks into one order, each feeding the 
 5. Retention: a week after each fix, one untouched task shows the change held
 6. One-page scoreboard, baseline vs now w CIs, good enough to show Cole Gawin
 
+Step 3 progress 2026-10-11: the recur judge is calibrated. Blocking now reads each
+lesson's quoted words (it had found 0 repeats of "Wtf taking so long"), Jev picks one of
+three candidates or none (18 of 25 right by hand read, 40s for 215 messages; haiku was
+about 11 of 23 and 6 minutes), and `recur --weekly` is the finish-line count. Baseline
+week 2026-W41: 18 judged repeats across 20 lessons, 18 of them prose only. Next half of
+step 3 is turning those prose-only repeats into hooks.
+
 Baseline on 2026-10-10: sealed recall@5 50.8 to 55.4% (rerank branch 72.3% but 37s),
 49 of 190 corrections enforced by code ([[project_lessons_enforcement_audit]]), zero
 kept self-fixes, and the em dash complaint still recurring in other tabs.

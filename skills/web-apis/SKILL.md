@@ -48,8 +48,8 @@ Read them before the first call: most failures are a param format they spell out
 | usc-dining | menuBreakfast, menuBrunch, menuLunch, menuDinner | dining hall menus, a few days ahead |
 | usc-libraries | studyRooms | open study-room slots (read only, never books) |
 | usc-directory | searchPeople | profs and staff: title, department, email |
-| handshake | searchJobs, getJob, events, careerFairs | his connectSC session; .json endpoints only, the pages write on load |
-| usc-reg | registrationAppointment, holds, schedule, courseBin (each Fall2026 / Spring2027) | WebReg through his USC sign-in; browser tier, 6 to 9 s, run it through `chewbacca jobs submit --net` |
+| handshake | searchJobs, getJob, events, careerFairs | the student's connectSC session; .json endpoints only, the pages write on load |
+| usc-reg | registrationAppointment, holds, schedule, courseBin, each taking term=<code> (20271 is Spring 2027) | WebReg through the student's USC sign-in; browser tier, 6 to 9 s, run it through `chewbacca jobs submit --net` |
 | usc-fees | registeredTerms, termSummary | Registration and Fee Summary: a term's charges, credits, net charges and units (no balance or due date); `chewbacca api login usc-fees` first |
 | bundled | google-flights, airbnb, amazon, goodreads, youtube, x, instagram, hacker-news | upstream's own |
 

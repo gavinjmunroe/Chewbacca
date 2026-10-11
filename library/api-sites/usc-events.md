@@ -9,5 +9,5 @@ Caveats:
 - Both answered on tier 1 (plain HTTP), about 2 s per call. No rate limiting seen at this volume.
 - start and end are dates as YYYY-MM-DD. Each call returns at most 100 events (pp=100) and does not page, so keep windows short; one week returned 66 events.
 - A recurring event comes back once per occurrence in the window, and start/end are that occurrence's times (checked: an Oct 20 instance of a weekly Religious Life event matched its page).
-- searchEvents only searches current and future events, and the index is narrow: "film" and "robotics" returned nothing while "lecture" returned 4.
+- searchEvents searches the next 90 days (days=90). Without a days window Localist's search answers only today, so on 2026-10-10 "music", "football" and "concert" all came back [] while the calendar held Jazz Night; with days=90 "music" returned 56. Some words still match nothing ("robotics").
 - end is null for all-day events. organizer is the first Localist department, which can be empty. location is often blank for online or unlisted events.

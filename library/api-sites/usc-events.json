@@ -7,7 +7,7 @@
       "description": "Search upcoming USC calendar events by keyword (Localist API)",
       "request": {
         "method": "GET",
-        "url": "https://calendar.usc.edu/api/2/events/search?search=%7Bq%7D&pp=100",
+        "url": "https://calendar.usc.edu/api/2/events/search?search=%7Bq%7D&pp=100&days=90",
         "headers": {
           "upgrade-insecure-requests": "1",
           "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
@@ -26,7 +26,7 @@
       ],
       "volatile": [],
       "trigger": {
-        "url": "https://calendar.usc.edu/api/2/events/search?search={q}&pp=100"
+        "url": "https://calendar.usc.edu/api/2/events/search?search={q}&pp=100&days=90"
       },
       "match": {
         "method": "GET",

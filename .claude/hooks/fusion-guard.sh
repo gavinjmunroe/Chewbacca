@@ -85,8 +85,12 @@ for word in NOT_NAMES:
 
 # Names being introduced by this write. Bolded or plain "First Last".
 introduced: set[tuple[str, str]] = set()
-for first, last in re.findall(r"\b([A-Z][a-z]{2,})\s+([A-Z][a-z]{2,})\b", new):
-    introduced.add((first, last))
+# A pair followed by a company word names a business, not a person. On
+# 2026-10-10 "Isaac Newton Studios", Caleb's spring LLC, was refused as a clash
+# with Isaac Chan.
+ORG_WORDS = r"(?:Studios?|LLC|Inc|Ventures|Labs|Media|Group|Partners|Capital|Foundation|Church|Company|Co)\b"
+for m in re.finditer(r"\b([A-Z][a-z]{2,})\s+([A-Z][a-z]{2,})\b(?!\s+" + ORG_WORDS + ")", new):
+    introduced.add((m.group(1), m.group(2)))
 
 # Already in the file being edited is not an introduction.
 existing = ""

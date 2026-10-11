@@ -486,9 +486,13 @@ draft, its baseline and its version stamp belong to one file only.
 ### Carlton's language on the glass
 
 Caleb, 2026-10-11: "Not just functionality of carlton's thing, but his UIUX
-is pretty sick bro". Realm has no LICENSE, so its design was read
-(`theme/tokens.css`, `design.md` at 59afd9e4) and re-written in Swift as
-`Realm` in RealmTokens.swift. What carried over:
+is pretty sick bro". The first pass read its design (`theme/tokens.css`,
+`design.md` at 59afd9e4) and re-wrote it in Swift as `Realm` in
+RealmTokens.swift. Copying is allowed: Carlton told Caleb to copy his code
+(Caleb, 2026-10-11: "Carlton told me to copy them bro"), so his components,
+styles and renderer can be used directly. Credit him in the file header. The
+repo still has no LICENSE file, so anything shipped to people outside the
+team waits on him adding one. What carried over:
 
 - Type ladder, nothing under 11: 11 tiny, 12 caption, 13 small, 14 body, 15
   reading, 16, then titles 18, 20, 24, 28. Tracking per rung (-0.2 at 11 and
@@ -597,7 +601,8 @@ needs Full Disk Access. Tests: `tests/test_call_pill.py`.
 Agent work without an editor or a terminal. Sessions are another kind of
 surface, on the same glass, with the same motion and the same input: there is
 no session window and no second chat box. The layout follows Carlton Aikins'
-realm (a design reference; none of its code is used, it carries no license).
+realm, and his code may be copied in directly: Carlton told Caleb to copy it
+(2026-10-11).
 
 `bin/kyber-sessions serve` (the menu's "Agent sessions") draws `sessions` at
 the left: every Claude Code session from the last three days, what needs you

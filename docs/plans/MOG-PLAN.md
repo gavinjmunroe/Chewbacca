@@ -218,7 +218,7 @@ Phase 3 kill rule: if a battle doesn't move its test number in 3 weeks, it goes 
 | Clay's terms on automated UI access (CHW-150)                  | the Clay operator bone             | API surface first, UI only where the API can't; read the ToS before a client pays | Caleb       |
 | Apple adds an explicit Full Disk Access step (2026-10-02)      | chat.db and the people import      | make the grant an explained onboarding step now                                   | Semyon      |
 | Claude plan cost per seat unknown                              | margin on $2.5K a month            | measure tokens per seat-day in the pilot run log before quoting account two       | Jake, Caleb |
-| Carlton's agent environment has no LICENSE file                            | shipping it to clients             | keep it off the client install until he adds one                                  | Caleb       |
+| Carlton's agent environment has no LICENSE file (he told Caleb to copy it, 10/11) | shipping it to clients             | copying is fine in-house; a LICENSE file before client installs | Caleb       |
 | Mac only                                                       | Windows-heavy prospects            | the waitlist count decides, per FIRST-COHORT                                      | Gavin       |
 | our own Mac at load 50 to 100                                  | every latency bench, and our speed | benches only under load 20; 2 workers max                                         | everyone    |
 | 11x's customer claims were challenged (TechCrunch, 2025-03-24) | bars copied from vendor claims     | every bar marks claim vs independent; beat the independent number                 | Caleb       |

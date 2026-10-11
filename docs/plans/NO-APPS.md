@@ -345,7 +345,7 @@ has the project, otherwise marked as not checked here.
 | Cline, OpenCode                 | how an agent's proposed edit becomes an approvable diff                                                   | Apache-2.0, MIT (registry)                        |
 | Orca                            | several agents side by side: the rail and card layout                                                     | MIT (registry)                                    |
 | Zed                             | agent panel behavior as a design reference only                                                           | NOASSERTION in the registry, so no code           |
-| Carlton Aikins' sessions app    | the sessions layout already used                                                                          | no license, design reference only (hud/CLAUDE.md) |
+| Carlton Aikins' sessions app    | the sessions layout already used                                                                          | Carlton said copy it (Caleb, 2026-10-11); credit him |
 
 ### What it needs that does not exist
 

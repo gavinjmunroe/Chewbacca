@@ -37,6 +37,13 @@ crossfades without moving), never replays an entrance keyed to state, and a
 page gets one rise entrance at most. `site-gate research` fails a keyed
 entrance and a component with three or more rises.
 
+**Ambient particles are light, not icons.** On Erik Fish's hero, drawn
+dandelion seeds (stem plus filaments) drifting across his face read as
+"tacky", and on every page they got "annoying". What worked: a dozen soft
+glowing flecks in the sunlit photo only, stopped once the hero scrolls away. An
+ambient layer stays in one place, never crosses a face, and reads as part of the
+photo's own light.
+
 ## A site is four layers, and a screenshot shows one
 
 1. Layout, meaning positions, sizes and type, the only layer a screenshot judges.

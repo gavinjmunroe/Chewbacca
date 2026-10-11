@@ -42,6 +42,7 @@ import json
 import math
 import os
 import re
+import unicodedata
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -97,14 +98,65 @@ GAP_FULL_HOURS = 72.0
 SPAN_FULL_MINUTES = 90.0
 
 
+# Letters from other scripts that draw as Latin ones, so "thеrapy" with a
+# Cyrillic e is read as "therapy" by the private check. The common Cyrillic
+# and Greek lookalikes only; a title that still mixes Latin with another
+# script after this is treated as private (`is_private`).
+CONFUSABLES = str.maketrans({
+    "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "у": "y", "х": "x", "і": "i", "ј": "j", "ѕ": "s",
+    "һ": "h", "ԁ": "d", "ӏ": "l", "ɡ": "g", "А": "A", "В": "B", "Е": "E", "К": "K", "М": "M", "Н": "H",
+    "О": "O", "Р": "P", "С": "C", "Т": "T", "Х": "X", "α": "a", "ο": "o", "ρ": "p", "ι": "i", "κ": "k",
+    "ν": "v", "τ": "t", "υ": "u", "Α": "A", "Β": "B", "Ε": "E", "Η": "H", "Ι": "I", "Κ": "K", "Μ": "M",
+    "Ν": "N", "Ο": "O", "Ρ": "P", "Τ": "T", "Χ": "X"})
+
+
 def decode(text) -> str:
-    """Granola and Anarlog hand titles over HTML-escaped ("Caleb&apos;s",
-    2026-10-11). Decoded before cleaning, so an entity never reaches a row."""
-    return html.unescape(str(text or ""))
+    """The one form of a meeting's words that is both checked and drawn.
+
+    Granola and Anarlog hand titles over HTML-escaped ("Caleb&apos;s",
+    2026-10-11), sometimes twice ("&amp;#39;"), so entities are undone until
+    nothing changes (three rounds at most); then NFKC folds full-width and
+    compatibility forms, and every format, control and bidi character goes,
+    zero-width joiner included (ingest_meetings.clean keeps U+200D for emoji,
+    and "psych\u200diatric" would have drawn as "psychiatric" while the
+    private check read two words). The private check runs on this value and
+    the row draws this value, so the two can never differ."""
+    out = str(text or "")
+    for _ in range(3):
+        nxt = html.unescape(out)
+        if nxt == out:
+            break
+        out = nxt
+    out = unicodedata.normalize("NFKC", out)
+    return "".join(ch for ch in out if unicodedata.category(ch) not in ("Cf", "Cc", "Cs", "Co", "Cn"))
+
+
+def _scripts(text: str) -> set[str]:
+    names = set()
+    for ch in text:
+        if ch.isalpha():
+            name = unicodedata.name(ch, "")
+            names.add(name.split(" ")[0] if name else "UNKNOWN")
+    return names
 
 
 def is_private(*texts: str) -> bool:
-    return any(PRIVATE.search(t or "") for t in texts)
+    """Whether a meeting names health care, read from `decode`'s value.
+
+    Lookalike letters are folded to Latin first, and a title that still
+    mixes Latin with another script, or has a letter with no name, is
+    private: a title that can't be read for sure is hidden."""
+    for t in texts:
+        text = decode(t)
+        if not text:
+            continue
+        folded = text.translate(CONFUSABLES).casefold()
+        if PRIVATE.search(folded):
+            return True
+        scripts = _scripts(folded)
+        if "UNKNOWN" in scripts or ("LATIN" in scripts and len(scripts) > 1):
+            return True
+    return False
 
 
 def gap_of(newer: datetime | None, older: datetime | None) -> float:
@@ -401,10 +453,11 @@ class Meetings(Provider):
                           "done": (done or {}).get(tid),
                           "due": AM.due_day(item.get("due_at")), "added": tid in kept,
                           "item": item})
-        title = AM.clean(decode(meeting.get("title")), 60) or "Untitled meeting"
+        full = decode(meeting.get("title"))
+        title = AM.clean(full, 60) or "Untitled meeting"
         begin, finish = AM.when(meeting.get("started_at")), AM.when(meeting.get("ended_at"))
         minutes = int((finish - begin).total_seconds() // 60) if begin and finish and finish > begin else 0
-        return {"id": mid, "title": title, "private": is_private(title, decode(meeting.get("folder_path"))),
+        return {"id": mid, "title": title, "private": is_private(full, decode(meeting.get("folder_path"))),
                 "minutes": minutes,
                 "has_lines": bool(lines),
                 "start": start, "live": AM.is_live(meeting, now), "length": duration(meeting),

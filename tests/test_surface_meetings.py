@@ -520,7 +520,7 @@ def glass_bugs(tmp: Path) -> None:
         base = {"id": mid, "title": SM.AM.clean(SM.decode(title), 60), "start": now - timedelta(hours=hours),
                 "live": False, "length": "", "who": ["Sagar Tiwari"], "summary": [], "decisions": [], "items": [],
                 "native": True, "summary_note": "", "has_lines": False, "folder": "", "meeting": {}}
-        base["private"] = SM.is_private(base["title"])
+        base["private"] = SM.is_private(title)
         base.update(kw)
         return base
 
@@ -537,6 +537,23 @@ def glass_bugs(tmp: Path) -> None:
     check("they read Private, with no names after them", texts[1] == "Private" and texts[2] == "Private", texts)
     check("no HTML entity reaches a row", not any("&apos;" in t or "&amp;" in t for t in texts), texts)
     check("SM.decode turns entities into characters", SM.decode("Caleb&apos;s &amp; co") == "Caleb's & co")
+    # The commit review, 2026-10-11: the check and the drawing must read
+    # one value. Every one of these drew a medical word and passed before.
+    sneaky = ["Caleb&#39;s psych&#x200b;iatric intake", "&#116;&#104;&#101;&#114;&#97;&#112;&#121;",
+              "Caleb&amp;#39;s thera&amp;#112;y", "psych\u200diatric intake", "th\u0435rapy",
+              "\uff34\uff48\uff45\uff52\uff41\uff50\uff59", "T\u200bherapy", "\u202etherapy",
+              "Dr. Kim follow-up", "THERAPY", "t\u0570erapy"]
+    leaks = [t for t in sneaky if not SM.is_private(t)]
+    check("encoded, zero-width, bidi, full-width and lookalike medical titles are all private", not leaks, leaks)
+    check("an ordinary title is not private, lookalike letters and all",
+          not SM.is_private("Chewbacca") and not SM.is_private("SHIPPP") and not SM.is_private("\u041ceeting with Ana"))
+    check("decode draws what the check read: no zero-width, no entity",
+          SM.decode("psych&#x200b;iatric") == "psychiatric" and SM.decode("a&amp;amp;b") == "a&b",
+          SM.decode("psych&#x200b;iatric"))
+    tricky = [row("x1", "Caleb&#39;s psych&#x200b;iatric intake", 4), row("x2", "th\u0435rapy", 5)]
+    trick_lines = draw(Meetings(), {**data, "rows": tricky}, None, ctx)
+    trick_texts = [r["text"] for r in value(trick_lines, "/meetings/rows")]
+    check("they draw as Private on the glass", trick_texts == ["Private", "Private"], trick_texts)
     check("a zero to-look-at count is not drawn", value(lines, "/meetings/owed") == "", value(lines, "/meetings/owed"))
     check("idle is a dim dot, never a lit word that reads as a call",
           (value(lines, "/meetings/state"), value(lines, "/meetings/stateTone")) == ("Listening", "idle"),

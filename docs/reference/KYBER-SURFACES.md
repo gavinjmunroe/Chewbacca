@@ -139,9 +139,13 @@ back). It is dragged by its background and resized from the bottom-right
 corner; the corner and a dragged size are kept in the `hud.home.topLeft` and
 `hud.home.size` defaults (a click on the corner with no drag saves nothing),
 and a double press on the corner goes back to the default width and the
-content's height. Type is Instrument Serif and Inter
-Tight (`HomeType`, both OFL, in `hud/Fonts`), and the mark beside "Kyber" is
-a morphing orb run by Core Animation (`HomeMark.swift`).
+content's height. Type follows typesafe.ai (`HomeType`): words in a pixel
+mono whose pixels are 2 wide by 3 tall, set at 16.5 and 33 points so each
+pixel is whole device pixels on a 2x screen, and small labels in JetBrains
+Mono Light. TypeSafe's own pixel face names no licence, so this one is
+Departure Mono redrawn by `hud/scripts/make-tall-pixel.py`; both are OFL, in
+`hud/Fonts`. The mark beside "Kyber" is a morphing orb run by Core Animation
+(`HomeMark.swift`).
 
 The daemon writes `~/.bob/home-panel.json` after every ingest
 (`bin/lib/home_feed.py`, walks `osgraph_walks.home*`); `kyber-surfaces home`

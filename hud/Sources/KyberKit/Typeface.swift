@@ -4,8 +4,9 @@ import SwiftUI
 
 /// The `window` chrome's display face.
 ///
-/// TypeSafe sets its windows in LisaTerminal Paper, a licensed face
-/// (typesafe.ai's stylesheet, read 2026-10-08), so it cannot ship here.
+/// TypeSafe sets its windows in LisaTerminal Paper (typesafe.ai's stylesheet,
+/// read 2026-10-08), whose file names no licence (its name table, read
+/// 2026-10-11), so it cannot ship here.
 /// Departure Mono is Helena Zhang's pixel mono under the OFL, in the bundle at
 /// `Contents/Resources/Fonts` and registered by `ATSApplicationFontsPath`.
 ///
@@ -49,25 +50,28 @@ extension View {
     }
 }
 
-/// The home panel's two faces, both from his own sites: Instrument Serif
-/// (Firm Foundation's and Chase Durkin's headings) for the date and the list
-/// names, and Inter Tight (gavinmunroe.com's display face) for every row.
-/// Both are under the OFL, in `Fonts/` beside Departure Mono, from
-/// google/fonts on 2026-10-11.
+/// The home panel's type, TypeSafe's (typesafe.ai's stylesheet, read
+/// 2026-10-11): nearly every word there is LisaTerminal Paper 2X3Y, a pixel
+/// mono whose pixels are 2 wide by 3 tall, and the smallest labels are
+/// JetBrains Mono Light tracked 0.05em. LisaTerminal's file names no licence,
+/// so the pixel face here is Departure Mono redrawn with the same tall pixels
+/// by `hud/scripts/make-tall-pixel.py`. JetBrains Mono, the one TypeSafe
+/// uses, is under the OFL. Both are in `Fonts/`.
 ///
-/// Asked for that day, after the first panel's pixel caps chips and system
-/// sans: "lets get rid of all the goyslop typography".
+/// Asked for that day, after Instrument Serif and Inter Tight: "the
+/// typography sucks, go on the typesafe font style".
 enum HomeType {
-    static let serif = "InstrumentSerif-Regular"
-    static let serifItalic = "InstrumentSerif-Italic"
-    /// Inter Tight ships as one variable file; these are its named
-    /// instances, by PostScript name, so a weight is never synthesised.
-    static let sans = "InterTight-Regular"
-    static let sansMedium = "InterTight-Regular_Medium"
-    static let sansSemibold = "InterTight-Regular_SemiBold"
-    static let files = ["InstrumentSerif-Regular.ttf", "InstrumentSerif-Italic.ttf", "InterTight-Variable.ttf"]
+    static let pixelName = "DepartureMono2X3Y-Regular"
+    static let lightName = "JetBrainsMono-Light"
+    static let files = ["DepartureMono2X3Y-Regular.otf", "JetBrainsMono-Light.ttf"]
 
-    enum Weight { case regular, medium, semibold }
+    /// A pixel is 1 point wide at 16.5 and 2 at 33: 2 by 3 and 4 by 6 device
+    /// pixels on a 2x screen. Any other size puts pixel edges between device
+    /// pixels and greys them.
+    static let text: CGFloat = 16.5
+    static let headline: CGFloat = 33
+    /// TypeSafe's label size.
+    static let label: CGFloat = 11
 
     /// `ATSApplicationFontsPath` registers the bundle's faces at launch;
     /// this covers a build that drops the key. Tests register from the
@@ -87,22 +91,32 @@ enum HomeType {
     /// first draw (a test's) are used from then on.
     static var isAvailable: Bool {
         _ = fromBundle
-        return NSFont(name: serif, size: 12) != nil && NSFont(name: sansMedium, size: 12) != nil
+        return NSFont(name: pixelName, size: text) != nil && NSFont(name: lightName, size: label) != nil
     }
 
-    /// Rows, times and counts. Falls back to the system sans, never to a
-    /// serif, when the faces are missing.
-    static func text(_ size: CGFloat, _ weight: Weight = .regular) -> Font {
-        guard isAvailable else {
-            return .system(size: size, weight: weight == .regular ? .regular : weight == .medium ? .medium : .semibold)
-        }
-        let name = weight == .regular ? sans : weight == .medium ? sansMedium : sansSemibold
-        return .custom(name, fixedSize: size)
+    /// Words, times and titles. Falls back to the system mono when the
+    /// faces are missing, never to a sans.
+    static func pixel(_ size: CGFloat = text) -> Font {
+        isAvailable ? .custom(pixelName, fixedSize: size) : .system(size: size * 0.8, design: .monospaced)
     }
 
-    /// The date and the list names.
-    static func display(_ size: CGFloat, italic: Bool = false) -> Font {
-        guard isAvailable else { return .system(size: size * 0.86, weight: .light) }
-        return .custom(italic ? serifItalic : serif, fixedSize: size)
+    /// One pixel of letterspacing: Departure's cell is 7 pixels wide and
+    /// LisaTerminal's is 8.
+    static func pixelTracking(_ size: CGFloat = text) -> CGFloat { size / text }
+
+    /// Counts, details and notes.
+    static func light(_ size: CGFloat = label) -> Font {
+        isAvailable ? .custom(lightName, fixedSize: size) : .system(size: size, weight: .light, design: .monospaced)
+    }
+}
+
+extension View {
+    func homePixel(_ size: CGFloat = HomeType.text) -> some View {
+        font(HomeType.pixel(size)).tracking(HomeType.pixelTracking(size))
+    }
+
+    /// TypeSafe tracks its small labels 0.05em.
+    func homeLight(_ size: CGFloat = HomeType.label) -> some View {
+        font(HomeType.light(size)).tracking(size * 0.05)
     }
 }

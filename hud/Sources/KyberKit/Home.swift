@@ -211,9 +211,9 @@ public enum HomeWords {
 /// width and a third of the area, whichever is tighter, however it is
 /// resized.
 public enum HomeLayout {
-    /// The column until he resizes it, wide enough for a thirty-character
-    /// title and its due word on one line. Guessed, never measured against
-    /// use.
+    /// The column until he resizes it. In the pixel face a letter is 8
+    /// points, so about 25 fit beside a to-do's due word and longer titles
+    /// take a second line. Guessed, never measured against use.
     public static let width: CGFloat = 340
     /// The smallest it can be dragged to: a short title with its due word on
     /// one line, and the top of two lists. Guessed.
@@ -625,7 +625,7 @@ public struct HomeView: View {
         HStack(spacing: 8) {
             HomeMark(size: 16)
             Text("Kyber")
-                .font(HomeType.text(13, .semibold))
+                .homePixel()
                 .foregroundStyle(HUD.ink)
             Spacer(minLength: 8)
             HomeClose(action: onClose)
@@ -639,16 +639,17 @@ public struct HomeView: View {
         }
     }
 
-    /// "Sunday  October 11".
+    /// "Sunday  october 11": the big word and its small lowercase gloss,
+    /// as typesafe.ai sets "LLM" over "pre-trained models".
+    /// "Wednesday  november 11" is 244 points, wider than the content at the
+    /// smallest panel, so there the date goes under the day.
     private var headline: some View {
         let line = HomeWords.dateLine(model.now)
-        return HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(line.day)
-                .font(HomeType.display(30))
-                .foregroundStyle(HUD.ink)
-            Text(line.date)
-                .font(HomeType.text(13, .medium))
-                .foregroundStyle(HUD.faint)
+        let day = Text(line.day).homePixel(HomeType.headline).foregroundStyle(HUD.ink)
+        let date = Text(line.date.lowercased()).homePixel().foregroundStyle(HUD.faint)
+        return ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) { day; date }
+            VStack(alignment: .leading, spacing: 2) { day; date }
         }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
@@ -697,14 +698,14 @@ public struct HomeView: View {
                     Text("Updated \(HomeWords.age(written, now: model.now)) ago")
                 }
             }
-            .font(HomeType.text(11))
+            .homeLight()
             .foregroundStyle(HUD.faint)
         }
     }
 
     private func note(_ text: String) -> some View {
         Text(text)
-            .font(HomeType.text(12.5))
+            .homePixel()
             .foregroundStyle(HUD.dim)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.vertical, 4)
@@ -752,24 +753,30 @@ struct HomeList: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
+            // The list's name in lowercase, as typesafe.ai labels its lists,
+            // over a hairline; the rows under it are in ink.
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(section.title)
-                    .font(HomeType.display(20, italic: true))
-                    .foregroundStyle(HUD.ink)
+                Text(section.title.lowercased())
+                    .homePixel()
+                    .foregroundStyle(HUD.faint)
+                    .accessibilityLabel(section.title)
                     .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 4)
                 let shown = rows.filter { !$0.done }.count
                 if let total, total > shown {
                     Text("\(shown) of \(total)")
-                        .font(HomeType.text(11, .medium))
-                        .monospacedDigit()
+                        .homeLight()
                         .foregroundStyle(HUD.faint)
                 }
+            }
+            .padding(.bottom, 5)
+            .overlay(alignment: .bottom) {
+                Color.white.opacity(0.16).frame(height: 1)
             }
             .padding(.bottom, 4)
             if rows.isEmpty {
                 Text(section.empty)
-                    .font(HomeType.text(12.5))
+                    .homeLight()
                     .foregroundStyle(HUD.faint)
                     .padding(.vertical, 3)
             } else {
@@ -777,11 +784,11 @@ struct HomeList: View {
                 // sharing an id would otherwise confuse the list.
                 ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
                     if section == .calendar, let header = dayHeader(index) {
-                        Text(header)
-                            .font(HomeType.display(15, italic: true))
+                        Text(header.lowercased())
+                            .homeLight()
                             .foregroundStyle(HUD.dim)
-                            .padding(.top, 6)
-                            .padding(.bottom, 1)
+                            .padding(.top, 8)
+                            .padding(.bottom, 2)
                     }
                     HomeRowView(section: section, row: row, now: now, model: model) { onOpen(section, row) }
                 }
@@ -821,6 +828,7 @@ struct HomeRowView: View {
         HStack(alignment: .firstTextBaseline, spacing: 0) {
             if section == .todos {
                 HomeCheck(done: isDone, enabled: model.canToggle(row), title: row.title) { model.toggle(row) }
+                    // The ring's middle at the middle of a 9-point x-height.
                     .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4.5 }
             }
             Button(action: press) {
@@ -829,21 +837,27 @@ struct HomeRowView: View {
                         dot.alignmentGuide(.firstTextBaseline) { $0[.bottom] }
                     }
                     if section == .calendar {
+                        // "12:00 PM" is 8 cells of 8 points.
                         Text(leading)
-                            .font(HomeType.text(12, .medium))
-                            .monospacedDigit()
+                            .homePixel()
                             .foregroundStyle(HUD.dim)
-                            .frame(width: 58, alignment: .leading)
+                            .lineLimit(1)
+                            .fixedSize()
+                            .frame(width: 66, alignment: .leading)
                     }
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        // Two lines: at 8 points a letter, one line of the
+                        // panel holds about 28, and an assignment's name
+                        // runs past that.
                         Text(row.title)
-                            .font(HomeType.text(13.5, .medium))
+                            .homePixel()
                             .strikethrough(isDone, color: HUD.faint)
                             .foregroundStyle(isDone ? HUD.faint : HUD.ink)
-                            .lineLimit(1)
+                            .lineLimit(section == .projects ? 1 : 2)
+                            .fixedSize(horizontal: false, vertical: true)
                         if !row.detail.isEmpty {
                             Text(row.detail)
-                                .font(HomeType.text(11.5))
+                                .homeLight()
                                 .foregroundStyle(HUD.faint)
                                 .lineLimit(1)
                         }
@@ -851,8 +865,7 @@ struct HomeRowView: View {
                     Spacer(minLength: 6)
                     if let trailing, !isDone {
                         Text(trailing)
-                            .font(HomeType.text(11.5, .medium))
-                            .monospacedDigit()
+                            .homeLight()
                             .foregroundStyle(tone ?? HUD.dim)
                     }
                 }
@@ -874,10 +887,14 @@ struct HomeRowView: View {
 
     private var start: Date? { HomeWords.date(row.at) }
 
-    /// The calendar's left column: its time, or "All day".
+    /// The calendar's left column: its time, or "All day". The formatter puts
+    /// a narrow no-break space before "PM", which the pixel face lacks: drawn
+    /// from Menlo it pushed "PM" 0.93 points off the pixel grid.
     private var leading: String {
         if row.allDay { return "All day" }
-        return start.map { HomeWords.clock($0) } ?? ""
+        return start.map { HomeWords.clock($0) }?
+            .replacingOccurrences(of: "\u{202F}", with: " ")
+            .replacingOccurrences(of: "\u{00A0}", with: " ") ?? ""
     }
 
     private var trailing: String? {
@@ -919,7 +936,7 @@ struct HomeRowView: View {
         Circle()
             .fill(tone ?? Color.white.opacity(0.45))
             .frame(width: 5, height: 5)
-            .padding(.bottom, 4)
+            .padding(.bottom, 2)
     }
 
     private var help: String {

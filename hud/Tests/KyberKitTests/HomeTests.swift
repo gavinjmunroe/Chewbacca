@@ -276,9 +276,25 @@ struct HomeTests {
     @Test func fontsAreTheOnesShipped() {
         HomeType.register(from: Self.fonts)
         #expect(HomeType.isAvailable)
-        for name in [HomeType.serif, HomeType.serifItalic, HomeType.sans, HomeType.sansMedium, HomeType.sansSemibold] {
+        for name in [HomeType.pixelName, HomeType.lightName] {
             #expect(NSFont(name: name, size: 13) != nil, "\(name)")
         }
+    }
+
+    /// The tall-pixel face keeps Departure's widths and is half again as
+    /// tall, so at 16.5 points a pixel is 1 by 1.5 points: whole device
+    /// pixels on a 2x screen. A rebuilt font with another em would grey every
+    /// edge.
+    @Test func pixelsAreTwoByThree() throws {
+        HomeType.register(from: Self.fonts)
+        let tall = try #require(NSFont(name: HomeType.pixelName, size: HomeType.text))
+        // A 7-pixel cell and an 8-pixel cap, as Departure's at 11 points,
+        // read from the outline as well as the metrics, which the script sets
+        // separately.
+        let glyph = tall.glyph(withName: "H")
+        #expect(tall.advancement(forGlyph: glyph).width == 7)
+        #expect(abs(tall.capHeight - 12) < 0.01)
+        #expect(abs(tall.boundingRect(forGlyph: glyph).height - 12) < 0.01)
     }
 
     static let fonts = URL(fileURLWithPath: #filePath)

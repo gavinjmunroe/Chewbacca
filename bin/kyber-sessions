@@ -1626,7 +1626,9 @@ def alerts(rows: list[dict], dead: list[dict], prev: dict[str, str]) -> list[tup
         if state == "needs" and old != "needs":
             out.append((f"needs:{sid}:{r.get('ask') or r.get('detail')}",
                         alert_text(f"{name} needs u: {r.get('ask') or r.get('detail') or 'a permission'}")))
-        elif r.get("origin") == "Kyber" and old in ("working", "needs") and state in ("finished", "failed"):
+        elif r.get("origin") == "Kyber" and old in (None, "working", "needs") and state in ("finished", "failed"):
+            # None: a short run can start and finish between two looks (a
+            # 12 s "pong" did on 2026-10-10 and was never said).
             word = "finished" if state == "finished" else "failed: " + (r.get("detail") or "see its card")
             out.append((f"done:{sid}:{int(r.get('last') or 0)}", alert_text(f"{name} {word}")))
         elif state == "failed" and old in ("working", "needs") and sid not in dead_ids:
@@ -1702,7 +1704,9 @@ def watch_once(rows: list[dict] | None = None, dead: list[dict] | None = None, n
     try:
         WATCH_STATE.parent.mkdir(parents=True, exist_ok=True)
         tmp = WATCH_STATE.with_suffix(".tmp")
-        tmp.write_text(json.dumps(state))
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        with os.fdopen(fd, "w") as f:
+            json.dump(state, f)
         tmp.replace(WATCH_STATE)
     except OSError as err:
         print(f"kyber-sessions: watch state: {err}", file=sys.stderr)

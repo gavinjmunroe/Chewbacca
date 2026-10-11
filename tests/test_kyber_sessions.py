@@ -897,6 +897,9 @@ def test_watch() -> None:
               len(drawn) == 1 and "life=" in drawn[0][0] and drawn[0][0].startswith("@ agent-alert at=top"), drawn)
         got = ks.watch_once(rows, [], now=320, draw=draw)
         check("nothing is said twice", got == [] and len(drawn) == 1, got)
+        got = ks.watch_once(rows + [row("q", "finished", origin="Kyber", project="quick")], [], now=340, draw=draw)
+        check("a glass run that started and finished between looks is still said", got == ["quick finished"], got)
+        check("the state file is private", oct(ks.WATCH_STATE.stat().st_mode & 0o777) == "0o600")
         dead = [{"session": "d", "cwd": "/Users/x/code/chewbacca", "died_at": "t1", "resets": "Oct 16 at 7am"}]
         rows2 = rows + [row("d", "failed", detail="You've hit your weekly limit")]
         got = ks.watch_once(rows2, dead, now=380, draw=draw)

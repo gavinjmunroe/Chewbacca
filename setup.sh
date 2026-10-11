@@ -2708,6 +2708,35 @@ PLIST
   launchctl bootout "gui/$(id -u)/com.chewbacca.jobs" &>/dev/null || true
   launchctl bootstrap "gui/$(id -u)" "$_jq_plist" &>/dev/null &&
     log "machine job queue ticking every 30 s" || warn "could not schedule the job queue"
+
+  # Agent alerts on the HUD: once a minute `kyber-sessions watch` toasts a tab
+  # that newly waits on a permission, a run started from the glass that
+  # finished, and a tab that died on a usage limit. 2026-10-10: two Desktop
+  # tabs died at 2:47pm and Caleb found out an hour later from the sidebar,
+  # and tab-rescue's hook only speaks when he types in some other tab, which
+  # never happens when he works from the HUD.
+  _aw_plist="$HOME/Library/LaunchAgents/com.chewbacca.agent-watch.plist"
+  cat >"$_aw_plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.chewbacca.agent-watch</string>
+  <key>ProgramArguments</key><array>
+    <string>$HOME/.local/bin/kyber-sessions</string><string>watch</string>
+  </array>
+  <key>EnvironmentVariables</key><dict>
+    <key>PATH</key><string>$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>StartInterval</key><integer>60</integer>
+  <key>RunAtLoad</key><true/>
+  <key>Nice</key><integer>10</integer>
+  <key>StandardOutPath</key><string>$HOME/Library/Logs/chewbacca-agent-watch.log</string>
+  <key>StandardErrorPath</key><string>$HOME/Library/Logs/chewbacca-agent-watch.log</string>
+</dict></plist>
+PLIST
+  launchctl bootout "gui/$(id -u)/com.chewbacca.agent-watch" &>/dev/null || true
+  launchctl bootstrap "gui/$(id -u)" "$_aw_plist" &>/dev/null &&
+    log "agent alerts on the HUD every minute" || warn "could not schedule agent alerts"
 else
   warn "Homebrew not found. macOS tools skipped: see docs/reference/MACOS-TOOLS.md"
 fi

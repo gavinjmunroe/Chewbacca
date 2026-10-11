@@ -393,9 +393,20 @@ def gws_calendar_write(run) -> tuple[bool, str]:
     return False, "gws has no calendar access"
 
 
+PRIVATE_ITEM = "Private follow-up from a meeting"
+
+
+def item_title(p: dict) -> str:
+    """What a calendar event, a Mac calendar draft or a ledger row is called.
+    One function for all three, so a private meeting's task can't leak
+    through a sibling path (security review, 2026-10-11: the ledger hid it
+    while both calendar paths still printed it)."""
+    return PRIVATE_ITEM if p.get("private") else clean(p["text"], TITLE_CHARS)
+
+
 def event_body(p: dict) -> dict:
     w = p["when"]
-    title = clean(p["text"], TITLE_CHARS)
+    title = item_title(p)
     said = f" Said at {p['line']['clock']}." if p.get("line") else ""
     desc = (f"From {p['meeting_title']}.{said} Drafted by Chewbacca from the meeting's action items; "
             "tentative until you keep it. No one was invited.")
@@ -430,7 +441,7 @@ def make_event(p: dict, run) -> dict:
         return {"ok": not invited, "ref": eid, "where": "google",
                 "line": (f"Tentative event on {day_text(p['when']['day'], p['when'].get('at'))} is on your Google "
                          f"calendar ({status}, {len(invited)} invited). Read back from Google.")}
-    title = "Draft: " + clean(p["text"], TITLE_CHARS)
+    title = "Draft: " + item_title(p)
     w = p["when"]
     at = w["day"].isoformat() + (f" {w['at'].strftime('%H:%M')}" if w.get("at") else "")
     # The title starts with "Draft: ", so it can never read as a flag.
@@ -509,7 +520,7 @@ def ledger_argv(p: dict, env: dict, key: str) -> list[str]:
     who = p["owner"]["name"] if p["owner"]["name"] and not p["owner"]["guess"] else ""
     # A private meeting's task reads as private in the ledger too: the tasks
     # surface and kit_read print ledger titles on the glass.
-    title = "Private follow-up from a meeting" if p.get("private") else clean(p["text"], TITLE_CHARS)
+    title = item_title(p)
     return [ledger_bin(env), "add", "--scope=~", "--title=" + title,
             "--source-key=" + key, "--owner=" + who, "--next-action=" + note]
 

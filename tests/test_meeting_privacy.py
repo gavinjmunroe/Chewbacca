@@ -37,6 +37,13 @@ argv = MA.ledger_argv(p, {}, "meeting:m1:i1")
 joined = " ".join(argv).lower()
 check("the ledger row reads as private, title and note", "psych" not in joined and "prescription" not in joined
       and "Private follow-up" in " ".join(argv), argv)
+body = MA.event_body(p) if p.get("when", {}).get("day") else {"summary": MA.item_title(p), "description": ""}
+check("the Google calendar event is private too", "prescription" not in str(body).lower()
+      and "psych" not in str(body).lower(), body)
+check("so is the Mac calendar draft title", "prescription" not in ("Draft: " + MA.item_title(p)).lower())
+import re as _re  # noqa: E402
+src = (ROOT / "bin" / "lib" / "meeting_actions.py").read_text()
+check("no path names an item without item_title", len(_re.findall(r'clean\(p\["text"\]', src)) == 1)
 plain = MA.plan({"id": "m2", "title": "Amber sync", "started_at": "2026-10-10T18:00:00Z"},
                 {"id": "i2", "text": "Send Sagar the deck"}, [], [], "you")
 check("an ordinary meeting keeps its title and task", plain["meeting_title"] == "Amber sync" and not plain["private"])

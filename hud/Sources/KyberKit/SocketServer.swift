@@ -37,6 +37,15 @@ public final class SocketServer: @unchecked Sendable {
             case failed(String)
         }
         public let kind: Kind
+        /// The namespace that vouches for a `.line`: the claim the sending
+        /// connection holds over the surface the line draws on, or nil. Set
+        /// only here, never read from the line, so a sender cannot forge it.
+        public let owner: String?
+
+        public init(kind: Kind, owner: String? = nil) {
+            self.kind = kind
+            self.owner = owner
+        }
     }
 
     private let path: String
@@ -87,6 +96,9 @@ public final class SocketServer: @unchecked Sendable {
     /// a process that ignores it, and "whats up" sat on "Working on it" until
     /// the person gave up (CHW-184).
     private var voices: Set<Int32> = []
+    /// Which connection holds which namespace of surfaces. See
+    /// `SurfaceClaims`; guarded by `lock` like everything above.
+    private var claims = SurfaceClaims()
     private var running = false
 
     /// One queue per connection, so a slow reader cannot stall the others or
@@ -158,7 +170,7 @@ public final class SocketServer: @unchecked Sendable {
     /// There was no version anywhere in the protocol, so a newer client talking
     /// to an older display failed one silent line at a time with no way to tell
     /// that was what was happening.
-    public static let version = "kyber/1 verbs=c,>,d,r,@,-,p,s,q,w,m,u,press,rim,listen"
+    public static let version = "kyber/1 verbs=c,>,d,r,@,-,p,s,q,w,m,u,press,rim,listen,claim"
 
     public static var defaultPath: String {
         if let override = ProcessInfo.processInfo.environment["BOB_HUD_SOCKET"] {
@@ -425,6 +437,7 @@ public final class SocketServer: @unchecked Sendable {
                 self.clients.remove(fd)
                 self.subscribers.remove(fd)
                 self.voices.remove(fd)
+                self.claims.disconnect(fd)
                 // A closed descriptor number is reused by the next accept;
                 // a stale entry would route the next client's presses wrong.
                 self.owners = self.owners.filter { $0.value != fd }
@@ -495,25 +508,66 @@ public final class SocketServer: @unchecked Sendable {
                     onEvent(Event(kind: .subscribed))
                     continue
                 }
-                if let surface = Self.owner(of: trimmed) {
-                    // Only a listener that showed the token can own a
-                    // surface; an unauthenticated drawer re-addressing
-                    // `s-abc` must not take its owner's private lines away.
-                    lock.lock()
-                    if subscribers.contains(fd) { owners[surface] = fd }
-                    lock.unlock()
+                if trimmed == "claim" || trimmed.hasPrefix("claim ") {
+                    claim(trimmed, from: fd)
+                    continue
                 }
                 if trimmed == "version" {
                     _ = write(
                         OutboundEvent.version(Self.version).line + "\n", to: fd)
                     continue
                 }
-                onEvent(Event(kind: .line(line)))
+                deliver(line, from: fd)
             }
         }
 
         if let tail = buffer.flush() {
-            onEvent(Event(kind: .line(tail)))
+            deliver(tail, from: fd)
+        }
+    }
+
+    /// `claim <namespace> token=<hex>`: the surfaces `<namespace>` and
+    /// `<namespace>.<name>` become this connection's until it hangs up.
+    /// Answered `e claimed <namespace>`, or a `!` saying why not.
+    private func claim(_ line: String, from fd: Int32) {
+        let words = line.split(separator: " ").map(String.init)
+        let namespace = words.dropFirst().first { !$0.hasPrefix("token=") } ?? ""
+        guard authorizes(line) else {
+            _ = write(OutboundEvent.problem(
+                "`claim` needs the token: claim <namespace> token=<hex from \(tokenPath)>").line + "\n",
+                to: fd)
+            return
+        }
+        lock.lock()
+        let problem = claims.claim(namespace, by: fd)
+        lock.unlock()
+        let reply = problem.map { OutboundEvent.problem($0) }
+            ?? .action(name: "claimed", component: namespace, payload: [:])
+        _ = write(reply.line + "\n", to: fd)
+    }
+
+    /// Hand one line on, after the claims have had their say: a line that
+    /// would draw on someone else's surface is answered with a `!` to its
+    /// sender and goes no further.
+    private func deliver(_ line: String, from fd: Int32) {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        lock.lock()
+        let routed = claims.route(trimmed, from: fd)
+        for (out, _) in routed.lines {
+            // Only a listener that showed the token can own a surface for
+            // events; an unauthenticated drawer re-addressing `s-abc` must
+            // not take its owner's private lines away. A refused `@` never
+            // reaches here, so it cannot take them either.
+            if let surface = Self.owner(of: out), subscribers.contains(fd) {
+                owners[surface] = fd
+            }
+        }
+        lock.unlock()
+        if let problem = routed.problem {
+            _ = write(OutboundEvent.problem(problem).line + "\n", to: fd)
+        }
+        for (out, owner) in routed.lines {
+            onEvent(Event(kind: .line(out), owner: owner))
         }
     }
 }

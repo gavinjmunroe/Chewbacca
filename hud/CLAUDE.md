@@ -581,6 +581,31 @@ they typed to a session, and every row and button they pressed, so since
    hear nothing until they are updated; `hud press`, call-watch and
    kyber-sessions send it.
 
+## Claiming surfaces
+
+Surface names are shared by everything that can open the socket, so without a
+claim any process running as this user can redraw your panel, close it, or
+point the person's typing at it with `to`. A listener that holds the token can
+claim a namespace:
+
+```
+claim amber token=<the 64 hex characters in ~/.bob/hud.token>
+e claimed amber
+```
+
+Until that connection hangs up, `amber` and every `amber.<name>` are its alone.
+Another connection that sends `@ amber.inbox`, `- amber.inbox`, `glance` or
+`to` on one gets a `!` saying whose it is, and its `c`, `>`, `d` and `r` lines
+are dropped until it names a surface it may draw on. While anyone holds a
+claim, a bare `-` from anyone else is refused (Escape still clears everything),
+and so is a `c` from a connection that never sent an `@`. A claimed surface
+shows "from amber" at the foot of its card, from the socket's record of who
+drew it, never from anything in the line. Claims are opt-in: a glass where
+nobody claimed anything behaves as before. This stops silent overwrites and
+keeps sandboxed apps out; it is not a wall against code running as the same
+user, which can read the token too. Source: `SurfaceClaims.swift`, tests in
+`ClaimsTests.swift`.
+
 ## Events, exactly
 
 Every line up is positional words, then `key=value` pairs:

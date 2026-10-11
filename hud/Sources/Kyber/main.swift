@@ -215,6 +215,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             do {
                 if let op = try LineParser.parse(line) {
                     model.apply(op)
+                    if case .surface(let id, _, _, _, _, _, _) = op {
+                        model.attribute(id, owner: event.owner)
+                    }
                     updateInteractive()
                 }
             } catch {

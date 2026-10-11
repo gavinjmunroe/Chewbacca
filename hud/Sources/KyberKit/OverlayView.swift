@@ -386,6 +386,7 @@ struct SurfaceCard: View {
         // dashboard lost its heading and its top chart at once. `ViewThatFits`
         // takes the plain layout when it fits and swaps in a scrolling one when
         // it does not, so a short panel is still sized to its content.
+        VStack(alignment: .leading, spacing: 8) {
         ViewThatFits(in: .vertical) {
             SurfaceView(store: surface.store, pendingTitle: LoadingView.title(fromID: surface.id))
             ScrollView(.vertical, showsIndicators: false) {
@@ -402,6 +403,13 @@ struct SurfaceCard: View {
                         colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
                         .frame(height: 22)
                 }
+            }
+        }
+            // Who drew it, when a connection claimed the name (bd_2026-Code-9rl).
+            // Nothing for an unclaimed surface: an empty line would say
+            // nothing and cost a row.
+            if let owner = surface.owner, !surface.compact, !isRail {
+                OwnerLine(owner: owner)
             }
         }
             .frame(maxHeight: surface.maxHeight)
@@ -521,6 +529,24 @@ struct SurfaceCard: View {
             // dark desktop is a white rectangle, and there is no version of that
             // which looks like anything but a bug.
             .environment(\.colorScheme, .dark)
+    }
+}
+
+/// The namespace that claimed a surface, at the foot of its card.
+struct OwnerLine: View {
+    let owner: String
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "checkmark.seal")
+                .font(.system(size: 8.5, weight: .semibold))
+            Text("from \(owner)")
+                .font(.system(size: 9.5, weight: .medium))
+                .kerning(0.3)
+        }
+        .foregroundStyle(HUD.faint)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Drawn by \(owner)")
     }
 }
 

@@ -51,6 +51,11 @@ public struct OverlaySurface: Identifiable, Equatable {
     /// reach (reported 2026-10-04).
     public var instance = 0
     public var viewID: String { "\(id)#\(instance)" }
+    /// The namespace that claimed this surface and drew it, shown on the
+    /// card so a forged panel cannot pass as the real one. Nil for a surface
+    /// nobody claimed. Set from the socket on every `@`, never from the
+    /// line itself. See `SurfaceClaims`.
+    public var owner: String?
 
     /// Whether this surface is a launcher rail (its Screen holds a Rail). A
     /// rail owns a lane at its edge: it is not stacked or folded with the
@@ -76,7 +81,7 @@ public struct OverlaySurface: Identifiable, Equatable {
         a.id == b.id && a.region == b.region && a.slot == b.slot
             && a.width == b.width && a.drag == b.drag && a.urgency == b.urgency && a.chrome == b.chrome && a.expires == b.expires
             && a.compact == b.compact && a.summonedFrom == b.summonedFrom && a.instance == b.instance
-            && a.near == b.near
+            && a.near == b.near && a.owner == b.owner
     }
 }
 
@@ -925,6 +930,16 @@ public final class OverlayModel {
         fullHeights.removeValue(forKey: id)
         if current == id { current = surfaces.last?.id ?? "main" }
         relayout()
+    }
+
+    /// Say who vouches for a surface: the namespace the socket says its
+    /// drawer holds, or nil. Called after every `@`, so a surface whose
+    /// claimant hung up and was then redrawn by someone else loses the name.
+    public func attribute(_ id: String, owner: String?) {
+        guard let index = surfaces.firstIndex(where: { $0.id == id }),
+              surfaces[index].owner != owner else { return }
+        surfaces[index].owner = owner
+        revision += 1
     }
 
     /// Move a surface by hand. Dragging outranks placement: an agent said where

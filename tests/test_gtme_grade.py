@@ -273,6 +273,25 @@ def big_list(c):
 
 expect_fail("gate 1: 120 assistants score under B and refuse", 1, big_list, "never upload below B")
 
+
+def big_good_list(c):
+    rows = [c.leads[0]]
+    for i in range(120):
+        rows.append([f"p{i}@firm{i}.example.test", "Pat", f"Firm {i}", "Partner", "valid",
+                     f"your seed {i}", f"https://firm{i}.example.test"])
+    c.leads = rows
+    c.drop.add("--icp-titles")
+
+
+# 2026-10-11: an unchecked dimension scored 0 and turned a clean list into a "D".
+c = Case()
+big_good_list(c)
+rc, out = c.run()
+g1 = gate(out, 1) if "gates" in out else {"fails": ["no gates"], "not_checked": [], "pass": True}
+check("gate 1: an unchecked title match stays NOT CHECKED and never fakes a low score",
+      not g1["pass"] and any("title match" in x for x in g1["not_checked"])
+      and not any("below B" in x for x in g1["fails"]), g1)
+
 # Gate 2, the copy
 expect_fail("gate 2: an em dash refuses", 2,
             lambda c: setattr(c, "copy", c.copy.replace("Worth a look?", "Worth a look — or not?")),

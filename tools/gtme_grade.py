@@ -396,8 +396,11 @@ def gate_list(rows, args, verdicts, suppressed, gate):
         if share < 0.8:
             gate.fail(f"title match to the ICP is {share:.0%}, under 80%", GEX_LIST)
     else:
+        # Not scored as 0: the skip already keeps the gate from passing, and a 0
+        # here turned a 181-row Monday list into a "D" on 2026-10-11 while
+        # every dimension actually checked scored 98 to 100, which sends the
+        # reader hunting for a list problem that isn't there.
         gate.skip("title match", "no title column or no --icp-titles")
-        dims["title match"] = (0, 1)
     if ti:
         bt = sum(1 for r in rows if BAD_TITLE.search(r[ti])) / n
         dims["bad titles"] = (linear(bt, 0.02, 0.10) if bt > 0.02 else 100, 1)
@@ -413,14 +416,13 @@ def gate_list(rows, args, verdicts, suppressed, gate):
             gate.fail(f"ICP fit is {share:.0%}, under 80%", GEX_LIST)
     else:
         gate.skip("ICP fit", "no --icp-fit-column naming a yes/no fit column")
-        dims["ICP fit"] = (0, 2)
     human = sum(1 for r in rows if fn and re.fullmatch(r"[A-Z][a-z'\-]+( [A-Z][a-z'\-]+)?", r[fn] or ""))
     dims["names"] = (100 if human / n >= 0.95 else linear(human / n, 0.95, 0.0), 1)
     total = sum(s * w for s, w in dims.values()) / sum(w for _, w in dims.values())
     gate.score = round(total, 1)
     grade = "A" if total >= 90 else "B" if total >= 80 else "C" if total >= 70 else "D" if total >= 60 else "F"
     gate.note("scorecard " + ", ".join(f"{k} {v[0]:.0f}" for k, v in dims.items())
-              + f" = {total:.0f} ({grade})")
+              + f" = {total:.0f} ({grade})" + (f", over the {len(dims)} dimensions checked" if len(dims) < 8 else ""))
     if total < 80:
         gate.fail(f"list scores {total:.0f} ({grade}); never upload below B", GEX_LIST)
 

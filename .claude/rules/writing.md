@@ -218,6 +218,31 @@ explicit list of what to stop doing.
 - Ask whether any sentence could be moved into a different person's essay
   unchanged. If yes, it is yours, not theirs.
 
+### Group papers: the teammate's section is the spec
+
+On 2026-10-11 a 1,285-word Miyake half went into a team paper next to Andy's
+hand-written Douglas half. Every scanner scored it clean. Andy read it once and
+called it "the slop version." Measured side by side, the tells were:
+
+- **Comparison by symmetry.** "both" 10 times in mine, once in his. Two people
+  compared in paired sentences ("Both of them... and both of them...") reads
+  as a template. Pick the one specific overlap and show it.
+- **Quote confetti.** 23 short phrases lifted from museum and press copy
+  ("a laboratory," "rings of color," "making things"). He quoted 4 times and
+  spent a whole paragraph on one primary source, Johnson's God's Trombones.
+- **"Not just" contrasts.** "Technical, but it was also democratic." "Shape
+  light, not just clothing." Same move as "it's not X, it's Y" in a new coat.
+- **Signposted scaffolding.** Paragraphs opened on "His pleats were also about
+  motion." and "That opening motion does two things." and closed on a kicker
+  ("The dress doesn't really exist until someone moves in it"). His open on a
+  fact and end on a fact.
+- **No point of view.** Mine summarized research notes. His tells a life with
+  texture (busboy, glass factory, the preacher's trombone) and says what it means.
+
+Before anything goes into a shared doc, read the teammate's section first and
+match its moves, and run `slop-check --essay` on the draft. A file that scores
+"rewrite" there does not go in.
+
 ### When the two rulesets conflict
 
 Their voice wins on anything going out under their name. The slop bans and the

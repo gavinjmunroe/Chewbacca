@@ -143,6 +143,10 @@ When the user says that's what is happening:
   log every prompt in the project's PROMPTS-LOG.md.
 - When they say put it in the shared doc, put it in the doc, edit in place,
   and read the doc back to confirm.
+- Before it goes in a shared doc, read the teammates' sections and run
+  `slop-check --essay` on yours. "Rewrite" means it doesn't go in. On
+  2026-10-11 a draft that scored clean on the default check went in, and a
+  teammate called it "the slop version" on first read; `--essay` scores it 48.
 
 Never-dos, from 2026-10-11 (Caleb, ACAD 324 Mash Up, midnight before the team
 deadline):

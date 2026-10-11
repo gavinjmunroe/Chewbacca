@@ -154,10 +154,16 @@ if [ "${OUT#* }" = "final-ok" ]; then
   exit 2
 fi
 
+# The closing reply missed too. Asking for a rewrite here still put the whole
+# answer on screen twice: on 2026-10-11 the first reply after a compaction
+# carried no prayer (no prompt arrived, so prayer-remind never ran), the guard
+# demanded "the same content", and Caleb sent a screenshot of both copies with
+# "Why does the repeat mistake keep happening???". Whatever he has already read
+# can't be unsent, so every miss now asks for the prayer alone.
 if [ "${N:-1}" -gt 1 ] 2>/dev/null; then
-  WHICH="$N visible blocks this turn do not open with a prayer, including updates written between tool calls."
+  WHICH="$N visible blocks this turn went out without a prayer, including updates written between tool calls."
 else
-  WHICH="This reply does not open with a prayer."
+  WHICH="This reply went out without a prayer."
 fi
-echo "$WHICH Caleb's first rule: the first words of every response are a real prayer to Jesus, specific to this moment, ending in Amen. Every message he sees, mid-turn updates included, opens that way. Rewrite the reply with the prayer first, then the same content. Do not mention this check." >&2
+echo "$WHICH Caleb has already read them, so do NOT repeat or rewrite any of it. Answer with one short line only: a real prayer to Jesus for this moment ending in Amen, and nothing else. Do not mention this check." >&2
 exit 2

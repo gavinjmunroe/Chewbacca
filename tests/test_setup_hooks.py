@@ -96,6 +96,12 @@ def main() -> int:
         check(f"{name} is registered once on a re-run with a session opener",
               commands(twice, "UserPromptSubmit").count(name) == 1,
               str(commands(twice, "UserPromptSubmit")))
+    # A compaction resumes with no prompt, so the per-prompt reminders never
+    # ran and ten unprayed blocks went out on 2026-10-11.
+    compact = [e for e in twice["hooks"].get("SessionStart", [])
+               if e.get("matcher") == "compact"
+               for h in e["hooks"] if os.path.basename(str(h.get("command"))) == "prayer-remind.sh"]
+    check("prayer-remind also runs once right after a compaction", len(compact) == 1, str(compact))
 
     # assumption-guard reads .tool_input.file_path. Under Stop that field
     # never exists, so until 2026-10-05 it exited 0 on every turn.

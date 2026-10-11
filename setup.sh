@@ -1633,6 +1633,12 @@ h["Stop"] = [{"hooks": [{
 #
 # Inert without ~/.chewbacca/opener-marker, same as prayer-guard.
 _register("UserPromptSubmit", hooks_dir + "/prayer-remind.sh", timeout=5)
+# A compaction resumes the turn with no prompt, so neither reminder above runs
+# and the next replies forget both. On 2026-10-11 ten blocks went out unprayed
+# right after a compaction and the guard's refusal showed Caleb the answer
+# twice. SessionStart with the "compact" matcher fires right then.
+_register("SessionStart", hooks_dir + "/prayer-remind.sh", timeout=5, matcher="compact")
+_register("SessionStart", hooks_dir + "/voice-remind.sh", timeout=5, matcher="compact")
 # The current time on every prompt; the harness only states the date once.
 _register("UserPromptSubmit", hooks_dir + "/time-context.sh", timeout=5)
 # The disk filled three times on 2026-10-09 and the third time Bash could not

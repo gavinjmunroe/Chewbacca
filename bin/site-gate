@@ -27,6 +27,8 @@ check, at 1440x900 and 390x844, on every url given:
       itself or any descendant (group hovers count) none allowed
     infinite animations running under
       prefers-reduced-motion                        none allowed
+    a boring section: nothing in it moves on
+      entry, at rest or on scroll                  none allowed
 
 Chromium runs on Metal. Without it a WebGL-heavy page fell to about 1 fps
 headless and screenshots timed out after 30 s; with it the same page ran 50 to
@@ -245,6 +247,7 @@ def check_page(pw, url, out):
                 except Exception:
                     continue
             fails += [f"heading paints nothing (covered or invisible): {x}" for x in covered]
+            fails += [f"boring section: {x}" for x in boring_sections(pg)]
         if expect == 404:
             errs = [e for e in errs if "404" not in e]
         fails += [f"{w}: console: {e[:160]}" for e in errs]
@@ -360,6 +363,83 @@ def story(pw, url):
         "screens_over_80_words": sum(1 for r in rows if r["words"] > 80),
     }
     return rows, summary
+
+
+# A section is boring when nothing in it moves: no entrance, nothing at rest,
+# nothing tied to the scroll. A still figure, however big, is a poster. Caleb,
+# 2026-10-10: "Make sure no section is ever boring. Chewb should ALWAYS ensure
+# this", after a day of TTS sections he called lame next to a claymation
+# reference. story averages over screens, so one dead section hid behind a
+# lively hero; this reads every section on its own.
+SECTION_LIST = r"""() => {
+  const vis = e => { const r = e.getBoundingClientRect(), c = getComputedStyle(e);
+    return r.width > 1 && r.height > 1 && c.visibility !== 'hidden' && c.display !== 'none'; };
+  let secs = [...document.querySelectorAll('main section, body > section')]
+    .filter(s => vis(s) && !s.querySelector('section') && !s.closest('nav, footer, header'));
+  if (!secs.length && document.querySelector('main'))
+    secs = [...document.querySelector('main').children].filter(vis);
+  secs = secs.filter(s => s.getBoundingClientRect().height >= 0.4 * innerHeight);
+  secs.forEach((s, i) => s.setAttribute('data-sg-sec', i));
+  return secs.map(s => ((s.querySelector('h1, h2, h3') || s).textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40));
+}"""
+
+SECTION_STILL = r"""(i) => {
+  const s = document.querySelector('[data-sg-sec="' + i + '"]');
+  const r = s.getBoundingClientRect(), W = innerWidth, H = innerHeight;
+  const top = Math.max(0, r.top), bot = Math.min(H, r.bottom);
+  const seen = Math.max(1, (bot - top) * W);
+  let area = 0;
+  for (const e of s.querySelectorAll('canvas, svg, img, video')) {
+    if (e.tagName.toLowerCase() === 'svg' && e.parentElement.closest('svg')) continue;
+    const b = e.getBoundingClientRect(), c = getComputedStyle(e);
+    if (b.width < 24 || b.height < 24 || c.visibility === 'hidden' || +c.opacity < 0.05) continue;
+    area += Math.max(0, Math.min(b.right, W) - Math.max(b.left, 0)) * Math.max(0, Math.min(b.bottom, bot) - Math.max(b.top, top));
+  }
+  const words = (s.innerText.match(/\S+/g) || []).length;
+  const anims = document.getAnimations().filter(a => a.playState === 'running' && a.effect &&
+    a.effect.target && a.effect.target.nodeType === 1 && s.contains(a.effect.target)).length;
+  window.__sgSec = [...s.querySelectorAll('*')].map(e => [e, e.getBoundingClientRect().top])
+    .filter(([e]) => { const b = e.getBoundingClientRect(); return b.width >= 40 && b.height >= 20; });
+  return { figure: Math.min(1, area / seen), words, anims,
+           clip: { x: 0, y: top, width: W, height: Math.max(1, bot - top) } };
+}"""
+
+SECTION_SCROLLED = r"""() => (window.__sgSec || []).filter(([e, t]) =>
+  Math.abs(e.getBoundingClientRect().top - t + 120) > 12).length"""
+
+
+def boring_sections(pg):
+    from PIL import Image, ImageChops
+    names = pg.evaluate(SECTION_LIST)
+    out = []
+    for i, name in enumerate(names):
+        try:
+            pg.evaluate("i => document.querySelector('[data-sg-sec=\"' + i + '\"]').scrollIntoView({block: 'start'})", i)
+            # an entrance that plays once and ends counts, so look early too
+            pg.wait_for_timeout(150)
+            early = pg.evaluate(SECTION_STILL, i)["anims"]
+            pg.wait_for_timeout(1050)
+            st = pg.evaluate(SECTION_STILL, i)
+            if st["clip"]["height"] < 80:
+                continue
+            a = Image.open(io.BytesIO(pg.screenshot(clip=st["clip"]))).convert("L")
+            pg.wait_for_timeout(1000)
+            c = Image.open(io.BytesIO(pg.screenshot(clip=st["clip"]))).convert("L")
+            idle_px = ImageChops.difference(a, c).point(lambda v: 255 if v > DIFF_LEVEL else 0).histogram()[255]
+            pg.evaluate("scrollBy(0, 120)"); pg.wait_for_timeout(600)
+            scrolled = pg.evaluate(SECTION_SCROLLED)
+        except Exception:
+            continue
+        # A still figure doesn't rescue it. The section Caleb called lame on
+        # 2026-10-10 was a still render filling its frame; on usctts.com that
+        # day 5 of 9 sections had figures over a third of the screen and
+        # nothing moving, which is what "boring" looked like to him.
+        alive = idle_px > 400 or scrolled >= 2 or early > 0 or st["anims"] > 0
+        if not alive:
+            out.append(f'"{name or "untitled"}": nothing moves on entry, at rest or on scroll '
+                       f'(figures {st["figure"]:.0%}, {st["words"]} words). Give it motion: '
+                       'an entrance, an ambient loop or a scroll-linked scene')
+    return out
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)

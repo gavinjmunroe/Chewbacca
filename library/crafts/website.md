@@ -406,3 +406,10 @@ the same section connected" and "Each section feels like 1 connected blob".
 Each neighbour changes at least one of ground (paper, tint, navy) or layout
 (split, centred, full-bleed figure). `site-gate check` now fails "twin
 sections" mechanically.
+
+**No section is ever boring (TTS, 2026-10-10).** Caleb: "Make sure no section
+is ever boring. Chewb should ALWAYS ensure this", and "No more 3d stills
+right? They're all fun videos???". A still render, however big, is a poster.
+Every section moves on entry, at rest or with the scroll. `site-gate check`
+now fails a section where none of the three happens. Calibrated that day: the
+Lemma reference had 0 such sections, live usctts.com had 5.

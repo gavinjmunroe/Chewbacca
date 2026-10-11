@@ -740,6 +740,17 @@ def test_tree() -> None:
     check("closing the card takes its tree down", sent[-1] == ["- s-6d901cd1-tree"] and not srv.trees, sent[-1])
 
 
+def test_one_shots() -> None:
+    print("a one-shot run in a temp folder is not a tab, even with a desktop entrypoint")
+    one = [user("judge this image", entrypoint="claude-desktop", cwd="/private/var/folders/x/T/judge_1"),
+           assistant([{"type": "text", "text": "limit"}], stop="end_turn")]
+    check("one turn in a temp folder is a script", not ks.meta(one)["interactive"], ks.meta(one))
+    two = one + [user("again", uuid="u2", entrypoint="claude-desktop", cwd="/private/var/folders/x/T/judge_1")]
+    check("a second turn makes it a tab", ks.meta(two)["interactive"])
+    home = [user("hi", entrypoint="claude-vscode", cwd="/Users/x/code/lemma")]
+    check("a fresh tab in a real folder stays", ks.meta(home)["interactive"])
+
+
 def test_origin() -> None:
     print("a VS Code session is a row like any other, and says where it runs")
     entries = [user("hi", entrypoint="claude-vscode", cwd="/x/lemma"), assistant([{"type": "text", "text": "ok"}], stop="end_turn")]
@@ -942,6 +953,7 @@ def main() -> int:
     test_tests_need_two_presses()
     test_tree()
     test_origin()
+    test_one_shots()
     test_runs()
     test_serve_start()
     test_watch()

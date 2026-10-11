@@ -95,6 +95,8 @@ ABANDONED_S = 2 * 3600.0
 # (reviewer runs, the voice's own `claude -p`): on 2026-10-04 they were 19 of
 # the 25 newest transcripts and buried the four Caleb was actually in.
 INTERACTIVE = frozenset({"cli", "claude-vscode", "claude-desktop"})
+# Where throwaway one-shot runs live. tab-rescue skips these folders too.
+SCRATCH_DIRS = ("/private/var/folders/", "/var/folders/", "/private/tmp/", "/tmp/")
 # The most rows the surface shows. Miller's seven plus two.
 MAX_ROWS = 9
 # How many turns a session card draws.
@@ -244,6 +246,12 @@ def meta(entries: list[dict]) -> dict:
         if out["title"] and out["model"] and out["cwd"] and out["mode"]:
             break
     out["interactive"] = bool(points & INTERACTIVE) or not points
+    turns = sum(1 for e in entries if e.get("type") == "user" and is_turn(e) and first_text(e))
+    if turns <= 1 and out["cwd"].startswith(SCRATCH_DIRS):
+        # A one-shot `claude -p` (a blind image judge, an eval) inherits its
+        # parent's desktop entrypoint. On 2026-10-10 two judges in
+        # /var/folders sat in the agents list as failed tabs.
+        out["interactive"] = False
     if not out["title"]:
         first_user = next((e for e in entries if e.get("type") == "user" and is_turn(e) and first_text(e)), None)
         out["title"] = first_text(first_user)[:80] if first_user else ""

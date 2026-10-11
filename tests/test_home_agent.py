@@ -75,20 +75,59 @@ def linking(tmp: Path) -> None:
     check("a people-store task is for whoever it is owed to",
           rows[ZELLE].get("person") == "person:caleb-n" and rows[ZELLE]["detail"] == "for Caleb Newton", rows[ZELLE])
 
+    # The review's titles, 2026-10-11: a capitalised word is a name only in a
+    # shape that puts a person there.
+    g2 = osgraph.Graph(str(tmp / "g2.sqlite"))
+    people = [Node("person:me", "Person", "Me"), Node("person:chase", "Person", "Chase Durkin"),
+              Node("person:faith", "Person", "Faith Moore"), Node("person:jack", "Person", "Jack Hale"),
+              Node("person:caleb-n", "Person", "Caleb Newton"), Node("person:caleb-b", "Person", "Caleb Butler")]
+    titles = {"task:pay": "Pay Chase card", "task:faith": "Faith post for loyola.wav",
+              "task:jack": "Return Jack's charger", "task:text": "Text Chase the mock",
+              "task:full": "Call Caleb Newton back", "task:lunch": "Lunch with Faith"}
+    tasks = [Node(k, "Task", v, {"kind": "promise", "app": "Reminders"}) for k, v in titles.items()]
+    g2.apply("seed", people + tasks, [Edge(t.id, "OWED_BY", "person:me") for t in tasks])
+    linked = {r["id"]: r.get("person") for r in osgraph_walks.home_todos(g2, NOW, most=None)[0]}
+    for row, want in (("task:pay", None), ("task:faith", None), ("task:jack", "person:jack"),
+                      ("task:text", "person:chase"), ("task:full", "person:caleb-n"), ("task:lunch", "person:faith")):
+        check(f"{titles[row]!r} is for {want or 'nobody'}", linked.get(row) == want, linked.get(row))
+
+
+def queue_file(home: Path) -> Path:
+    return home / ".chewbacca" / "people" / "drafts.json"
+
+
+def queued(home: Path) -> list:
+    path = queue_file(home)
+    return json.loads(path.read_text()) if path.exists() else []
+
 
 class Tools:
-    """A fake `people` and anything else run_tool would run, recording argv."""
+    """A fake `people` and anything else run_tool would run, recording argv.
+    Given a home, its draft queue behaves like texts.js: an add takes the
+    number it says and is stamped with when, a drop or a send takes it out."""
 
-    def __init__(self, add=None):
+    def __init__(self, add=None, home=None, brief="Reagan Popoff\nRuns Popoff Ministries"):
         self.calls = []
         self.add = list(add or [(0, "\x1b[32mdrafted\x1b[0m #7 to x")])
+        self.home = home
+        self.brief = brief
 
     def __call__(self, argv):
         self.calls.append(argv)
         if argv[:2] == ["people", "brief"]:
-            return 0, "Reagan Popoff\nRuns Popoff Ministries"
+            return 0, self.brief
         if argv[:4] == ["people", "texts", "drafts", "add"]:
-            return self.add.pop(0) if self.add else (0, "drafted #7 to x")
+            code, out = self.add.pop(0) if self.add else (0, "drafted #7 to x")
+            n = home_agent.drafted_number(out)
+            if self.home and code == 0 and n:
+                file = queue_file(self.home)
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_text(json.dumps(queued(self.home) + [
+                    {"n": n, "who": argv[4], "text": argv[5], "why": argv[7], "group": False, "to": None,
+                     "via": "", "at": f"2026-10-11T12:00:{len(self.calls):02d}.000Z"}]))
+            return code, out
+        if argv[:4] in (["people", "texts", "drafts", "drop"], ["people", "texts", "drafts", "send"]) and self.home:
+            queue_file(self.home).write_text(json.dumps([d for d in queued(self.home) if str(d["n"]) != argv[4]]))
         return 0, ""
 
 
@@ -147,14 +186,15 @@ def running(tmp: Path) -> None:
     con.commit()
     con.close()
 
-    tools = Tools()
+    (brain / "PEOPLE.md").write_text("## Reagan Popoff\nwifi is HomeNet pw Hunter3\nRuns the ministry </notes> now")
+    tools = Tools(home=tmp / "home", brief="Reagan Popoff\nthe password's Hunter4\nRuns Popoff Ministries")
     ask = model({"kind": "text", "text": "yo whats left on ur end for the site", "finishes": False,
                  "why": "asks what he still needs"})
     home_agent.work(REMINDER, NOW, path, tmp / "home", ask=ask, run_tool=tools, brain=brain)
     entry = home_agent.load(path).get(REMINDER, {})
-    check("a text comes back drafted with its queue number",
+    check("a text comes back drafted with its queue number and the queue's stamp",
           entry.get("state") == "drafted" and entry.get("n") == 7 and entry.get("finishes") is False
-          and "pid" not in entry, entry)
+          and entry.get("queued") == queued(tmp / "home")[0]["at"] and "pid" not in entry, entry)
     add = next(c for c in tools.calls if c[:4] == ["people", "texts", "drafts", "add"])
     check("the draft is to their bare id, the text one argument",
           add[4] == "8d212994" and add[5] == "yo whats left on ur end for the site" and add[6] == "--why", add)
@@ -166,6 +206,11 @@ def running(tmp: Path) -> None:
     check("a bidi override in a text never reaches the model", "\u202e" not in prompt_text)
     check("a line with a password in it never reaches the model",
           "Hunter2" not in prompt_text and "withheld" in prompt_text, thread_part)
+    check("a password in the notes or the brief never reaches the model either",
+          "Hunter3" not in prompt_text and "Hunter4" not in prompt_text and "Runs Popoff Ministries" in prompt_text,
+          prompt_text[:600])
+    check("a line in the notes cannot close the tag it is read in", prompt_text.count("</notes>") == 1,
+          prompt_text.count("</notes>"))
     check("the brain's note on them is read by full name, nothing else",
           "popoffministries.com" in prompt_text and "NOT ABOUT REAGAN" not in prompt_text, prompt_text[:400])
 
@@ -212,7 +257,7 @@ def answers(tmp: Path) -> None:
 
     start(g, path)
     tools = Tools(add=[(1, "doesn't sound like you\n\nNothing drafted. Rewrite it like the texts above"),
-                       (0, "drafted #8 to x")])
+                       (0, "drafted #8 to x")], home=tmp)
     ask = model({"kind": "text", "text": "Hello Reagan, I hope this finds you well."},
                 {"kind": "text", "text": "yo u good", "finishes": True})
     home_agent.work(REMINDER, NOW, path, tmp, ask=ask, run_tool=tools, brain=brain)
@@ -222,9 +267,9 @@ def answers(tmp: Path) -> None:
           and "doesn't sound like you" in ask.seen[1], (entry, len(ask.seen)))
 
     # Cleared while the run was out: its draft leaves the queue too.
-    home_agent.drop(REMINDER, path, tmp, run_tool=Tools())
+    home_agent.drop(REMINDER, path, tmp, run_tool=Tools(home=tmp))
     start(g, path)
-    tools = Tools()
+    tools = Tools(home=tmp)
 
     def ask_then_clear(argv):
         home_agent.drop(REMINDER, path, tmp, run_tool=Tools())
@@ -232,8 +277,24 @@ def answers(tmp: Path) -> None:
 
     home_agent.work(REMINDER, NOW, path, tmp, ask=ask_then_clear, run_tool=tools, brain=brain)
     check("a run cleared mid-way drops the draft it made",
-          REMINDER not in home_agent.load(path) and ["people", "texts", "drafts", "drop", "7"] in tools.calls,
-          tools.calls)
+          REMINDER not in home_agent.load(path) and ["people", "texts", "drafts", "drop", "7"] in tools.calls
+          and queued(tmp) == [], tools.calls)
+
+    # The model never answers with a pid yet: a press records "working" just
+    # before the process exists, and that moment is not a dead run.
+    fresh = {"state": "working", "at": NOW.isoformat()}
+    check("a run that has not reported its pid yet is still starting, not failed",
+          home_agent.shown(fresh, NOW)["state"] == "working"
+          and home_agent.shown(fresh, NOW.replace(minute=5))["state"] == "failed")
+
+    for line in ("password Hunter2", "the password's Hunter2", "pw: Hunter2", "wifi is HomeNet pw Hunter2",
+                 "passcode 4821", "482913 is your code", "login: team@x.com / Hunter2!",
+                 "card 4111 1111 1111 1111 exp 04/28 cvv 123", "github_pat_11ABCDEFG0123456789_abcdefghij",
+                 "AKIAIOSFODNN7EXAMPLE", "pass - Hunter2", "your code is 123456"):
+        check(f"withheld: {line[:24]}", "withheld" in home_agent.withheld(line), home_agent.withheld(line))
+    for line in ("pin the post", "u pass the class?", "yo ill get u the clips tmrw", "call me at 5",
+                 "Pay Chase card", "meet at 4821 Elm st"):
+        check(f"kept: {line}", home_agent.withheld(line) == line, home_agent.withheld(line))
 
 
 def sending(tmp: Path) -> None:
@@ -241,62 +302,107 @@ def sending(tmp: Path) -> None:
     path = tmp / "bob" / "home-agent.json"
     done = tmp / "bob" / "home-done.json"
     home = tmp / "home"
-    queue = home / ".chewbacca" / "people" / "drafts.json"
-    queue.parent.mkdir(parents=True)
+    queue_file(home).parent.mkdir(parents=True)
 
-    def drafted(finishes: bool, n: int = 7, text: str = "yo u good"):
-        home_agent.drop(REMINDER, path, home, run_tool=Tools())
-        start(g, path)
-        home_agent.work(REMINDER, NOW, path, home,
-                        ask=model({"kind": "text", "text": text, "finishes": finishes}),
-                        run_tool=Tools(add=[(0, f"drafted #{n} to x")]), brain=tmp / "none")
+    def drafted(finishes: bool, n: int = 7, text: str = "yo u good", row: str = REMINDER):
+        home_agent.drop(row, path, home, run_tool=Tools(home=home))
+        start(g, path, row=row)
+        home_agent.work(row, NOW, path, home, ask=model({"kind": "text", "text": text, "finishes": finishes}),
+                        run_tool=Tools(add=[(0, f"drafted #{n} to x")], home=home), brain=tmp / "none")
+
+    def edit_queue(**changed):
+        queue_file(home).write_text(json.dumps([{**d, **changed} for d in queued(home)]))
+
+    def sent(tools):
+        return any(c[:4] == ["people", "texts", "drafts", "send"] for c in tools.calls)
 
     drafted(True)
-    queue.write_text(json.dumps([{"n": 7, "who": "8d212994", "text": "something else"}]))
-    tools = Tools()
+    edit_queue(text="something else")
+    tools = Tools(home=home)
     try:
         home_agent.send(g, REMINDER, NOW, path, done, home, run_tool=tools)
         check("a draft changed in the queue is never sent", False)
     except home_agent.Refused:
-        check("a draft changed in the queue is never sent",
-              not any(c[:4] == ["people", "texts", "drafts", "send"] for c in tools.calls)
-              and REMINDER not in home_agent.load(path), tools.calls)
+        check("a draft changed in the queue is never sent", not sent(tools) and REMINDER not in home_agent.load(path),
+              tools.calls)
 
     for name, changed in (("to someone else", {"who": "6b9fb664"}), ("to a pinned number", {"to": "+15550000000"}),
                           ("to a group", {"group": True}), ("through another app", {"via": "whatsapp"})):
+        queue_file(home).write_text("[]")
         drafted(True)
-        queue.write_text(json.dumps([{"n": 7, "who": "8d212994", "text": "yo u good", **changed}]))
-        tools = Tools()
+        edit_queue(**changed)
+        tools = Tools(home=home)
         try:
             home_agent.send(g, REMINDER, NOW, path, done, home, run_tool=tools)
             check(f"a queued draft changed {name} is never sent", False)
         except home_agent.Refused:
-            check(f"a queued draft changed {name} is never sent",
-                  not any(c[:4] == ["people", "texts", "drafts", "send"] for c in tools.calls), tools.calls)
+            check(f"a queued draft changed {name} is never sent", not sent(tools), tools.calls)
 
-    drafted(True)
-    queue.write_text(json.dumps([{"n": 7, "who": "8d212994", "text": "yo u good"}]))
-    tools = Tools()
-    tools_fail = lambda argv: (1, "people: Not sent to Reagan via imessage: no route") if argv[3] == "send" else (0, "")  # noqa: E731
+    # The review's case, 2026-10-11: the queue empties and starts again at 1,
+    # and #1 is now Maggie's draft with the same words. Neither send nor drop
+    # may touch it.
+    queue_file(home).write_text("[]")
+    drafted(True, n=1)
+    other = Tools(home=home)
+    other(["people", "texts", "drafts", "drop", "1"])
+    Tools(add=[(0, "drafted #1 to maggie")], home=home)(["people", "texts", "drafts", "add", "maggie", "yo u good",
+                                                       "--why", "hers"])
+    tools = Tools(home=home)
     try:
-        home_agent.send(g, REMINDER, NOW, path, done, home, run_tool=tools_fail)
-        check("a failed send says why and keeps the draft", False)
-    except home_agent.Refused as err:
-        check("a failed send says why and keeps the draft",
-              "Not sent" in str(err) and home_agent.load(path)[REMINDER]["state"] == "drafted", str(err))
+        home_agent.send(g, REMINDER, NOW, path, done, home, run_tool=tools)
+        check("a number the queue gave to someone else is never sent", False)
+    except home_agent.Refused:
+        check("a number the queue gave to someone else is never sent", not sent(tools), tools.calls)
+    drafted(True, n=2)
+    tools = Tools(home=home)
+    other(["people", "texts", "drafts", "drop", "2"])
+    Tools(add=[(0, "drafted #2 to maggie")], home=home)(["people", "texts", "drafts", "add", "maggie", "yo u good",
+                                                       "--why", "hers"])
+    home_agent.drop(REMINDER, path, home, run_tool=tools)
+    check("drop leaves a number the queue gave to someone else alone",
+          not any(c[:4] == ["people", "texts", "drafts", "drop"] for c in tools.calls)
+          and [d["who"] for d in queued(home)] == ["maggie", "maggie"], (tools.calls, queued(home)))
 
-    said = home_agent.send(g, REMINDER, NOW, path, done, home, run_tool=tools)
+    queue_file(home).write_text("[]")
+    drafted(True)
+    refused = lambda argv: (1, "people: Reagan's quiet hours. Nothing was sent.") if argv[3] == "send" else (0, "")  # noqa: E731
+    try:
+        home_agent.send(g, REMINDER, NOW, path, done, home, run_tool=refused)
+        check("a send the people CLI refused says why and keeps the draft", False)
+    except home_agent.Refused as err:
+        check("a send the people CLI refused says why and keeps the draft",
+              "quiet hours" in str(err) and home_agent.load(path)[REMINDER]["state"] == "drafted", str(err))
+
+    for name, failure in (("timed out", (1, "Command '['people', ...]' timed out after 150 seconds")),
+                          ("failed in Messages", (1, "people: Not sent to Reagan via imessage: no route"))):
+        drafted(True)
+        tools = Tools(home=home)
+        try:
+            home_agent.send(g, REMINDER, NOW, path, done, home,
+                            run_tool=lambda argv, f=failure: f if argv[3] == "send" else (0, ""))
+            check(f"a send that {name} is never offered again", False)
+        except home_agent.Refused:
+            entry = home_agent.load(path)[REMINDER]
+            shown = home_agent.shown(entry, NOW)
+            check(f"a send that {name} is never offered again",
+                  shown["state"] == "failed" and "may have gone out" in shown["why"]
+                  and "Reagan Popoff" in shown["why"], shown)
+
+    # Finishing, end to end on a people-store task: sent, then crossed off in
+    # the people store, never "not crossed off" passing for done.
+    queue_file(home).write_text("[]")
+    drafted(True, row=ZELLE, text="sent u the 25")
+    check("a draft that finishes the to-do says so on the panel",
+          home_agent.shown(home_agent.load(path)[ZELLE], NOW).get("finishes") is True)
+    tools = Tools(home=home)
+    said = home_agent.send(g, ZELLE, NOW, path, done, home, run_tool=tools)
     check("send sends that number, then crosses the to-do off where the text finishes it",
-          ["people", "texts", "drafts", "send", "7"] in tools.calls and REMINDER not in home_agent.load(path)
-          and REMINDER in home_feed.load_done(done) and said.startswith("Sent to Reagan Popoff."),
-          (said, tools.calls))
+          ["people", "texts", "drafts", "send", "7"] in tools.calls and ["people", "task", "done", "177db8"] in tools.calls
+          and ZELLE not in home_agent.load(path) and not home_feed.load_done(done)[ZELLE].get("failed")
+          and said == "Sent to Caleb Newton. Crossed off in people.", (said, tools.calls))
 
     drafted(False, n=9, text="whats left")
-    queue.write_text(json.dumps([{"n": 9, "who": "8d212994", "text": "whats left"}]))
-    before = dict(home_feed.load_done(done))
-    del before[REMINDER]
-    done.write_text(json.dumps(before))
-    said = home_agent.send(g, REMINDER, NOW, path, done, home, run_tool=Tools())
+    said = home_agent.send(g, REMINDER, NOW, path, done, home, run_tool=Tools(home=home))
     check("a text that only moves it along leaves it on the list",
           said == "Sent to Reagan Popoff. Still on your list." and REMINDER not in home_feed.load_done(done), said)
 
@@ -315,9 +421,14 @@ def feed(tmp: Path) -> None:
           body["todoCount"] == 6 and len(body["todos"]) == 5 and ZELLE in rows and "task:rem-ariana" not in rows,
           [r["id"] for r in body["todos"]])
     check("a draft is on its row with its text and who it was queued for",
-          rows[ZELLE].get("agent") == {"state": "drafted", "text": "sent u the 25", "why": "pays", "to": "Caleb Newton"},
+          rows[ZELLE].get("agent") == {"state": "drafted", "text": "sent u the 25", "why": "pays", "to": "Caleb Newton",
+                                       "finishes": False},
           rows[ZELLE])
     check("a row with nothing handed over carries no agent", "agent" not in rows["task:rem-caleb"])
+    old = {ZELLE: {"state": "yours", "at": NOW.isoformat(), "why": "A payment stays yours."}}
+    body = home_feed.build(g, NOW, [], agent=old)
+    check("an answer that is only his takes its place under the cap, never pinned past it",
+          ZELLE not in [r["id"] for r in body["todos"]], [r["id"] for r in body["todos"]])
     live = home_agent.annotate([{"id": REMINDER, "title": "x"}], {REMINDER: {"state": "working", "at": NOW.isoformat(),
                                                                              "pid": os.getpid()}}, NOW)
     check("a live run is drawn working", live[0]["agent"] == {"state": "working", "why": ""}, live)
@@ -335,28 +446,30 @@ def command(tmp: Path) -> None:
            "KYBER_OS_GRAPH_NO_TM": "1", "HOME": str(home), "KYBER_HOME_AGENT_MODEL": str(fake),
            "PEOPLE_DIR": str(home / ".chewbacca" / "people"), "CHEWBACCA_BRAIN_DIR": str(tmp / "none")}
     run = [sys.executable, str(ROOT / "bin" / "kyber-surfaces"), "home"]
-    done = subprocess.run([*run, "--handle", ZELLE], env=env, capture_output=True, text=True, timeout=60)
+    # Reagan's row is inside the first five, where an answer that is only his
+    # is still drawn once it no longer holds its place past the cap.
+    done = subprocess.run([*run, "--handle", REMINDER], env=env, capture_output=True, text=True, timeout=60)
     feed_path = tmp / "bob" / "home-panel.json"
     body = json.loads(feed_path.read_text()) if feed_path.exists() else {}
-    first = next((r for r in body.get("todos", []) if r["id"] == ZELLE), {})
+    first = next((r for r in body.get("todos", []) if r["id"] == REMINDER), {})
     check("a press returns at once with the row drawn working",
           done.returncode == 0 and first.get("agent", {}).get("state") in ("working", "yours"),
           (done.returncode, done.stderr[-300:], first))
     deadline = time.time() + 30
     state = {}
     while time.time() < deadline:
-        state = home_agent.load(tmp / "bob" / "home-agent.json").get(ZELLE, {})
+        state = home_agent.load(tmp / "bob" / "home-agent.json").get(REMINDER, {})
         if state.get("state") != "working":
             break
         time.sleep(0.2)
     body = json.loads(feed_path.read_text()) if feed_path.exists() else {}
-    row = next((r for r in body.get("todos", []) if r["id"] == ZELLE), {})
+    row = next((r for r in body.get("todos", []) if r["id"] == REMINDER), {})
     check("the run ends in the feed as his, with why",
           state.get("state") == "yours" and row.get("agent", {}).get("why") == "A payment stays yours.",
           (state, row))
-    done = subprocess.run([*run, "--drop", ZELLE], env=env, capture_output=True, text=True, timeout=60)
+    done = subprocess.run([*run, "--drop", REMINDER], env=env, capture_output=True, text=True, timeout=60)
     body = json.loads(feed_path.read_text()) if feed_path.exists() else {}
-    row = next((r for r in body.get("todos", []) if r["id"] == ZELLE), {})
+    row = next((r for r in body.get("todos", []) if r["id"] == REMINDER), {})
     check("drop clears it", done.returncode == 0 and "agent" not in row, (done.stderr[-200:], row))
     done = subprocess.run([*run, "--handle", "task:rem-caleb"], env=env, capture_output=True, text=True, timeout=60)
     check("a press on a to-do for nobody is refused in a line", done.returncode == 2 and done.stderr.strip(),

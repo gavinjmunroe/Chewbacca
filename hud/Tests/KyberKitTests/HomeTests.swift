@@ -29,7 +29,7 @@ struct HomeTests {
             "overdue": false, "person": "person:c"},
            {"id": "task:r", "title": "Do Reagan's stuff", "detail": "for Reagan Popoff", "day": "", "overdue": false,
             "person": "person:r", "agent": {"state": "drafted", "text": "yo whats left on ur end for the site",
-            "why": "asks what he still needs", "to": "Reagan Popoff"}},
+            "why": "asks what he still needs", "to": "Reagan Popoff", "finishes": true}},
            {"id": "backlog:1", "title": "GTM engineering for Jonah", "detail": "Backlog", "day": "2026-10-09",
             "overdue": true},
            {"id": "task:bank", "title": "Call the bank", "detail": "", "day": "", "overdue": false,
@@ -64,7 +64,8 @@ struct HomeTests {
         #expect(feed.todos[4].done && !feed.todos[4].reopen)
         #expect(feed.todos[1].person == "person:c" && feed.todos[1].agent == nil)
         #expect(feed.todos[2].agent == HomeAgent(state: .drafted, text: "yo whats left on ur end for the site",
-                                                 why: "asks what he still needs", to: "Reagan Popoff"))
+                                                 why: "asks what he still needs", to: "Reagan Popoff",
+                                                 finishes: true))
         #expect(feed.projects[0].path == "/x/oakley")
         #expect(feed.failed == ["calendar"])
     }

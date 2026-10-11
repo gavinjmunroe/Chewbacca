@@ -231,7 +231,11 @@ def build(graph, now: datetime, project_rows: list[dict], errors=None, written: 
     `done` is the crossed-off record (load_done), and `agent` the runs handed
     to the agent from the panel (home_agent.load)."""
     body = osgraph_walks.home(graph, now, most_todos=None)
-    body["todos"], body["todoCount"] = crossed(body["todos"], done or {}, now, keep=set(agent or {}))
+    # A run out or a draft waiting on his press is shown past the cap; an
+    # answer that only says "yours" or "failed" takes its place in the list
+    # like any other row, so old ones never pile up above the rest.
+    waiting = {k for k, v in (agent or {}).items() if v.get("state") in ("working", "drafted")}
+    body["todos"], body["todoCount"] = crossed(body["todos"], done or {}, now, keep=waiting)
     if agent:
         import home_agent  # noqa: PLC0415  it imports this module
 

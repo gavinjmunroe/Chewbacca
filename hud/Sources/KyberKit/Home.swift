@@ -106,14 +106,18 @@ public struct HomeAgent: Decodable, Equatable, Sendable {
     /// Who the draft was queued for, as the run recorded it. The row's own
     /// "for <name>" is recomputed every pass and can name someone else.
     public var to = ""
+    /// Send also crosses the to-do off, which Reminders and the people store
+    /// cannot take back, so the press says so in its own word.
+    public var finishes = false
 
-    enum CodingKeys: String, CodingKey { case state, text, why, to }
+    enum CodingKeys: String, CodingKey { case state, text, why, to, finishes }
 
-    public init(state: State, text: String = "", why: String = "", to: String = "") {
+    public init(state: State, text: String = "", why: String = "", to: String = "", finishes: Bool = false) {
         self.state = state
         self.text = text
         self.why = why
         self.to = to
+        self.finishes = finishes
     }
 
     public init(from decoder: Decoder) throws {
@@ -122,6 +126,7 @@ public struct HomeAgent: Decodable, Equatable, Sendable {
         text = try c.decodeIfPresent(String.self, forKey: .text) ?? ""
         why = try c.decodeIfPresent(String.self, forKey: .why) ?? ""
         to = try c.decodeIfPresent(String.self, forKey: .to) ?? ""
+        finishes = (try? c.decodeIfPresent(Bool.self, forKey: .finishes)) ?? false
     }
 }
 
@@ -1095,7 +1100,9 @@ struct HomeAgentLine: View {
                         .overlay(alignment: .leading) { HUD.needsYou.frame(width: 1) }
                         .padding(.top, 2)
                     HStack(spacing: 4) {
-                        HomeVerb(word: "send", tone: HUD.needsYou, help: "Send this text to \(who(agent))") {
+                        HomeVerb(word: agent.finishes ? "send and cross off" : "send", tone: HUD.needsYou,
+                                 help: agent.finishes ? "Send this text to \(who(agent)) and cross the to-do off"
+                                                      : "Send this text to \(who(agent))") {
                             model.send(row)
                         }
                         HomeVerb(word: "drop", tone: HUD.faint, help: "Throw this draft away") { model.drop(row) }

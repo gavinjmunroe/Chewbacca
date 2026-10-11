@@ -178,26 +178,39 @@ that fails is still crossed off on the panel that day, and the row says
 A to-do that is for someone ends in a lit "handle" (asked for 2026-10-11:
 "click a button and have an agent handle"). It is for someone when the people
 store's task is owed to them, or when a reminder's title names exactly one
-person in this week's graph by first name ("Do Reagan's stuff" is Reagan
-Popoff; "Call Caleb" links nobody while there are two Calebs). The press runs
-`kyber-surfaces home --handle <id>`, which records the run as working in
-`~/.bob/home-agent.json` and starts `home --work <id>` in its own session
-(`bin/lib/home_agent.py`). That run reads `people brief`, his last 24 lines
-with them one-to-one (a line shaped like a password or a code is withheld) and
-the brain's memory files whose index line names them in full, then asks
-`claude -p` with no tools for one JSON answer: a text, or "yours" with why (a
-payment, a call, a file, anything a text would only promise). A text goes into
+person in this week's graph: in full anywhere, or by first name in a shape
+that puts a person there, "Reagan's" or after "text", "ask", "with", "for" and
+the rest of `NAME_AFTER` in `bin/lib/osgraph_walks.py`. "Do Reagan's stuff" is
+Reagan Popoff; "Call Caleb" links nobody while there are two Calebs, "Pay
+Chase card" links nobody, and a title naming two people links neither. The
+press runs `kyber-surfaces home --handle <id>`, which records the run as
+working in `~/.bob/home-agent.json` and starts `home --work <id>` in its own
+session (`bin/lib/home_agent.py`). That run reads `people brief`, the last 24
+messages between them one-to-one, and the brain's memory files whose index
+line names them in full; any line shaped like a password, a code, a card or a
+key is withheld from all three. It asks `claude -p` with no tools for one JSON
+answer: a text, or "yours" with why (a payment, a call, a file, anything a text
+would only promise). The brief and the notes are background the text never
+quotes unless the thread shows the person already knows it. A text goes into
 `people texts drafts add <their id>`, which voice-checks it; a refusal gets one
-rewrite with what voice-check measured. The row then shows the whole draft,
-who it goes to when that is not already the row's "for" line, and "send" and
-"drop". Send runs `--send <id>`, which checks the queue still holds that
-number with that text, for that person, one-to-one, with no pinned address,
-group or app (an edited queue entry is dropped, never sent), runs
-`people texts drafts send <n>` (the number is the approval, as everywhere),
-and crosses the to-do off only when the model said the text finishes it. Nothing goes out without that press. A row with a
-run or a draft on it is shown even past the five-row cap. A run whose process
-died, or that ran past seven minutes, draws as failed, with "retry" and
-"clear".
+rewrite with what voice-check measured. The run records the draft's number and
+the stamp the queue wrote beside it, because the queue numbers from 1 again
+once it empties and a stale number can name someone else's draft.
+
+The row then shows the whole draft, who it goes to when that is not already
+the row's "for" line, and "send" and "drop"; the press reads "send and cross
+off" when the model said the text finishes the to-do, since Reminders and the
+people store cannot reopen one. Send runs `--send <id>`, which checks the queue
+still holds that number with that stamp and text, for that person, one-to-one,
+with no pinned address, group or app (anything else is cleared, never sent),
+then runs `people texts drafts send <n>`. A refusal from the people CLI ("Nothing
+was sent.") keeps the draft. A timeout or any other failure draws the row
+failed with "It may have gone out", and send is not offered again, because a
+second press could text them twice. Drop takes the draft out of the queue only
+under the same check. Nothing goes out without his press. A row with a run out
+or a draft waiting is shown even past the five-row cap; an answer that is only
+his takes its place in the list like any other row. A run whose process died,
+or that ran past eight minutes, draws as failed, with "retry" and "clear".
 
 Projects are the pinned list when there is one, in its order, each showing the
 newest non-`chore:` commit by `git config user.email` across the repositories

@@ -325,30 +325,55 @@ def resolved_people(g: Graph) -> list[dict]:
 
 
 # "Do Reagan's stuff": a capitalised word, with a possessive dropped.
-NAME_WORD = re.compile(r"\b([A-Z][a-z]+(?:-[A-Z][a-z]+)?)(?:['’]s)?\b")
+NAME_WORD = re.compile(r"\b([A-Z][a-z]+(?:-[A-Z][a-z]+)?)(['\u2019]s)?\b")
+# A capitalised word is a name only where a title puts a person: "Reagan's",
+# or after one of these. On 2026-10-11 the review ran titles past the first
+# version, which took any capitalised word, against this week's graph: "Pay
+# Chase card" linked to Chase and "Faith post for loyola.wav" to Faith, each
+# with a handle press on a row that is nobody's. An allowlist, so a new shape
+# links nobody until it is added here.
+NAME_AFTER = frozenset({"text", "call", "ask", "tell", "email", "message", "msg", "dm", "ping", "thank",
+                        "remind", "meet", "see", "invite", "send", "with", "for", "to", "from", "and"})
 
 
 def task_person(g: Graph, node: dict, people: list[dict]) -> dict | None:
     """Who a to-do is for, so the home panel can hand it to an agent. A
     people-store task says so (OWED_TO). A reminder only names them: "Do
     Reagan's stuff", added by voice on 2026-10-05, links to Reagan Popoff
-    because he is the one Reagan in this week's graph. Never fuzzy, and the
-    same rule as find_person: a word two people answer to ("Caleb" was Caleb
-    Newton and Caleb Butler on 2026-10-11), or two names in one title, links
-    nobody, since the agent would write to whoever it picked."""
+    because he is the one Reagan in this week's graph. A full name links
+    wherever it is; a first name only in a shape that names a person
+    (NAME_AFTER). Never fuzzy, and the same rule as find_person: a word two
+    people answer to ("Caleb" was Caleb Newton and Caleb Butler on
+    2026-10-11), or two people in one title, links nobody, since the agent
+    would write to whoever it picked."""
     owed = [p for p in g.out(node["id"], "OWED_TO") if p["id"] != ME]
     if owed:
         return owed[0]
     if node["props"].get("app") != "Reminders":
         return None
+    label = node["label"]
     found: dict[str, dict] = {}
-    for word in NAME_WORD.findall(node["label"]):
-        hits = [p for p in people if p["label"].casefold().split()[:1] == [word.casefold()]]
+    for person in people:
+        name = person["label"]
+        if len(name.split()) > 1 and re.search(rf"(?<!\w){re.escape(name)}(?!\w)", label, re.I):
+            found[person["id"]] = person
+    # The shape decides who a title links to; any capitalised word decides
+    # whom it might be about. "Ask Reagan about Maggie" names Maggie in no
+    # linking shape and still names her, so it links nobody.
+    named = set(found)
+    for match in NAME_WORD.finditer(label):
+        word = match.group(1).casefold()
+        hits = [p for p in people if p["label"].casefold().split()[:1] == [word]]
+        if not hits or any(p["id"] in found for p in hits):
+            continue  # nobody, or named in full already: "Call Caleb Newton"
         if len(hits) > 1:
             return None
-        if hits:
+        named.add(hits[0]["id"])
+        before = label[:match.start()].split()
+        after = before[-1].casefold().strip(",.:;!?") if before else ""
+        if match.group(2) or after in NAME_AFTER:
             found[hits[0]["id"]] = hits[0]
-    return next(iter(found.values())) if len(found) == 1 else None
+    return next(iter(found.values())) if len(found) == 1 and named == set(found) else None
 
 
 def home(g: Graph, now: datetime, most_todos: int | None = HOME_TODOS) -> dict:

@@ -332,6 +332,39 @@ expect_fail("gate 4: a zero-day follow-up refuses", 4,
 expect_fail("gate 4: a raw CRM first name refuses", 4,
             lambda c: c.leads[1].__setitem__(1, "BO SMITH"), "raw CRM")
 
+# 2026-10-11, three Vertocol leads loaded for Monday: UTF-8 read as Mac Roman
+# ("Mittelst√§ndische"), as Mac Cyrillic (a Russian LLC), and as cp1252 ("Oâ€™Neill").
+expect_fail("gate 4: a first name garbled through Mac Roman refuses", 4,
+            lambda c: c.leads[1].__setitem__(1, "Mittelst√§ndische"), "garbled text")
+expect_fail("gate 4: a first name garbled through Mac Cyrillic refuses", 4,
+            lambda c: c.leads[1].__setitem__(1, "–Ю–Ю–Ю"), "garbled text")
+expect_fail("gate 4: a merge field garbled through cp1252 refuses", 4,
+            lambda c: c.leads[2].__setitem__(5, "Oâ€™Neill's seed"), "garbled text")
+
+
+def with_full_names(c, bad):
+    c.leads[0].append("full_name")
+    for row, name in zip(c.leads[1:], ["Ann Lee", "Bo Park", "Cy Diaz"]):
+        row.append(name)
+    c.leads[2][-1] = bad
+
+
+expect_fail("gate 4: a company loaded as the person refuses", 4,
+            lambda c: with_full_names(c, "Mittelständische Beteiligungsgesellschaft Sachsen"),
+            "name is a company")
+expect_fail("gate 4: a garbled Russian LLC loaded as the person refuses", 4,
+            lambda c: with_full_names(c, "–Ю–Ю–Ю ¬Ђ–£—А–∞–ї-–Ш–љ–≤–µ—Б—В-–Ъ–∞–њ–Є—В–∞–ї¬ї"),
+            "name is a company")
+
+# A real accented name is not garbled text and not a company.
+c = Case()
+c.leads[1][1] = "José"
+with_full_names(c, "Zoë Brontë")
+rc, out = c.run()
+g4 = gate(out, 4) if "gates" in out else {"fails": ["no gates"]}
+check("gate 4: José and Zoë Brontë render clean, no garbled or company flag",
+      not any("garbled" in x or "company" in x for x in g4["fails"]), g4["fails"])
+
 # Gate 5, infrastructure and the start
 expect_fail("gate 5: open tracking refuses", 5,
             lambda c: c.settings["trackingSettings"].__setitem__("trackEmailOpen", True), "tracking")

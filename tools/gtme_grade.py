@@ -119,6 +119,26 @@ OPT_OUT = re.compile(r"(unsubscribe|opt[- ]out|say the word|tell me to stop|i'?l
 LEAK = re.compile(r"(\bnone\b|\bn/?a\b|\bnull\b|\bundefined\b|couldn'?t find|could not find|"
                   r"not available|no information|unknown|\{\{|\}\}|\[\w)", re.I)
 INVISIBLE = re.compile("[​‌‍⁠﻿­]")
+ORG_AS_PERSON = re.compile(r"\b(llc|l\.l\.c|inc|ltd|limited|gmbh|corp|corporation|holdings|capital|ventures|"
+                           r"partners|fund|group|mbh|ооо|оао|зао|пао)\b|gesellschaft|[«»]", re.I)
+
+
+def repair(text):
+    """The text as its writer typed it, when an export re-read UTF-8 as a one-byte
+    code page. On 2026-10-11 a Vertocol lead was loaded with its name as UTF-8
+    Cyrillic read as Mac Roman, so the first name rendered as garbage. A real name
+    like "José" never survives this round trip, so a clean repair means the value
+    was garbled. Returns None when the text is fine."""
+    if not text or text.isascii():
+        return None
+    for enc in ("mac_roman", "mac_cyrillic", "cp1252", "latin-1"):
+        try:
+            fixed = text.encode(enc).decode("utf-8")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            continue
+        if fixed != text:
+            return fixed
+    return None
 PLACEHOLDER = re.compile(r"(\[[A-Z][^\]]*\]|\bXXX\b|lorem ipsum|\bTODO\b|(?<!\{)\{(first|company)\w*\}(?!\}))", re.I)
 URL = re.compile(r"^https?://\S+\.\S+", re.I)
 BASE_FIELDS = {"first_name", "last_name", "full_name", "company", "company_name", "email"}
@@ -650,6 +670,18 @@ def gate_render(camp, rows, gate):
                 problems[f"{{{{{f}}}}} carries an enrichment leak (NONE, N/A, braces)"] += 1
             if v and INVISIBLE.search(v):
                 problems[f"{{{{{f}}}}} carries invisible characters"] += 1
+            if repair(v):
+                problems[f"{{{{{f}}}}} is garbled text (UTF-8 read in the wrong encoding)"] += 1
+    # A company sitting where a person's name goes. On 2026-10-11 a Russian LLC,
+    # "ООО «Урал-Инвест-Капитал»", was loaded as a lead on a Monday list, first
+    # name and all. Togari's realness heuristics catch org tokens in a name; this
+    # is the same idea on the rendered list.
+    full = col(rows, "full_name", "name")
+    if full:
+        org = sum(1 for r in rows
+                  if ORG_AS_PERSON.search(repair(r[full]) or r[full] or ""))
+        if org:
+            problems["the person's name is a company (LLC, Inc, Capital, ООО...)"] += org
     for what, k in problems.items():
         if k:
             gate.fail(f"{k} leads: {what}", LASTLOOK)

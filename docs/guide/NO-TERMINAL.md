@@ -21,17 +21,32 @@ its own most valuable data was the least reachable thing on the machine.
 
 ## What it gives you
 
-Five read-only tools. No writes: a browser client reaching into a laptop is
-exactly the wrong place to expose one, and everything valuable here is a
-question anyway.
+Five named reads, plus four tools that reach the rest of the kit, writes
+included.
 
-| Tool | Answers |
-| --- | --- |
-| `who_do_i_know` | "do I know anyone at X", "who works in Y" |
-| `person_brief` | everything recorded about one person |
-| `who_am_i_overdue_with` | who you have not contacted in longer than your own cadence |
-| `whats_due` | real deadlines from your syllabus ledger |
-| `course_ai_policy` | what a course allows regarding AI help |
+| Tool                      | Answers                                                    |
+| ------------------------- | ---------------------------------------------------------- |
+| `who_do_i_know`           | "do I know anyone at X", "who works in Y"                  |
+| `person_brief`            | everything recorded about one person                       |
+| `who_am_i_overdue_with`   | who you have not contacted in longer than your own cadence |
+| `whats_due`               | real deadlines from your syllabus ledger                   |
+| `course_ai_policy`        | what a course allows regarding AI help                     |
+| `find_capability`         | searches every read and write the kit offers               |
+| `kit_read`                | runs one read from `config/data/mcp-reads.json`            |
+| `kit_write`               | runs one write from `config/data/mcp-writes.json`          |
+| `kit_confirm`, `kit_undo` | send a draft, or put a write back                          |
+
+Every write comes with a way back. A change on your own Mac (a todo, a
+note, a reminder, a calendar hold, a note about a person, a file in
+`~/second-brain`, `~/Downloads` or `~/Documents`) runs at once, snapshots what
+it touched, and hands back an undo id. `kit_undo` puts it back, and refuses if
+something else changed the same thing since. Anything that reaches another
+person or spends money (a text, an email, a Slack message, any Clay write)
+only makes a draft that names who gets what. It sends only on `kit_confirm`
+with that draft's id, within 15 minutes, once, and still through the kit's own
+gates: `CHEWBACCA_NO_SEND`, a person's quiet hours, and Caleb's ok in chat
+within 2 hours for Clay. Every write is logged with the client and who asked,
+in `~/.chewbacca/mcp-writes/log.jsonl`.
 
 ## You do not configure anything
 

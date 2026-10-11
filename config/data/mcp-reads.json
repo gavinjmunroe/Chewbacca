@@ -1,5 +1,5 @@
 {
-  "_about": "Read-only kit commands any MCP agent may run through chewbacca-mcp's kit_read tool. Each entry is a fixed argv; only the listed params are appended, typed and checked. Nothing here writes, sends or spends. A write is added only with its own approval gate, never here.",
+  "_about": "The reads any MCP agent may run through chewbacca-mcp's kit_read tool. Each entry is a fixed argv; only the listed params are appended, typed and checked. The server writes too, but never from this file: writes live in mcp-writes.json, where each one carries an undo or sends only after kit_confirm.",
   "reads": [
     {
       "id": "coursework.today",

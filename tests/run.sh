@@ -1519,6 +1519,8 @@ if group "mcp"; then
       bash "$ROOT/tests/mcp_find_capability.sh" "$ROOT"
     check "no MCP read prints a private meeting title" \
       bash "$ROOT/tests/mcp_meeting_privacy.sh" "$ROOT"
+    check "every MCP write undoes, and nothing sends without kit_confirm" \
+      env CHEWBACCA_NO_SEND=1 bash "$ROOT/tests/mcp_writes.sh" "$ROOT"
   else
     skip "mcp" "node not installed"
   fi

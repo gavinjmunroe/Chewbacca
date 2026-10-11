@@ -380,7 +380,7 @@ looks tiny, read the module it runs.
 
 | Server | File | Tools |
 | --- | --- | --- |
-| chewbacca | `bin/chewbacca-mcp` (Node, stdio or HTTP) | `who_do_i_know`, `person_brief`, `who_am_i_overdue_with`, `whats_due`, `course_ai_policy`. Read-only wrappers over `people` and `coursework`. |
+| chewbacca | `bin/chewbacca-mcp` (Node, stdio or HTTP) | `who_do_i_know`, `person_brief`, `who_am_i_overdue_with`, `whats_due`, `course_ai_policy`, then `find_capability`, `kit_read` (config/data/mcp-reads.json), and `kit_write`, `kit_confirm`, `kit_undo` (config/data/mcp-writes.json, bin/lib/mcp-writes.js): writes undo, sends draft first. |
 | amber | `apps/mcp/amber/amber-mcp` | Per-user contact memory with preview, apply and undo for imports. |
 | weft | `bin/weft-mcp` | One `weft` tool whose argv is checked by `bin/lib/weft_fence.js`. |
 

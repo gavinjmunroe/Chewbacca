@@ -8,7 +8,7 @@
   mac-db sql <store> "select ..."        any query; a write backs the file up first
   mac-db backups / restore <dir>         list snapshots, put one back
   mac-db notes add|append|edit|delete    writes through the app so iCloud syncs it
-  mac-db reminders add|complete, calendar add|edit, contacts add, messages send
+  mac-db reminders add|complete|edit|delete, calendar add|edit|delete, contacts add, messages send
   mac-db biome                           list Biome streams; mac-db biome <Stream.Name> reads one
 
 Stores: messages, calls, contacts, mail, notes, calendar, reminders, safari,
@@ -567,8 +567,8 @@ KEEP_BACKUPS = 5
 # store -> (mac CLI app, verbs that write through the app)
 APP_VERBS = {
     "notes": ("notes", {"add", "append", "edit", "delete"}),
-    "reminders": ("reminders", {"add", "complete"}),
-    "calendar": ("calendar", {"add", "edit"}),
+    "reminders": ("reminders", {"add", "complete", "edit", "delete"}),
+    "calendar": ("calendar", {"add", "edit", "delete"}),
     "contacts": ("contacts", {"add"}),
     "messages": ("messages", {"send"}),
 }

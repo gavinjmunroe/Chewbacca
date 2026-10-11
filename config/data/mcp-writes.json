@@ -1,0 +1,174 @@
+{
+  "_about": "Writes any MCP agent may make through chewbacca-mcp's kit_write tool. A reversible write runs at once, snapshots what it touches first, and returns an undo id for kit_undo. An outward write (a message, an email, a Slack post, any Clay write, anything that spends money) never fires from one call: kit_write returns a draft showing what goes out and to whom, and only kit_confirm with that draft's id sends it, through the tool's own gates (CHEWBACCA_NO_SEND, quiet hours, Caleb's Clay ok within 2 hours). Each entry's code lives in bin/lib/mcp-writes.js under the same id; tests/mcp_writes.sh checks the two agree. Caleb, 2026-10-11: \"Never read only, find a way to write too\".",
+  "writes": [
+    {
+      "id": "ledger.add",
+      "kind": "reversible",
+      "about": "Add a task or todo to the work ledger. Undo deletes it, if nobody changed it since.",
+      "asks": "add todo task remember to do later commitment",
+      "params": {
+        "title": { "type": "text", "required": true },
+        "next_action": { "type": "long" },
+        "workspace": {
+          "type": "text",
+          "about": "A workspace path; leave out for a personal todo that shows everywhere"
+        }
+      }
+    },
+    {
+      "id": "ledger.update",
+      "kind": "reversible",
+      "about": "Change a work ledger task's status, next action, evidence, reason or owner. Undo puts the old values back, if nobody changed it since.",
+      "asks": "update task mark done finished status next step",
+      "params": {
+        "task_id": { "type": "text", "required": true },
+        "status": {
+          "type": "choice",
+          "choices": ["queued", "active", "blocked", "done", "cancelled"]
+        },
+        "next_action": { "type": "long" },
+        "evidence": { "type": "long" },
+        "reason": { "type": "long" },
+        "owner": { "type": "text" }
+      }
+    },
+    {
+      "id": "notes.add",
+      "kind": "reversible",
+      "about": "Create an Apple Note, through Notes so it syncs. Undo moves it to Recently Deleted.",
+      "asks": "write a note save jot down apple notes",
+      "params": {
+        "title": { "type": "text", "required": true },
+        "body": { "type": "long" },
+        "folder": { "type": "text" }
+      }
+    },
+    {
+      "id": "notes.append",
+      "kind": "reversible",
+      "about": "Add a paragraph to the end of an Apple Note (ids from kit_read notes reads). Undo puts the note back exactly as it was.",
+      "asks": "append add to note",
+      "params": {
+        "note_id": { "type": "text", "required": true },
+        "text": { "type": "long", "required": true }
+      }
+    },
+    {
+      "id": "notes.edit",
+      "kind": "reversible",
+      "about": "Replace an Apple Note's title or body. Undo puts the note back exactly as it was.",
+      "asks": "edit change rewrite note",
+      "params": {
+        "note_id": { "type": "text", "required": true },
+        "title": { "type": "text" },
+        "body": { "type": "long" }
+      }
+    },
+    {
+      "id": "reminders.add",
+      "kind": "reversible",
+      "about": "Create a reminder in Reminders, optionally due at a time like 'tomorrow 9am'. Undo deletes it.",
+      "asks": "remind me reminder",
+      "params": {
+        "title": { "type": "text", "required": true },
+        "due": { "type": "text" },
+        "notes": { "type": "long" },
+        "list": { "type": "text" },
+        "priority": {
+          "type": "choice",
+          "choices": ["none", "low", "medium", "high"]
+        }
+      }
+    },
+    {
+      "id": "reminders.complete",
+      "kind": "reversible",
+      "about": "Tick off a reminder. Undo marks it not done again.",
+      "asks": "complete reminder check off tick",
+      "params": {
+        "reminder_id": { "type": "text", "required": true }
+      }
+    },
+    {
+      "id": "calendar.hold",
+      "kind": "reversible",
+      "about": "Put a tentative hold on the person's own calendar (titled 'Hold: ...', no invitees, so nobody is notified). Undo deletes it.",
+      "asks": "hold time block calendar tentative schedule put on calendar",
+      "params": {
+        "title": { "type": "text", "required": true },
+        "at": {
+          "type": "text",
+          "required": true,
+          "about": "Start, e.g. 'tomorrow 2pm' or '2026-10-14 14:00'"
+        },
+        "duration": { "type": "text", "about": "e.g. 30m or 1h" },
+        "calendar": { "type": "text" },
+        "notes": { "type": "long" }
+      }
+    },
+    {
+      "id": "people.note",
+      "kind": "reversible",
+      "about": "Record something about a person in the relationship store ('just got promoted'). Undo forgets it.",
+      "asks": "note about person remember fact relationship",
+      "params": {
+        "name": { "type": "text", "required": true },
+        "text": { "type": "long", "required": true }
+      }
+    },
+    {
+      "id": "file.write",
+      "kind": "reversible",
+      "about": "Create or replace a text file inside ~/second-brain, ~/Downloads or ~/Documents. The old bytes are backed up; undo puts them back (or removes a file it created).",
+      "asks": "write file save file create document",
+      "params": {
+        "path": { "type": "path", "required": true },
+        "content": { "type": "file", "required": true }
+      }
+    },
+    {
+      "id": "file.edit",
+      "kind": "reversible",
+      "about": "Replace one exact passage in a text file inside ~/second-brain, ~/Downloads or ~/Documents. The old bytes are backed up; undo puts them back.",
+      "asks": "edit file change text in file",
+      "params": {
+        "path": { "type": "path", "required": true },
+        "old": { "type": "long", "required": true },
+        "new": { "type": "long", "required": true }
+      }
+    },
+    {
+      "id": "text.send",
+      "kind": "outward",
+      "about": "Send a text, WhatsApp, Slack DM, email or any bridged chat to one person, through the app their thread is in. Returns a draft naming exactly who gets it and where; nothing sends until kit_confirm.",
+      "asks": "text send message email slack dm reply tell",
+      "params": {
+        "to": {
+          "type": "text",
+          "required": true,
+          "about": "The person's name"
+        },
+        "text": { "type": "long", "required": true },
+        "via": { "type": "choice", "choices_from": "people.apps" },
+        "subject": { "type": "text", "about": "Email only" }
+      }
+    },
+    {
+      "id": "gtm.clay_write",
+      "kind": "outward",
+      "about": "Any Clay write (add rows, run cells, add leads, blocklist, draft campaigns, replies): spends credits or emails people. Returns the exact request as a draft; kit_confirm sends it only with Caleb's ok in chat within the last 2 hours. A campaign start is never sent.",
+      "asks": "clay add leads rows enrich run cells campaign blocklist reply spend credits",
+      "params": {
+        "op": {
+          "type": "choice",
+          "required": true,
+          "choices_from": "clay.writes"
+        },
+        "args": {
+          "type": "kv",
+          "about": "The op's args as an object of strings, e.g. {\"ws\": \"123\", \"table\": \"t_...\"}"
+        }
+      }
+    }
+  ]
+}

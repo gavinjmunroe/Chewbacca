@@ -225,12 +225,17 @@ def cached_projects(now: datetime, clock: float, home: Path) -> list[dict]:
 
 
 def build(graph, now: datetime, project_rows: list[dict], errors=None, written: datetime | None = None,
-          done: dict | None = None) -> dict:
+          done: dict | None = None, agent: dict | None = None) -> dict:
     """`written` is when the graph was last ingested, if not now: the panel
     shows the feed's age from `at`, so a graph nobody refreshes says so.
-    `done` is the crossed-off record (load_done)."""
+    `done` is the crossed-off record (load_done), and `agent` the runs handed
+    to the agent from the panel (home_agent.load)."""
     body = osgraph_walks.home(graph, now, most_todos=None)
-    body["todos"], body["todoCount"] = crossed(body["todos"], done or {}, now)
+    body["todos"], body["todoCount"] = crossed(body["todos"], done or {}, now, keep=set(agent or {}))
+    if agent:
+        import home_agent  # noqa: PLC0415  it imports this module
+
+        body["todos"] = home_agent.annotate(body["todos"], agent, now)
     body["at"] = (written or now).isoformat()
     body["projects"] = project_rows
     # A source that failed is named, so an empty list is never mistaken for a
@@ -296,7 +301,7 @@ def _crossed_at(record: dict) -> datetime | None:
 
 
 def crossed(rows: list[dict], done: dict, now: datetime,
-            most: int = osgraph_walks.HOME_TODOS) -> tuple[list[dict], int]:
+            most: int = osgraph_walks.HOME_TODOS, keep=()) -> tuple[list[dict], int]:
     """The to-dos with the crossed-off record applied: open rows first, up to
     `most`, then the last few crossed off today, struck through, in the order
     they were crossed. A row finished in its own app has left the graph by the
@@ -306,7 +311,9 @@ def crossed(rows: list[dict], done: dict, now: datetime,
     that app says: gone once it is finished there, and open again if it is
     not (a failed write, or a repeating reminder, which Reminders keeps under
     the same id with its next date). Only a panel-only row stays hidden by the
-    record. The count is what is still open."""
+    record. The count is what is still open. A row in `keep` (one the agent
+    is working on, or has a draft for) is shown whatever the cap, in its
+    place: a text waiting on his send must never be one of the rows cut."""
     today = now.date()
 
     def crossed_today(record: dict) -> bool:
@@ -328,7 +335,10 @@ def crossed(rows: list[dict], done: dict, now: datetime,
         if record.get("failed"):
             row = {**row, "detail": f"Still open in {record['failed']}"}
         struck.append({**row, "done": True, "reopen": bool(record.get("reopen", True))})
-    return open_rows[:most] + struck[-DONE_SHOWN:], len(open_rows)
+    kept = {r["id"] for r in open_rows if r["id"] in keep}
+    room = [r["id"] for r in open_rows if r["id"] not in kept][:max(0, most - len(kept))]
+    shown = [r for r in open_rows if r["id"] in kept or r["id"] in room]
+    return shown + struck[-DONE_SHOWN:], len(open_rows)
 
 
 def tool_env(home: Path) -> dict:

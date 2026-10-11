@@ -44,14 +44,20 @@ public struct HomeRow: Decodable, Equatable, Identifiable, Sendable {
     /// Whether a crossed-off to-do can be put back from the panel: not once
     /// Reminders or the people store has it as finished.
     public var reopen = true
+    /// Who a to-do is for, as a graph id, when the walk could tell: the rows
+    /// the agent can be handed (bin/lib/home_agent.py).
+    public var person = ""
+    /// What the agent has done with it, if it was handed over.
+    public var agent: HomeAgent?
 
     enum CodingKeys: String, CodingKey {
-        case id, title, detail, at, end, day, allDay, overdue, count, path, done, reopen
+        case id, title, detail, at, end, day, allDay, overdue, count, path, done, reopen, person, agent
     }
 
     public init(id: String, title: String, detail: String = "", at: String = "", end: String = "",
                 day: String = "", allDay: Bool = false, overdue: Bool = false, count: Int = 0,
-                path: String = "", done: Bool = false, reopen: Bool = true) {
+                path: String = "", done: Bool = false, reopen: Bool = true, person: String = "",
+                agent: HomeAgent? = nil) {
         self.id = id
         self.title = title
         self.detail = detail
@@ -64,6 +70,8 @@ public struct HomeRow: Decodable, Equatable, Identifiable, Sendable {
         self.path = path
         self.done = done
         self.reopen = reopen
+        self.person = person
+        self.agent = agent
     }
 
     public init(from decoder: Decoder) throws {
@@ -80,6 +88,35 @@ public struct HomeRow: Decodable, Equatable, Identifiable, Sendable {
         path = try c.decodeIfPresent(String.self, forKey: .path) ?? ""
         done = try c.decodeIfPresent(Bool.self, forKey: .done) ?? false
         reopen = try c.decodeIfPresent(Bool.self, forKey: .reopen) ?? true
+        person = try c.decodeIfPresent(String.self, forKey: .person) ?? ""
+        // An agent state this build does not know draws as nothing rather
+        // than failing the whole feed.
+        agent = try? c.decodeIfPresent(HomeAgent.self, forKey: .agent)
+    }
+}
+
+/// A to-do handed to the agent: working on it, a text drafted and waiting
+/// on his send, his to do (a payment, a call), or failed. The text is only
+/// ever sent by his press on send.
+public struct HomeAgent: Decodable, Equatable, Sendable {
+    public enum State: String, Decodable, Sendable { case working, drafted, yours, failed }
+    public let state: State
+    public var text = ""
+    public var why = ""
+
+    enum CodingKeys: String, CodingKey { case state, text, why }
+
+    public init(state: State, text: String = "", why: String = "") {
+        self.state = state
+        self.text = text
+        self.why = why
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        state = try c.decode(State.self, forKey: .state)
+        text = try c.decodeIfPresent(String.self, forKey: .text) ?? ""
+        why = try c.decodeIfPresent(String.self, forKey: .why) ?? ""
     }
 }
 
@@ -485,6 +522,47 @@ public final class HomeModel: ObservableObject {
         }
     }
 
+    // MARK: The agent
+
+    /// A press on the agent that is still running, by row: "starting",
+    /// "sending" or "dropping". The row says so until the feed it rewrites
+    /// is read back.
+    @Published public private(set) var agentPress: [String: String] = [:]
+
+    /// Hand a to-do for someone to the agent (`home --handle`), which drafts
+    /// the text in the background; a failed run's retry is the same press.
+    public func handle(_ row: HomeRow) { agent(["home", "--handle", row.id], for: row.id, saying: "starting") }
+
+    /// Send the text the agent drafted. Only ever on this press: the agent
+    /// itself can queue a draft and nothing more.
+    public func send(_ row: HomeRow) { agent(["home", "--send", row.id], for: row.id, saying: "sending") }
+
+    /// Throw the draft away, or clear an answer that said it is his to do.
+    public func drop(_ row: HomeRow) { agent(["home", "--drop", row.id], for: row.id, saying: "dropping") }
+
+    private func agent(_ arguments: [String], for id: String, saying word: String) {
+        guard agentPress[id] == nil else { return }
+        agentPress[id] = word
+        let finish: @MainActor (Int32, String) -> Void = { [weak self] status, said in
+            guard let self else { return }
+            if status != 0 {
+                Self.log.notice("home.agent status=\(status, privacy: .public) \(said, privacy: .private)")
+                let line = said.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
+                notice = line.isEmpty ? "The agent could not do that." : line
+            } else {
+                notice = nil
+            }
+            agentPress[id] = nil
+        }
+        if let writer {
+            writer(arguments, finish)
+        } else if refresher != nil {
+            surfaces(arguments, then: finish)
+        } else {
+            finish(127, "Kyber could not find kyber-surfaces, so the agent was not asked.")
+        }
+    }
+
     private func write(_ arguments: [String], for id: String) {
         waiting[id] = nil
         let finish: @MainActor (Int32, String) -> Void = { [weak self] status, said in
@@ -824,7 +902,27 @@ struct HomeRowView: View {
 
     private var isDone: Bool { section == .todos && model.isDone(row) }
 
+    /// The agent's verb sits at the end of a to-do for someone until it is
+    /// pressed; after that the line under the row carries the state.
+    private var offersHandle: Bool {
+        section == .todos && !isDone && !row.person.isEmpty && row.agent == nil && model.agentPress[row.id] == nil
+    }
+
     var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            line
+            if section == .todos, !isDone, model.agentPress[row.id] != nil || row.agent != nil {
+                HomeAgentLine(row: row, model: model)
+                    // Under the title: past the box and the press's padding.
+                    .padding(.leading, 30)
+                    .padding(.trailing, 6)
+                    .padding(.bottom, 4)
+            }
+        }
+        .padding(.horizontal, -6)
+    }
+
+    private var line: some View {
         HStack(alignment: .firstTextBaseline, spacing: 0) {
             if section == .todos {
                 HomeCheck(done: isDone, enabled: model.canToggle(row), title: row.title) { model.toggle(row) }
@@ -881,8 +979,13 @@ struct HomeRowView: View {
             .onHover { hovered = $0 }
             .help(help)
             .accessibilityLabel([row.title, row.detail, trailing ?? ""].filter { !$0.isEmpty }.joined(separator: ", "))
+            if offersHandle {
+                HomeVerb(word: "handle", tone: HUD.running,
+                         help: "Have the agent draft what to send. Nothing goes out until you press send.") {
+                    model.handle(row)
+                }
+            }
         }
-        .padding(.horizontal, -6)
     }
 
     private var start: Date? { HomeWords.date(row.at) }
@@ -945,6 +1048,115 @@ struct HomeRowView: View {
         case .todos: return "Open your tasks on the glass"
         case .projects: return row.path.isEmpty ? "No folder for \(row.title)" : "Open \(row.title) in Terminal"
         }
+    }
+}
+
+/// Under a to-do handed to the agent: what it is doing, the text it drafted
+/// with send and drop, or why it is his to do. The state is the colour of
+/// its words (hud/CLAUDE.md, past the window, rule 5): working cyan, a draft
+/// waiting on him amber, failed red.
+struct HomeAgentLine: View {
+    let row: HomeRow
+    @ObservedObject var model: HomeModel
+
+    var body: some View {
+        if let press = model.agentPress[row.id] {
+            status(press == "starting" ? "Drafting a text" : press.capitalized, tone: HUD.running)
+        } else if let agent = row.agent {
+            switch agent.state {
+            case .working:
+                status("Drafting a text", tone: HUD.running)
+            case .drafted:
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(agent.text)
+                        .homeLight()
+                        .foregroundStyle(HUD.ink)
+                        .lineLimit(6)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                        .padding(.leading, 8)
+                        // One lit line on its leading edge, in the colour of
+                        // a thing waiting on him.
+                        .overlay(alignment: .leading) { HUD.needsYou.frame(width: 1) }
+                        .padding(.top, 2)
+                    HStack(spacing: 4) {
+                        HomeVerb(word: "send", tone: HUD.needsYou, help: "Send this text to \(who)") {
+                            model.send(row)
+                        }
+                        HomeVerb(word: "drop", tone: HUD.faint, help: "Throw this draft away") { model.drop(row) }
+                    }
+                    .padding(.leading, -6)
+                }
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel("Draft to \(who): \(agent.text)")
+            case .yours:
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    note(agent.why.isEmpty ? "This one is yours." : agent.why, tone: HUD.dim)
+                    HomeVerb(word: "clear", tone: HUD.faint, help: "Clear the agent's answer") { model.drop(row) }
+                }
+            case .failed:
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    note(agent.why.isEmpty ? "The agent stopped." : agent.why, tone: HUD.bad)
+                    HomeVerb(word: "retry", tone: HUD.running, help: "Ask the agent again") { model.handle(row) }
+                    HomeVerb(word: "clear", tone: HUD.faint, help: "Clear the failure") { model.drop(row) }
+                }
+            }
+        }
+    }
+
+    /// "for Reagan Popoff" is the row's detail; the name alone here.
+    private var who: String {
+        row.detail.hasPrefix("for ") ? String(row.detail.dropFirst(4)) : "them"
+    }
+
+    /// A state in its colour with a still dot before it: nothing on the
+    /// panel moves while a run is out (motion rule 6).
+    private func status(_ text: String, tone: Color) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Circle().fill(tone).frame(width: 5, height: 5)
+                .alignmentGuide(.firstTextBaseline) { $0[.bottom] + 1 }
+            Text(text).homeLight().foregroundStyle(tone)
+        }
+        .frame(minHeight: 20, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func note(_ text: String, tone: Color) -> some View {
+        Text(text)
+            .homeLight()
+            .foregroundStyle(tone)
+            .lineLimit(3)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// A verb as a lit word, no capsule (hud/CLAUDE.md, past the window, rule
+/// 3): underlined on hover, and a press area of 44 by 28 points around it.
+/// 28 is under the 44 the HIG asks for, kept so a draft's send and drop sit
+/// under it without a gap the height of a row; the box beside every to-do
+/// already took 36 for the same reason.
+struct HomeVerb: View {
+    let word: String
+    let tone: Color
+    let help: String
+    let action: () -> Void
+    @State private var hovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Text(word)
+                .homeLight()
+                .foregroundStyle(tone)
+                .underline(hovered, color: tone)
+                .padding(.horizontal, 6)
+                .frame(minWidth: 44, minHeight: 28)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(HomePress())
+        .onHover { hovered = $0 }
+        .help(help)
+        .accessibilityLabel(help)
     }
 }
 

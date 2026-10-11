@@ -21,6 +21,7 @@ longest"), `due_before` ("what's due before the ACAD 324 midterm").
 """
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta
 
 from osgraph import ME, Graph, Identities
@@ -280,6 +281,7 @@ def home_todos(g: Graph, now: datetime, most: int | None = HOME_TODOS) -> tuple[
     today = now.date().isoformat()
     horizon = (now + timedelta(hours=DUE_WINDOW_H)).date().isoformat()
     rows = []
+    people = None
     for e in g.edges(verb="OWED_BY", dst=ME):
         node = g.node(e["src"])
         if not node:
@@ -300,15 +302,53 @@ def home_todos(g: Graph, now: datetime, most: int | None = HOME_TODOS) -> tuple[
             elif kind != "promise":
                 continue
             overdue = bool(day) and day < today
-            owed = [p["label"] for p in g.out(node["id"], "OWED_TO") if p["id"] != ME]
-            if owed:
-                detail = f"for {owed[0]}"
         else:
             continue
-        rows.append({"id": node["id"], "title": node["label"], "detail": detail, "day": day,
-                     "overdue": overdue})
+        row = {"id": node["id"], "title": node["label"], "detail": detail, "day": day, "overdue": overdue}
+        person = None
+        if node["type"] == "Task":
+            if people is None and props.get("app") == "Reminders":
+                people = resolved_people(g)
+            person = task_person(g, node, people or [])
+        if person:
+            row.update(detail=f"for {person['label']}", person=person["id"])
+        rows.append(row)
     rows.sort(key=lambda r: (not r["overdue"], r["day"] or "9999", r["title"].casefold()))
     return (rows if most is None else rows[:most]), len(rows)
+
+
+def resolved_people(g: Graph) -> list[dict]:
+    """Everyone in the graph the people store has resolved, which is the
+    people he is in touch with this week, never a bare first name taken from
+    a backlog cell."""
+    return [p for p in g.nodes("Person") if p["id"] != ME and not p["unresolved"]]
+
+
+# "Do Reagan's stuff": a capitalised word, with a possessive dropped.
+NAME_WORD = re.compile(r"\b([A-Z][a-z]+(?:-[A-Z][a-z]+)?)(?:['’]s)?\b")
+
+
+def task_person(g: Graph, node: dict, people: list[dict]) -> dict | None:
+    """Who a to-do is for, so the home panel can hand it to an agent. A
+    people-store task says so (OWED_TO). A reminder only names them: "Do
+    Reagan's stuff", added by voice on 2026-10-05, links to Reagan Popoff
+    because he is the one Reagan in this week's graph. Never fuzzy, and the
+    same rule as find_person: a word two people answer to ("Caleb" was Caleb
+    Newton and Caleb Butler on 2026-10-11), or two names in one title, links
+    nobody, since the agent would write to whoever it picked."""
+    owed = [p for p in g.out(node["id"], "OWED_TO") if p["id"] != ME]
+    if owed:
+        return owed[0]
+    if node["props"].get("app") != "Reminders":
+        return None
+    found: dict[str, dict] = {}
+    for word in NAME_WORD.findall(node["label"]):
+        hits = [p for p in people if p["label"].casefold().split()[:1] == [word.casefold()]]
+        if len(hits) > 1:
+            return None
+        if hits:
+            found[hits[0]["id"]] = hits[0]
+    return next(iter(found.values())) if len(found) == 1 else None
 
 
 def home(g: Graph, now: datetime, most_todos: int | None = HOME_TODOS) -> dict:

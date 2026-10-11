@@ -121,11 +121,12 @@ Machine with `tmutil addexclusion` when it is first made. It holds:
 Also on disk: `~/.bob/surface-runs/<run>/task.json` (one task's snippet for an
 agent run), `~/.bob/badges.json` (a count), `~/.bob/home-panel.json` (the
 desktop home panel's lists, owner-only), `~/.bob/home-done.json` (the to-dos
-crossed off on it), `~/.bob/surfaces-state.json` (which panels are open) and
+crossed off on it), `~/.bob/home-agent.json` (the to-dos handed to the agent
+from it), `~/.bob/surfaces-state.json` (which panels are open) and
 `~/.bob/surfaces-activity.jsonl` (actions and outcomes, never a message).
 `kyber-surfaces forget` stops the daemon and deletes the graph, the runs, the
-badge, the home feed and its crossed-off record; the next start rebuilds the
-last 7 days from the sources.
+badge, the home feed, its crossed-off record and its agent runs; the next
+start rebuilds the last 7 days from the sources.
 
 ## Home on the desktop
 
@@ -173,6 +174,28 @@ cleared, and a finished reminder or people task is refused, because neither
 can be reopened from here; the refusal shows under the lists. A write-back
 that fails is still crossed off on the panel that day, and the row says
 "Still open in Reminders".
+
+A to-do that is for someone ends in a lit "handle" (asked for 2026-10-11:
+"click a button and have an agent handle"). It is for someone when the people
+store's task is owed to them, or when a reminder's title names exactly one
+person in this week's graph by first name ("Do Reagan's stuff" is Reagan
+Popoff; "Call Caleb" links nobody while there are two Calebs). The press runs
+`kyber-surfaces home --handle <id>`, which records the run as working in
+`~/.bob/home-agent.json` and starts `home --work <id>` in its own session
+(`bin/lib/home_agent.py`). That run reads `people brief`, his last 24 lines
+with them one-to-one (a line shaped like a password or a code is withheld) and
+the brain's memory files whose index line names them in full, then asks
+`claude -p` with no tools for one JSON answer: a text, or "yours" with why (a
+payment, a call, a file, anything a text would only promise). A text goes into
+`people texts drafts add <their id>`, which voice-checks it; a refusal gets one
+rewrite with what voice-check measured. The row then shows the draft with
+"send" and "drop". Send runs `--send <id>`, which checks the queue still holds
+that number with that text, runs `people texts drafts send <n>` (the number is
+the approval, as everywhere), and crosses the to-do off only when the model
+said the text finishes it. Nothing goes out without that press. A row with a
+run or a draft on it is shown even past the five-row cap. A run whose process
+died, or that ran past seven minutes, draws as failed, with "retry" and
+"clear".
 
 Projects are the pinned list when there is one, in its order, each showing the
 newest non-`chore:` commit by `git config user.email` across the repositories

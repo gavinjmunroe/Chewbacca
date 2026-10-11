@@ -21,6 +21,7 @@ conversations. A row is a graph node, so a press on it opens that node's walk.
     kyber-surfaces ingest [--days N]                 read every source into the graph now
     kyber-surfaces walk <kind> [arg]                 print a walk's rows, no HUD needed
     kyber-surfaces home [--write]                    the desktop home panel's feed (~/.bob/home-panel.json)
+    kyber-surfaces home --handle|--send|--drop <id>  the agent on a to-do for someone (home_agent.py)
     kyber-surfaces graph                             counts, and every edge re-checked
     kyber-surfaces forget                            stop the daemon, delete what it stored
     kyber-surfaces start                             the daemon, in the background (hud-listen runs this)
@@ -77,6 +78,8 @@ BADGES = Path(os.environ.get("KYBER_SURFACES_BADGES", str(BOB / "badges.json")))
 HOME_PANEL = BOB / "home-panel.json"
 # To-dos crossed off on the panel (home_feed.cross).
 HOME_DONE = BOB / "home-done.json"
+# To-dos handed to the agent from the panel (home_agent).
+HOME_AGENT = BOB / "home-agent.json"
 CONFIG = Path(os.environ.get("KYBER_SURFACES_CONFIG", str(Path.home() / ".chewbacca" / "surfaces.json")))
 LOG = Path.home() / "Library" / "Logs" / "com.calebnewton.chewbacca.surfaces.log"
 
@@ -256,12 +259,14 @@ class Daemon:
         if self.ctx.graph is None:
             return
         try:
+            import home_agent  # noqa: PLC0415
             import home_feed  # noqa: PLC0415
 
             now = self.ctx.now()
             rows = home_feed.cached_projects(now, time.monotonic(), self.ctx.home)
             body = home_feed.build(self.ctx.graph, now, rows, getattr(self.ctx, "ingest_errors", {}),
-                                   done=home_feed.load_done(home_feed.done_path(self.home_path)))
+                                   done=home_feed.load_done(home_feed.done_path(self.home_path)),
+                                   agent=home_agent.load(home_agent.state_path(self.home_path)))
             home_feed.write(body, self.home_path)
         except Exception as err:  # noqa: BLE001  the panel never takes the daemon down
             log(f"home: {err}")
@@ -979,14 +984,31 @@ def cmd_walk(kind: str, arg: str, as_json: bool = False) -> int:
     return 0
 
 
-def cmd_home(write: bool, done: str = "", undo: str = "") -> int:
+def spawn_home_work(row_id: str) -> int:
+    """`home --work <id>` in its own session, so a press returns at once and
+    the run outlives the Kyber process that asked for it. What it says on
+    stderr goes to the surfaces log."""
+    LOG.parent.mkdir(parents=True, exist_ok=True)
+    with open(LOG, "a") as out:
+        child = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "home", "--work", row_id],
+                                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=out,
+                                 start_new_session=True, close_fds=True)
+    return child.pid
+
+
+def cmd_home(write: bool, done: str = "", undo: str = "", handle: str = "", work: str = "",
+             send: str = "", drop: str = "") -> int:
     """The home panel's feed from the graph as it stands. It never ingests:
     Kyber runs `home --write` when the feed is stale, and the daemon owns
     ingesting. Stamped with when the graph was last written, so a graph
     nobody is refreshing shows its age on the panel, and carrying the
     sources the daemon last could not read, since only an ingest knows them.
-    `done` crosses a to-do off and `undo` puts it back (home_feed.cross),
-    then the feed is written so the panel shows it at once."""
+    `done` crosses a to-do off and `undo` puts it back (home_feed.cross).
+    `handle` hands a to-do for someone to the agent, `work` is that run,
+    `send` sends the text it drafted and `drop` throws the draft or the
+    answer away (home_agent). Each then writes the feed, so the panel shows
+    it at once."""
+    import home_agent  # noqa: PLC0415
     import home_feed  # noqa: PLC0415
 
     path = osgraph.default_path()
@@ -997,26 +1019,55 @@ def cmd_home(write: bool, done: str = "", undo: str = "") -> int:
         return 1
     ctx = live_context()
     now = ctx.now()
-    if done or undo:
+    acted = bool(done or undo or handle or work or send or drop)
+    if acted:
         try:
-            said = (home_feed.cross(ctx.graph, done, now, HOME_DONE, home=ctx.home) if done
-                    else home_feed.uncross(undo, HOME_DONE))
-        except home_feed.Refused as err:
+            if done:
+                said = home_feed.cross(ctx.graph, done, now, HOME_DONE, home=ctx.home)
+            elif undo:
+                said = home_feed.uncross(undo, HOME_DONE)
+            elif handle:
+                said = home_agent.handle(ctx.graph, handle, now, HOME_AGENT, spawn_home_work)
+            elif work:
+                said = home_agent.work(work, now, HOME_AGENT, ctx.home)
+                # The run took minutes; the feed is stamped when it ends.
+                now = ctx.now()
+            elif send:
+                said = home_agent.send(ctx.graph, send, now, HOME_AGENT, HOME_DONE, ctx.home)
+            else:
+                said = home_agent.drop(drop, HOME_AGENT, ctx.home)
+        except (home_feed.Refused, home_agent.Refused) as err:
             print(err, file=sys.stderr)
+            # A refused send or handle may have changed the record; the
+            # panel redraws from the feed either way.
+            write_home_feed(ctx, now, path)
             return 2
         print(said)
         write = True
-    rows = home_feed.projects(now, ctx.home, home_feed.load_config(home_feed.config_path(ctx.home)))
-    failed = home_feed.read(HOME_PANEL).get("failed") or []
-    body = home_feed.build(ctx.graph, now, rows, [str(f) for f in failed if isinstance(f, str)],
-                           written=home_feed.graph_written(path), done=home_feed.load_done(HOME_DONE))
     if write:
-        home_feed.write(body, HOME_PANEL)
-        if not (done or undo):
+        write_home_feed(ctx, now, path)
+        if not acted:
             print(HOME_PANEL)
     else:
-        print(json.dumps(body, indent=1, default=str))
+        print(json.dumps(home_body(ctx, now, path), indent=1, default=str))
     return 0
+
+
+def home_body(ctx, now, graph_path: Path) -> dict:
+    import home_agent  # noqa: PLC0415
+    import home_feed  # noqa: PLC0415
+
+    rows = home_feed.projects(now, ctx.home, home_feed.load_config(home_feed.config_path(ctx.home)))
+    failed = home_feed.read(HOME_PANEL).get("failed") or []
+    return home_feed.build(ctx.graph, now, rows, [str(f) for f in failed if isinstance(f, str)],
+                           written=home_feed.graph_written(graph_path), done=home_feed.load_done(HOME_DONE),
+                           agent=home_agent.load(HOME_AGENT))
+
+
+def write_home_feed(ctx, now, graph_path: Path) -> None:
+    import home_feed  # noqa: PLC0415
+
+    home_feed.write(home_body(ctx, now, graph_path), HOME_PANEL)
 
 
 def cmd_forget() -> int:
@@ -1038,7 +1089,7 @@ def cmd_forget() -> int:
         gone.append(str(osgraph_runs.RUNS))
     # The home feed and its crossed-off record hold to-do titles and names,
     # so they go with the graph they were read from.
-    for derived in (BADGES, HOME_PANEL, HOME_DONE):
+    for derived in (BADGES, HOME_PANEL, HOME_DONE, HOME_AGENT):
         if derived.exists():
             derived.unlink()
             gone.append(str(derived))
@@ -1081,6 +1132,10 @@ def main(argv: list[str] | None = None) -> int:
     crossing = h.add_mutually_exclusive_group()
     crossing.add_argument("--done", default="", metavar="ID", help="cross a to-do off, in its own app where it can be")
     crossing.add_argument("--undo", default="", metavar="ID", help="put a crossed-off to-do back")
+    crossing.add_argument("--handle", default="", metavar="ID", help="hand a to-do for someone to the agent")
+    crossing.add_argument("--work", default="", metavar="ID", help=argparse.SUPPRESS)
+    crossing.add_argument("--send", default="", metavar="ID", help="send the text the agent drafted for a to-do")
+    crossing.add_argument("--drop", default="", metavar="ID", help="throw away the agent's draft or answer")
     sub.add_parser("forget", help="stop the daemon and delete everything it stored")
     sub.add_parser("run", help="the daemon")
     sub.add_parser("start", help="start the daemon in the background if it is not running")
@@ -1101,7 +1156,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "graph":
         return cmd_graph()
     if args.cmd == "home":
-        return cmd_home(args.write, args.done, args.undo)
+        return cmd_home(args.write, args.done, args.undo, args.handle, args.work, args.send, args.drop)
     if args.cmd == "forget":
         return cmd_forget()
     if args.cmd in ("open", "walk"):

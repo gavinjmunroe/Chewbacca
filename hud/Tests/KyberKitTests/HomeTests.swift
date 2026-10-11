@@ -25,7 +25,11 @@ struct HomeTests {
          "todos": [
            {"id": "assignment:q6", "title": "SPAN 1412 Quiz, Ch. 6", "detail": "SPAN 1412", "day": "2026-10-11",
             "overdue": false},
-           {"id": "task:r", "title": "Do Reagan's stuff", "detail": "Reminders", "day": "", "overdue": false},
+           {"id": "task:people:c", "title": "Ask Colby to edit the film", "detail": "for Colby Cluff", "day": "",
+            "overdue": false, "person": "person:c"},
+           {"id": "task:r", "title": "Do Reagan's stuff", "detail": "for Reagan Popoff", "day": "", "overdue": false,
+            "person": "person:r", "agent": {"state": "drafted", "text": "yo whats left on ur end for the site",
+            "why": "asks what he still needs"}},
            {"id": "backlog:1", "title": "GTM engineering for Jonah", "detail": "Backlog", "day": "2026-10-09",
             "overdue": true},
            {"id": "task:bank", "title": "Call the bank", "detail": "", "day": "", "overdue": false,
@@ -56,8 +60,11 @@ struct HomeTests {
         #expect(feed.calendar.count == 3)
         #expect(feed.calendar[1].count == 6)
         #expect(feed.todoCount == 7)
-        #expect(feed.todos[2].overdue)
-        #expect(feed.todos[3].done && !feed.todos[3].reopen)
+        #expect(feed.todos[3].overdue)
+        #expect(feed.todos[4].done && !feed.todos[4].reopen)
+        #expect(feed.todos[1].person == "person:c" && feed.todos[1].agent == nil)
+        #expect(feed.todos[2].agent == HomeAgent(state: .drafted, text: "yo whats left on ur end for the site",
+                                                 why: "asks what he still needs"))
         #expect(feed.projects[0].path == "/x/oakley")
         #expect(feed.failed == ["calendar"])
     }
@@ -69,6 +76,14 @@ struct HomeTests {
         #expect(feed.todoCount == 1)
         #expect(!feed.todos[0].done && feed.todos[0].reopen)
         #expect(feed.todos[0].day.isEmpty)
+    }
+
+    /// An agent state from a newer daemon draws as no state, never as a
+    /// feed that fails to read.
+    @Test func anUnknownAgentStateIsDropped() throws {
+        let feed = try HomeFeed.decode(Data(
+            #"{"todos": [{"id": "t", "title": "One", "person": "person:p", "agent": {"state": "thinking"}}]}"#.utf8))
+        #expect(feed.todos[0].agent == nil && feed.todos[0].person == "person:p")
     }
 
     /// Python's isoformat writes microseconds, which ISO8601DateFormatter
@@ -252,6 +267,36 @@ struct HomeTests {
         try await Task.sleep(for: .milliseconds(100))
         #expect(!lost.isDone(open))
         #expect(lost.notice?.contains("kyber-surfaces") == true)
+    }
+
+    /// Handle, send and drop each run their one command, say so on the row
+    /// while it runs, take no second press meanwhile, and say why on the
+    /// panel when refused. Send only ever runs on its own press.
+    @Test func agentPressesRunTheirCommands() async throws {
+        let row = HomeRow(id: "task:r", title: "Do Reagan's stuff", person: "person:r")
+        let calls = Calls()
+        var finish: (@MainActor (Int32, String) -> Void)?
+        let model = HomeModel(feed: HomeFeed(), now: Self.now) { arguments, done in
+            calls.made.append(arguments)
+            finish = done
+        }
+        model.handle(row)
+        #expect(model.agentPress[row.id] == "starting")
+        model.handle(row)
+        model.send(row)
+        #expect(calls.made == [["home", "--handle", "task:r"]])
+        finish?(0, "")
+        #expect(model.agentPress[row.id] == nil && model.notice == nil)
+
+        model.send(row)
+        #expect(model.agentPress[row.id] == "sending")
+        finish?(2, "That draft is not in the queue any more. Press handle for a new one.\n")
+        #expect(model.notice == "That draft is not in the queue any more. Press handle for a new one.")
+        model.drop(row)
+        finish?(0, "")
+        #expect(calls.made == [["home", "--handle", "task:r"], ["home", "--send", "task:r"],
+                               ["home", "--drop", "task:r"]])
+        #expect(model.agentPress.isEmpty && model.notice == nil)
     }
 
     /// Reminders can complete a reminder and never reopen one, so a row it

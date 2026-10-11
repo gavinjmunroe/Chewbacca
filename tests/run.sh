@@ -1643,6 +1643,10 @@ if group "hud"; then
   # the person's own repos and git config never decide a result.
   check  "the home feed lists his recent repos, skips chores and others' commits, and writes owner-only" \
     python3 "$ROOT/tests/test_home_feed.py"
+  # The home panel's "handle" press: every model and tool is a fake, and the
+  # end-to-end run uses a fake claude under a temp HOME, so nothing is sent.
+  check  "the home agent links a to-do to one person, drafts behind his send, and refuses a flag-shaped text" \
+    python3 "$ROOT/tests/test_home_agent.py"
   check  "waiting on you: his tapback, a 1:1 or a call closes a thread, and the eval asks what the ingester asks" \
     python3 "$ROOT/tests/test_needs_you.py"
   # CHW-204. Hand-built graphs and a fixture chat.db; the replay of real days

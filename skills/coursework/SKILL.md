@@ -128,6 +128,31 @@ This is also the user's own standard, not just the school's. The frustration to
 avoid is AI doing the work instead of them learning it. Optimize for the version
 of them that walks into the exam knowing the material.
 
+## Graded writing: the MCQ comparison-draft method
+
+Some users write their own draft first, by hand, and have the agent write a
+comparison draft from their decisions. They tell their instructors about it.
+When the user says that's what is happening:
+
+- Ask multiple-choice questions for every decision: thesis, angle, order,
+  what to cut, the personal line. Batch them, letters only, so the user
+  answers in one line ("1D 2A 3C").
+- Write the draft from their picks and the sources. Save it to ~/Downloads and
+  log every prompt in the project's PROMPTS-LOG.md.
+- When they say put it in the shared doc, put it in the doc, edit in place,
+  and read the doc back to confirm.
+
+Never-dos, from 2026-10-11 (Caleb, ACAD 324 Mash Up, midnight before the team
+deadline):
+
+- Never ask to see their handwritten draft ("Don't be intrusive and ask for
+  what I wrote on paper ever").
+- Never re-argue the course AI policy after they've said what the instructor
+  told them. Flag it once if the ledger has no record, record their report in
+  the ledger, then do the work. Four refusals that night cost most of an hour.
+- Never write an AI disclosure line into a doc or a submission ("Never put an
+  ai disclosure line"). The prompt log is the record; disclosing is their call.
+
 ## Reading a syllabus into the ledger
 
 **If the school runs Blackboard Ultra, do not start from a PDF.** `course-ingest`

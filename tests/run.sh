@@ -972,6 +972,7 @@ if group "installer"; then
   # that the same day; this is the gate, because prose had already failed once.
   check  "the browser gate refuses pixels on a browser until the DOM is tried" \
     bash "$ROOT/tests/browser_ux_guard.sh" "$ROOT"
+    bash "$ROOT/tests/focus_guard.sh" "$ROOT"
 
   check  "committed checksums describe the committed tree" \
     python3 "$ROOT/tools/committed_checksums.py"

@@ -269,9 +269,10 @@ tell application "Google Chrome"
       set t to tab tabIndex of w
       if ($EXACT and (URL of t) is "$MATCH") or ((not $EXACT) and (URL of t) contains "$MATCH") then
         if $ACTIVATE then
+          -- The tab becomes the active one in its window so it renders, but
+          -- Chrome is never brought in front of what Caleb is using
+          -- (2026-10-11, "a flashbang tab opening and taking over").
           set active tab index of w to tabIndex
-          set index of w to 1
-          activate
         end if
         return execute t javascript js
       end if

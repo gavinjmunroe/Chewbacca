@@ -1685,6 +1685,13 @@ _register("PreToolUse", hooks_dir + "/browser-ux-guard.sh", timeout=10,
           matcher="Bash|mcp__peekaboo__.*",
           status="Checking this browser work is not being done through pixels...")
 
+# An agent's `open` stole Caleb's screen at 1:38am on 2026-10-11 ("waking up
+# the entire city with a flashbang tab"), a day after the background rule was
+# written as prose. Refuses a foreground open or a browser activate.
+_register("PreToolUse", hooks_dir + "/focus-guard.sh", timeout=10,
+          matcher="Bash",
+          status="Checking nothing jumps to the front of the screen...")
+
 # Stage 8 of graph-engineering, knowledge fusion, which the skill calls the #1
 # cause of useless graphs and which this machine kept skipping. On 2026-09-21 a
 # session wrote a paying client's name into the notes off a FIRST NAME match

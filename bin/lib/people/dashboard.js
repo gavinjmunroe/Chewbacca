@@ -100,7 +100,7 @@ function cmdDashboard(argv) {
       say("");
       if (!flags["no-open"]) {
         try {
-          execFileSync("open", [url]);
+          execFileSync("open", ["-g", url]);
         } catch {}
       }
     },

@@ -257,7 +257,7 @@ class Client:
         if stale:
             sys.exit(stale)
         # Signed out for real: now it needs his hands, so take him to the page.
-        subprocess.run(["open", "-na", "Google Chrome", "--args",
+        subprocess.run(["open", "-g", "-na", "Google Chrome", "--args",
                         f"--profile-directory={PROFILE}", HOST + "/d2l/home"], check=False)
         sys.exit("BLOCKED: Brightspace is signed out in Chrome %s. It's open there, sign in once." % PROFILE)
 

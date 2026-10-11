@@ -346,7 +346,7 @@ def open_url(url: str) -> bool:
     if os.environ.get("GTME_NO_OPEN") or not shutil.which("open"):
         return False
     try:
-        subprocess.run(["open", url], check=False, timeout=10,
+        subprocess.run(["open", "-g", url], check=False, timeout=10,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return True
     except (OSError, subprocess.SubprocessError):

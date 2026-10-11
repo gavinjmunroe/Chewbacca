@@ -262,7 +262,7 @@ def open_signin():
         pass
     if os.environ.get("CHEWBACCA_NO_OPEN"):
         return False
-    shown = subprocess.run(["open", "-a", "Google Chrome", "https://brightspace.usc.edu/d2l/home"],
+    shown = subprocess.run(["open", "-g", "-a", "Google Chrome", "https://brightspace.usc.edu/d2l/home"],
                            check=False).returncode == 0
     if shown:
         SIGNIN_STAMP.parent.mkdir(parents=True, exist_ok=True)

@@ -40,6 +40,15 @@ interactions come back with `who_name` from Contacts. `--json` for values.
   (history, downloads, knowledgeC) or when the app has no verb for it.
 - A raw write that says "locked" means the owning app holds the file (Chrome
   does while it runs); quit it and rerun. The backup is already taken.
+- Never write a Reminders change through one API and undo it through another.
+  2026-10-11, the MCP writes night ("Never read only, find a way to write
+  too"): a tick through `mac` (EventKit) and an untick through AppleScript
+  left the reminder done after its undo. The `mac` id is a bare UUID, and
+  AppleScript only finds `x-apple-reminder://<UUID>`. Any new app write runs
+  once live on a throwaway item and gets read back before it's called done;
+  a fake that accepts every id passed both bugs.
+- From an MCP agent, writes go through `kit_write` (undo id back) and sends
+  through a draft plus `kit_confirm`; `config/data/mcp-writes.json` lists them.
 - Sends follow CHEWBACCA_NO_SEND: set, `messages send` only prints.
 - Never paste raw rows from Messages, Mail or Notes into anything that leaves
   the Mac. Summarize, and only what the task needs.

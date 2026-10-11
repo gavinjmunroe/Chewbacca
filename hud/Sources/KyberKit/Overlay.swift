@@ -64,7 +64,9 @@ public final class OverlayWindow: NSPanel {
         //
         // The real guarantee was always the person hiding the layer: Escape
         // clears it and Option-Command-Space toggles it. That is one gesture,
-        // it works against every capture method, and it does not lie.
+        // it works against every capture method, and it does not lie. Since
+        // bd_2026-Code-5wa the app also hides it on its own while a share it
+        // recognises is running (`ScreenShare`, `suppress`).
         acceptsMouseMovedEvents = true
 
         contentView = PassThroughHostingView(rootView: AnyView(content))
@@ -127,9 +129,24 @@ public final class OverlayWindow: NSPanel {
     }
 
     public func show() {
+        guard hold.allowsShow() else { return }
         fitToScreen()
         orderFrontRegardless()
         rim?.orderFrontRegardless()
+    }
+
+    /// Why the glass is held down on its own, or nil: a screen share, or an
+    /// app on the deny list in front (bd_2026-Code-5wa). See `ScreenShare`.
+    public var suppressed: String? { hold.reason }
+    private var hold = GlassHold()
+
+    /// Hold the glass down for `reason`, or let it back up with nil.
+    public func suppress(_ reason: String?) {
+        switch hold.set(reason, visible: isVisible) {
+        case .hide: orderOut(nil)
+        case .show: show()
+        case .none: break
+        }
     }
 
     /// Accept mouse events only while the pointer is over a surface.
@@ -146,6 +163,41 @@ public final class OverlayWindow: NSPanel {
         if ignoresMouseEvents == over {
             ignoresMouseEvents = !over
         }
+    }
+}
+
+/// The rule for holding the glass down, apart from the window so it is
+/// tested without putting one on the screen.
+///
+/// It comes back when the hold lifts only if it was up when the hold began,
+/// or something asked to show it during the hold: a person who had hidden it
+/// does not get it back because a meeting ended.
+public struct GlassHold: Equatable, Sendable {
+    public enum Effect: Equatable, Sendable { case none, hide, show }
+
+    public private(set) var reason: String?
+    private var restore = false
+
+    public init() {}
+
+    public mutating func set(_ next: String?, visible: Bool) -> Effect {
+        guard next != reason else { return .none }
+        if let next {
+            if reason == nil { restore = visible }
+            reason = next
+            return .hide
+        }
+        reason = nil
+        defer { restore = false }
+        return restore ? .show : .none
+    }
+
+    /// Whether a show may go ahead now. During a hold it is remembered
+    /// instead, and happens when the hold lifts.
+    public mutating func allowsShow() -> Bool {
+        guard reason != nil else { return true }
+        restore = true
+        return false
     }
 }
 

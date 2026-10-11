@@ -52,6 +52,15 @@ it instead. The window comes from the window server's bounds, read before each
 `@`; no permission is involved. Source: `Occlusion.swift`, tests in
 `OcclusionTests.swift`.
 
+The whole layer hides itself during a screen share and over apps you name,
+and comes back as it was afterwards (a layer you had hidden stays hidden). A
+share is Zoom's share bar, Chromium's "is sharing your screen" or "is sharing
+a window" bar (English only), or macOS Screen Sharing; those strings were read
+out of the apps' own bundles and have not been seen on a live share yet.
+`~/.bob/hud-deny.txt` takes one app name or bundle id per line, `#` comments,
+and the word `fullscreen` to hide over any app filling the screen. Checked
+every two seconds and on every app switch. Source: `ScreenShare.swift`.
+
 ## How loud to be
 
 `urgency=` is `ambient`, `normal` (the default), `alert`, or `critical`.

@@ -167,6 +167,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.checkListener() }
         }
+        // Out of the way during a screen share or over a denied app.
+        shareCheck = Timer.scheduledTimer(
+            withTimeInterval: ScreenShare.interval, repeats: true
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.checkSuppression() }
+        }
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.checkSuppression() }
+        }
+    }
+
+    private var shareCheck: Timer?
+    private var denyList = DenyList("")
+    private var denyListRead: Date?
+
+    /// Hide the glass while the screen is shared or a denied app is in
+    /// front, and bring it back as it was after (bd_2026-Code-5wa).
+    private func checkSuppression() {
+        guard let overlay else { return }
+        let modified = (try? FileManager.default.attributesOfItem(atPath: DenyList.path.path))?[.modificationDate] as? Date
+        if modified != denyListRead {
+            denyList = DenyList.load()
+            denyListRead = modified
+        }
+        let windows = ScreenShare.onScreen()
+        var reason = ScreenShare.sharing(windows, session: ScreenShare.session()).map { "\($0) is sharing the screen" }
+        if reason == nil, let app = NSWorkspace.shared.frontmostApplication,
+           app.processIdentifier != ProcessInfo.processInfo.processIdentifier {
+            let screen = OverlayWindow.active?.frame.size ?? .zero
+            let filling = windows.contains {
+                $0.pid == app.processIdentifier && $0.layer == 0
+                    && $0.bounds.width >= screen.width && $0.bounds.height >= screen.height
+            }
+            if denyList.denies(name: app.localizedName, bundle: app.bundleIdentifier, filling: filling) {
+                reason = "\(app.localizedName ?? "the app in front") is on the deny list"
+            }
+        }
+        if reason != overlay.suppressed {
+            Self.keys.notice("glass.suppress reason=\(reason ?? "none", privacy: .public)")
+            overlay.suppress(reason)
+        }
     }
 
     private func checkListener() {

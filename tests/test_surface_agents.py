@@ -98,6 +98,8 @@ class FakeEngine:
         self.n = 0
         self.imported_keys: set = set()
         self.diff = None
+        # A callable answering workspace.fileDiff from a real checkout.
+        self.file_diff = None
         self.upstream = True
         # Transcript keys import.scan finds on disk.
         self.disk: list = []
@@ -207,6 +209,8 @@ class FakeEngine:
         if method == "environments.get":
             sid = p["id"].removeprefix("env-")
             return {"id": p["id"], "path": self.sessions[sid]["cwd"] if sid in self.sessions else "/nowhere"}
+        if method == "workspace.fileDiff" and self.file_diff:
+            return self.file_diff(p)
         if method == "workspace.fileDiff":
             return {"path": p["path"], "oldPath": None, "staged": False, "binary": False, "truncated": False,
                     "truncatedReason": None, "additions": 1, "deletions": 1, "hunks": [
@@ -442,6 +446,8 @@ def world(tmp: Path, engine: FakeEngine | None, built: bool = True):
     a.spawn = lambda fn: fn()
     a.tabs = lambda now: []
     a.wall = lambda: NOW_MS / 1000 + 120
+    # Copies a press keeps go under the test's folder, never ~/.bob.
+    a.backups = lambda: tmp / "backups"
     if engine is None:
         def refuse(_ctx):
             raise rc.RealmUnavailable(f"engine not started ({tmp}/realm-home/engine.json missing); "
@@ -1055,6 +1061,134 @@ def agent_card(tmp: Path) -> None:
     check("a file not in its changes is never read", not r.ok and sum(m == "workspace.fileDiff" for m, _, _ in e.calls)
           == 1, r)
     check("reading the card wrote nothing", e.writes == [], e.writes)
+
+
+def git_repo(path: Path, files: dict) -> Path:
+    """A real checkout with `files` committed."""
+    import subprocess  # noqa: PLC0415
+    path.mkdir(parents=True, exist_ok=True)
+    for name, body in files.items():
+        (path / name).parent.mkdir(parents=True, exist_ok=True)
+        (path / name).write_bytes(body if isinstance(body, bytes) else body.encode())
+    for argv in (["init", "-q", "-b", "main"], ["add", "-A"],
+                 ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "start"]):
+        subprocess.run(["git", "-C", str(path), *argv], check=True, capture_output=True)
+    return path
+
+
+def realm_file_diff(repo: Path):
+    """workspace.fileDiff as realm's git-diff.ts answers it, from the real
+    checkout: the same `git diff` read, parsed into its hunk shape."""
+    import ide_git  # noqa: PLC0415
+
+    def answer(p):
+        args = ["diff", *ide_git.DIFF_FLAGS] + (["--cached"] if p.get("staged") else []) + ["-M", "--", p["path"]]
+        _, out, _ = ide_git.run_bytes(["git", "-C", str(repo), *args])
+        _, hunks = ide_git.parse_diff(out)
+        kinds = {b" ": "context", b"+": "add", b"-": "del", b"\\": "meta"}
+        return {"path": p["path"], "oldPath": None, "staged": bool(p.get("staged")), "binary": False,
+                "truncated": False, "truncatedReason": None, "additions": sum(h.added for h in hunks),
+                "deletions": sum(h.removed for h in hunks), "hunks": [
+                    {"header": h.header.decode().strip(), "oldStart": h.old_start, "oldLines": h.old_lines,
+                     "newStart": h.new_start, "newLines": h.new_lines,
+                     "lines": [{"kind": kinds[b[:1]], "text": b[1:].decode().rstrip("\n"), "oldLine": None,
+                                "newLine": None} for b in h.body]} for h in hunks]}
+    return answer
+
+
+def hunk_loop(tmp: Path) -> None:
+    """Cursor's core loop on the card: each hunk of the agent's edit kept
+    (staged) or rejected (its lines put back, the file copied aside) with one
+    press, each undoable, never acting on a hunk it wasn't drawn on."""
+    import subprocess  # noqa: PLC0415
+    base = "".join(f"line {i}\n" for i in range(1, 31))
+    repo = git_repo(tmp / "hunks" / "repo", {"app.py": base, "other.py": "x = 1\n"})
+    edited = base.replace("line 3\n", "line 3 by the agent\n").replace("line 25\n", "line 25 by the agent\nextra\n")
+    (repo / "app.py").write_text(edited)
+    e = FakeEngine()
+    e.add_session("s1", "idle", cwd=str(repo))
+    e.diff = {"root": str(repo), "branch": "main", "totalFiles": 1, "truncated": False, "files": [
+        {"path": "app.py", "oldPath": None, "status": "modified", "staged": False, "unstaged": True,
+         "binary": False, "additions": 3, "deletions": 2}]}
+    e.file_diff = realm_file_diff(repo)
+    a, ctx = world(tmp / "hunks", e)
+    backups = tmp / "hunks" / "backups"
+    a.backups = lambda: backups
+    data, model = view(a, ctx, open="s1")
+    r = a.show_file(ctx, data, {"row": "app.py"})
+    data, model = view(a, ctx)
+    hunks = model["/agents/hunks"]
+    check("an unstaged diff carries Keep and Reject on each of its hunks, saying what each does first",
+          r.ok and len(hunks) == 2 and hunks[0]["keep"] == "Keep" and hunks[0]["reject"] == "Reject"
+          and hunks[0]["where"] == "lines 1-6" and "copied aside" in model["/agents/hunkNote"], hunks)
+    layout = " ".join(a.layout())
+    check("the Diff is drawn with the hunk words and their two verbs",
+          "agents-patch Diff" in layout and "hunks=@/agents/hunks" in layout and 'keepAction="ks-hunkkeep"' in layout
+          and 'rejectAction="ks-hunkreject"' in layout and drawn_order(a).index("agents-hunknote")
+          < drawn_order(a).index("agents-patch"), [x for x in a.layout() if "Diff" in x])
+    check("reading the hunks wrote nothing", e.writes == [] and (repo / "app.py").read_text() == edited
+          and not backups.exists(), e.writes)
+    for bad in ("", "x", "1:0", f"{hunks[0]['id']}x", "999:0:" + hunks[0]["id"].split(":")[2],
+                hunks[0]["id"].rsplit(":", 1)[0] + ":0000"):
+        check(f"a forged hunk id {bad!r} changes nothing", not a.hunk_reject(ctx, data, {"row": bad}).ok
+              and (repo / "app.py").read_text() == edited)
+    e.sessions["s1"]["status"] = "running"
+    r = a.hunk_reject(ctx, data, {"row": hunks[1]["id"]})
+    check("nothing is rejected while the agent is working", not r.ok and "working" in r.line
+          and (repo / "app.py").read_text() == edited, r)
+    e.sessions["s1"]["status"] = "idle"
+    second = hunks[1]["id"]
+    r = a.hunk_reject(ctx, data, {"row": hunks[0]["id"]})
+    after = (repo / "app.py").read_text()
+    check("Reject puts that hunk's lines back and leaves the other hunk as the agent wrote it",
+          r.ok and "line 3\n" in after and "line 3 by" not in after and "line 25 by the agent\nextra\n" in after, r)
+    kept = list(backups.iterdir()) if backups.exists() else []
+    check("the file was copied aside first, byte for byte", len(kept) == 1 and kept[0].read_text() == edited
+          and kept[0].name.startswith("app.py."), kept)
+    data, model = view(a, ctx)
+    check("the diff is read again after the press: one hunk left, and an Undo row naming it",
+          len(model["/agents/hunks"]) == 1 and model["/agents/hunkUndo"][0]["text"]
+          == "Puts lines 1-6 of app.py back as the agent wrote them", (model["/agents/hunks"], model["/agents/hunkUndo"]))
+    r = a.hunk_keep(ctx, data, {"row": second})
+    check("a word drawn before the diff was read again refuses", not r.ok, r)
+    r = a.hunk_keep(ctx, data, {"row": model["/agents/hunks"][0]["id"]})
+    cached = subprocess.run(["git", "-C", str(repo), "diff", "--cached"], capture_output=True, text=True).stdout
+    check("Keep stages exactly that hunk and leaves the file alone",
+          r.ok and "+line 25 by the agent" in cached and "+extra" in cached and "line 3" not in cached
+          and (repo / "app.py").read_text() == after, cached)
+    data, model = view(a, ctx)
+    r = a.hunk_undo(ctx, data, {"row": model["/agents/hunkUndo"][0]["id"]})
+    cached = subprocess.run(["git", "-C", str(repo), "diff", "--cached"], capture_output=True, text=True).stdout
+    check("Undo of a Keep takes it back out of the index", r.ok and cached == "", (r, cached))
+    # Undo of a reject: reject, then undo, the agent's lines come back.
+    data, model = view(a, ctx)
+    a.show_file(ctx, data, {"row": "app.py"})
+    data, model = view(a, ctx)
+    r = a.hunk_reject(ctx, data, {"row": model["/agents/hunks"][0]["id"]})
+    data, model = view(a, ctx)
+    r2 = a.hunk_undo(ctx, data, {"row": model["/agents/hunkUndo"][0]["id"]})
+    check("Undo of a Reject writes the agent's lines back", r.ok and r2.ok
+          and (repo / "app.py").read_text() == after, (r, r2))
+    # An Undo after someone else changed the file leaves it alone.
+    data, model = view(a, ctx)
+    a.show_file(ctx, data, {"row": "app.py"})
+    data, model = view(a, ctx)
+    a.hunk_reject(ctx, data, {"row": model["/agents/hunks"][0]["id"]})
+    (repo / "app.py").write_text("someone else\n")
+    data, model = view(a, ctx)
+    r = a.hunk_undo(ctx, data, {"row": model["/agents/hunkUndo"][0]["id"]})
+    check("Undo over a file changed since leaves it alone and says where the copy is",
+          not r.ok and "left alone" in r.line and (repo / "app.py").read_text() == "someone else\n", r)
+    # A file whose bytes moved under a drawn hunk refuses rather than half-apply.
+    (repo / "app.py").write_text(edited)
+    data, model = view(a, ctx)
+    a.show_file(ctx, data, {"row": "app.py"})
+    data, model = view(a, ctx)
+    (repo / "app.py").write_text(edited.replace("line 25 by the agent", "line 25 rewritten"))
+    r = a.hunk_reject(ctx, data, {"row": model["/agents/hunks"][1]["id"]})
+    check("a hunk the agent rewrote since it was drawn refuses",
+          not r.ok and "changed since" in r.line and "line 25 rewritten" in (repo / "app.py").read_text(), r)
+    check("no hunk press went through the engine as a write", e.writes == [], e.writes)
 
 
 def finder(tmp: Path) -> None:
@@ -1954,6 +2088,7 @@ def main() -> int:
         any_agent(tmp)
         live_tabs_and_import(tmp)
         agent_card(tmp)
+        hunk_loop(tmp)
         finder(tmp)
         mention_picker(tmp)
         real_repo(tmp)

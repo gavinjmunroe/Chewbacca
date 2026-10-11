@@ -103,6 +103,7 @@ import session_tree
 
 from . import ACTION_PREFIX, Bind, Context, Provider, Result, SurfaceError, ago, clock, comp, note_for
 from .agent_history import History
+from .agent_hunks import Hunks
 from .agent_ide import Ide
 from .agent_space import Space
 from .code import candidates, code_root
@@ -311,7 +312,7 @@ STATE_ORDER = {"waiting_permission": 0, "error": 1, "running": 2, "idle": 3, "en
 BUSY = ("running", "waiting_permission")
 # The pointers holding a row a press can write through.
 VERBS = ("send", "allow", "deny", "interrupt", "fork", "new", "stage", "unstage", "ship", "upstream", "run", "ctrlc",
-         "restore", "pr",
+         "restore", "pr", "hunks", "hunkUndo",
          "termopen", "mode", "go")
 MODE_WORDS = {"default": "asks before each tool", "acceptEdits": "edits without asking",
               "bypassPermissions": "never asks (full access)", "plan": "plans only"}
@@ -894,7 +895,7 @@ class Log:
         return any(seq > after and sent == text for seq, sent in self.sent)
 
 
-class Agents(Ide, History, Space, Provider):
+class Agents(Ide, Hunks, History, Space, Provider):
     name = "agents"
     title = "AGENTS"
     region = "center"
@@ -977,6 +978,7 @@ class Agents(Ide, History, Space, Provider):
         self.tabs = live_tabs
         self.wall = time.time
         self._ide_init()
+        self._hunks_init()
         self._history_init()
         self._space_init()
 
@@ -1511,9 +1513,9 @@ class Agents(Ide, History, Space, Provider):
                 card_parts.append(comp(c("changed"), "Events", caption=Bind(p("changedCap")), items=Bind(p("changed")),
                                        action=f"{ACTION_PREFIX}file", actionLabel="Diff"))
                 card_order.append("changed")
-            if plan.get("patch"):
-                card_parts.append(comp(c("patch"), "Diff", text=Bind(p("patch")), path=Bind(p("patchPath"))))
-                card_order.append("patch")
+            patch_parts, patch_order = self.patch_parts(plan)
+            card_parts += patch_parts
+            card_order += patch_order
             if plan.get("git"):
                 card_parts += [comp(c("stage"), "Events", caption="", items=Bind(p("stage")),
                                     action=f"{ACTION_PREFIX}stage", actionLabel="Stage"),
@@ -1596,7 +1598,7 @@ class Agents(Ide, History, Space, Provider):
                 p("termopen"): [], p("termOn"): False,
                 p("models"): [], p("modelValue"): "", p("efforts"): [], p("effortValue"): "", p("modes"): [],
                 p("mode"): [], p("webHead"): "", p("webUrl"): "", p("go"): [], p("addressOn"): False,
-                p("placeholder"): "Typed here, sent only by Send", p("pinnedRow"): "", **self.find_blank(),
+                p("placeholder"): "Typed here, sent only by Send", p("pinnedRow"): "", **self.find_blank(), **self.hunks_blank(),
                 **self.history_blank(), **self.space_blank()}
 
     def model(self, data, error, values, ctx) -> dict:
@@ -1624,7 +1626,7 @@ class Agents(Ide, History, Space, Provider):
                         shipped=bool(out.get(p("shipped"))), upstream=bool(out.get(p("upstream"))),
                         terminal=bool(out.get(p("termOn"))), termopen=bool(out.get(p("termopen"))),
                         web=bool(out.get(p("webUrl"))), address=bool(out.get(p("addressOn"))),
-                        ask=bool(out.get(p("ask"))), start=bool(out.get(p("kinds"))), **self.find_plan(out),
+                        ask=bool(out.get(p("ask"))), start=bool(out.get(p("kinds"))), **self.find_plan(out), **self.hunks_plan(out),
                         **self.history_plan(out), **self.space_plan(out))
         with self._lock:
             self._plan = plan
@@ -1739,6 +1741,7 @@ class Agents(Ide, History, Space, Provider):
         patch = data.get("patch")
         if patch:
             out[p("patch")], out[p("patchPath")] = patch[2], clean(patch[1], 120)
+        self.hunks_model(shown, patch, out)
         self.git_model(shown, files, changes, patch, data.get("shipped"), values, out)
         self.history_model(shown, changes, float(data.get("now") or time.time()) * 1000, values, out)
         self.space_model(shown, changes, float(data.get("now") or time.time()) * 1000, out)
@@ -2006,6 +2009,8 @@ class Agents(Ide, History, Space, Provider):
             return Result(False, f"Couldn't read that diff: {rpc_words(err)}", refetch=True)
         with self._lock:
             self._patch = (sid, path, patch_text(got))
+        root = str(((data or {}).get("changes") or {}).get("root") or self.repo_of(row))
+        self.load_hunks(sid, root, path, got)
         return Result(True, f"Showing the diff of {Path(path).name}.", refetch=True)
 
     def _git_press(self, ctx: Context, data, values: dict, verb: str):

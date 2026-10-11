@@ -1746,6 +1746,8 @@ if group "hud"; then
     python3 "$ROOT/tests/test_capture_consent.py"
   check  "agents sends only to the pinned session, answers only the shown request, and a down engine offers only Start" \
     python3 "$ROOT/tests/test_surface_agents.py"
+  check  "a hunk is kept or rejected byte for byte, CRLF and a missing last newline kept, no repo filter runs" \
+    python3 "$ROOT/tests/test_ide_git.py"
   check  "the launcher lists only real surfaces and the hud-apps sentence reaches it, not genui" \
     python3 "$ROOT/tests/test_surface_apps.py"
   check  "setup lists what's left, one press each, the recording press is the only yes, a real press registers MCP" \

@@ -677,7 +677,13 @@ the accent, the last 600 lines. Code inside a diff line is syntax colored by
 the language its `+++` header names, or `path` when there is no header (an
 Edit call's diff); text in no known language (test output, a status) stays
 plain. `plain=true` draws every line plain with no wash and no color, for
-terminal output, where a line starting with `-` is not a removal. `File` colors text the same way, and its `editable` editor keeps the
+terminal output, where a line starting with `-` is not a removal. `hunks`
+(`[{"id","keep","reject","where"}]`, one per `@@` line in order) with
+`keepAction` and `rejectAction` puts two lit words at the end of each `@@`
+line, and a press sends `e action <keepAction|rejectAction> row=<id>`: the
+agent card's per-hunk Keep and Reject (bin/lib/surfaces/agent_hunks.py). The
+`@@` lines are counted over the whole text, so the words stay on their hunk
+when the top is cut. `File` colors text the same way, and its `editable` editor keeps the
 color while typing (`Sources/KyberKit/Syntax.swift`, a line scanner, not a
 parser). **Tree** rows are `{"id","name","depth","dir"}` with optional
 `mark` (git's letters, `edited`, `read`), `collapsed` and `note`; a file row

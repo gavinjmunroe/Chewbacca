@@ -701,8 +701,13 @@ public struct SurfaceView: View {
                     onOpen: action.map { name in { [store] id in store.fireRow(name, row: id) } }))
 
         case "Diff":
+            let keep = p["keepAction"]?.stringValue
+            let reject = p["rejectAction"]?.stringValue
             return AnyView(DiffView(text: p["text"]?.display ?? "", path: p["path"]?.stringValue ?? "",
-                                    plain: p["plain"] == .bool(true)))
+                                    plain: p["plain"] == .bool(true),
+                                    hunks: DiffView.HunkVerbs.parse(p["hunks"]?.arrayValue ?? []),
+                                    onKeep: keep.map { name in { [store] id in store.fireRow(name, row: id) } },
+                                    onReject: reject.map { name in { [store] id in store.fireRow(name, row: id) } }))
 
         case "Web":
             return AnyView(WebPaneView(url: p["url"]?.display ?? ""))

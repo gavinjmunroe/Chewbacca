@@ -143,6 +143,30 @@ struct DiffView: View {
     /// Terminal output: every line plain, no wash and no syntax, since a
     /// shell line starting with `-` or `+` is not a removal or an addition.
     var plain: Bool = false
+    /// Keep and Reject for each hunk, in the order of the `@@` lines: the
+    /// agent card's per-hunk loop (bin/lib/surfaces/agent_hunks.py). The
+    /// words sit at the end of their own `@@` line and nowhere else, and a
+    /// press sends that hunk's id. Empty, the diff is read only.
+    var hunks: [HunkVerbs] = []
+    var onKeep: ((String) -> Void)?
+    var onReject: ((String) -> Void)?
+
+    /// One hunk's two verbs: `{"id", "keep", "reject", "where"}`. A blank
+    /// word is not drawn.
+    struct HunkVerbs: Equatable {
+        let id: String
+        let keep: String
+        let reject: String
+        let place: String
+
+        static func parse(_ items: [JSON]) -> [HunkVerbs] {
+            items.compactMap { item in
+                guard let o = item.objectValue, let id = o["id"]?.stringValue, !id.isEmpty else { return nil }
+                return HunkVerbs(id: id, keep: o["keep"]?.display ?? "", reject: o["reject"]?.display ?? "",
+                                 place: o["where"]?.display ?? "")
+            }
+        }
+    }
 
     /// Drawn lines are capped: a 20,000-line diff is not read on a HUD, and
     /// laying it out stalls the glass. The tail is kept, where a test run's
@@ -155,6 +179,9 @@ struct DiffView: View {
         let id: Int
         let kind: Kind
         let body: AttributedString
+        /// Which `@@` line of the whole text this is (0 for the first),
+        /// counted before the drawn lines are cut, nil for any other line.
+        var hunk: Int? = nil
     }
 
     static func kind(_ line: Substring) -> Kind {
@@ -193,8 +220,11 @@ struct DiffView: View {
         var state = Syntax.State()
         var out: [Line] = []
         let start = max(0, all.count - maxLines)
+        var hunks = 0
         for (index, line) in all.enumerated() {
             let kind = Self.kind(line)
+            let ordinal: Int? = kind == .hunk ? hunks : nil
+            if kind == .hunk { hunks += 1 }
             if let named = headerPath(line) {
                 language = Syntax.language(forPath: named) ?? language
                 state = Syntax.State()
@@ -212,7 +242,7 @@ struct DiffView: View {
                 body = AttributedString(line.isEmpty ? " " : String(line))
                 body.foregroundColor = color(kind)
             }
-            if index >= start { out.append(Line(id: index, kind: kind, body: body)) }
+            if index >= start { out.append(Line(id: index, kind: kind, body: body, hunk: ordinal)) }
         }
         return out
     }
@@ -220,18 +250,39 @@ struct DiffView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Self.lines(text, path: path, plain: plain)) { line in
-                Text(line.body)
-                    .font(.system(size: 11, design: .monospaced))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 6)
-                    .background(Self.background(line.kind))
+                HStack(spacing: 10) {
+                    Text(line.body)
+                        .font(.system(size: 11, design: .monospaced))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if let n = line.hunk, n < hunks.count {
+                        verbs(hunks[n])
+                    }
+                }
+                .padding(.horizontal, 6)
+                .background(Self.background(line.kind))
             }
         }
         .textSelection(.enabled)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .accessibilityElement(children: .combine)
+    }
+
+    /// Keep lit in Realm's accent ink, Reject in the quieter ink: the
+    /// one that throws work away is never the loud one (hud/CLAUDE.md,
+    /// Carlton's language: a destructive verb says its cost first, and the
+    /// caption above the diff says it).
+    @ViewBuilder
+    private func verbs(_ h: HunkVerbs) -> some View {
+        if !h.keep.isEmpty, let onKeep {
+            HunkWord(text: h.keep, ink: Realm.accentInk) { onKeep(h.id) }
+                .accessibilityLabel("\(h.keep) \(h.place)")
+        }
+        if !h.reject.isEmpty, let onReject {
+            HunkWord(text: h.reject, ink: Realm.ink2) { onReject(h.id) }
+                .accessibilityLabel("\(h.reject) \(h.place)")
+        }
     }
 
     static func color(_ kind: Kind) -> Color {
@@ -249,6 +300,34 @@ struct DiffView: View {
         case .added: return HUD.good.opacity(0.14)
         case .removed: return HUD.bad.opacity(0.14)
         default: return .clear
+        }
+    }
+}
+
+/// A verb drawn as a word on a diff line: no capsule, a light overlay while
+/// the pointer is on it that arrives at once and leaves over Realm's hover
+/// duration, and a 44-point-tall invisible target kept around the word.
+struct HunkWord: View {
+    let text: String
+    let ink: Color
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Text(text)
+                .font(Realm.font(Realm.Size.tiny, Realm.Weight.medium))
+                .tracking(Realm.tracking(Realm.Size.tiny))
+                .foregroundStyle(ink)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1)
+                .background(hovering ? Realm.hoverFill : .clear,
+                            in: RoundedRectangle(cornerRadius: Realm.Radius.chip, style: .continuous))
+                .contentShape(Rectangle().inset(by: -6))
+        }
+        .buttonStyle(.plain)
+        .onHover { inside in
+            withAnimation(inside ? nil : Realm.fade(Realm.Duration.hover)) { hovering = inside }
         }
     }
 }

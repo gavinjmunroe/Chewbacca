@@ -515,6 +515,18 @@ class Daemon:
             if ev is None:
                 return
             extra = {k: v for k, v in ev.items() if k not in ("name", "component")}
+            if line.startswith("e closed "):
+                # The X on a card. Kyber has already taken it down; forget it
+                # here too. Unheard, the next refresh sent `@ tasks` and its
+                # `d` lines to a surface the display no longer had, which drew
+                # an empty "Tasks / Loading" card: on 2026-10-11 one opened at
+                # 09:51 kept coming back all afternoon after every X.
+                name = str(extra.get("surface") or ev["component"])
+                with self.lock:
+                    gone = self.open.pop(name, None)
+                if gone is not None:
+                    self.save()
+                return
             if line.startswith("e action "):
                 # A row's button: `e action <name> row="<id>" surface="<name>"`
                 # (hud/CLAUDE.md, Row actions). The row is a graph node id.

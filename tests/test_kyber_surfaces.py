@@ -336,6 +336,16 @@ def spaces_and_state(tmp: Path) -> None:
     d2, _ = make_daemon(ctx, tmp)
     d2.restore()
     check("a restarted daemon reopens the same surfaces", set(d2.open) == set(d.open), list(d2.open))
+    # The X on one card: forgotten here too, so no refresh or restart redraws
+    # it as an empty "Loading" card (2026-10-11, tasks).
+    d.handle_line('e closed today surface="today"')
+    hud.take()
+    d.refresh("today")
+    check("a card closed with its X is forgotten and saved",
+          "today" not in d.open and "today" not in json.loads((tmp / "state.json").read_text())["open"],
+          list(d.open))
+    check("a refresh draws nothing for a closed card",
+          not any(line.startswith("@ today") for line in hud.take()))
     d.handle_line("x")
     check("the display's clear (x) closes everything and remembers that",
           d.open == {} and json.loads((tmp / "state.json").read_text())["open"] == {})

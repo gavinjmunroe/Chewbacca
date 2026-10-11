@@ -157,6 +157,12 @@ Where it loses, which is where Kyber wins:
   a call) reaches the same path. Voice and typed text only fill the New task
   box (`kyber-sessions draft`); Start on the glass runs it. Same for any new
   verb that executes: the sentence stages it, a press runs it.
+- **Never a wall of text.** Caleb, 2026-10-10: "fix chewb so we NEVER make a wall of
+  text ever again". `bin/lib/surface_lint.py` measures what the display receives: rows
+  over 120 characters, over 1,000 characters on the first view, provenance or clock
+  seconds printed in a row, more than 7 text components with nothing visual between.
+  Every surface in tests/test_kyber_surfaces.py must pass it, and the daemon logs
+  any panel that fails it. Long text goes behind a tap (File, Diff, Transcript).
 - **Never merge on a name.** A handle becomes a person only through the
   people store. "Show me Tyler" is two people and the answer is a question.
 - **Never invent a measure.** The tasks lanes come from real process status;

@@ -55,6 +55,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
 
+import surface_lint  # noqa: E402
 import hud_events  # noqa: E402
 import osgraph  # noqa: E402
 import osgraph_ingest  # noqa: E402
@@ -344,6 +345,13 @@ class Daemon:
             live.sent[pointer] = json.dumps(value, sort_keys=True)
             if pointer in initial:
                 live.values.setdefault(pointer, value)
+        try:
+            # A wall of text still draws (an empty panel is worse), but it is
+            # named in the log every agent reads (surface_lint, 2026-10-10).
+            for finding in surface_lint.lint(lines):
+                log(f"wall of text on {p.name}: {finding}")
+        except Exception:  # noqa: BLE001  the check never takes the panel down
+            pass
         self.hud.send(lines)
 
     def push(self, live: Live, extra: dict | None = None) -> list[str]:

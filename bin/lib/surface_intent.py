@@ -76,12 +76,12 @@ NOUNS = {
     "github": r"(?:github|prs|pull requests|reviews|review requests|ci)",
     "code": r"(?:code changes|changes|diffs?|what changed|repos)",
     "meetings": r"(?:meetings|calls|meeting notes|call notes|granola|anarlog|(?:latest|recent|last) (?:meetings?|calls?))",
-    # The Realm engine's Claude sessions. Typed, `kyber-surfaces open
-    # sessions` and `open claude` reach it through ALIASES; spoken, only
-    # phrases that name agents do: "show my sessions" could mean
-    # kyber-sessions' panel and "show me Claude" a person, so both stay with
-    # the model, which can ask.
-    "agents": r"(?:agents|coding agents|agent sessions|claude sessions|claude code sessions|realm sessions)",
+    # The Realm engine's own sessions, by name only. "Show my agents" means
+    # every tab Caleb has running (VS Code, desktop, the glass's own runs),
+    # which is kyber-sessions' panel: SESSIONS below (2026-10-10, "make the
+    # Kyber HUD the only place I work"). "Show me Claude" stays with the
+    # model, which can ask whether that is a person.
+    "agents": r"(?:realm sessions|realm agents|the engine's sessions)",
     # "Show me the built in hud apps" went to genui on 2026-10-05, and the
     # model drew six boxes that named two surfaces that do not exist.
     "apps": r"(?:(?:built ?in |kyber |hud )*(?:hud )?apps|(?:all )?(?:the )?surfaces|launcher|launchpad|everything (?:kyber|the hud) (?:has|can do))",
@@ -150,6 +150,33 @@ FILES = re.compile(
 FILES_CLOSE = re.compile(
     r"^(?:close|hide|take down|dismiss|get rid of) (?:my |the )?(?:files|file manager|file browser|finder)$")
 HUD = Path(__file__).resolve().parent.parent / "hud"
+KYBER_SESSIONS = Path(__file__).resolve().parent.parent / "kyber-sessions"
+SESSIONS_LOG = Path(os.environ.get("BOB_DIR", str(Path.home() / ".bob"))) / "kyber-sessions.log"
+# "Show my agents", "pull up my tabs": every
+# coding-agent session on the glass (bin/kyber-sessions serve), where each
+# one's reply is read and answered, and runs are started and stopped. "What
+# are my agents doing" stays with hud-listen's spoken summary (route.
+# agent_status_word), which answers it aloud with no panel.
+SESSIONS = re.compile(
+    rf"^(?:{SHOW} {MY}(?:agents|coding agents|agent sessions|agent tabs|claude sessions|claude code sessions"
+    r"|claude tabs|sessions|tabs|running agents)"
+    r"(?: (?:on|up on) (?:the )?(?:screen|glass|hud))?(?: (?:right )?now)?)$")
+SESSIONS_CLOSE = re.compile(
+    r"^(?:close|hide|take down|dismiss|get rid of) (?:my |the )?(?:agents|tabs|sessions|agent sessions|claude sessions)"
+    r"(?: surface| panel)?$")
+# "Start an agent in lemma to write the README", "new task: summarize my
+# week", "spin up a tab to fix the nav". Read off the raw sentence, because
+# _norm drops the punctuation and digits a task is made of.
+TASK = re.compile(
+    r"(?is)^(?:(?:ok(?:ay)?|hey|kyber|so),?\s+)*"
+    r"(?:(?:start|spin up|kick off|launch|fire up)\s+(?:up\s+)?(?:a\s+|an\s+)?(?:new\s+)?(?:background\s+)?"
+    r"|new\s+)"
+    r"(?:agent|task|tab|session|claude)"
+    r"(?:\s+in\s+(?P<folder>[A-Za-z0-9][A-Za-z0-9_.-]{0,63}))?"
+    r"\s*(?:to|that|which|and have it|:|,|-)\s*(?P<task>\S.*)$")
+# "Stop the lemma agent", "kill the readme task". Only a run the glass
+# started can stop; kyber-sessions refuses anything else in words.
+STOP = re.compile(r"^(?:stop|kill|cancel|end|abort) (?:the |my )?(?P<name>[a-z0-9][a-z0-9 .-]{0,40}?) (?:agent|task|tab|session|run)$")
 # "Set up my permissions", "fix my permissions": the on-screen walkthrough
 # (bin/lib/permission_walk.py), a ring on each switch in System Settings. It
 # runs for minutes while the person flips switches, so it is started and left
@@ -186,6 +213,16 @@ def parse(said: str, resolve_person=find_person) -> Command | None:
         return None
     if PERMISSIONS.match(s):
         return Command("walk", "permissions")
+    m = TASK.match(said.strip())
+    if m and m.group("task").strip(" .!?"):
+        return Command("task", m.group("task").strip().rstrip(".!?"), m.group("folder") or "")
+    if SESSIONS_CLOSE.match(s):
+        return Command("panel", "sessions", "off")
+    if SESSIONS.match(s):
+        return Command("sessions", "open")
+    m = STOP.match(s)
+    if m:
+        return Command("stop", m.group("name").strip())
     if FILES_CLOSE.match(s):
         return Command("panel", "files", "off")
     if FILES.match(s):
@@ -265,12 +302,70 @@ def start_walk(spawn=subprocess.Popen) -> bool:
         return False
 
 
+def open_sessions(open_id: str = "", spawn=subprocess.Popen) -> bool:
+    """Start `kyber-sessions serve` detached, as Kyber's menu does. It holds
+    its own lock, so a second start while one runs exits at once."""
+    try:
+        SESSIONS_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with open(SESSIONS_LOG, "a", encoding="utf-8") as log:
+            spawn([str(KYBER_SESSIONS), "serve"] + (["--open", open_id] if open_id else []),
+                  stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=log, start_new_session=True)
+        return True
+    except OSError:
+        return False
+
+
+def sessions_verb(command: Command, run=subprocess.run, spawn=subprocess.Popen) -> Outcome:
+    if command.verb == "sessions":
+        if open_sessions(spawn=spawn):
+            return Outcome(True, "Your agents are up.")
+        return Outcome(False, "The agents panel didn't open.")
+    if command.verb == "task":
+        argv = [str(KYBER_SESSIONS), "new", command.name] + (["--in", command.arg] if command.arg else [])
+        try:
+            done = run(argv, capture_output=True, text=True, timeout=CLI_TIMEOUT_S)
+        except (OSError, subprocess.TimeoutExpired):
+            return Outcome(False, "The agent didn't start.")
+        if done.returncode != 0:
+            why = (done.stderr or "").strip().splitlines()
+            return Outcome(False, why[-1] if why else "The agent didn't start.")
+        try:
+            started = json.loads(done.stdout)
+        except ValueError:
+            started = {}
+        where = Path(str(started.get("cwd") or "")).name or "the background"
+        open_sessions(str(started.get("session") or ""), spawn=spawn)
+        return Outcome(True, f"Started in {where}. It's on the glass.")
+    # stop: the one live glass run whose folder or task names it
+    try:
+        listed = run([str(KYBER_SESSIONS), "--json"], capture_output=True, text=True, timeout=CLI_TIMEOUT_S)
+        rows = json.loads(listed.stdout or "[]")
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return Outcome(False, "Couldn't read your agents.")
+    key = command.name.lower()
+    hits = [r for r in rows if r.get("run") and (key in str(r.get("project", "")).lower()
+                                                   or key in str(r.get("title", "")).lower())]
+    if not hits:
+        return Outcome(False, f"No running agent from the glass matches {command.name}.")
+    if len(hits) > 1:
+        return Outcome(False, f"{len(hits)} running agents match {command.name}. Stop one on its card.")
+    try:
+        done = run([str(KYBER_SESSIONS), "stop", str(hits[0]["id"])], capture_output=True, text=True,
+                   timeout=CLI_TIMEOUT_S + 20)
+    except (OSError, subprocess.TimeoutExpired):
+        return Outcome(False, "The stop didn't answer.")
+    line = (done.stdout or done.stderr or "").strip() or ("Stopped." if done.returncode == 0 else "It didn't stop.")
+    return Outcome(done.returncode == 0, line)
+
+
 def perform(command: Command, run=subprocess.run, ask=None, spawn=subprocess.Popen) -> Outcome:
+    if command.verb in ("sessions", "task", "stop"):
+        return sessions_verb(command, run=run, spawn=spawn)
     if command.verb == "walk":
         if start_walk(spawn):
             return Outcome(True, "Opening Settings. Follow the ring.")
         return Outcome(False, "The permission walkthrough didn't start.")
-    if command.verb == "panel":
+    if command.verb == "panel" and command.name != "sessions":
         argv = [str(HUD), command.name] + ([command.arg] if command.arg else [])
         try:
             done = run(argv, capture_output=True, text=True, timeout=CLI_TIMEOUT_S)
@@ -279,6 +374,12 @@ def perform(command: Command, run=subprocess.run, ask=None, spawn=subprocess.Pop
         if done.returncode != 0:
             return Outcome(False, "Your files didn't come up.")
         return Outcome(True, "Closed." if command.arg == "off" else "Your files are up.")
+    if command.verb == "panel" and command.name == "sessions":
+        try:
+            run([str(HUD), "close", "sessions"], capture_output=True, text=True, timeout=CLI_TIMEOUT_S)
+        except (OSError, subprocess.TimeoutExpired):
+            return Outcome(False, "The display didn't answer.")
+        return Outcome(True, "Closed.")
     if command.verb == "open" and command.name == "oss" and command.arg:
         if open_with_preset("oss", {"/oss/q": command.arg}, run=run, ask=ask):
             return Outcome(True, f"Here's what replaces {command.arg}.")

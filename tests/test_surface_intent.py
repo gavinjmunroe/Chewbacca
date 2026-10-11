@@ -58,10 +58,18 @@ def main() -> int:
         ("hide the tasks", "close", "tasks", ""),
         ("close everything", "close", "all", ""),
         ("Kyber, show my day please", "open", "today", ""),
-        ("show my agents", "open", "agents", ""),
-        ("pull up my claude sessions", "open", "agents", ""),
-        ("open the coding agents", "open", "agents", ""),
-        ("close the agents", "close", "agents", ""),
+        ("show my agents", "sessions", "open", ""),
+        ("pull up my claude sessions", "sessions", "open", ""),
+        ("open the coding agents", "sessions", "open", ""),
+        ("show my sessions", "sessions", "open", ""),
+        ("pull up my tabs", "sessions", "open", ""),
+        ("show the realm sessions", "open", "agents", ""),
+        ("close the agents", "panel", "sessions", "off"),
+        ("Start an agent in lemma to write the README for v2.", "task", "write the README for v2", "lemma"),
+        ("new task: summarize my week", "task", "summarize my week", ""),
+        ("Kyber, spin up a tab that fixes the 3 failing tests", "task", "fixes the 3 failing tests", ""),
+        ("stop the lemma agent", "stop", "lemma", ""),
+        ("kill the readme task", "stop", "readme", ""),
     ]
     for said, verb, name, arg in takes:
         got = si.parse(said, resolve_person=resolver)
@@ -86,8 +94,14 @@ def main() -> int:
         "open my work",
         # A question about a surface is a question.
         "why did my tasks close",
-        # Too loose for the agents panel: kyber-sessions, and a person.
-        "show my sessions",
+        # Not an agent: music, a timer, a browser tab, nothing to do.
+        "stop the music",
+        # Said aloud by hud-listen's agent summary instead.
+        "what are my agents doing",
+        "start a timer for 5 minutes",
+        "open a new tab to google.com",
+        "launch a new claude",
+        # Too loose for the agents panel: a person.
         "Show me Claude",
         "show my agents and tell the lemma one to run the tests",
         # A greeting, answered by hud-listen's pleasantry (CHW-184).
@@ -122,6 +136,37 @@ def main() -> int:
     check("closing files sends `hud files off`", calls[-1][1:] == ["files", "off"] and out.ok, calls[-1])
     out = si.perform(si.Command("open", "today"), run=lambda argv, **kw: Done(1))
     check("a failed open says so instead of claiming it", not out.ok and "didn't" in out.line, out)
+    class Done:
+        def __init__(self, rc=0, out="", err=""):
+            self.returncode, self.stdout, self.stderr = rc, out, err
+
+    calls, spawned = [], []
+
+    def fake_run(argv, **kw):
+        calls.append(argv)
+        if argv[1:2] == ["new"]:
+            return Done(out='{"session": "abc", "cwd": "/x/lemma", "pid": 1}')
+        if argv[1:2] == ["--json"]:
+            return Done(out='[{"id": "r1", "run": true, "project": "lemma", "title": "readme"},'
+                            ' {"id": "v1", "run": false, "project": "lemma", "title": "vs code tab"}]')
+        if argv[1:2] == ["stop"]:
+            return Done(out="Stopped.")
+        return Done()
+
+    spawn = lambda argv, **kw: spawned.append(argv)
+    got = si.perform(si.Command("task", "write the README", "lemma"), run=fake_run, spawn=spawn)
+    check("a task starts through kyber-sessions new, folder as --in",
+          got.ok and calls[-1][1:] == ["new", "write the README", "--in", "lemma"] and "lemma" in got.line, (calls, got))
+    check("and opens its card on the glass", spawned and spawned[-1][-2:] == ["--open", "abc"], spawned)
+    got = si.perform(si.Command("stop", "lemma"), run=fake_run, spawn=spawn)
+    check("stop reaches only the glass's own run", got.ok and calls[-1][1:] == ["stop", "r1"], calls[-1])
+    got = si.perform(si.Command("stop", "nothing"), run=fake_run, spawn=spawn)
+    check("a stop that names no run says so", not got.ok and "No running agent" in got.line, got)
+    refused = lambda argv, **kw: Done(rc=1, err="No single folder is named nope. Say the full path.")
+    got = si.perform(si.Command("task", "x", "nope"), run=refused, spawn=spawn)
+    check("a refused start says why", not got.ok and "No single folder" in got.line, got)
+    got = si.perform(si.Command("sessions", "open"), run=fake_run, spawn=spawn)
+    check("show my agents starts the panel", got.ok and spawned[-1][-1] == "serve", spawned[-1])
     print("all passed" if not failed else f"{failed} failed")
     return 1 if failed else 0
 

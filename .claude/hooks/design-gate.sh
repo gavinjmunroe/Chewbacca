@@ -71,6 +71,10 @@ EXTRA=$(tail -c 400000 "$TRANSCRIPT" 2>/dev/null \
       if ls "$d"/*.html "$d"/../*.html >/dev/null 2>&1; then echo "$f"; fi
     done)
 EDITED=$(printf '%s\n%s\n' "$EDITED" "$EXTRA" | grep -v '^$' | sort -u)
+# Only files that still exist. The scan reads the transcript's tail, not just
+# this turn, so a scratch sketch written, viewed and deleted kept refusing
+# every later turn, eight times on 2026-10-10, over a page that was gone.
+EDITED=$(printf '%s\n' "$EDITED" | while IFS= read -r f; do [ -e "$f" ] && printf '%s\n' "$f"; done)
 [ -n "$EDITED" ] || exit 0
 
 # The project root is the nearest ancestor holding a marker.

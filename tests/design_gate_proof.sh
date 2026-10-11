@@ -36,6 +36,12 @@ run(){
           UI_PROOF_RECEIPTS="$T/receipts" CHEWBACCA_LOG_DIR="$T/logs" bash "$HOOK"
 }
 
+# A rendered file that was written and then deleted is not a page to look at.
+printf '"file_path":"%s"\n' "$T/gone/sketch.html" > "$T/gone.jsonl"
+out=$(printf '{"prompt_id":"pg-'"$$"'","transcript_path":"%s"}' "$T/gone.jsonl" \
+  | env HOME="$T/home" PATH="$T/bin:$PATH" UX_ENGINE_DIR="$T/ux" CHEWBACCA_LOG_DIR="$T/logs" bash "$HOOK" 2>&1); code=$?
+[ $code -eq 0 ] && [ -z "$out" ] && ok "a deleted file never refuses a turn" || no "deleted file refused: $code $out"
+
 err=$(run clean 2>&1); code=$?
 [ $code -eq 0 ] && ok "clean page passes" || no "clean page exited $code: $err"
 ls "$T"/receipts/*/receipt.json >/dev/null 2>&1 && ok "receipt written outside the project" \

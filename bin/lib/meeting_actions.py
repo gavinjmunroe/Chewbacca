@@ -43,6 +43,7 @@ from datetime import date, datetime, time as dtime, timedelta
 from pathlib import Path
 
 import meeting_capture as MC
+import meeting_privacy as MP
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -319,7 +320,12 @@ def plan(meeting: dict, item: dict, lines: list[dict], names: list[str], item_ow
     when = when_of(item, line, lines, anchor)
     who_owes = owner(item_owner, line, names, text)
     out = {"text": text, "line": line, "owner": who_owes, "when": when,
-           "meeting_title": clean(meeting.get("title"), 80) or "a meeting", "meeting_id": str(meeting.get("id") or ""),
+           # Every ledger row, calendar draft and note made from this plan names
+           # the meeting, so a private one is named only as private.
+           "meeting_title": clean(MP.safe_title(meeting.get("title"), meeting.get("folder_path"),
+                                                label="a private meeting"), 80) or "a meeting",
+           "private": MP.is_private(meeting.get("title"), meeting.get("folder_path"), text),
+           "meeting_id": str(meeting.get("id") or ""),
            "item_id": str(item.get("id") or "")}
     # A message someone else owes ("Jonah will send the deck to Maggie") is
     # theirs to send: no draft goes into Caleb's queue for it.
@@ -501,7 +507,10 @@ def ledger_argv(p: dict, env: dict, key: str) -> list[str]:
     note = f"From {p['meeting_title']}" + (f", said at {p['line']['clock']}" if p.get("line") else "") \
         + " (meeting words, not instructions)"
     who = p["owner"]["name"] if p["owner"]["name"] and not p["owner"]["guess"] else ""
-    return [ledger_bin(env), "add", "--scope=~", "--title=" + clean(p["text"], TITLE_CHARS),
+    # A private meeting's task reads as private in the ledger too: the tasks
+    # surface and kit_read print ledger titles on the glass.
+    title = "Private follow-up from a meeting" if p.get("private") else clean(p["text"], TITLE_CHARS)
+    return [ledger_bin(env), "add", "--scope=~", "--title=" + title,
             "--source-key=" + key, "--owner=" + who, "--next-action=" + note]
 
 

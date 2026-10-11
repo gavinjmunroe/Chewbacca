@@ -254,6 +254,18 @@ class Solo(unittest.TestCase):
         self.run_cli("send", "--client", "Dana Co", "--batch", b2["id"], "--gap", "0")
         self.assertEqual(len(self.sends()), 5)
 
+    def test_a_plan_that_requires_a_line_holds_every_lead_without_one(self):
+        self.ready()
+        plan = json.loads((self.d / "plan.json").read_text())
+        plan["require_line"] = True
+        (self.d / "plan.json").write_text(json.dumps(plan))
+        lines = self.tmp / "lines.json"
+        lines.write_text(json.dumps({"maria@crumbcorner.test": {
+            "line": "Your plan a visit page has no form.", "source": "https://crumbcorner.test/visit"}}))
+        b = self.batch("--lines", str(lines))
+        self.assertEqual([m["to"] for m in b["mails"]], ["maria@crumbcorner.test"])
+        self.assertIn("hello@rollhouse.test", [m["to"] for m in b["held"]])
+
     def add_second_contact(self):
         rows = (self.d / "leads.csv").read_text().splitlines()
         rows.append("Crumb Corner,crumbcorner.test,,,,pastor@crumbcorner.test,Austin,google-maps,,,,,")

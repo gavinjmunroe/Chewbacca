@@ -551,6 +551,8 @@ def cmd_batch(a) -> int:
                 "line": lead["line"], "line_source": extra.get("source") or "",
                 "body": f"{body}\n\n{footer(sender)}"}
         bad = problems(mail)
+        if plan.get("require_line") and not lead["line"]:
+            bad.append("the first email needs its personal line and this lead has none yet")
         (held if bad else mails).append({**mail, "held_for": bad} if bad else mail)
     frozen = json.dumps([{k: m[k] for k in ("to", "step", "subject", "body")} for m in mails], sort_keys=True)
     bid = hashlib.sha256(frozen.encode()).hexdigest()[:10]

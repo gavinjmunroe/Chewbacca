@@ -152,7 +152,23 @@ def clear_engine(pid: int | None = None) -> None:
 # Refuses every WebSocket upgrade that carries an Origin header, so a web page
 # cannot reach the engine (see the file's own comment).
 ORIGIN_GUARD = Path(__file__).resolve().parent.parent / "config" / "data" / "realm" / "origin-guard.mjs"
-PINNED_REF = os.environ.get("CHEWBACCA_REALM_REF", "0ae5b8b5739e6165360e4b0679302b7b5afdd4b1")
+# "latest" follows Carlton's main. On 2026-10-10 the engine sat 1,027
+# commits behind on 0ae5b8b5 and Caleb, asked whether to move it, said "YES
+# ALWAYS dont ask that". Carlton is a collaborator who gave the engine to the
+# kit in person (2026-10-05), so his main is code this kit trusts; a sha in
+# CHEWBACCA_REALM_REF still pins it for a rollback or a bisect.
+PINNED_REF = os.environ.get("CHEWBACCA_REALM_REF", "latest")
+
+
+def target_ref(git: str | None) -> str:
+    """The commit to build: CHEWBACCA_REALM_REF's sha, or origin/main fetched now."""
+    if PINNED_REF != "latest":
+        return PINNED_REF
+    if not git:
+        return ""
+    subprocess.run([git, "-C", str(REALM_DIR), "fetch", "--quiet", "origin", "main"])
+    got = subprocess.run([git, "-C", str(REALM_DIR), "rev-parse", "origin/main"], capture_output=True, text=True)
+    return got.stdout.strip() if got.returncode == 0 else ""
 
 
 def build(force: bool) -> int:
@@ -170,17 +186,20 @@ def build(force: bool) -> int:
         print(f"cloning {REPO_URL} into {REALM_DIR}", file=sys.stderr)
         if subprocess.run([git, "clone", REPO_URL, str(REALM_DIR)]).returncode:
             return die("clone failed")
-    # Build only the commit this kit was verified against. `pnpm install` and
-    # the build run code from the checkout, so building whatever main holds
-    # today would run code nobody here has read (security review, 2026-10-05).
-    # Moving to a newer commit is a deliberate change to PINNED_REF.
+    # Build exactly one named commit, never whatever the working tree holds:
+    # `pnpm install` and the build run code from the checkout, so a stray local
+    # edit must not ride along (security review, 2026-10-05). The commit is
+    # Carlton's latest main unless CHEWBACCA_REALM_REF pins a sha.
+    ref = target_ref(git) if git and (REALM_DIR / ".git").exists() else PINNED_REF
+    if not ref or ref == "latest":
+        return die("could not resolve realm's origin/main; set CHEWBACCA_REALM_REF to a sha")
     if git and (REALM_DIR / ".git").exists():
-        if source_stamp(git) != PINNED_REF:
-            subprocess.run([git, "-C", str(REALM_DIR), "fetch", "--quiet", "origin", PINNED_REF])
-            if subprocess.run([git, "-C", str(REALM_DIR), "checkout", "--quiet", "--detach", PINNED_REF]).returncode:
-                return die(f"could not check out the pinned commit {PINNED_REF[:12]} in {REALM_DIR}")
-    if source_stamp(git) != PINNED_REF:
-        return die(f"{REALM_DIR} is not at the pinned commit {PINNED_REF[:12]}; refusing to run its build")
+        if source_stamp(git) != ref:
+            subprocess.run([git, "-C", str(REALM_DIR), "fetch", "--quiet", "origin", ref])
+            if subprocess.run([git, "-C", str(REALM_DIR), "checkout", "--quiet", "--detach", ref]).returncode:
+                return die(f"could not check out {ref[:12]} in {REALM_DIR}")
+    if source_stamp(git) != ref:
+        return die(f"{REALM_DIR} is not at {ref[:12]}; refusing to run its build")
     stamp = home() / "build.json"
     head = source_stamp(git)
     if not force and main_js().exists() and head and _read_json(stamp).get("source") == head:

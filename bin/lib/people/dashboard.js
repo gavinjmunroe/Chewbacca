@@ -26,59 +26,32 @@ function dashboardModule() {
 
 const AGENT_LABEL = "com.chewbacca.people-dashboard";
 
-function agentPlistPath() {
-  return path.join(HOME, "Library", "LaunchAgents", AGENT_LABEL + ".plist");
+// "A dashboard I can always open" means the server has to outlive the terminal
+// that started it. It is a keepalive service of chewbacca-daemon, the one
+// Login Items row Chewbacca has (Caleb, 2026-10-11: "only 1 thing").
+function daemon(args) {
+  const bin = path.join(__dirname, "..", "..", "chewbacca-daemon");
+  return execFileSync(process.argv[0], [bin, ...args], { encoding: "utf8" });
 }
 
-// "A dashboard I can always open" means the server has to outlive the terminal
-// that started it. A LaunchAgent with KeepAlive is the version of that which
-// survives a reboot; a backgrounded shell job is not.
 function installAgent(port) {
-  const plist = agentPlistPath();
-  const logDir = path.join(HOME, "Library", "Logs");
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key><string>${AGENT_LABEL}</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>${process.argv[0]}</string>
-    <string>${fs.realpathSync(process.argv[1])}</string>
-    <string>dashboard</string>
-    <string>--port</string>
-    <string>${port}</string>
-    <string>--no-open</string>
-  </array>
-  <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
-  <key>StandardOutPath</key><string>${path.join(logDir, AGENT_LABEL + ".log")}</string>
-  <key>StandardErrorPath</key><string>${path.join(logDir, AGENT_LABEL + ".err")}</string>
-</dict>
-</plist>
-`;
-  fs.writeFileSync(plist, xml);
-  const uid = process.getuid();
-  // bootout first so a re-install picks up a changed port rather than silently
-  // keeping the old one running.
-  try {
-    execFileSync("launchctl", ["bootout", `gui/${uid}/${AGENT_LABEL}`], { stdio: "ignore" });
-  } catch {}
-  execFileSync("launchctl", ["bootstrap", `gui/${uid}`, plist]);
+  daemon(["register", "people-dashboard", "--keepalive", "--",
+    process.argv[0], fs.realpathSync(process.argv[1]), "dashboard", "--port", String(port), "--no-open"]);
+  for (const label of [AGENT_LABEL, "com.calebnewton.people-dashboard"]) {
+    try { execFileSync("launchctl", ["bootout", `gui/${process.getuid()}/${label}`], { stdio: "ignore" }); } catch {}
+    const old = path.join(HOME, "Library", "LaunchAgents", label + ".plist");
+    if (fs.existsSync(old)) fs.unlinkSync(old);
+  }
+  daemon(["install"]);
   say("");
-  say(`  ${c.grn("installed")} ${c.dim(AGENT_LABEL)}`);
+  say(`  ${c.grn("installed")} ${c.dim("people-dashboard")}`);
   say(`  running at ${c.cyn(`http://localhost:${port}`)} and after every reboot`);
   say(c.dim(`  stop it with: people dashboard --uninstall`));
   say("");
 }
 
 function uninstallAgent() {
-  const plist = agentPlistPath();
-  const uid = process.getuid();
-  try {
-    execFileSync("launchctl", ["bootout", `gui/${uid}/${AGENT_LABEL}`], { stdio: "ignore" });
-  } catch {}
-  if (fs.existsSync(plist)) fs.unlinkSync(plist);
+  daemon(["unregister", "people-dashboard"]);
   say(c.dim("  dashboard agent removed. The data is untouched."));
 }
 

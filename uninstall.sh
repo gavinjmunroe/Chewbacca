@@ -227,6 +227,20 @@ else
   skip "no local data store to export"
 fi
 
+step "Removing the Chewbacca background item"
+# One LaunchAgent, com.chewbacca, runs every background job; the jobs are
+# files in ~/.chewbacca/daemon/services, which go with ~/.chewbacca below.
+D_PLIST="$HOME/Library/LaunchAgents/com.chewbacca.plist"
+if [ -f "$D_PLIST" ]; then
+  if [ "$DRY" -eq 1 ]; then
+    ok "would remove $D_PLIST"
+  else
+    launchctl bootout "gui/$(id -u)/com.chewbacca" &>/dev/null || true
+    rm -f "$D_PLIST"
+    ok "removed the Chewbacca background item"
+  fi
+fi
+
 step "Removing the kit runtime"
 # ~/.chewbacca/kit holds locked git worktrees of origin/main that PATH tools
 # run from, plus a launchd job that refreshes them. Unlock and remove them

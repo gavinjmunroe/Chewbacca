@@ -32,8 +32,8 @@ APP="/Applications/Kyber.app/Contents/MacOS/Kyber"
 LOGDIR="$HOME/Library/Logs"
 
 status() {
-  if launchctl list 2>/dev/null | grep -q "$LABEL"; then
-    echo "agent:   loaded"
+  if [ -f "$HOME/.chewbacca/daemon/services/hud.json" ]; then
+    echo "agent:   kept open by the Chewbacca background item"
   else
     echo "agent:   not loaded"
   fi
@@ -42,7 +42,6 @@ status() {
   else
     echo "process: not running"
   fi
-  [ -f "$PLIST" ] && echo "plist:   $PLIST" || echo "plist:   absent"
 }
 
 case "${1:-install}" in
@@ -50,6 +49,8 @@ case "${1:-install}" in
   --remove|remove)
     launchctl unload "$PLIST" 2>/dev/null
     rm -f "$PLIST"
+    _root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+    "$("$_root/bin/chewbacca-node" 2>/dev/null || command -v node)" "$_root/bin/chewbacca-daemon" unregister hud >/dev/null
     echo "removed. Kyber is no longer kept alive."
     exit 0
     ;;
@@ -79,34 +80,15 @@ AGENT_PATH="$(
     xargs -n1 dirname 2>/dev/null | awk '!seen[$0]++' | tr '\n' ':'
 )$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
-cat > "$PLIST" <<PLISTEOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key><string>$LABEL</string>
-  <key>ProgramArguments</key>
-  <array><string>$APP</string></array>
-  <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
-  <key>EnvironmentVariables</key>
-  <dict><key>PATH</key><string>$AGENT_PATH</string></dict>
-  <!-- A front door that dies and stays dead is worse than one that was never
-       there, because the person keeps reaching for it. -->
-  <key>ThrottleInterval</key><integer>10</integer>
-  <key>StandardOutPath</key><string>$LOGDIR/$LABEL.log</string>
-  <key>StandardErrorPath</key><string>$LOGDIR/$LABEL.err</string>
-</dict>
-</plist>
-PLISTEOF
-
-# Replace any previous copy rather than stacking a second one.
+# One Login Items row for all of Chewbacca: Kyber is kept open by
+# chewbacca-daemon, through `open`, so it stays its own process with its own
+# Accessibility grant (Caleb, 2026-10-11: "only 1 thing").
+ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+NODE="$("$ROOT/bin/chewbacca-node" 2>/dev/null || command -v node)"
+"$NODE" "$ROOT/bin/chewbacca-daemon" register hud --app /Applications/Kyber.app --env "PATH=$AGENT_PATH" >/dev/null
 launchctl unload "$PLIST" 2>/dev/null
-launchctl load "$PLIST" 2>/dev/null || {
-  echo "launchctl load failed. The plist is at $PLIST" >&2
-  exit 1
-}
+rm -f "$PLIST"
+"$NODE" "$ROOT/bin/chewbacca-daemon" install >/dev/null
 
 sleep 1
 status

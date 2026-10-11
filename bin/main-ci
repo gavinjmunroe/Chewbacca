@@ -230,28 +230,14 @@ def _install() -> int:
     home_bin.mkdir(parents=True, exist_ok=True)
     stable = home_bin / "main-ci"
     shutil.copy2(HERE, stable)
-    plist = Path.home() / "Library" / "LaunchAgents" / f"{LABEL}.plist"
     path = f"{Path.home()}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
-    log = Path.home() / "Library" / "Logs" / "chewbacca-main-ci.log"
-    plist.write_text(f"""<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>Label</key><string>{LABEL}</string>
-  <key>ProgramArguments</key><array>
-    <string>/usr/bin/python3</string><string>{stable}</string><string>tick</string>
-  </array>
-  <key>EnvironmentVariables</key><dict><key>PATH</key><string>{path}</string><key>MAIN_CI_REPO</key><string>{common}</string></dict>
-  <key>StartInterval</key><integer>600</integer>
-  <key>RunAtLoad</key><true/>
-  <key>StandardOutPath</key><string>{log}</string>
-  <key>StandardErrorPath</key><string>{log}</string>
-</dict></plist>
-""")
-    uid = os.getuid()
-    subprocess.run(["launchctl", "bootout", f"gui/{uid}/{LABEL}"], capture_output=True, check=False)
-    done = subprocess.run(["launchctl", "bootstrap", f"gui/{uid}", str(plist)], capture_output=True, text=True)
-    print(f"installed {plist}" if done.returncode == 0 else f"launchctl: {done.stderr.strip()}")
-    return done.returncode
+    # A service of chewbacca-daemon, the one Login Items row Chewbacca has
+    # (Caleb, 2026-10-11: "only 1 thing"), not its own LaunchAgent.
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+    import daemon_register
+    print(daemon_register.register("main-ci", ["/usr/bin/python3", str(stable), "tick"], every=600,
+                                   env={"PATH": path, "MAIN_CI_REPO": str(common)}, legacy_label=LABEL))
+    return 0
 
 
 def main() -> int:

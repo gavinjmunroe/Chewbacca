@@ -5,7 +5,6 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 AGENT="$HERE/live-stats-sync"
-DEST="$HOME/Library/LaunchAgents/com.chewbacca.live-stats-sync.plist"
 if ! security find-generic-password -s chewbacca-live-sync >/dev/null 2>&1; then
   echo "install: no chewbacca-live-sync key in the login keychain" >&2
   exit 1
@@ -19,8 +18,12 @@ for tool in api-anything node; do
   found="$(command -v "$tool" 2>/dev/null || true)"
   [ -n "$found" ] && EXTRA="$EXTRA$(dirname "$found"):"
 done
-sed -e "s#__AGENT__#$AGENT#g" -e "s#__EXTRA_PATH__#$EXTRA#g" -e "s#__HOME__#$HOME#g" "$HERE/com.chewbacca.live-stats-sync.plist" >"$DEST"
-plutil -lint "$DEST" >/dev/null
+# One Login Items row for all of Chewbacca: this is a keepalive service of
+# chewbacca-daemon, not its own LaunchAgent (Caleb, 2026-10-11).
+NODE="$("$HERE/../../../bin/chewbacca-node" 2>/dev/null || command -v node)"
+"$NODE" "$HERE/../../../bin/chewbacca-daemon" register live-stats-sync --keepalive \
+  --env "PATH=${EXTRA}$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" -- /usr/bin/python3 "$AGENT"
 launchctl bootout "gui/$(id -u)/com.chewbacca.live-stats-sync" 2>/dev/null || true
-launchctl bootstrap "gui/$(id -u)" "$DEST"
-echo "installed $DEST -> $AGENT"
+rm -f "$HOME/Library/LaunchAgents/com.chewbacca.live-stats-sync.plist"
+"$NODE" "$HERE/../../../bin/chewbacca-daemon" install >/dev/null
+echo "installed live-stats-sync -> $AGENT"

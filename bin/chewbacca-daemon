@@ -1,0 +1,470 @@
+#!/usr/bin/env node
+// @ts-nocheck
+/**
+ * chewbacca-daemon: the one background item Chewbacca puts on a Mac.
+ *
+ *   chewbacca-daemon install            write the one LaunchAgent, adopt the old ones
+ *   chewbacca-daemon register NAME (--every SEC | --at HH:MM[,HH:MM] | --keepalive | --app PATH)
+ *                                [--nice N] [--env K=V]... [--start-later] -- ARGV...
+ *   chewbacca-daemon unregister NAME
+ *   chewbacca-daemon status [--json]
+ *   chewbacca-daemon run                 the supervisor launchd starts
+ *   chewbacca-daemon uninstall
+ *
+ * Caleb, 2026-10-11, on two "Background Items Added" notices (kyber-sessions,
+ * node): "Chewb should aim to be only 1 thing ... Most ppl will get weirded out
+ * if they see too many things". Login Items then listed Chewbacca as five
+ * python3 rows, bash rows, two node rows, kyber-sessions and Kyber: one
+ * LaunchAgent per job, each named after whatever binary it started.
+ *
+ * Now there is one LaunchAgent, com.chewbacca, whose program is the
+ * Chewbacca.app runtime (bin/chewbacca-node), so the row reads "Chewbacca"
+ * with its icon. Every job is a file in ~/.chewbacca/daemon/services/ and runs
+ * as a child of this supervisor. Children inherit the runtime as their
+ * responsible process, so the texts refresh keeps its Full Disk Access grant.
+ * The cost: every service here runs under that grant too, the same exposure
+ * bin/chewbacca-node already documents for anything launched through it.
+ *
+ * Kyber is the exception that stays its own process: it is started with
+ * `open`, so LaunchServices launches it and its Accessibility grant stays its own.
+ */
+"use strict";
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
+const { spawn, execFileSync, spawnSync } = require("child_process");
+
+const HOME = os.homedir();
+const DIR = process.env.CHEWBACCA_DAEMON_DIR || path.join(HOME, ".chewbacca", "daemon");
+const SERVICES = path.join(DIR, "services");
+const STATE = path.join(DIR, "state.json");
+const LEGACY = path.join(DIR, "legacy");
+const LOGS = process.env.CHEWBACCA_DAEMON_LOGS || path.join(HOME, "Library", "Logs", "chewbacca");
+const AGENTS = process.env.CHEWBACCA_LAUNCH_AGENTS || path.join(HOME, "Library", "LaunchAgents");
+const LABEL = "com.chewbacca";
+const KIT = process.env.CHEWBACCA_KIT || path.join(HOME, ".chewbacca", "kit", "current");
+const DEFAULT_PATH = `${HOME}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin`;
+
+// launchd ran the fastest of the old jobs (the job queue) every 30 s, so a 5 s
+// tick is finer than anything a service asked for. Guessed, never measured
+// for cost; one readdir and a few stats per tick.
+const TICK_MS = 5000;
+// A keepalive service that dies is restarted after 10 s, doubling to 5 min,
+// and the delay resets once it has stayed up a minute. launchd's own
+// ThrottleInterval is 10 s; the ceiling is guessed, never measured.
+const BACKOFF_MIN_S = 10, BACKOFF_MAX_S = 300, STABLE_S = 60;
+// Logs are cut back to the last 1 MB once they pass 5 MB. Guessed: the busiest
+// old log, chewbacca-jobs.log, grew by about 30 lines an hour.
+const LOG_MAX = 5 * 1024 * 1024, LOG_KEEP = 1024 * 1024;
+
+// Labels the kit or Caleb's own setup put in ~/Library/LaunchAgents before
+// this existed. `install` folds each one it finds into a service and removes
+// its plist, so Login Items loses the row. Anything not named here is left alone.
+const ADOPT = [
+  "com.chewbacca.messages-refresh", "com.chewbacca.jobs", "com.chewbacca.agent-watch",
+  "com.chewbacca.kit-runtime", "com.chewbacca.bridge", "com.chewbacca.live-stats-sync",
+  "com.chewbacca.people-dashboard", "com.chewbacca.main-ci", "com.chewbacca.realm",
+  "com.calebnewton.brain-index", "com.calebnewton.people-sync", "com.calebnewton.people-dashboard",
+  "com.calebnewton.chewbacca.hud", "com.calebnewton.chewbacca-maintain",
+  "com.calebnewton.presence-watch", "com.calebnewton.claude-contacts-export",
+  "ai.chewie.brief", "ai.nova.brief",
+];
+// Re-checked this often while running, so a tool that still writes its own
+// plist (realm-engine install, mac/app/install-brief.sh) is folded in within
+// minutes. Guessed, never measured.
+const ADOPT_EVERY_MS = 10 * 60 * 1000;
+
+const NAME_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+
+function readJSON(file, fallback) {
+  try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
+}
+function writeJSON(file, value) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(value, null, 2) + "\n", { mode: 0o600 });
+  fs.renameSync(tmp, file);
+}
+
+function validate(svc) {
+  if (!svc || !NAME_RE.test(svc.name || "")) return "name must be lowercase letters, digits, . _ or -";
+  const modes = ["every", "at", "keepalive", "app"].filter((k) => svc[k] !== undefined && svc[k] !== false);
+  if (modes.length !== 1) return "give exactly one of --every, --at, --keepalive, --app";
+  if (svc.keepalive !== undefined && svc.keepalive !== true && svc.keepalive !== "crash") return "--keepalive is true or crash";
+  if (svc.every !== undefined && !(Number.isFinite(svc.every) && svc.every >= 5)) return "--every needs whole seconds, at least 5";
+  if (svc.at !== undefined && !(Array.isArray(svc.at) && svc.at.length && svc.at.every((t) => /^([01]\d|2[0-3]):[0-5]\d$/.test(t)))) return "--at needs HH:MM times";
+  if (svc.app !== undefined) { if (typeof svc.app !== "string" || !svc.app.endsWith(".app")) return "--app needs a .app path"; }
+  else if (!Array.isArray(svc.argv) || !svc.argv.length || !svc.argv.every((a) => typeof a === "string")) return "give the command after --";
+  return null;
+}
+
+function register(svc) {
+  const err = validate(svc);
+  if (err) throw new Error(err);
+  writeJSON(path.join(SERVICES, `${svc.name}.json`), svc);
+}
+
+function loadServices() {
+  let names = [];
+  try { names = fs.readdirSync(SERVICES).filter((f) => f.endsWith(".json")); } catch { return []; }
+  const out = [];
+  for (const f of names) {
+    const svc = readJSON(path.join(SERVICES, f), null);
+    if (svc && !validate(svc) && `${svc.name}.json` === f) out.push(svc);
+  }
+  return out;
+}
+
+// ---- adopting the old LaunchAgents ----------------------------------------
+
+function plistToJSON(file) {
+  const r = spawnSync("/usr/bin/plutil", ["-convert", "json", "-o", "-", file], { encoding: "utf8" });
+  if (r.status !== 0) return null;
+  try { return JSON.parse(r.stdout); } catch { return null; }
+}
+
+function serviceFromPlist(label, p) {
+  const name = /^ai\.(chewie|nova)\.brief$/.test(label) ? "brief"
+    : label.replace(/^com\.(chewbacca|calebnewton)\./, "").replace(/^chewbacca[.-]/, "") || label;
+  const argv = p.ProgramArguments || (p.Program ? [p.Program] : null);
+  if (!argv || !argv.length) return null;
+  const svc = { name, argv, adoptedFrom: label };
+  const app = argv[0].match(/^(.*?\.app)\/Contents\/MacOS\//);
+  // KeepAlive {SuccessfulExit: false} means restart only after a crash; the
+  // realm engine relies on it so its own stop command stays stopped.
+  const crashOnly = p.KeepAlive && typeof p.KeepAlive === "object" && p.KeepAlive.SuccessfulExit === false;
+  if (app && p.KeepAlive) { delete svc.argv; svc.app = app[1]; }
+  else if (crashOnly) svc.keepalive = "crash";
+  else if (p.KeepAlive) svc.keepalive = true;
+  else if (p.StartInterval) svc.every = Math.max(5, Number(p.StartInterval));
+  else if (p.StartCalendarInterval) {
+    const slots = [].concat(p.StartCalendarInterval)
+      .filter((s) => s.Hour !== undefined)
+      .map((s) => `${String(s.Hour).padStart(2, "0")}:${String(s.Minute || 0).padStart(2, "0")}`);
+    if (!slots.length) return null;
+    svc.at = slots;
+  } else if (p.RunAtLoad) svc.keepalive = true;
+  else return null;
+  if (p.EnvironmentVariables) svc.env = p.EnvironmentVariables;
+  if (p.WorkingDirectory) svc.cwd = p.WorkingDirectory;
+  if (Number.isInteger(p.Nice)) svc.nice = p.Nice;
+  if (svc.every !== undefined && p.RunAtLoad === false) svc.startLater = true;
+  return svc;
+}
+
+function launchctl(args) {
+  return spawnSync("/bin/launchctl", args, { encoding: "utf8" });
+}
+
+function adoptLegacy({ dryRun = false } = {}) {
+  const uid = process.getuid();
+  const adopted = [];
+  for (const label of ADOPT) {
+    const file = path.join(AGENTS, `${label}.plist`);
+    if (!fs.existsSync(file)) continue;
+    const p = plistToJSON(file);
+    const svc = p && serviceFromPlist(label, p);
+    if (!svc || validate(svc)) { adopted.push({ label, skipped: "could not read a schedule from it" }); continue; }
+    adopted.push({ label, service: svc.name });
+    if (dryRun) continue;
+    register(svc);
+    launchctl(["bootout", `gui/${uid}/${label}`]);
+    fs.mkdirSync(LEGACY, { recursive: true });
+    fs.renameSync(file, path.join(LEGACY, `${label}.plist`));
+  }
+  return adopted;
+}
+
+// ---- install ----------------------------------------------------------------
+
+function runtimeBinary() {
+  const app = path.join(HOME, ".chewbacca", "runtime", "Chewbacca.app", "Contents", "MacOS", "Chewbacca");
+  if (fs.existsSync(app)) return app;
+  return process.execPath;
+}
+
+function plistXML(bin, script) {
+  const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>${LABEL}</string>
+  <key>ProgramArguments</key><array>
+    <string>${esc(bin)}</string><string>${esc(script)}</string><string>run</string>
+  </array>
+  <key>EnvironmentVariables</key><dict>
+    <key>PATH</key><string>${esc(DEFAULT_PATH)}</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ProcessType</key><string>Background</string>
+  <key>StandardOutPath</key><string>${esc(path.join(LOGS, "daemon.log"))}</string>
+  <key>StandardErrorPath</key><string>${esc(path.join(LOGS, "daemon.log"))}</string>
+</dict></plist>
+`;
+}
+
+function install({ dryRun = false } = {}) {
+  const script = fs.existsSync(path.join(KIT, "bin", "chewbacca-daemon"))
+    ? path.join(KIT, "bin", "chewbacca-daemon") : path.resolve(__filename);
+  const plist = path.join(AGENTS, `${LABEL}.plist`);
+  const xml = plistXML(runtimeBinary(), script);
+  if (dryRun) return { plist, xml, adopted: adoptLegacy({ dryRun: true }) };
+  fs.mkdirSync(AGENTS, { recursive: true });
+  fs.mkdirSync(LOGS, { recursive: true });
+  const adopted = adoptLegacy();
+  const same = fs.existsSync(plist) && fs.readFileSync(plist, "utf8") === xml;
+  const uid = process.getuid();
+  if (!same) {
+    fs.writeFileSync(plist, xml);
+    launchctl(["bootout", `gui/${uid}/${LABEL}`]);
+    const r = launchctl(["bootstrap", `gui/${uid}`, plist]);
+    if (r.status !== 0) throw new Error(`launchctl bootstrap failed: ${(r.stderr || "").trim()}`);
+  } else if (launchctl(["print", `gui/${uid}/${LABEL}`]).status !== 0) {
+    launchctl(["bootstrap", `gui/${uid}`, plist]);
+  }
+  return { plist, adopted, changed: !same };
+}
+
+// ---- the supervisor ----------------------------------------------------------
+
+function log(msg) {
+  process.stdout.write(`${new Date().toISOString()} ${msg}\n`);
+}
+
+function openLog(name) {
+  fs.mkdirSync(LOGS, { recursive: true });
+  const file = path.join(LOGS, `${name}.log`);
+  try {
+    const st = fs.statSync(file);
+    if (st.size > LOG_MAX) {
+      const fd = fs.openSync(file, "r");
+      const buf = Buffer.alloc(LOG_KEEP);
+      fs.readSync(fd, buf, 0, LOG_KEEP, st.size - LOG_KEEP);
+      fs.closeSync(fd);
+      fs.writeFileSync(file, buf);
+    }
+  } catch { /* first run: no log yet */ }
+  return fs.openSync(file, "a");
+}
+
+function appRunning(app) {
+  const exe = path.basename(app, ".app");
+  return spawnSync("/usr/bin/pgrep", ["-x", exe]).status === 0;
+}
+
+// The last time an --at slot came due, at or before now.
+function lastSlot(times, now) {
+  let best = 0;
+  for (const t of times) {
+    const [h, m] = t.split(":").map(Number);
+    const d = new Date(now); d.setHours(h, m, 0, 0);
+    if (d.getTime() > now) d.setDate(d.getDate() - 1);
+    best = Math.max(best, d.getTime());
+  }
+  return best;
+}
+
+function due(svc, st, now) {
+  if (svc.app) return !appRunning(svc.app) && now >= (st.retryAt || 0);
+  if (st.pid) return false;
+  if (svc.keepalive) return now >= (st.retryAt || 0);
+  if (svc.every) {
+    if (!st.lastStart) return !svc.startLater || now - (st.firstSeen || now) >= svc.every * 1000;
+    return now - st.lastStart >= svc.every * 1000;
+  }
+  if (svc.at) return lastSlot(svc.at, now) > (st.lastStart || st.firstSeen || now);
+  return false;
+}
+
+function start(svc, st, children) {
+  const now = Date.now();
+  st.lastStart = now;
+  if (svc.app) {
+    // `open --env` hands the app a PATH; LaunchServices otherwise gives it
+    // /usr/bin:/bin only, and on 2026-09-21 that left the HUD unable to find
+    // the model CLI, so speech went nowhere with no error.
+    const envArgs = Object.entries(svc.env || {}).flatMap(([k, v]) => ["--env", `${k}=${v}`]);
+    spawnSync("/usr/bin/open", ["-g", ...envArgs, "-a", svc.app]);
+    // Give LaunchServices a minute before checking again, so a slow launch is not opened twice.
+    st.retryAt = now + 60 * 1000;
+    log(`opened ${svc.name}`);
+    return;
+  }
+  const fd = openLog(svc.name);
+  const env = { ...process.env, PATH: DEFAULT_PATH, ...(svc.env || {}) };
+  let child;
+  try {
+    child = spawn(svc.argv[0], svc.argv.slice(1), {
+      cwd: svc.cwd || HOME, env, detached: true, stdio: ["ignore", fd, fd],
+    });
+  } catch (e) {
+    fs.closeSync(fd);
+    st.lastExit = `spawn failed: ${e.message}`;
+    st.retryAt = now + BACKOFF_MAX_S * 1000;
+    return;
+  }
+  fs.closeSync(fd);
+  if (Number.isInteger(svc.nice) && child.pid) { try { os.setPriority(child.pid, svc.nice); } catch { /* best effort */ } }
+  st.pid = child.pid;
+  children.set(svc.name, child);
+  child.on("error", (e) => { st.lastExit = `error: ${e.message}`; });
+  child.on("exit", (code, signal) => {
+    children.delete(svc.name);
+    st.pid = null;
+    st.lastExit = signal ? `signal ${signal}` : code;
+    st.lastEnd = Date.now();
+    if (svc.keepalive === "crash" && code === 0 && !signal) {
+      st.retryAt = Infinity;  // a clean exit stays down until the next login, as launchd did
+    } else if (svc.keepalive) {
+      const up = (st.lastEnd - st.lastStart) / 1000;
+      st.backoff = up >= STABLE_S ? BACKOFF_MIN_S : Math.min(BACKOFF_MAX_S, (st.backoff || BACKOFF_MIN_S / 2) * 2);
+      st.retryAt = st.lastEnd + st.backoff * 1000;
+    }
+  });
+}
+
+function kitTarget() {
+  try { return fs.realpathSync(KIT); } catch { return null; }
+}
+
+function run() {
+  const children = new Map();
+  const state = readJSON(STATE, {});
+  for (const st of Object.values(state)) st.pid = null;
+  const bootKit = kitTarget();
+  log(`daemon up, pid ${process.pid}`);
+  let lastAdopt = 0;
+
+  const stopAll = (sig) => {
+    for (const child of children.values()) { try { process.kill(-child.pid, "SIGTERM"); } catch { /* gone */ } }
+    log(`daemon down (${sig})`);
+    process.exit(0);
+  };
+  process.on("SIGTERM", () => stopAll("SIGTERM"));
+  process.on("SIGINT", () => stopAll("SIGINT"));
+
+  const tick = () => {
+    const now = Date.now();
+    if (now - lastAdopt >= ADOPT_EVERY_MS) {
+      lastAdopt = now;
+      try { for (const a of adoptLegacy()) log(`folded in ${a.label}${a.skipped ? ` (skipped: ${a.skipped})` : ""}`); }
+      catch (e) { log(`adopt failed: ${e.message}`); }
+    }
+    const services = loadServices();
+    const live = new Set(services.map((s) => s.name));
+    for (const [name, child] of children) {
+      if (!live.has(name)) { try { process.kill(-child.pid, "SIGTERM"); } catch { /* gone */ } }
+    }
+    for (const svc of services) {
+      const st = state[svc.name] || (state[svc.name] = { firstSeen: now });
+      if (due(svc, st, now)) start(svc, st, children);
+    }
+    for (const name of Object.keys(state)) if (!live.has(name) && !children.has(name)) delete state[name];
+    try { writeJSON(STATE, state); } catch { /* disk full: keep running */ }
+    // A kit update swapped ~/.chewbacca/kit/current: exit once nothing is mid-run,
+    // and launchd's KeepAlive starts the new code.
+    const kit = kitTarget();
+    if (bootKit && kit && kit !== bootKit && ![...children.keys()].some((n) => {
+      const s = services.find((x) => x.name === n); return s && !s.keepalive;
+    })) {
+      log(`kit moved to ${path.basename(kit)}, restarting`);
+      stopAll("kit update");
+    }
+  };
+  tick();
+  setInterval(tick, TICK_MS);
+}
+
+// ---- status -------------------------------------------------------------------
+
+function ago(ms) {
+  if (!ms) return "never";
+  const s = Math.round((Date.now() - ms) / 1000);
+  return s < 90 ? `${s}s ago` : s < 5400 ? `${Math.round(s / 60)}m ago` : `${Math.round(s / 3600)}h ago`;
+}
+
+function status(json) {
+  const services = loadServices();
+  const state = readJSON(STATE, {});
+  const loaded = launchctl(["print", `gui/${process.getuid()}/${LABEL}`]).status === 0;
+  const rows = services.map((s) => {
+    const st = state[s.name] || {};
+    const when = s.app ? "kept open" : s.keepalive ? "always on" : s.every ? `every ${s.every}s` : `at ${s.at.join(", ")}`;
+    const running = s.app ? appRunning(s.app) : Boolean(st.pid);
+    return { name: s.name, when, running, lastStart: st.lastStart || null, lastExit: st.lastExit ?? null };
+  });
+  if (json) { process.stdout.write(JSON.stringify({ loaded, label: LABEL, services: rows }, null, 2) + "\n"); return; }
+  console.log(`Chewbacca background: ${loaded ? "running" : "NOT loaded"} (one Login Items row)`);
+  for (const r of rows) {
+    console.log(`  ${r.name.padEnd(22)} ${r.when.padEnd(16)} ${r.running ? "running" : `last ${ago(r.lastStart)}, exit ${r.lastExit ?? "-"}`}`);
+  }
+}
+
+// ---- cli -------------------------------------------------------------------------
+
+function parseRegister(args) {
+  const dash = args.indexOf("--");
+  const opts = dash >= 0 ? args.slice(0, dash) : args;
+  const argv = dash >= 0 ? args.slice(dash + 1) : [];
+  const svc = { name: opts.shift() };
+  for (let i = 0; i < opts.length; i++) {
+    const a = opts[i];
+    if (a === "--every") svc.every = Number(opts[++i]);
+    else if (a === "--at") svc.at = String(opts[++i] || "").split(",").filter(Boolean);
+    else if (a === "--keepalive") svc.keepalive = true;
+    else if (a === "--restart-on-crash") svc.keepalive = "crash";
+    else if (a === "--app") svc.app = opts[++i];
+    else if (a === "--nice") svc.nice = Number(opts[++i]);
+    else if (a === "--cwd") svc.cwd = opts[++i];
+    else if (a === "--start-later") svc.startLater = true;
+    else if (a === "--env") {
+      const kv = String(opts[++i] || ""); const eq = kv.indexOf("=");
+      if (eq < 1) throw new Error("--env needs KEY=VALUE");
+      (svc.env = svc.env || {})[kv.slice(0, eq)] = kv.slice(eq + 1);
+    } else throw new Error(`unknown option ${a}`);
+  }
+  if (!svc.app) svc.argv = argv;
+  return svc;
+}
+
+function main(argv) {
+  const [cmd, ...rest] = argv;
+  try {
+    switch (cmd) {
+      case "run": return run();
+      case "install": {
+        const r = install({ dryRun: rest.includes("--dry-run") });
+        if (rest.includes("--dry-run")) { process.stdout.write(JSON.stringify(r, null, 2) + "\n"); return; }
+        console.log(`Chewbacca background item ${r.changed ? "installed" : "already installed"}: ${r.plist}`);
+        for (const a of r.adopted) console.log(`  folded in ${a.label}${a.skipped ? ` (skipped: ${a.skipped})` : ` as ${a.service}`}`);
+        return;
+      }
+      case "register": { const svc = parseRegister(rest); register(svc); console.log(`registered ${svc.name}`); return; }
+      case "unregister": {
+        const name = rest[0];
+        if (!NAME_RE.test(name || "")) throw new Error("give a service name");
+        try { fs.unlinkSync(path.join(SERVICES, `${name}.json`)); console.log(`unregistered ${name}`); }
+        catch { console.log(`${name} was not registered`); }
+        return;
+      }
+      case "status": return status(rest.includes("--json"));
+      case "uninstall": {
+        const plist = path.join(AGENTS, `${LABEL}.plist`);
+        launchctl(["bootout", `gui/${process.getuid()}/${LABEL}`]);
+        try { fs.unlinkSync(plist); } catch { /* not installed */ }
+        console.log("Chewbacca background item removed; services stay registered in " + SERVICES);
+        return;
+      }
+      default:
+        process.stdout.write(fs.readFileSync(__filename, "utf8").split("\n").slice(3, 12).map((l) => l.replace(/^ \* ?/, "")).join("\n") + "\n");
+        process.exitCode = cmd ? 2 : 0;
+    }
+  } catch (e) {
+    console.error(`chewbacca-daemon: ${e.message}`);
+    process.exitCode = 2;
+  }
+}
+
+if (require.main === module) main(process.argv.slice(2));
+module.exports = { validate, serviceFromPlist, lastSlot, due, parseRegister, plistXML, adoptLegacy, register };

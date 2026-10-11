@@ -23,9 +23,10 @@ grep -q "NOISE" "$M" || fail "digest no longer drops passing lines"
 # becomes noise.
 grep -q "if a.quiet and not human" "$M" || fail "--quiet always prints"
 
-# Scheduling must be offline, not on load.
-grep -q '"RunAtLoad": False' "$M" || fail "would run at load instead of offline"
-grep -q "StartCalendarInterval" "$M" || fail "no schedule"
+# Scheduling must be offline, not on load: a daily --at slot of the one
+# Chewbacca background item, which never fires at registration.
+grep -q 'register("maintain"' "$M" || fail "no schedule"
+grep -q 'at=\["{:02d}:17"' "$M" || fail "would run at load instead of offline"
 
 python3 -c "import ast;ast.parse(open('$M').read())" || fail "does not parse"
 echo "  ok   maintain repairs and reports, and cannot commit or merge"

@@ -2699,59 +2699,27 @@ if command -v brew &>/dev/null; then
   # silently broke the HUD once, so the plist carries its own. The log lives in
   # the user's own Library: a fixed name in shared /tmp can be pre-created as
   # a symlink by another account and redirect these writes.
-  _mr_plist="$HOME/Library/LaunchAgents/com.chewbacca.messages-refresh.plist"
   # Run it on the stable node copy, never through `env node`: launchd jobs
   # have no .app above them, so macOS asks on behalf of node itself, and
   # Homebrew node moved to a new Cellar path on its 26.9 upgrade, losing its
   # grant. On 2026-10-09 that put "node would like to access data from other
   # apps" on screen every ten minutes. One Full Disk Access grant on the
   # copy covers this job across node upgrades.
+  #
+  # All three jobs below are services of chewbacca-daemon, the one Login Items
+  # row Chewbacca has. Each used to be its own LaunchAgent, and Login Items
+  # listed them as node, python3 and kyber-sessions. Caleb, 2026-10-11: "Chewb
+  # should aim to be only 1 thing ... Most ppl will get weirded out".
   _mr_node=$("$SCRIPT_DIR/bin/chewbacca-node" 2>/dev/null || command -v node)
-  cat >"$_mr_plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>Label</key><string>com.chewbacca.messages-refresh</string>
-  <key>ProgramArguments</key><array>
-    <string>$_mr_node</string><string>$SCRIPT_DIR/bin/people</string><string>texts</string><string>refresh</string>
-  </array>
-  <key>EnvironmentVariables</key><dict>
-    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
-  </dict>
-  <key>StartInterval</key><integer>600</integer>
-  <key>RunAtLoad</key><true/>
-  <key>StandardOutPath</key><string>$HOME/Library/Logs/chewbacca-messages-refresh.log</string>
-  <key>StandardErrorPath</key><string>$HOME/Library/Logs/chewbacca-messages-refresh.log</string>
-</dict></plist>
-PLIST
-  launchctl bootout "gui/$(id -u)/com.chewbacca.messages-refresh" &>/dev/null || true
-  launchctl bootstrap "gui/$(id -u)" "$_mr_plist" &>/dev/null &&
+  _daemon() { "$_mr_node" "$SCRIPT_DIR/bin/chewbacca-daemon" "$@" >/dev/null; }
+  _daemon register messages-refresh --every 600 -- "$_mr_node" "$SCRIPT_DIR/bin/people" texts refresh &&
     log "message refresh scheduled every 10 min" || warn "could not schedule the message refresh"
 
   # The machine queue's heartbeat: every 30 s `chewbacca jobs tick` admits queued work
   # when there's room, pauses heavy work when the Mac is busy, and resumes it
   # after. 2026-10-10: every tab ran its own long jobs with no shared budget,
   # the Mac swapped at load 80+, and Caleb had to force-quit Claude.
-  _jq_plist="$HOME/Library/LaunchAgents/com.chewbacca.jobs.plist"
-  cat >"$_jq_plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>Label</key><string>com.chewbacca.jobs</string>
-  <key>ProgramArguments</key><array>
-    <string>/usr/bin/python3</string><string>$SCRIPT_DIR/bin/chewbacca-jobs</string><string>tick</string>
-  </array>
-  <key>EnvironmentVariables</key><dict>
-    <key>PATH</key><string>$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
-  </dict>
-  <key>StartInterval</key><integer>30</integer>
-  <key>RunAtLoad</key><true/>
-  <key>StandardOutPath</key><string>$HOME/Library/Logs/chewbacca-jobs.log</string>
-  <key>StandardErrorPath</key><string>$HOME/Library/Logs/chewbacca-jobs.log</string>
-</dict></plist>
-PLIST
-  launchctl bootout "gui/$(id -u)/com.chewbacca.jobs" &>/dev/null || true
-  launchctl bootstrap "gui/$(id -u)" "$_jq_plist" &>/dev/null &&
+  _daemon register jobs --every 30 -- /usr/bin/python3 "$SCRIPT_DIR/bin/chewbacca-jobs" tick &&
     log "machine job queue ticking every 30 s" || warn "could not schedule the job queue"
 
   # Agent alerts on the HUD: once a minute `kyber-sessions watch` toasts a tab
@@ -2760,28 +2728,12 @@ PLIST
   # tabs died at 2:47pm and Caleb found out an hour later from the sidebar,
   # and tab-rescue's hook only speaks when he types in some other tab, which
   # never happens when he works from the HUD.
-  _aw_plist="$HOME/Library/LaunchAgents/com.chewbacca.agent-watch.plist"
-  cat >"$_aw_plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>Label</key><string>com.chewbacca.agent-watch</string>
-  <key>ProgramArguments</key><array>
-    <string>$HOME/.local/bin/kyber-sessions</string><string>watch</string>
-  </array>
-  <key>EnvironmentVariables</key><dict>
-    <key>PATH</key><string>$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
-  </dict>
-  <key>StartInterval</key><integer>60</integer>
-  <key>RunAtLoad</key><true/>
-  <key>Nice</key><integer>10</integer>
-  <key>StandardOutPath</key><string>$HOME/Library/Logs/chewbacca-agent-watch.log</string>
-  <key>StandardErrorPath</key><string>$HOME/Library/Logs/chewbacca-agent-watch.log</string>
-</dict></plist>
-PLIST
-  launchctl bootout "gui/$(id -u)/com.chewbacca.agent-watch" &>/dev/null || true
-  launchctl bootstrap "gui/$(id -u)" "$_aw_plist" &>/dev/null &&
+  _daemon register agent-watch --every 60 --nice 10 -- "$HOME/.local/bin/kyber-sessions" watch &&
     log "agent alerts on the HUD every minute" || warn "could not schedule agent alerts"
+
+  # Install the one LaunchAgent last, and fold in any per-job agent an older
+  # install left behind, so Login Items ends with a single Chewbacca row.
+  "$_mr_node" "$SCRIPT_DIR/bin/chewbacca-daemon" install 2>&1 | while IFS= read -r _line; do log "$_line"; done
 else
   warn "Homebrew not found. macOS tools skipped: see docs/reference/MACOS-TOOLS.md"
 fi

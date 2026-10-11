@@ -341,34 +341,19 @@ def status(source: Path, base: Path) -> dict:
 
 
 def install_timer(source: Path, base: Path, live: str, interval: int) -> str:
-    """A launchd job that runs `update` between sessions, from the runtime itself."""
+    """Run `update` between sessions as a service of chewbacca-daemon, from the runtime itself.
+
+    It used to be its own LaunchAgent; Login Items listed it as python3, one of
+    ten Chewbacca rows (Caleb, 2026-10-11: "only 1 thing").
+    """
     if sys.platform != "darwin":
         return "not macOS, no timer"
-    plist = Path.home() / "Library" / "LaunchAgents" / (LABEL + ".plist")
-    log = Path.home() / "Library" / "Logs" / "chewbacca-kit-runtime.log"
     script = base / "current" / "tools" / "kit_runtime.py"
     args = ["/usr/bin/python3", "-I", str(script), "update", "--fetch", "--repo", str(source), "--link-bin", live]
-    items = "".join("<string>{}</string>".format(a) for a in args)
-    plist.parent.mkdir(parents=True, exist_ok=True)
-    plist.write_text("""<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>Label</key><string>{label}</string>
-  <key>ProgramArguments</key><array>{items}</array>
-  <key>EnvironmentVariables</key><dict>
-    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
-  </dict>
-  <key>StartInterval</key><integer>{interval}</integer>
-  <key>RunAtLoad</key><true/>
-  <key>LowPriorityIO</key><true/>
-  <key>StandardOutPath</key><string>{log}</string>
-  <key>StandardErrorPath</key><string>{log}</string>
-</dict></plist>
-""".format(label=LABEL, items=items, interval=interval, log=log))
-    domain = "gui/{}".format(os.getuid())
-    subprocess.run(["launchctl", "bootout", domain + "/" + LABEL], capture_output=True)
-    r = subprocess.run(["launchctl", "bootstrap", domain, str(plist)], capture_output=True, text=True)
-    return "timer every {}s".format(interval) if r.returncode == 0 else "timer not loaded: " + r.stderr.strip()
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "bin" / "lib"))
+    import daemon_register
+    daemon_register.register("kit-runtime", args, every=interval, legacy_label=LABEL)
+    return "timer every {}s".format(interval)
 
 
 def main(argv: Optional[List[str]] = None) -> int:

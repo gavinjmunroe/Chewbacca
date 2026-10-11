@@ -26,7 +26,6 @@ Log:     ~/.chewbacca/bridge.log, one line per job, arguments included, keys nev
 import json
 import os
 import pathlib
-import plistlib
 import re
 import shutil
 import subprocess
@@ -39,7 +38,6 @@ BASE = pathlib.Path(os.environ.get("CHEWBACCA_BRIDGE_DIR", "/tmp/chewbacca-bridg
 INBOX, OUTBOX = BASE / "in", BASE / "out"
 LOG = pathlib.Path.home() / ".chewbacca" / "bridge.log"
 LABEL = "com.chewbacca.bridge"
-PLIST = pathlib.Path.home() / "Library" / "LaunchAgents" / f"{LABEL}.plist"
 POLL_S = 0.25
 MAX_OUT = 200_000
 PATH = f"{pathlib.Path.home()}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
@@ -376,41 +374,41 @@ def call(tool: str, args: list[str], timeout: float = 700.0) -> int:
     return 125
 
 
+def _daemon():
+    sys.path.insert(0, str(HERE / "lib"))
+    import daemon_register
+    return daemon_register
+
+
 def install() -> int:
-    PLIST.parent.mkdir(parents=True, exist_ok=True)
-    plist = {
-        "Label": LABEL,
-        "ProgramArguments": [shutil.which("python3") or "/usr/bin/python3", str(pathlib.Path(__file__).resolve()), "serve"],
-        "RunAtLoad": True, "KeepAlive": True,
-        "StandardErrorPath": str(LOG.with_suffix(".err")),
-        "EnvironmentVariables": {"PATH": PATH},
-    }
-    PLIST.write_bytes(plistlib.dumps(plist))
-    uid = os.getuid()
-    subprocess.run(["launchctl", "bootout", f"gui/{uid}/{LABEL}"], capture_output=True)
-    r = subprocess.run(["launchctl", "bootstrap", f"gui/{uid}", str(PLIST)], capture_output=True, text=True)
-    if r.returncode:
-        print(r.stderr.strip(), file=sys.stderr)
-        return r.returncode
-    time.sleep(1.0)
-    rc = call("ping", [], timeout=10)
-    print("chewbacca-bridge: running" if rc == 0 else "chewbacca-bridge: loaded, but ping failed; see ~/.chewbacca/bridge.err")
-    return rc
+    # One Login Items row for all of Chewbacca: the bridge is a service of
+    # chewbacca-daemon now, not its own LaunchAgent (Caleb, 2026-10-11).
+    reg = _daemon()
+    print(reg.register("bridge", [shutil.which("python3") or "/usr/bin/python3", str(pathlib.Path(__file__).resolve()), "serve"],
+                       keepalive=True, env={"PATH": PATH}, legacy_label=LABEL))
+    for _ in range(30):
+        if call("ping", [], timeout=2) == 0:
+            print("chewbacca-bridge: running")
+            return 0
+        time.sleep(1.0)
+    print("chewbacca-bridge: registered, but ping failed; see ~/Library/Logs/chewbacca/bridge.log")
+    return 1
 
 
 def uninstall() -> int:
-    subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}/{LABEL}"], capture_output=True)
-    PLIST.unlink(missing_ok=True)
+    reg = _daemon()
+    reg.unregister("bridge")
+    reg.retire(LABEL)
     print("chewbacca-bridge: removed")
     return 0
 
 
 def status() -> int:
-    r = subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/{LABEL}"], capture_output=True, text=True)
-    print("loaded" if r.returncode == 0 else "not loaded")
+    up = call("ping", [], timeout=3) == 0
+    print("running" if up else "not running")
     if LOG.exists():
         print("".join(LOG.read_text().splitlines(keepends=True)[-10:]), end="")
-    return 0 if r.returncode == 0 else 1
+    return 0 if up else 1
 
 
 def main(argv: list[str]) -> int:

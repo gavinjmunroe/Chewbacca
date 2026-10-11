@@ -169,9 +169,12 @@ followed by that guard and that setup never calls `read`.
 | Codex side | `tools/agent_runtime.py` | `~/.codex/AGENTS.md`, `hooks.json`, `config.toml`, receipts in `~/.chewbacca/runtime-installs/`. |
 | Shell rc | a PATH line and a guard block | |
 
-Setup installs **no launchd agents**. Background jobs are opt-in through the
-tool that owns them (`hud-autostart`, `maintain --install`,
-`chewbacca-bridge`, `people`, `mac/app/install-brief.sh`).
+Setup installs **one launchd agent**, `com.chewbacca`, so Login Items shows a
+single Chewbacca row. `bin/chewbacca-daemon` is that agent: every background
+job (texts refresh, job queue, agent alerts, kit updates, and the opt-in ones
+from `hud-autostart`, `maintain --install`, `chewbacca-bridge install`,
+`people dashboard --install`) is a service file it runs. `chewbacca-daemon
+status` lists them, and any older per-job plist is folded in on install.
 
 **Important:** `config/settings/settings.json` is a template used by `install.sh` and
 `start.ps1`. It is not what `setup.sh` installs, and it registers far fewer
@@ -487,9 +490,9 @@ events, which is a common first confusion.
   request finds no listener. `ListenerWatchdog.swift` restarts it if it drops
   off the socket.
 - **`whisper-server`** on 127.0.0.1:8178, used only to correct dictation.
-- Kyber itself is kept alive by launchd once `bin/hud-autostart` has written
-  its LaunchAgent (with `PATH` baked in, because launchd's `PATH` cannot find
-  `claude` under nvm).
+- Kyber itself is kept open by `chewbacca-daemon` once `bin/hud-autostart`
+  has registered it (with `PATH` passed through `open --env`, because the
+  default `PATH` cannot find `claude` under nvm).
 
 ### Keys and modes
 
@@ -870,7 +873,7 @@ The pre-commit hook (`.githooks/pre-commit`, through
 | `~/.bob/` | HUD socket, token, agent prompt, decisions log, voice memory, whisper model, recordings | Kyber, `hud-listen`, Jev callers |
 | `~/coursework/` | The semester ledger | `coursework`, `course-ingest` |
 | `~/.chewie/runs/` | Traces of `chewie plan run` | `chewie` |
-| `~/Library/LaunchAgents/` | Only what opt-in tools install | `hud-autostart`, `maintain`, others |
+| `~/Library/LaunchAgents/` | One agent, `com.chewbacca` | `chewbacca-daemon install`; every job is a service in `~/.chewbacca/daemon/services/` |
 
 Note that `~/.chewbacca` has two jobs: it is the state folder, and for
 `curl | bash` installs it is also where the repo itself is unpacked.

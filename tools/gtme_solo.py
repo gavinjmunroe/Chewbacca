@@ -473,6 +473,33 @@ def due_followups(client: str, plan: dict) -> list[dict]:
     return out
 
 
+# Caleb to Gavin, 2026-10-11: "ones that don't reply after 3 days we follow up
+# and also email other members of the staff". A church is one account: the
+# next person there waits until the first has had this long to answer, and
+# anyone at the church replying stops the rest. The 3 is his, not measured.
+NEXT_CONTACT_DAYS = 3
+
+
+def account_of(addr: str) -> str:
+    dom = addr.rsplit("@", 1)[-1].lower()
+    return "" if gtme_reply.FREE_MAIL.search(dom) else dom
+
+
+def account_state(client: str) -> tuple[dict, set]:
+    """When each account was first emailed, and which accounts have replied."""
+    first: dict[str, object] = {}
+    for r in jsonl(cdir(client) / "sent.jsonl"):
+        acct = account_of(r.get("email", ""))
+        if acct and r.get("step") == 1:
+            at = op.parse_time(r["at"])
+            if acct not in first or at < first[acct]:
+                first[acct] = at
+    answered = {account_of(r.get("email", "")) for r in jsonl(cdir(client) / "replies.jsonl")}
+    answered |= {account_of(r.get("from", "")) for r in jsonl(cdir(client) / "replies.jsonl")}
+    answered.discard("")
+    return first, answered
+
+
 def cmd_batch(a) -> int:
     plan = plan_of(a.client)
     sender = plan.get("sender") or {}
@@ -500,12 +527,21 @@ def cmd_batch(a) -> int:
         (held if bad else mails).append({**mail, "held_for": bad} if bad else mail)
     leads_csv = d / "leads.csv"
     rows = list(csv.DictReader(leads_csv.open())) if leads_csv.exists() else []
+    first_at, answered = account_state(a.client)
+    wait = timedelta(days=plan.get("next_contact_days", NEXT_CONTACT_DAYS))
+    in_batch = set()
     for r in rows:
         if len(mails) >= room:
             break
         addr = (r.get("email") or "").lower()
         if not addr or addr in contacted or addr in off:
             continue
+        acct = account_of(addr)
+        if acct and (acct in answered or acct in in_batch
+                     or (acct in first_at and op.utc_now() - first_at[acct] < wait)):
+            continue
+        if acct:
+            in_batch.add(acct)
         extra = lines.get(addr, {})
         lead = {k: r.get(k, "") for k in ("company", "name", "email", "website", "role_inbox")}
         lead["line"] = (extra.get("line") or "").strip()

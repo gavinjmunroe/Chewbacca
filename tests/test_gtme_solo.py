@@ -254,6 +254,38 @@ class Solo(unittest.TestCase):
         self.run_cli("send", "--client", "Dana Co", "--batch", b2["id"], "--gap", "0")
         self.assertEqual(len(self.sends()), 5)
 
+    def add_second_contact(self):
+        rows = (self.d / "leads.csv").read_text().splitlines()
+        rows.append("Crumb Corner,crumbcorner.test,,,,pastor@crumbcorner.test,Austin,google-maps,,,,,")
+        (self.d / "leads.csv").write_text("\n".join(rows) + "\n")
+
+    def test_the_next_person_at_a_church_waits_three_days_and_a_reply_stops_them(self):
+        self.ready()
+        self.add_second_contact()
+        b = self.batch()
+        to = [m["to"] for m in b["mails"]]
+        self.assertIn("maria@crumbcorner.test", to)
+        self.assertNotIn("pastor@crumbcorner.test", to)
+        self.run_cli("send", "--client", "Dana Co", "--batch", b["id"], "--gap", "0")
+        os.environ["GTME_NOW"] = "2026-10-13T16:00:00+00:00"
+        b2 = self.batch()
+        self.assertNotIn("pastor@crumbcorner.test", [m["to"] for m in (b2 or {}).get("mails", [])])
+        os.environ["GTME_NOW"] = "2026-10-15T16:00:00+00:00"
+        self.assertIn("pastor@crumbcorner.test", [m["to"] for m in self.batch()["mails"]])
+
+    def test_a_reply_from_anyone_at_the_church_stops_the_next_contact(self):
+        self.ready()
+        self.add_second_contact()
+        b = self.batch()
+        self.run_cli("send", "--client", "Dana Co", "--batch", b["id"], "--gap", "0")
+        thread = {json.loads(x)["email"]: json.loads(x)["thread"]
+                  for x in (self.d / "sent.jsonl").read_text().splitlines()}["maria@crumbcorner.test"]
+        self.threads.write_text(json.dumps({thread: [["maria@crumbcorner.test", "Not right now, thanks."]]}))
+        self.run_cli("inbox", "--client", "Dana Co", "--json")
+        os.environ["GTME_NOW"] = "2026-10-15T16:00:00+00:00"
+        b2 = self.batch()
+        self.assertNotIn("pastor@crumbcorner.test", [m["to"] for m in (b2 or {}).get("mails", [])])
+
     # inbox
 
     def test_opt_out_is_suppressed_and_a_reply_stops_follow_ups(self):

@@ -198,6 +198,23 @@ Run `gtme-grade --action launch|resume|add-leads` on every campaign before any s
 
 ## Reuse before building
 
+Added 2026-10-11, each with tests:
+
+- `gtme-rules audit` shows which of a client's DECISIONS.json rulings name a
+  check that still exists (ENFORCED, UNENFORCED, BROKEN). Give a new ruling an
+  `enforced_by` test or an `unenforced_why` the same day it's written.
+- `gtme-rules check-text --client NAME FILE --facts nums.json` refuses client
+  text with shorthand, our tool names, interest no reply quotes, a dash, or a
+  number the facts file doesn't hold. Run it on anything the client will read.
+- `gtme-score signal FILE` scores an account's why-now 1 to 10 from sourced,
+  dated signals and holds the email under 6.
+- `chewbacca clay --session NAME` reads Clay through another Chrome login
+  (`session-login "Profile N"` imports it once). The clay CLI answers only for
+  the workspace it's signed in to, so pass `ws=` and the front door won't let
+  it answer for another one.
+- Every reply in `gtm replies --json` carries `text`, the whole reply in the
+  lead's own words. Classify and draft from it, never from `snippet`.
+
 Use list-audit and list-gate for inherited contacts. Locate the installed official Clay plugin and read its command help and relevant skills before assuming capabilities. Probe account and workspace identity. Native workflow APIs, table reads, browser operations, and paid enrichments have different capabilities and costs. Use the browser-use skill for verified gaps. Search the private research corpus with `gtme-library --corpus PATH search 'query'`; retrieval is not evidence that the entire corpus was studied.
 
 Run `gtme-dedupe a.csv b.csv` before combining any two contact lists. It merges exact email (plus-tags stripped for Gmail-style providers only), LinkedIn slug and name plus domain, scores the rest with splink, and writes nothing until `--out DIR`.

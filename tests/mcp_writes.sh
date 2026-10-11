@@ -112,6 +112,11 @@ CALLS = os.path.join(T, "calls.log")
 put(os.path.join(FB, "people"), f"""
     #!/usr/bin/env bash
     printf 'people %s\\n' "$*" >> {CALLS!r}
+    # A thread no saved card owns, as `people send --dry-run` prints one.
+    if [ "$2" = "Unsaved Person" ] && [ "${{@: -1}}" = "--dry-run" ]; then
+      printf '  would send to Unsaved Person via whatsapp, 15550001111@s.whatsapp.net, not a saved contact\\n  %s\\n  to send: add --to 15550001111@s.whatsapp.net\\n' "$3"
+      exit 0
+    fi
     exec {os.path.join(ROOT, "bin", "people")!r} "$@"
 """)
 REQ = os.path.join(T, "gtm-request.json")
@@ -350,11 +355,63 @@ time.sleep(0.05)  # a 1ms TTL compared by Date.now() can tie without it
 check("expired" in s3.call("kit_confirm", draft_id=d, asked_by="test"), "an expired draft was not refused")
 s3.close()
 
-# 17. Every write is logged with who asked and which client.
+# 17. An address no saved card owns is never filled in for the sender: the
+#     confirm has to repeat it, the way `people send` makes a person type it.
+s4 = Server()
+t = s4.write("text.send", to="Unsaved Person", text="hey", via="whatsapp")
+d = re.search(r"DRAFT (d_[A-Za-z0-9_-]{16})", t).group(1)
+check("not a saved contact" in t and "to_address" in t, f"an unsaved address was not flagged: {t}")
+check("needs to_address" in s4.call("kit_confirm", draft_id=d, asked_by="test"), "an unsaved address confirmed without to_address")
+check("needs to_address" in s4.call("kit_confirm", draft_id=d, to_address="15559999999@s.whatsapp.net", asked_by="test"),
+      "a different to_address was accepted")
+check("nothing was sent" in s4.call("kit_confirm", draft_id=d, to_address="15550001111@s.whatsapp.net", asked_by="test"),
+      "the matching to_address was not accepted")
+s4.close()
+check(all(c.endswith("--dry-run") for c in open(CALLS).read().splitlines() if c.startswith("people send")),
+      "an unsaved-address confirm reached the sender")
+
+# 18. Caleb's handwritten notes stay his in any spelling APFS accepts.
+os.makedirs(os.path.join(T, "files", "04 Notes"))
+for spelled in ("04 Notes", "04 notes", "04 NOTES"):
+    s5 = Server()
+    out = s5.write("file.write", path=os.path.join(T, "files", spelled, "idea.md"), content="x\n")
+    s5.close()
+    check("written by hand" in out, f"a write into {spelled} was not refused: {out}")
+check(not os.listdir(os.path.join(T, "files", "04 Notes")), "a file landed in 04 Notes")
+
+# 19. Over HTTP a write needs the owner-only token; a read does not.
+import socket, urllib.request
+sock = socket.socket(); sock.bind(("127.0.0.1", 0)); port = sock.getsockname()[1]; sock.close()
+srv = subprocess.Popen([os.path.join(ROOT, "bin", "chewbacca-mcp"), "--http", str(port)], env=env,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+def post(body, token=None):
+    req = urllib.request.Request(f"http://127.0.0.1:{port}/", data=json.dumps(body).encode(),
+                                 headers={"content-type": "application/json", **({"authorization": f"Bearer {token}"} if token else {})})
+    return json.loads(urllib.request.urlopen(req, timeout=30).read())["result"]["content"][0]["text"]
+for _ in range(50):
+    try:
+        urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=1); break
+    except Exception:
+        time.sleep(0.1)
+call = lambda: {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {"name": "kit_write", "arguments": {"id": "ledger.add", "params": {"title": "over http"}, "asked_by": "test"}}}
+tokfile = os.path.join(env["CHEWBACCA_MCP_STATE"], "http-token")
+try:
+    check("bearer token" in post(call()), "an HTTP write ran without the token")
+    check("bearer token" in post(call(), "0" * 64), "an HTTP write ran with a wrong token")
+    check(not [x for x in ledger().values() if x["title"] == "over http"], "a refused HTTP write still landed")
+    check(oct(os.stat(tokfile).st_mode & 0o777) == "0o600", "the HTTP token is readable by others")
+    check("Undo id" in post(call(), open(tokfile).read().strip()), "an HTTP write with the token was refused")
+finally:
+    srv.terminate(); srv.wait(timeout=10)
+
+# 20. Every write is logged with who asked and which client.
 log = [json.loads(l) for l in open(os.path.join(env["CHEWBACCA_MCP_STATE"], "log.jsonl"))]
-writes = [l for l in log if l["op"] == "write"]
+writes = [l for l in log if l["op"] == "write" and l["transport"] == "stdio"]
 check(writes and all(l["asked_by"] == "the writes test" and l["client"] == "writes-test 1" for l in writes),
       "a write was logged without who asked")
+check([l for l in log if l["op"] == "write" and l["transport"] == "http" and l["asked_by"] == "test"],
+      "the HTTP write was not logged as one")
 check(any(l["op"] == "confirm-no-send" for l in log) and any(l["op"] == "confirm-refused" for l in log),
       "confirms are not logged")
 check(oct(os.stat(os.path.join(env["CHEWBACCA_MCP_STATE"], "log.jsonl")).st_mode & 0o777) == "0o600", "the log is readable by others")

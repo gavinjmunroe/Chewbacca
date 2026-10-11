@@ -111,7 +111,7 @@ const TOOLS = [
 // code as the person.
 const READS_FILE = process.env.CHEWBACCA_MCP_READS || path.join(BIN, "..", "config", "data", "mcp-reads.json");
 const WRITES_FILE = process.env.CHEWBACCA_MCP_WRITES || path.join(BIN, "..", "config", "data", "mcp-writes.json");
-const { createWrites } = require("./lib/mcp-writes");
+const { createWrites, STATE: WRITES_STATE } = require("./lib/mcp-writes");
 
 // Choices a write entry names by source, so they can't drift from the tool
 // that enforces them: the apps `people send` can reach, and every op the GTM
@@ -297,6 +297,7 @@ TOOLS.push(
       type: "object",
       properties: {
         draft_id: { type: "string", description: "The draft id kit_write returned, d_..." },
+        to_address: { type: "string", description: "Only when the draft says the address is not a saved contact: that address, once the person says it's right" },
         asked_by: { type: "string", description: "Who said to send it and where. It is logged." },
       },
       required: ["draft_id", "asked_by"],
@@ -358,7 +359,9 @@ function redactMeetings(text) {
 }
 
 // ── JSON-RPC ─────────────────────────────────────────────────────────────────
-async function handle(msg) {
+const WRITE_TOOLS = new Set(["kit_write", "kit_confirm", "kit_undo"]);
+
+async function handle(msg, ctx = {}) {
   const { id, method, params } = msg || {};
   const reply = (result) => ({ jsonrpc: "2.0", id, result });
   const fail = (code, message) => ({ jsonrpc: "2.0", id, error: { code, message } });
@@ -389,6 +392,8 @@ async function handle(msg) {
   if (method === "tools/call") {
     const tool = TOOLS.find((t) => t.name === params?.name);
     if (!tool) return fail(-32602, `no tool named ${params?.name}`);
+    if (ctx.http && WRITE_TOOLS.has(tool.name) && !ctx.authorized)
+      return reply({ content: [{ type: "text", text: `Writes over HTTP need the bearer token in ${HTTP_TOKEN_FILE}. Nothing was written.` }], isError: true });
     try {
       const text = await tool.run(params.arguments || {});
       return reply({ content: [{ type: "text", text }] });
@@ -428,8 +433,30 @@ function serveStdio() {
 // Bound to 127.0.0.1 only. This serves somebody's entire relationship history
 // and message archive; a bind to 0.0.0.0 would put that on the local network,
 // and on a campus wifi that is the whole building.
+//
+// Writes over HTTP also need a bearer token from an owner-only file. The
+// Origin and Host checks stop a web page; they don't stop another account on
+// the same Mac, which can reach 127.0.0.1 too and must not write as this one.
+const HTTP_TOKEN_FILE = path.join(WRITES_STATE, "http-token");
+function httpToken() {
+  try {
+    return fs.readFileSync(HTTP_TOKEN_FILE, "utf8").trim();
+  } catch {
+    fs.mkdirSync(WRITES_STATE, { recursive: true, mode: 0o700 });
+    const token = require("node:crypto").randomBytes(32).toString("hex");
+    fs.writeFileSync(HTTP_TOKEN_FILE, token + "\n", { mode: 0o600 });
+    return token;
+  }
+}
+function bearerOk(header, token) {
+  const got = Buffer.from(String(header || "").replace(/^Bearer\s+/i, ""));
+  const want = Buffer.from(token);
+  return got.length === want.length && require("node:crypto").timingSafeEqual(got, want);
+}
+
 function serveHttp(port) {
   WHO.transport = "http";
+  const token = httpToken();
   http
     .createServer(async (req, res) => {
       // A web page can POST to 127.0.0.1 from the person's own browser. With
@@ -460,7 +487,7 @@ function serveHttp(port) {
       req.on("end", async () => {
         let out;
         try {
-          out = await handle(JSON.parse(body));
+          out = await handle(JSON.parse(body), { http: true, authorized: bearerOk(req.headers.authorization, token) });
         } catch {
           out = { jsonrpc: "2.0", id: null, error: { code: -32700, message: "parse error" } };
         }

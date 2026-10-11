@@ -215,7 +215,7 @@ function fileRoots() {
     : ["second-brain", "Downloads", "Documents"].map((d) => path.join(HOME, d));
   return raw.filter(Boolean).flatMap((r) => {
     try {
-      return [fs.realpathSync(r)];
+      return [fs.realpathSync.native(r)];
     } catch {
       return [];
     }
@@ -228,7 +228,9 @@ function placeFile(raw) {
     throw new Error("path must be absolute or start with ~/");
   let parent;
   try {
-    parent = fs.realpathSync(path.dirname(asked));
+    // .native returns the on-disk case. APFS is case-insensitive, so
+    // "04 notes" opens "04 Notes" and must be caught as it.
+    parent = fs.realpathSync.native(path.dirname(asked));
   } catch {
     throw new Error("the folder it goes in doesn't exist");
   }
@@ -241,7 +243,7 @@ function placeFile(raw) {
   const parts = path.relative(root, target).split(path.sep);
   if (parts.some((p) => p.startsWith(".")))
     throw new Error("no dotfiles or dot folders");
-  if (parts.includes("04 Notes"))
+  if (parts.some((p) => p.normalize("NFC").toLowerCase() === "04 notes"))
     throw new Error("04 Notes is written by hand, never by an agent");
   let st = null;
   try {
@@ -636,12 +638,18 @@ function outward(bin) {
         const r = await run(B("people"), [...argv, "--dry-run"]);
         if (r.code !== 0 || !/would send to/.test(r.out))
           throw new Error(`can't address that: ${said(r)}`);
-        // An address the store can't tie to the person sends only with --to
-        // repeating it; the person reading this draft is who confirms it.
+        // An address the store can't tie to the person (on WhatsApp or Slack
+        // the sender picks their own name) sends only with --to repeating it.
+        // That is never filled in here: kit_confirm has to be handed the same
+        // address as to_address, the way `people send` makes a person type it.
         const unsaved = /to send: add --to (.+)$/m.exec(r.out);
-        const dry = [...argv, "--dry-run"];
-        if (unsaved) argv.push("--to", unsaved[1].trim());
-        return { argv, dry, preview: r.out, bind: recipientLine(r.out) };
+        return {
+          argv,
+          dry: [...argv, "--dry-run"],
+          preview: r.out,
+          bind: recipientLine(r.out),
+          needsTo: unsaved ? unsaved[1].trim() : null,
+        };
       },
       async recheck(d) {
         return recipientLine((await run(B("people"), d.dry)).out);
@@ -734,6 +742,7 @@ function createWrites({ bin, registryFile, choicesFor }) {
         argv: d.argv,
         dry: d.dry,
         bind: d.bind,
+        needsTo: d.needsTo || null,
         at: Date.now(),
         used: false,
       });
@@ -750,7 +759,10 @@ function createWrites({ bin, registryFile, choicesFor }) {
         `DRAFT ${id}. Nothing has been sent.`,
         d.preview,
         "",
-        `To send it, show this to the person, and once they say send, call kit_confirm with draft_id ${id}. It expires in ${Math.round(DRAFT_TTL_MS / 60000)} minutes and works once.`,
+        d.needsTo
+          ? `${d.needsTo} is not a saved contact. Ask the person whether that address is right; only if they say so, call kit_confirm with draft_id ${id} and to_address set to it.`
+          : `To send it, show this to the person, and once they say send, call kit_confirm with draft_id ${id}.`,
+        `It expires in ${Math.round(DRAFT_TTL_MS / 60000)} minutes and works once.`,
       ].join("\n");
     }
     const fn = R[entry.id];
@@ -804,9 +816,14 @@ function createWrites({ bin, registryFile, choicesFor }) {
       drafts.delete(id);
       return refuse("that draft expired; make a new one");
     }
+    if (d.needsTo && String(a.to_address || "").trim() !== d.needsTo)
+      return refuse(
+        `the address isn't a saved contact; confirming needs to_address ${d.needsTo}, as the draft showed it`,
+      );
     // Spent on the first confirm that gets this far, whatever happens next.
     d.used = true;
     const kind = O[d.entry];
+    const argv = d.needsTo ? [...d.argv, "--to", d.needsTo] : d.argv;
     // Who and where are resolved again; if a new thread or a changed table
     // means it would go somewhere else now, the person never saw that.
     const now = await kind.recheck(d);
@@ -816,7 +833,7 @@ function createWrites({ bin, registryFile, choicesFor }) {
       logEvent({ op: "confirm-no-send", write: d.entry, draft: id }, who);
       return `CHEWBACCA_NO_SEND is set, so nothing was sent. The draft checked out: ${d.bind.slice(0, 200)}`;
     }
-    const r = await kind.send(d);
+    const r = await kind.send({ ...d, argv });
     logEvent({ op: "confirm", write: d.entry, draft: id, exit: r.code }, who);
     return r.code === 0 ? `Sent. ${said(r)}` : `Not sent: ${said(r)}`;
   }

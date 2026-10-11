@@ -46,7 +46,9 @@ only makes a draft that names who gets what. It sends only on `kit_confirm`
 with that draft's id, within 15 minutes, once, and still through the kit's own
 gates: `CHEWBACCA_NO_SEND`, a person's quiet hours, and Caleb's ok in chat
 within 2 hours for Clay. Every write is logged with the client and who asked,
-in `~/.chewbacca/mcp-writes/log.jsonl`.
+in `~/.chewbacca/mcp-writes/log.jsonl`. Over `--http`, the write tools
+also need the bearer token in `~/.chewbacca/mcp-writes/http-token`, so another
+account on the same Mac can read the port's refusal but never write through it.
 
 ## You do not configure anything
 

@@ -138,6 +138,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - reference_watch_skill: Watch Skill (oxbshw/watch-skill) is installed globally: video/screen perception +...
 - reference_writing_toolchain: Four writing tools are installed and they overlap; which one to reach for, plus...
 
+- reference_setup_installs_from_checkout: setup re-execs from ~/code/chewbacca; source_sync catches it up, update needs a 2nd setup run; verify hooks w grep settings
 - reference_google_docs_write_via_gws: Edit a Google Doc in place w gws batchUpdate (tabId, indices high to low, read back); 403 = re-consent via chewbacca email add
 
 ## Lessons
@@ -281,3 +282,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - project_firm_foundation_site: FF site after the 10/10 rebuild: one story, live on firm-foundation.up.railway.app, Vercel domain waits on Gavin
 - feedback_amber_stealth_in_public: Amber is stealth; public copy says "Stealth (PearX W27)", never the name, product or Amber Circles (10/11)
 - feedback_offscreen_render_was_blank: every HUD_LINES_FILE render of a tall panel was a blank card until 10/11 (ImageRenderer draws ScrollView as nothing); fixed + tallPanelRenders; look at every render
+- feedback_ledger_update_by_source_key: close ledger tasks by source_key from parsed JSON, never a grepped id; a grep marked the wrong active task done (10/11)

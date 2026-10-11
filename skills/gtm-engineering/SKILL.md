@@ -113,10 +113,10 @@ Start with the business outcome, its denominator, maturity window, and budget. R
   the whole week!!!! Always remember this I shouldn't have to tell you". One
   build: strongest fits start Monday, the rest start Wednesday through the
   campaign's scheduleStartDate. Never plan a separate midweek wave. Zeutara's
-  builder is `scripts/monday_wave.py` (ruling `monday-covers-the-week`).
+  builder is monday_wave.py in the zeutara-gtme repo (ruling `monday-covers-the-week`).
 - **Numbers and reply text come from the API, never a Clay window.** `chewbacca
 clay campaign-stats`, `chewbacca gtm sync` then `gtm replies --all` answer in
-  seconds. A script that drives Clay in Chrome (Zeutara's `scripts/replies.py`)
+  seconds. A script that drives Clay in Chrome (replies.py in the zeutara-gtme repo)
   steals his screen. Caleb: "I thought we had reverse engineered a clay api so
   you don't hv to go back to clay?"
 - **Never hand him the Clay writes as a command.** Caleb: "Bro fuck the guard
@@ -209,7 +209,7 @@ Added 2026-10-11, each with tests:
 - `gtme-score signal FILE` scores an account's why-now 1 to 10 from sourced,
   dated signals and holds the email under 6.
 - `chewbacca clay --session NAME` reads Clay through another Chrome login
-  (`session-login "Profile N"` imports it once). The clay CLI answers only for
+  (`chewbacca clay --session NAME session-login "Profile N"` imports it once). The clay CLI answers only for
   the workspace it's signed in to, so pass `ws=` and the front door won't let
   it answer for another one.
 - Every reply in `gtm replies --json` carries `text`, the whole reply in the

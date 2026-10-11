@@ -65,6 +65,7 @@ EXTERNAL = {
     "uv": "setup.sh: uv is the Python env manager the kit installs with",
     "uvx": "ships with uv, which setup.sh installs",
     "ollama": "setup.sh and doctor.sh: local embedding and model backend",
+    "api-anything": "chewbacca api install builds it (bin/chewbacca-api); the Clay front door pins its commit",
     # Named in a skill's own install section, not by setup.sh.
     "manim": "skills/manim: its install step (uv pip install manim)",
     "manimgl": "skills/manim: named only to say it is the other engine",

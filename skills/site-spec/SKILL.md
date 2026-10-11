@@ -30,7 +30,7 @@ lands on disk, and `site-gate research <repo>` exits 1 until it does.
 4. **`library/crafts/website.md` and `web-ux.md`**, read before layout.
 5. **`ux-pick` or `ux-gen`** for the stance and the refusals, written down.
 6. **`research/STEAL.md`** (From | What | Why it is ours, plus what was not
-   stolen on purpose) and **`docs/COPY.md`**, one document, each line traced.
+   stolen on purpose) and **the site repo's docs/COPY.md**, one document, each line traced.
 7. **`research/SOURCES.md`** names each tool above and what it produced.
 
 Then `site-gate research .` must print `ok`. Finished means `site-gate

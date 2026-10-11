@@ -355,9 +355,10 @@ LATER = js_regex(
     r"|once (they|you|the company) (identify|have|find|land|secure) a lead|until then"
     r"|after the holidays|next quarter|ball (is )?in my court)", "i")
 # A bare "no" (the whole reply, no punctuation) and "It would be a conflict of
-# interest since we have our own" both came out "unclear" on 2026-10-11.
+# interest since we have our own" both came out "unclear" on 2026-10-11, and
+# so did "I have to pass" (togari-platform #84 carries the same rules).
 PASS = js_regex(
-    r"(^\s*no\b([,.!]|\s*$)|\bno interest\b|conflict of interest|(doesn'?t|isn'?t|not)\b[^.]{0,20}\bfit\b|retired from (making )?(new )?invest"
+    r"(^\s*no\b([,.!]|\s*$)|\bno interest\b|conflict of interest|\b(i|we) (have to|must|need to) pass\b|(doesn'?t|isn'?t|not)\b[^.]{0,20}\bfit\b|retired from (making )?(new )?invest"
     r"|retired from investing|^\s*no thank|no thank you|not (an )?area of (focus|interest)|pass on"
     r"|outside (of )?our (investment\s*)?(scope|focus|thesis|mandate)"
     r"|don'?t do (consumer|b2c|crypto|hardware|pre-?seed|seed|safes)|bow out|is tough for us"

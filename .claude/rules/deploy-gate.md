@@ -25,6 +25,7 @@ PRE-DEPLOY
 [ ] NEXT_PUBLIC_APP_URL points to production domain
 
 UI CHECK
+[ ] site-gate research <repo> exits 0 (every source page inventoried, kit tools named, STEAL.md, COPY.md)
 [ ] site-gate check <every page url> exits 0 (dead links, states, 390 overflow, console, reduced motion)
 [ ] Hero section renders correctly on mobile (375px width)
 [ ] No layout overflow on any screen size

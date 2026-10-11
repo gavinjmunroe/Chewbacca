@@ -248,3 +248,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - reference_chewbacca_launch: `chewbacca launch` opens a named, briefed desktop tab (seed via -p --session-id, --desktop --resume under script); kickoff via send_message; LAUNCHED_BY marker
 - feedback_we_good_means_closeout_first: "we good?" = run closeout, answer once with what landed + whose files fail; a yes then no drew "Wtfffff" (10/10)
 - feedback_land_workflow_traps: checksums.py hashes the index (add first), never chain cleanup with ;, DESTRUCTIVE_OK=1 must lead, zsh file lists need arrays (10/10)
+- feedback_site_research_pass: Every site starts with the kit pass (api-anything pulls every page, brand-grab, ux-pick, crafts, STEAL, COPY); site-gate research refuses without it (10/10)

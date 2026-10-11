@@ -10,6 +10,10 @@ library/crafts/website.md. Prose does not fire, so this is the half that does.
     site-gate check <url> [<url>...]   exit 1 on any failure below
                                         (write url@404 for a page meant to 404)
     site-gate idle <url> [--ref <url>] what moves while nobody touches it
+    site-gate research [repo]          exit 1 unless research/INDEX.md (every
+                                       source page), research/SOURCES.md (which
+                                       kit tools ran), research/STEAL.md and
+                                       docs/COPY.md exist. Run it FIRST.
     site-gate story <url>...           exit 1 if the page is an essay: figure
                                        share under 0.35, or under 60% of
                                        screens with scroll-linked motion
@@ -41,6 +45,7 @@ import argparse
 import io
 import json
 import sys
+from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
 GPU = ["--use-angle=metal", "--enable-gpu", "--ignore-gpu-blocklist"]
@@ -549,6 +554,45 @@ def boring_sections(pg):
     return out
 
 
+
+# Caleb, 2026-10-10, after a site for Erik Fish was started from three pages
+# of his site and none of the kit's tools: "scrape everything from every page
+# and use all the cool stuff we've built ... I should NEVER have to say this
+# again." The Lemma lessons existed in prose and the next site skipped them,
+# so the research pass is a receipt on disk that this command checks.
+RESEARCH_FILES = {
+    "research/INDEX.md": "every page and post of the source, one line each (api-anything or the site's own API, never three hand-picked pages)",
+    "research/SOURCES.md": "which kit tools ran and what each produced",
+    "research/STEAL.md": "From | What | Why it is ours, plus a 'Not stolen, on purpose' list",
+    "docs/COPY.md": "the copy as one document, each line traced to the owner's words",
+}
+# Each named tool must appear in SOURCES.md. ux-pick or ux-gen counts once.
+RESEARCH_TOOLS = [("api-anything",), ("brand-grab",), ("ux-pick", "ux-gen"), ("website.md",), ("site-gate",)]
+# Under this many lines the inventory is a sample, not "every page". The
+# erikfish.com pull was 166 (132 posts, 34 pages); a one-page business site
+# still has a home, an about and a contact.
+MIN_INDEX_LINES = 3
+
+
+def research(root: Path) -> list[str]:
+    fails = []
+    for rel, what in RESEARCH_FILES.items():
+        f = root / rel
+        if not f.is_file() or not f.read_text(errors="ignore").strip():
+            fails.append(f"missing {rel}: {what}")
+    idx = root / "research/INDEX.md"
+    if idx.is_file():
+        lines = [l for l in idx.read_text(errors="ignore").splitlines() if l.lstrip().startswith(("-", "*", "|"))]
+        if len(lines) < MIN_INDEX_LINES:
+            fails.append(f"research/INDEX.md lists {len(lines)} pages; inventory the whole source site")
+    src = root / "research/SOURCES.md"
+    if src.is_file():
+        text = src.read_text(errors="ignore")
+        for names in RESEARCH_TOOLS:
+            if not any(n in text for n in names):
+                fails.append(f"research/SOURCES.md never mentions {' or '.join(names)}: run it and record what it found")
+    return fails
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -564,7 +608,15 @@ def main():
                    help="viewports of runway the longest pinned scene needs")
     i = sub.add_parser("idle"); i.add_argument("url"); i.add_argument("--ref")
     i.add_argument("--ys", help="comma separated scroll positions; default every 900px")
+    r = sub.add_parser("research", help="exit 1 unless the repo holds the research receipt")
+    r.add_argument("repo", nargs="?", default=".")
     a = ap.parse_args()
+    if a.cmd == "research":
+        fails = research(Path(a.repo).resolve())
+        for f in fails:
+            print(f"FAIL  {f}")
+        print(f"site-gate research: {len(fails)} problem(s)" if fails else "ok    research receipt complete")
+        sys.exit(1 if fails else 0)
     from playwright.sync_api import sync_playwright
     with sync_playwright() as pw:
         if a.cmd == "check":

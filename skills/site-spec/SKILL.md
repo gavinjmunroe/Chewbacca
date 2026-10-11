@@ -10,6 +10,32 @@ owner has already said about the business, in their own colors and their own
 voice, and hand it back better than they could have. A draft that could belong
 to any food truck has failed, however good it looks.
 
+## Step zero: the kit pass, before any design or code
+
+Caleb, 2026-10-10, after Erik Fish's site was started from three pages and
+none of these tools: "scrape everything from every page and use all the cool
+stuff we've built ... I should NEVER have to say this again." Every item
+lands on disk, and `site-gate research <repo>` exits 1 until it does.
+
+1. **Every page, through api-anything.** Teach it the site, then pull the
+   whole thing. A WordPress site answers `/wp-json/wp/v2/posts` and `/pages`
+   (Erik's: 132 posts, 34 pages, 108k words, 367 images, 25 videos). Add
+   ops like `searchPosts(q)`, `getPost(slug)`, `getPage(slug)` with
+   `api-anything add`, run `api-anything verify <site>`, then write every page
+   to `research/corpus/` and one line per page to `research/INDEX.md`.
+2. **`brand-grab`** for fonts, colors, palettes off their own images and
+   phone and desktop captures of the current site.
+3. **Their other words.** A corpus already on disk (`~/code/corpora/`), the
+   second brain's domain folder for that person, their books and talks.
+4. **`library/crafts/website.md` and `web-ux.md`**, read before layout.
+5. **`ux-pick` or `ux-gen`** for the stance and the refusals, written down.
+6. **`research/STEAL.md`** (From | What | Why it is ours, plus what was not
+   stolen on purpose) and **`docs/COPY.md`**, one document, each line traced.
+7. **`research/SOURCES.md`** names each tool above and what it produced.
+
+Then `site-gate research .` must print `ok`. Finished means `site-gate
+check`, `story` and `idle` also pass on every route.
+
 ## Order
 
 1. **Find the owner before the brand.** Search the business name and the

@@ -7,6 +7,14 @@ holding the replica to it. `web-ux.md` decides what a site should LOOK like
 right in a screenshot from a site that feels finished in a hand. Every rule
 below cost a day to learn. `site-gate` enforces the mechanical half.
 
+**Before any of this: `site-gate research <repo>`.** It refuses a site whose
+repo lacks `research/INDEX.md` (every page of the source, pulled with
+api-anything or the site's own API), `research/SOURCES.md` (naming
+api-anything, brand-grab, ux-pick or ux-gen, this file and site-gate),
+`research/STEAL.md` and `docs/COPY.md`. Added 2026-10-10 when a new site
+started from three hand-read pages and Caleb had to name the tools again.
+The `site-spec` skill has the step-zero list.
+
 ## A site is four layers, and a screenshot shows one
 
 1. Layout, meaning positions, sizes and type, the only layer a screenshot judges.

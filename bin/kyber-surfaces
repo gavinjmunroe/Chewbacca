@@ -55,6 +55,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
 
+import live_glass  # noqa: E402
 import surface_lint  # noqa: E402
 import hud_events  # noqa: E402
 import osgraph  # noqa: E402
@@ -1050,6 +1051,10 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         if args.cmd == "walk":
             return cmd_walk(kind, arg, as_json=args.json)
+        why = live_glass.refusal()
+        if why:
+            print(why, file=sys.stderr)
+            return 3
         return via_daemon({"cmd": "open", "name": kind, "arg": arg, "at": at})
     if args.cmd == "close":
         if not running():
@@ -1057,6 +1062,10 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         return via_daemon({"cmd": "close", "name": " ".join(args.words)})
     if args.cmd == "space":
+        why = live_glass.refusal()
+        if why:
+            print(why, file=sys.stderr)
+            return 3
         return via_daemon({"cmd": "space", "name": args.name})
     return 2
 

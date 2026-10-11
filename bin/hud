@@ -260,7 +260,12 @@ hud_doctor() {
 }
 
 case "${1:-}" in
-  draw)   send ;;
+  draw)   # A background agent may not draw over the person's work while they
+          # are using the Mac (bin/lib/live_glass.py, 2026-10-11).
+          if command -v python3 >/dev/null 2>&1; then
+            python3 "$(dirname "$0")/lib/live_glass.py" || exit 3
+          fi
+          send ;;
   rim)    # The rim editor: sliders for the rim's thickness, frost, tint,
           # edge light and corners, live on the screen. Saved to ~/.bob/rim.json.
           # With key=value pairs it sets those instead: hud rim thickness=12.

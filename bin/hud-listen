@@ -5014,6 +5014,10 @@ def main() -> int:
         return 0
     voice = None if args.voice.lower() in {"off", "none", ""} else args.voice
     dropped = scrub_inherited_session_env(os.environ)
+    # Everything the voice answers was asked for out loud, so the model it
+    # runs may draw on the glass while the person is active (bin/lib/live_glass.py
+    # refuses background agents, 2026-10-11).
+    os.environ["KYBER_LIVE_OK"] = "1"
     if dropped and args.verbose:
         print(f"dropped from the environment: {' '.join(dropped)}", file=sys.stderr, flush=True)
     if os.environ.get("HUD_NAMES", "").lower() != "off":

@@ -1633,6 +1633,8 @@ if group "hud"; then
   # 2026-10-10: "fix chewb so we NEVER make a wall of text ever again".
   check  "no panel on the glass is a wall of text: row length, first-view text, plumbing, text runs" \
     python3 "$ROOT/tests/test_surface_lint.py"
+  check  "a background agent may not draw over the person's work while they use the Mac" \
+    python3 "$ROOT/tests/test_live_glass.py"
   # CHW-203. Scripted Jev and a scripted model, recorded query answers: no
   # network, no display. It was never wired in before the tiers landed.
   check  "generated surfaces: tiers answer before the model, math picks components, every layout validates" \

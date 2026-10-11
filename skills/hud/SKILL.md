@@ -598,3 +598,11 @@ way to put a mark in the wrong place.
 
 **Check `hud status` first** if you have not drawn this session, and `hud open`
 if it is not running.
+
+## Never draw over the person's work unasked
+
+Since 2026-10-11 `hud draw` and `kyber-surfaces open` refuse an agent (CLAUDECODE set)
+while the person has touched the keyboard or mouse in the last two minutes, because a
+background agent's test panels kept popping up over Caleb's work ("It keeps popping up?
+Fix chewbs bro"). When the person in this conversation asked to see something, prefix the
+draw with `KYBER_LIVE_OK=1`. To check your own work, render offscreen with HUD_LINES_FILE.

@@ -55,7 +55,9 @@ public struct SurfaceView: View {
               element.type != ComponentNode.pendingType
         else { return AnyView(PlaceholderView()) }
         return AnyView(
-            render(element, ancestors: ancestors.union([id]))
+            A11yContract.decorate(
+                element.type, store.resolved(element),
+                render(element, ancestors: ancestors.union([id])))
                 // Identity keyed on the *type*, so a component that becomes a
                 // different kind of component transitions instead of snapping.
                 //
@@ -458,6 +460,7 @@ public struct SurfaceView: View {
                     Text(p["label"]?.display ?? "").font(.system(size: 12))
                 }
                 .toggleStyle(.checkbox)
+                .accessibilityLabel(A11yContract.name("Checkbox", p) ?? "")
                 .disabled(pointer == nil))
 
         case "Select":
@@ -493,6 +496,10 @@ public struct SurfaceView: View {
                     .menuStyle(.button)
                     .buttonStyle(.plain)
                     .menuIndicator(.hidden)
+                    // Named by its label, valued by the choice: it read as
+                    // "Choose, pop up button" before (bd_2026-Code-apw).
+                    .accessibilityLabel(A11yContract.name("Select", p) ?? "")
+                    .accessibilityValue((p["value"]?.display).flatMap { $0.isEmpty ? nil : $0 } ?? "None")
                     .disabled(pointer == nil)
                 })
 
@@ -513,6 +520,7 @@ public struct SurfaceView: View {
                                     pointer,
                                     numeric ? .number(Double(next) ?? 0) : .string(next))
                             }))
+                    .accessibilityLabel(A11yContract.name("Field", p) ?? "")
                     .disabled(pointer == nil)
                 })
 
@@ -678,6 +686,9 @@ struct LabeledControl<Content: View>: View {
             Text(label)
                 .font(.system(size: 10.5))
                 .foregroundStyle(.secondary)
+                // The control carries this as its own name; read here as
+                // well, every field would be announced twice.
+                .accessibilityHidden(true)
             content
         }
     }
@@ -767,6 +778,9 @@ struct ListView: View {
                             .font(.system(size: 11, design: .monospaced))
                             .foregroundStyle(
                                 chrome == .window ? HUD.ink.opacity(0.9) : HUD.accent.opacity(0.8))
+                            // The bullet was read as "black right-pointing
+                            // small triangle" before every item.
+                            .accessibilityHidden(!ordered)
                     }
                     Text(row.text)
                         .font(.system(size: 12.5))

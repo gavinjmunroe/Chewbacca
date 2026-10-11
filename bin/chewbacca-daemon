@@ -80,7 +80,7 @@ function readJSON(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
 }
 function writeJSON(file, value) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   const tmp = `${file}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(value, null, 2) + "\n", { mode: 0o600 });
   fs.renameSync(tmp, file);
@@ -128,6 +128,13 @@ function serviceFromPlist(label, p) {
     : label.replace(/^com\.(chewbacca|calebnewton)\./, "").replace(/^chewbacca[.-]/, "") || label;
   const argv = p.ProgramArguments || (p.Program ? [p.Program] : null);
   if (!argv || !argv.length) return null;
+  // What the supervisor can't reproduce stays a LaunchAgent rather than run
+  // on the wrong schedule: a weekly job run daily, a disabled job revived.
+  if (p.Disabled) return "it is disabled";
+  const ka = p.KeepAlive;
+  if (ka && typeof ka === "object" && Object.keys(ka).some((k) => k !== "SuccessfulExit")) return "its KeepAlive has conditions";
+  if ([].concat(p.StartCalendarInterval || []).some((c) => ["Weekday", "Day", "Month"].some((k) => c[k] !== undefined)))
+    return "it runs on certain days only";
   const svc = { name, argv, adoptedFrom: label };
   const app = argv[0].match(/^(.*?\.app)\/Contents\/MacOS\//);
   // KeepAlive {SuccessfulExit: false} means restart only after a crash; the
@@ -159,15 +166,24 @@ function launchctl(args) {
 function adoptLegacy({ dryRun = false } = {}) {
   const uid = process.getuid();
   const adopted = [];
+  const disabled = new Set();
+  const pd = launchctl(["print-disabled", `gui/${uid}`]);
+  for (const m of String(pd.stdout || "").matchAll(/"([^"]+)"\s*=>\s*(true|disabled)/g)) disabled.add(m[1]);
   for (const label of ADOPT) {
     const file = path.join(AGENTS, `${label}.plist`);
     if (!fs.existsSync(file)) continue;
     const p = plistToJSON(file);
     const svc = p && serviceFromPlist(label, p);
+    if (typeof svc === "string") { adopted.push({ label, skipped: svc }); continue; }
     if (!svc || validate(svc)) { adopted.push({ label, skipped: "could not read a schedule from it" }); continue; }
-    adopted.push({ label, service: svc.name });
+    if (disabled.has(label)) { adopted.push({ label, skipped: "it is turned off in launchctl" }); continue; }
+    // An existing service file wins: setup registers the current command just
+    // before install, and the old plist's command (an old node path, say) must
+    // not overwrite it. Two old labels for one job fold into the first.
+    const exists = fs.existsSync(path.join(SERVICES, `${svc.name}.json`));
+    adopted.push({ label, service: svc.name, kept: exists || undefined });
     if (dryRun) continue;
-    register(svc);
+    if (!exists) register(svc);
     launchctl(["bootout", `gui/${uid}/${label}`]);
     fs.mkdirSync(LEGACY, { recursive: true });
     fs.renameSync(file, path.join(LEGACY, `${label}.plist`));
@@ -232,25 +248,39 @@ function log(msg) {
   process.stdout.write(`${new Date().toISOString()} ${msg}\n`);
 }
 
+function trimLog(file) {
+  try {
+    const st = fs.statSync(file);
+    if (st.size <= LOG_MAX) return;
+    const fd = fs.openSync(file, "r");
+    const buf = Buffer.alloc(LOG_KEEP);
+    fs.readSync(fd, buf, 0, LOG_KEEP, st.size - LOG_KEEP);
+    fs.closeSync(fd);
+    // A child holding the log open with O_APPEND keeps writing at the new end.
+    fs.writeFileSync(file, buf);
+  } catch { /* no log yet */ }
+}
+
 function openLog(name) {
   fs.mkdirSync(LOGS, { recursive: true });
   const file = path.join(LOGS, `${name}.log`);
-  try {
-    const st = fs.statSync(file);
-    if (st.size > LOG_MAX) {
-      const fd = fs.openSync(file, "r");
-      const buf = Buffer.alloc(LOG_KEEP);
-      fs.readSync(fd, buf, 0, LOG_KEEP, st.size - LOG_KEEP);
-      fs.closeSync(fd);
-      fs.writeFileSync(file, buf);
-    }
-  } catch { /* first run: no log yet */ }
+  trimLog(file);
   return fs.openSync(file, "a");
 }
 
 function appRunning(app) {
   const exe = path.basename(app, ".app");
   return spawnSync("/usr/bin/pgrep", ["-x", exe]).status === 0;
+}
+
+// When this Mac last booted. A crash-only service that exited cleanly stays
+// down until this changes, the way launchd left it down until the next login.
+// Infinity was tried first and JSON turned it into null, so any daemon restart
+// (a kit update every few hours) brought back an engine Caleb had stopped.
+function bootTime() {
+  const r = spawnSync("/usr/sbin/sysctl", ["-n", "kern.boottime"], { encoding: "utf8" });
+  const m = /sec\s*=\s*(\d+)/.exec(r.stdout || "");
+  return m ? Number(m[1]) : 0;
 }
 
 // The last time an --at slot came due, at or before now.
@@ -265,11 +295,18 @@ function lastSlot(times, now) {
   return best;
 }
 
-function due(svc, st, now) {
+function due(svc, st, now, boot = 0) {
   if (svc.app) return !appRunning(svc.app) && now >= (st.retryAt || 0);
   if (st.pid) return false;
-  if (svc.keepalive) return now >= (st.retryAt || 0);
+  if (svc.keepalive) {
+    if (st.stoppedBoot !== undefined && st.stoppedBoot !== null) {
+      if (st.stoppedBoot === boot) return false;
+      st.stoppedBoot = null;
+    }
+    return now >= (st.retryAt || 0);
+  }
   if (svc.every) {
+    if (st.retryAt && now < st.retryAt) return false;
     if (!st.lastStart) return !svc.startLater || now - (st.firstSeen || now) >= svc.every * 1000;
     return now - st.lastStart >= svc.every * 1000;
   }
@@ -277,7 +314,23 @@ function due(svc, st, now) {
   return false;
 }
 
-function start(svc, st, children) {
+function finished(svc, st, children, boot, code, signal, why) {
+  children.delete(svc.name);
+  st.pid = null;
+  st.lastExit = why || (signal ? `signal ${signal}` : code);
+  st.lastEnd = Date.now();
+  if (svc.keepalive === "crash" && code === 0 && !signal) {
+    st.stoppedBoot = boot;
+  } else if (svc.keepalive || why) {
+    // A binary that can't start backs off like a crash, keepalive or not, so a
+    // missing tool is retried every few minutes rather than every tick.
+    const up = (st.lastEnd - st.lastStart) / 1000;
+    st.backoff = up >= STABLE_S && !why ? BACKOFF_MIN_S : Math.min(BACKOFF_MAX_S, (st.backoff || BACKOFF_MIN_S / 2) * 2);
+    st.retryAt = st.lastEnd + st.backoff * 1000;
+  }
+}
+
+function start(svc, st, children, boot) {
   const now = Date.now();
   st.lastStart = now;
   if (svc.app) {
@@ -291,53 +344,80 @@ function start(svc, st, children) {
     log(`opened ${svc.name}`);
     return;
   }
-  const fd = openLog(svc.name);
-  const env = { ...process.env, PATH: DEFAULT_PATH, ...(svc.env || {}) };
+  let fd;
   let child;
   try {
+    fd = openLog(svc.name);
     child = spawn(svc.argv[0], svc.argv.slice(1), {
-      cwd: svc.cwd || HOME, env, detached: true, stdio: ["ignore", fd, fd],
+      cwd: svc.cwd || HOME, env: { ...process.env, PATH: DEFAULT_PATH, ...(svc.env || {}) },
+      detached: true, stdio: ["ignore", fd, fd],
     });
   } catch (e) {
-    fs.closeSync(fd);
-    st.lastExit = `spawn failed: ${e.message}`;
-    st.retryAt = now + BACKOFF_MAX_S * 1000;
+    if (fd !== undefined) try { fs.closeSync(fd); } catch { /* closed */ }
+    st.pid = null;
+    finished(svc, st, children, boot, null, null, `spawn failed: ${e.message}`);
     return;
   }
   fs.closeSync(fd);
   if (Number.isInteger(svc.nice) && child.pid) { try { os.setPriority(child.pid, svc.nice); } catch { /* best effort */ } }
-  st.pid = child.pid;
+  st.pid = child.pid || null;
+  st.argv0 = path.basename(svc.argv[0]);
   children.set(svc.name, child);
-  child.on("error", (e) => { st.lastExit = `error: ${e.message}`; });
-  child.on("exit", (code, signal) => {
-    children.delete(svc.name);
-    st.pid = null;
-    st.lastExit = signal ? `signal ${signal}` : code;
-    st.lastEnd = Date.now();
-    if (svc.keepalive === "crash" && code === 0 && !signal) {
-      st.retryAt = Infinity;  // a clean exit stays down until the next login, as launchd did
-    } else if (svc.keepalive) {
-      const up = (st.lastEnd - st.lastStart) / 1000;
-      st.backoff = up >= STABLE_S ? BACKOFF_MIN_S : Math.min(BACKOFF_MAX_S, (st.backoff || BACKOFF_MIN_S / 2) * 2);
-      st.retryAt = st.lastEnd + st.backoff * 1000;
-    }
-  });
+  // A missing binary never emits "exit", only "error" (ENOENT, pid undefined):
+  // without this the service stayed "running" forever and blocked kit restarts.
+  let ended = false;
+  const end = (code, signal, why) => { if (ended) return; ended = true; finished(svc, st, children, boot, code, signal, why); };
+  child.on("error", (e) => end(null, null, `error: ${e.message}`));
+  child.on("exit", (code, signal) => { if (svc.every) st.retryAt = 0; end(code, signal); });
 }
 
 function kitTarget() {
   try { return fs.realpathSync(KIT); } catch { return null; }
 }
 
+function alive(pid) {
+  try { process.kill(pid, 0); return true; } catch { return false; }
+}
+
+function sleepMs(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+// SIGTERM every group, give them five seconds, then SIGKILL what's left, so a
+// slow child can't keep a port the next daemon's copy needs. Five is guessed.
+function stopGroups(pids) {
+  for (const pid of pids) { try { process.kill(-pid, "SIGTERM"); } catch { /* gone */ } }
+  const until = Date.now() + 5000;
+  while (pids.some(alive) && Date.now() < until) sleepMs(100);
+  for (const pid of pids) if (alive(pid)) { try { process.kill(-pid, "SIGKILL"); } catch { /* gone */ } }
+}
+
+// A daemon that crashed left its children running. A saved pid still alive
+// and still running the same program is ours; anything else is a reused pid.
+function reapOrphans(state) {
+  const ours = [];
+  for (const st of Object.values(state)) {
+    if (!st.pid || !alive(st.pid)) continue;
+    const comm = spawnSync("/bin/ps", ["-o", "comm=", "-p", String(st.pid)], { encoding: "utf8" }).stdout.trim();
+    if (st.argv0 && path.basename(comm) === st.argv0) ours.push(st.pid);
+  }
+  if (ours.length) { log(`stopping ${ours.length} left over from the last run`); stopGroups(ours); }
+  for (const st of Object.values(state)) st.pid = null;
+}
+
 function run() {
   const children = new Map();
   const state = readJSON(STATE, {});
-  for (const st of Object.values(state)) st.pid = null;
+  reapOrphans(state);
+  const boot = bootTime();
   const bootKit = kitTarget();
+  const daemonLog = path.join(LOGS, "daemon.log");
   log(`daemon up, pid ${process.pid}`);
   let lastAdopt = 0;
+  let ticks = 0;
 
   const stopAll = (sig) => {
-    for (const child of children.values()) { try { process.kill(-child.pid, "SIGTERM"); } catch { /* gone */ } }
+    stopGroups([...children.values()].map((c) => c.pid).filter(Boolean));
     log(`daemon down (${sig})`);
     process.exit(0);
   };
@@ -346,6 +426,7 @@ function run() {
 
   const tick = () => {
     const now = Date.now();
+    ticks += 1;
     if (now - lastAdopt >= ADOPT_EVERY_MS) {
       lastAdopt = now;
       try { for (const a of adoptLegacy()) log(`folded in ${a.label}${a.skipped ? ` (skipped: ${a.skipped})` : ""}`); }
@@ -354,11 +435,18 @@ function run() {
     const services = loadServices();
     const live = new Set(services.map((s) => s.name));
     for (const [name, child] of children) {
-      if (!live.has(name)) { try { process.kill(-child.pid, "SIGTERM"); } catch { /* gone */ } }
+      if (!live.has(name) && child.pid) { try { process.kill(-child.pid, "SIGTERM"); } catch { /* gone */ } }
     }
     for (const svc of services) {
       const st = state[svc.name] || (state[svc.name] = { firstSeen: now });
-      if (due(svc, st, now)) start(svc, st, children);
+      try { if (due(svc, st, now, boot)) start(svc, st, children, boot); }
+      catch (e) { log(`${svc.name}: ${e.message}`); }
+    }
+    // Long-running services never reopen their log, so trim them here too,
+    // about once a minute.
+    if (ticks % 12 === 0) {
+      trimLog(daemonLog);
+      for (const name of children.keys()) trimLog(path.join(LOGS, `${name}.log`));
     }
     for (const name of Object.keys(state)) if (!live.has(name) && !children.has(name)) delete state[name];
     try { writeJSON(STATE, state); } catch { /* disk full: keep running */ }
@@ -372,8 +460,9 @@ function run() {
       stopAll("kit update");
     }
   };
-  tick();
-  setInterval(tick, TICK_MS);
+  const safeTick = () => { try { tick(); } catch (e) { log(`tick failed: ${e.stack || e.message}`); } };
+  safeTick();
+  setInterval(safeTick, TICK_MS);
 }
 
 // ---- status -------------------------------------------------------------------

@@ -9,6 +9,7 @@ Stock /usr/bin/python3 is 3.9 on this Mac, so no `X | None` here.
 """
 import json
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -18,6 +19,30 @@ HOME = Path.home()
 DAEMON_DIR = Path(os.environ.get("CHEWBACCA_DAEMON_DIR", str(HOME / ".chewbacca" / "daemon")))
 AGENTS = Path(os.environ.get("CHEWBACCA_LAUNCH_AGENTS", str(HOME / "Library" / "LaunchAgents")))
 ROOT = Path(__file__).resolve().parents[2]
+
+
+NAME = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+SLOT = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+
+
+def validate(svc: dict) -> Optional[str]:
+    """The same rules chewbacca-daemon applies when it loads a service. A file
+    it would skip must never be written, because the old plist is retired right
+    after and the job would be gone while the installer said "installed"."""
+    if not NAME.match(svc.get("name", "")):
+        return "name must be lowercase letters, digits, . _ or -"
+    modes = [k for k in ("every", "at", "keepalive", "app") if svc.get(k) not in (None, False)]
+    if len(modes) != 1:
+        return "give exactly one of every, at, keepalive, app"
+    if "every" in svc and not (isinstance(svc["every"], int) and svc["every"] >= 5):
+        return "every needs whole seconds, at least 5"
+    if "at" in svc and not (svc["at"] and all(SLOT.match(t) for t in svc["at"])):
+        return "at needs HH:MM times"
+    if "app" in svc:
+        return None if str(svc["app"]).endswith(".app") else "app needs a .app path"
+    if not svc.get("argv") or not all(isinstance(a, str) for a in svc["argv"]):
+        return "give the command"
+    return None
 
 
 def _node() -> Optional[str]:
@@ -46,6 +71,9 @@ def register(name: str, argv: Optional[List[str]] = None, every: Optional[int] =
         svc["env"] = dict(env)
     if nice is not None:
         svc["nice"] = int(nice)
+    bad = validate(svc)
+    if bad:
+        raise ValueError("chewbacca-daemon would skip {}: {}".format(name, bad))
     services = DAEMON_DIR / "services"
     services.mkdir(parents=True, exist_ok=True)
     tmp = services / ".{}.{}.tmp".format(name, os.getpid())
@@ -54,9 +82,16 @@ def register(name: str, argv: Optional[List[str]] = None, every: Optional[int] =
     tmp.replace(services / "{}.json".format(name))
     if legacy_label:
         retire(legacy_label)
-    if ensure_daemon and not (AGENTS / "com.chewbacca.plist").exists():
+    if ensure_daemon and not _loaded():
         return install()
     return "registered {} with the Chewbacca background item".format(name)
+
+
+def _loaded() -> bool:
+    if not (AGENTS / "com.chewbacca.plist").exists():
+        return False
+    r = subprocess.run(["launchctl", "print", "gui/{}/com.chewbacca".format(os.getuid())], capture_output=True)
+    return r.returncode == 0
 
 
 def unregister(name: str) -> None:

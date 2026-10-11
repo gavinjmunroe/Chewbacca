@@ -182,6 +182,50 @@ class DaemonTests(unittest.TestCase):
         self.assertIn("<key>KeepAlive</key><true/>", xml)
         self.assertIn("<string>run</string>", xml)
 
+    def test_missing_binary_backs_off_and_does_not_wedge(self):
+        self.cli("register", "ghost", "--every", "5", "--", str(self.tmp / "no-such-tool"))
+        proc = subprocess.Popen([NODE, str(DAEMON), "run"], env=self.env,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            time.sleep(8)
+        finally:
+            proc.send_signal(signal.SIGTERM)
+            proc.wait(timeout=10)
+        st = json.loads((self.tmp / "daemon/state.json").read_text())["ghost"]
+        self.assertIsNone(st.get("pid"), "a binary that never started is still counted as running")
+        self.assertIn("ENOENT", str(st.get("lastExit")))
+        self.assertGreater(st.get("retryAt", 0), st["lastStart"], "a missing binary is retried every tick")
+
+    def test_adopt_keeps_fresh_service_and_skips_what_it_cannot_reproduce(self):
+        import plistlib
+        agents = self.tmp / "agents"
+        self.cli("register", "messages-refresh", "--every", "600", "--", "/new/node", "people", "texts", "refresh")
+        bodies = {
+            "com.chewbacca.messages-refresh": {"ProgramArguments": ["/old/node", "people"], "StartInterval": 600},
+            "com.calebnewton.presence-watch": {"ProgramArguments": ["/bin/true"], "StartInterval": 60, "Disabled": True},
+            "com.calebnewton.brain-index": {"ProgramArguments": ["/bin/true"],
+                                            "StartCalendarInterval": {"Weekday": 1, "Hour": 9, "Minute": 0}},
+            "com.chewbacca.bridge": {"ProgramArguments": ["/bin/true"], "KeepAlive": {"NetworkState": True}},
+        }
+        for label, body in bodies.items():
+            (agents / f"{label}.plist").write_bytes(plistlib.dumps(dict(body, Label=label)))
+        out = node_eval(f"process.stdout.write(JSON.stringify(require({json.dumps(str(DAEMON))}).adoptLegacy()))", self.env)
+        got = {a["label"]: a for a in out}
+        svc = json.loads((self.tmp / "daemon/services/messages-refresh.json").read_text())
+        self.assertEqual(svc["argv"][0], "/new/node", "the old plist overwrote the service setup just registered")
+        self.assertFalse((agents / "com.chewbacca.messages-refresh.plist").exists())
+        for label in ("com.calebnewton.presence-watch", "com.calebnewton.brain-index", "com.chewbacca.bridge"):
+            self.assertIn("skipped", got[label], label)
+            self.assertTrue((agents / f"{label}.plist").exists(), f"{label} was retired without a service")
+
+    def test_python_register_refuses_what_the_daemon_would_skip(self):
+        sys.path.insert(0, str(ROOT / "bin" / "lib"))
+        import importlib
+        import daemon_register
+        importlib.reload(daemon_register)
+        with self.assertRaises(ValueError):
+            daemon_register.register("maintain", ["/x"], at=["24:17"], ensure_daemon=False)
+
     def test_python_register_writes_service(self):
         sys.path.insert(0, str(ROOT / "bin" / "lib"))
         os.environ["CHEWBACCA_DAEMON_DIR"] = self.env["CHEWBACCA_DAEMON_DIR"]

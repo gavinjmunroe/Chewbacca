@@ -103,13 +103,17 @@ public struct HomeAgent: Decodable, Equatable, Sendable {
     public let state: State
     public var text = ""
     public var why = ""
+    /// Who the draft was queued for, as the run recorded it. The row's own
+    /// "for <name>" is recomputed every pass and can name someone else.
+    public var to = ""
 
-    enum CodingKeys: String, CodingKey { case state, text, why }
+    enum CodingKeys: String, CodingKey { case state, text, why, to }
 
-    public init(state: State, text: String = "", why: String = "") {
+    public init(state: State, text: String = "", why: String = "", to: String = "") {
         self.state = state
         self.text = text
         self.why = why
+        self.to = to
     }
 
     public init(from decoder: Decoder) throws {
@@ -117,6 +121,7 @@ public struct HomeAgent: Decodable, Equatable, Sendable {
         state = try c.decode(State.self, forKey: .state)
         text = try c.decodeIfPresent(String.self, forKey: .text) ?? ""
         why = try c.decodeIfPresent(String.self, forKey: .why) ?? ""
+        to = try c.decodeIfPresent(String.self, forKey: .to) ?? ""
     }
 }
 
@@ -1068,10 +1073,20 @@ struct HomeAgentLine: View {
                 status("Drafting a text", tone: HUD.running)
             case .drafted:
                 VStack(alignment: .leading, spacing: 2) {
+                    // The row already says "for Reagan Popoff" when the run
+                    // is for the same person, and a second line saying it
+                    // again is noise; it shows only when the two differ.
+                    if row.detail != "for \(who(agent))" {
+                        Text("to \(who(agent))")
+                            .homeLight()
+                            .foregroundStyle(HUD.faint)
+                    }
+                    // Whole, never truncated: send approves every word of
+                    // it, so every word is on the panel (600 characters at
+                    // most, home_agent.MOST_TEXT_CHARS).
                     Text(agent.text)
                         .homeLight()
                         .foregroundStyle(HUD.ink)
-                        .lineLimit(6)
                         .fixedSize(horizontal: false, vertical: true)
                         .textSelection(.enabled)
                         .padding(.leading, 8)
@@ -1080,7 +1095,7 @@ struct HomeAgentLine: View {
                         .overlay(alignment: .leading) { HUD.needsYou.frame(width: 1) }
                         .padding(.top, 2)
                     HStack(spacing: 4) {
-                        HomeVerb(word: "send", tone: HUD.needsYou, help: "Send this text to \(who)") {
+                        HomeVerb(word: "send", tone: HUD.needsYou, help: "Send this text to \(who(agent))") {
                             model.send(row)
                         }
                         HomeVerb(word: "drop", tone: HUD.faint, help: "Throw this draft away") { model.drop(row) }
@@ -1088,7 +1103,7 @@ struct HomeAgentLine: View {
                     .padding(.leading, -6)
                 }
                 .accessibilityElement(children: .contain)
-                .accessibilityLabel("Draft to \(who): \(agent.text)")
+                .accessibilityLabel("Draft to \(who(agent)): \(agent.text)")
             case .yours:
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     note(agent.why.isEmpty ? "This one is yours." : agent.why, tone: HUD.dim)
@@ -1104,9 +1119,9 @@ struct HomeAgentLine: View {
         }
     }
 
-    /// "for Reagan Popoff" is the row's detail; the name alone here.
-    private var who: String {
-        row.detail.hasPrefix("for ") ? String(row.detail.dropFirst(4)) : "them"
+    /// Who the draft goes to, from the run's record, never from the row.
+    private func who(_ agent: HomeAgent) -> String {
+        agent.to.isEmpty ? "them" : agent.to
     }
 
     /// A state in its colour with a still dot before it: nothing on the

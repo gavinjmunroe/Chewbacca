@@ -123,7 +123,11 @@ def shown(entry: dict, now: datetime, is_alive=alive) -> dict:
     if state == "working" and (not is_alive(entry.get("pid")) or _age(entry, now) > WORKING_STALE_S):
         return {"state": "failed", "why": "The agent stopped without an answer."}
     if state == "drafted":
-        return {"state": "drafted", "text": str(entry.get("text") or ""), "why": str(entry.get("why") or "")}
+        # The name the draft was queued for, from the run's own record: the
+        # row's "for <name>" is recomputed every pass and can move to someone
+        # else, so the panel never names the recipient from it.
+        return {"state": "drafted", "text": str(entry.get("text") or ""), "why": str(entry.get("why") or ""),
+                "to": str(entry.get("name") or "")}
     if state in ("working", "yours", "failed"):
         return {"state": state, "why": str(entry.get("why") or "")}
     return {}
@@ -453,7 +457,14 @@ def send(graph, row_id: str, now: datetime, path: Path, done: Path, home: Path, 
             raise Refused("There is no draft to send for that one.")
         queued = _queued(drafts_file(home))
         match = [d for d in queued if isinstance(d, dict) and d.get("n") == entry["n"]]
-        if not match or match[0].get("text") != entry.get("text"):
+        # The press approves this text to this person, so the queue entry must
+        # still be exactly that: same text, to their id, one-to-one, with no
+        # address or app pinned on it that the run did not put there. A drafts
+        # file edited by anything else between the draft and the press is
+        # refused, never sent to whoever it names now.
+        person = str(entry.get("person") or "").split(":", 1)[-1]
+        if not match or not person or match[0].get("text") != entry.get("text") or match[0].get("who") != person \
+                or match[0].get("group") or match[0].get("to") or match[0].get("via"):
             del state[row_id]
             home_feed.write(state, path)
             raise Refused("That draft is not in the queue any more. Press handle for a new one.")

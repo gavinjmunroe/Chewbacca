@@ -262,6 +262,18 @@ def sending(tmp: Path) -> None:
               not any(c[:4] == ["people", "texts", "drafts", "send"] for c in tools.calls)
               and REMINDER not in home_agent.load(path), tools.calls)
 
+    for name, changed in (("to someone else", {"who": "6b9fb664"}), ("to a pinned number", {"to": "+15550000000"}),
+                          ("to a group", {"group": True}), ("through another app", {"via": "whatsapp"})):
+        drafted(True)
+        queue.write_text(json.dumps([{"n": 7, "who": "8d212994", "text": "yo u good", **changed}]))
+        tools = Tools()
+        try:
+            home_agent.send(g, REMINDER, NOW, path, done, home, run_tool=tools)
+            check(f"a queued draft changed {name} is never sent", False)
+        except home_agent.Refused:
+            check(f"a queued draft changed {name} is never sent",
+                  not any(c[:4] == ["people", "texts", "drafts", "send"] for c in tools.calls), tools.calls)
+
     drafted(True)
     queue.write_text(json.dumps([{"n": 7, "who": "8d212994", "text": "yo u good"}]))
     tools = Tools()
@@ -292,7 +304,8 @@ def sending(tmp: Path) -> None:
 def feed(tmp: Path) -> None:
     g = graph(tmp)
     state = {REMINDER: {"state": "working", "at": NOW.isoformat(), "pid": 999999999},
-             ZELLE: {"state": "drafted", "at": NOW.isoformat(), "n": 3, "text": "sent u the 25", "why": "pays"}}
+             ZELLE: {"state": "drafted", "at": NOW.isoformat(), "n": 3, "text": "sent u the 25", "why": "pays",
+                     "name": "Caleb Newton"}}
     body = home_feed.build(g, NOW, [], agent=state)
     rows = {r["id"]: r for r in body["todos"]}
     check("a run whose process is gone is drawn failed, never working forever",
@@ -301,8 +314,9 @@ def feed(tmp: Path) -> None:
     check("a row with a draft is shown past the cap of five",
           body["todoCount"] == 6 and len(body["todos"]) == 5 and ZELLE in rows and "task:rem-ariana" not in rows,
           [r["id"] for r in body["todos"]])
-    check("a draft is on its row with its text",
-          rows[ZELLE].get("agent") == {"state": "drafted", "text": "sent u the 25", "why": "pays"}, rows[ZELLE])
+    check("a draft is on its row with its text and who it was queued for",
+          rows[ZELLE].get("agent") == {"state": "drafted", "text": "sent u the 25", "why": "pays", "to": "Caleb Newton"},
+          rows[ZELLE])
     check("a row with nothing handed over carries no agent", "agent" not in rows["task:rem-caleb"])
     live = home_agent.annotate([{"id": REMINDER, "title": "x"}], {REMINDER: {"state": "working", "at": NOW.isoformat(),
                                                                              "pid": os.getpid()}}, NOW)

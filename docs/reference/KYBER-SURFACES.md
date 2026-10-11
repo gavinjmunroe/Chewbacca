@@ -188,11 +188,13 @@ the brain's memory files whose index line names them in full, then asks
 `claude -p` with no tools for one JSON answer: a text, or "yours" with why (a
 payment, a call, a file, anything a text would only promise). A text goes into
 `people texts drafts add <their id>`, which voice-checks it; a refusal gets one
-rewrite with what voice-check measured. The row then shows the draft with
-"send" and "drop". Send runs `--send <id>`, which checks the queue still holds
-that number with that text, runs `people texts drafts send <n>` (the number is
-the approval, as everywhere), and crosses the to-do off only when the model
-said the text finishes it. Nothing goes out without that press. A row with a
+rewrite with what voice-check measured. The row then shows the whole draft,
+who it goes to when that is not already the row's "for" line, and "send" and
+"drop". Send runs `--send <id>`, which checks the queue still holds that
+number with that text, for that person, one-to-one, with no pinned address,
+group or app (an edited queue entry is dropped, never sent), runs
+`people texts drafts send <n>` (the number is the approval, as everywhere),
+and crosses the to-do off only when the model said the text finishes it. Nothing goes out without that press. A row with a
 run or a draft on it is shown even past the five-row cap. A run whose process
 died, or that ran past seven minutes, draws as failed, with "retry" and
 "clear".

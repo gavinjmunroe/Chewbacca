@@ -44,6 +44,24 @@ def landed_versions(repo, head, target, path):
     return blobs
 
 
+def edits_already_landed(repo, head, target, path, full):
+    """True when every line this copy added is on main and every line it cut
+    is gone from main too. The 10/11 case: a tab appended two index lines to
+    MEMORY.md and landed them, main gained more lines since, so no whole-file
+    version matched, yet the local edit held nothing main didn't."""
+    import difflib
+    old = git(repo, "show", f"{head}:{path}", check=False).splitlines()
+    new = open(full, encoding="utf-8", errors="replace").read().splitlines()
+    tgt = set(git(repo, "show", f"{target}:{path}", check=False).splitlines())
+    added, cut = [], []
+    for line in difflib.ndiff(old, new):
+        if line.startswith("+ "):
+            added.append(line[2:])
+        elif line.startswith("- "):
+            cut.append(line[2:])
+    return bool(added or cut) and all(a in tgt for a in added) and not any(c in tgt for c in cut)
+
+
 def main(repo, target):
     head = git(repo, "rev-parse", "HEAD")
     target = git(repo, "rev-parse", target)
@@ -66,6 +84,8 @@ def main(repo, target):
             keep.append(path)
             continue
         if blob_hash(repo, full) in landed_versions(repo, head, target, path):
+            heal.append((code, path))
+        elif code.strip() == "M" and edits_already_landed(repo, head, target, path, full):
             heal.append((code, path))
         else:
             keep.append(path)

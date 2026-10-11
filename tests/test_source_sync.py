@@ -94,3 +94,19 @@ def test_local_commits_are_left_alone(repo):
     mine = commit(r, {"other.md": "local\n"}, "local")
     rc, out = sync(r, top)
     assert rc == 1 and head(r) == mine
+
+
+def test_edit_whose_lines_all_landed_is_cleared(repo):
+    # The real 10/11 shape: local appended a line that main has, and main has
+    # moved on past it, so no whole-file version matches.
+    r, _, _, top = repo
+    (r / "index.md").write_text("a\nc\n")
+    assert sync(r, top)[0] == 0 and head(r) == top
+
+
+def test_edit_with_one_new_line_is_kept(repo):
+    r, base, _, top = repo
+    (r / "index.md").write_text("a\nc\nnot on main\n")
+    rc, _ = sync(r, top)
+    assert rc == 1 and head(r) == base
+    assert (r / "index.md").read_text() == "a\nc\nnot on main\n"

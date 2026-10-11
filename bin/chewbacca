@@ -72,6 +72,7 @@ COMMANDS=(
   "gtme-signals|list recent SEC Form D raises as buying signals"
   "gtme-grade|run the five pre-send gates on one campaign; launch-guard needs its pass"
   "gtme-reply|classify a cold-email reply, clean its text, and gate auto-send, offline"
+  "gtme-rules|which client rulings run as code, and check text a client will read"
   "gtme-dnc|may we email this address: one check across the graph, DNC lists and the Clay blocklist"
   "gtme-score|Togari's lead, affiliation, primary-contact, tier and quality rubrics, offline"
   "gtme-lookup|ZoomInfo's free company and person search, Fireflies meetings, keys from the keychain"
@@ -135,7 +136,7 @@ repo_version() { cat "$ROOT/VERSION" 2>/dev/null || echo "unknown"; }
 installed_version() { cat "$STATE/version" 2>/dev/null || echo "unrecorded"; }
 
 case "${1:-}" in
-task-graph|graph-fuse|review-gate|work-ledger|tabs|ux-learning|jev|decision-lab|ux-decision|ux-policy|clay-review|gtme-math|gtme-graph|gtme-learning|gtme-library|gtme-signals|gtme-grade|gtme-reply|gtme-dnc|gtme-score|gtme-interview|gtm|gtm-memory|gtme|clay-fixture-check|oss-apps)
+task-graph|graph-fuse|review-gate|work-ledger|tabs|ux-learning|jev|decision-lab|ux-decision|ux-policy|clay-review|gtme-math|gtme-graph|gtme-learning|gtme-library|gtme-signals|gtme-grade|gtme-reply|gtme-rules|gtme-dnc|gtme-score|gtme-interview|gtm|gtm-memory|gtme|clay-fixture-check|oss-apps)
   tool="$1"
   shift
   exec python3 "$ROOT/bin/$tool" "$@"

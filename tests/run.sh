@@ -466,6 +466,7 @@ if group "gtme"; then
   # Every case from the upstream TypeScript tests; offline, nothing sends.
   check "gtme-reply labels real replies, cleans HTML, refuses risky auto-sends" python3 "$ROOT/tests/test_gtme_reply.py"
   check "gtme-reply dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-reply intent --help
+  check "gtme-rules audits rulings and refuses client text a ruling forbids" python3 "$ROOT/tests/test_gtme_rules.py"
   expect "gtme-reply appears in help" "chewbacca gtme-reply" bash "$ROOT/bin/chewbacca" --help
   # Ported from togari-platform's dnc and scoring modules with their TypeScript cases; offline.
   check "gtme-dnc matches Togari's DNC check and calls an unreadable list unknown, never allowed" \

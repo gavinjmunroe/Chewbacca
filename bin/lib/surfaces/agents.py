@@ -60,7 +60,10 @@ first message are left out). Open on a tile pins it and draws its
 conversation under the grid. Caleb's open tabs come in by themselves:
 realm's own importer (import.apply, apps/server/src/import) copies each
 recent live tab's transcript into the engine, never writing the CLI's own
-files, so a tab shows here without anything to press or read about it.
+files, so a tab shows here without anything to press or read about it. It is
+the panel's one press-less write, so it goes through import_call, which
+takes import.scan and import.apply and nothing else, and applies only keys
+that same scan found on disk.
 
 SHIPPING. The opened card stages, unstages, commits and pushes through
 realm's own git write path (workspace.stage, workspace.unstage,
@@ -120,6 +123,16 @@ IMPORT_BATCH = 6
 # import.apply copies every event of each transcript in one transaction per
 # session. Not measured; two minutes for six long sessions is a guess.
 APPLY_TIMEOUT = 120.0
+# The only realm writes this panel makes without a press, both for bringing
+# Caleb's open tabs in by themselves (his ask, 2026-10-10). import_call takes
+# nothing else, so the press-less path can't be reused for any other write
+# (security review, 2026-10-10). import.scan writes nothing (contracts
+# import.ts) but isn't in realm_client's READ_METHODS.
+IMPORT_ONLY = frozenset({"import.scan", "import.apply"})
+# import.scan answered with 41,039,576 bytes for 5,446 transcripts on
+# 2026-10-10, over realm_client's 32 MiB cap; this connection only takes up
+# to 128 MiB, about three times that. Guessed past the one measurement.
+SCAN_MAX_MESSAGE = 128 * 1024 * 1024
 # Miller's seven plus two, the same cap the code and sessions panels use.
 MAX_SESSIONS = 9
 # Turns on the glass. Guessed, never measured on the glass: fourteen rows of
@@ -586,6 +599,20 @@ def out_until(text: str, name: str) -> str:
     return f"Out of {name} until {m.group(1)}" + (f", {m.group(2).replace(' ', '')}" if m.group(2) else "")
 
 
+def import_call(conn, method: str, params: dict, timeout: float):
+    """A press-less realm write, and only import.scan or import.apply."""
+    if method not in IMPORT_ONLY:
+        raise realm_client.RealmWriteRefused(f"{method} isn't an import; it needs a press")
+    return conn.call(method, params, timeout=timeout, write=True)
+
+
+def scanned_keys(scan) -> set[str]:
+    """Every transcript key import.scan found, the only keys a press-less
+    import.apply may name."""
+    rows = scan.get("sessions") if isinstance(scan, dict) else None
+    return {r["key"] for r in rows or [] if isinstance(r, dict) and isinstance(r.get("key"), str)}
+
+
 _KS = None
 
 
@@ -858,10 +885,19 @@ class Agents(Provider):
                     profiles = conn.call("profiles.list", timeout=CALL_TIMEOUT)
                     profile = next((x["id"] for x in profiles if isinstance(x, dict)
                                     and isinstance(x.get("id"), str)), None) if isinstance(profiles, list) else None
-                    if profile is not None:
-                        conn.call("import.apply", {"sessions": [{"key": t["transcript"], "spaceId": None,
-                                                                 "profileId": profile} for t in want]},
-                                  timeout=APPLY_TIMEOUT, write=True)
+                    if profile is None:
+                        return
+                    # Apply only what this same scan found: a tab's path is
+                    # never handed to the engine on kyber-sessions' word alone.
+                    conn.max_message = SCAN_MAX_MESSAGE
+                    found = scanned_keys(import_call(conn, "import.scan", {}, APPLY_TIMEOUT))
+                    keys = [t["transcript"] for t in want if t["transcript"] in found]
+                    with self._lock:
+                        # Not on disk as realm sees it yet: tried again next pass.
+                        self._imported -= {t["transcript"] for t in want} - found
+                    if keys:
+                        import_call(conn, "import.apply", {"sessions": [{"key": k, "spaceId": None, "profileId": profile}
+                                                                        for k in keys]}, APPLY_TIMEOUT)
             except realm_client.RealmError as err:
                 if not err.maybe_applied:
                     # Nothing reached the engine: let the next pass try them.
@@ -1280,7 +1316,9 @@ class Agents(Provider):
             out[p("send")] = [{"id": shown["id"], "accent": True,
                                "text": clean(f"To {shown['title']} in {where} · can't be unsent", 120)}]
         if data.get("checkpoint") and shown["status"] not in BUSY:
-            out[p("fork")] = [{"id": shown["id"], "text": f"Copies {where} as it was before your last message "
+            # The row names the checkpoint drawn, so a turn that lands
+            # between drawing and pressing can't move what gets forked.
+            out[p("fork")] = [{"id": f"{shown['id']}@{data['checkpoint']}", "text": f"Copies {where} as it was before your last message "
                                                            "into a new worktree, with a new session · the "
                                                            "original is untouched"}]
         return out
@@ -1643,9 +1681,8 @@ class Agents(Provider):
                                None) if isinstance(profiles, list) else None
                 if profile is None:
                     return Result(False, "The engine has no profile to bring it into yet.", refetch=True)
-                got = conn.call("import.apply", {"sessions": [{"key": tab["transcript"], "spaceId": None,
-                                                               "profileId": profile}]},
-                                timeout=APPLY_TIMEOUT, write=True)
+                got = import_call(conn, "import.apply", {"sessions": [{"key": tab["transcript"], "spaceId": None,
+                                                                       "profileId": profile}]}, APPLY_TIMEOUT)
         except realm_client.RealmError as err:
             return Result(False, f"Couldn't open it: {rpc_words(err)}", refetch=True)
         with self._lock:
@@ -1821,8 +1858,10 @@ class Agents(Provider):
                       updates={self.p("level"): "success"}, refetch=True)
 
     def fork(self, ctx: Context, data, values: dict) -> Result:
-        row, why = self._pinned_row(data, values)
-        if row is None:
+        sid, _, drawn = str(values.get("row") or "").partition("@")
+        row, why = self._pinned_row(data, {**values, "row": sid})
+        if row is None or not drawn:
+            why = why or "That Fork row named no checkpoint. Open the agent again, then press."
             return Result(False, why, updates={self.p("level"): "error"})
         if not self._claim("fork", row["id"]):
             return Result(False, "Already forking it.")
@@ -1830,10 +1869,15 @@ class Agents(Provider):
         try:
             try:
                 with self.connect(ctx) as conn:
+                    if self._fresh(conn, row["id"]).get("status") in BUSY:
+                        return Result(False, f"Not forked: the session in {where} is working again.", refetch=True)
                     checkpoint = self.newest_checkpoint(conn, row)
                     if checkpoint is None:
                         return Result(False, "Nothing to fork from yet: a checkpoint is taken before each message.",
                                       refetch=True)
+                    if checkpoint != drawn:
+                        return Result(False, "Not forked: a newer turn landed since that was drawn. Look again, "
+                                             "then press.", refetch=True)
                     made = conn.call("sessions.fork", {"checkpointId": checkpoint}, timeout=60.0, write=True)
             except realm_client.RealmError as err:
                 if err.maybe_applied:

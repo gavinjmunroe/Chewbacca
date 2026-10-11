@@ -90,6 +90,8 @@ class FakeEngine:
         self.imported_keys: set = set()
         self.diff = None
         self.upstream = True
+        # Transcript keys import.scan finds on disk.
+        self.disk: list = []
         # agents.probe's answer, shaped as on this Mac on 2026-10-10: Claude
         # and Gemini installed with sign-in unknown, Codex installed but not
         # runnable by the engine, Cursor absent.
@@ -178,6 +180,8 @@ class FakeEngine:
                                    {"kind": "add", "text": "    new", "oldLine": None, "newLine": 2}]}]}
         if method == "agents.probe":
             return [dict(x) for x in self.probe]
+        if method == "import.scan":
+            return {"sessions": [{"key": k, "agentKind": "claude"} for k in self.disk], "memories": [], "skills": []}
         if method == "import.apply":
             out = []
             for sel in p["sessions"]:
@@ -577,9 +581,20 @@ def interrupt_and_fork(tmp: Path) -> None:
     check("Interrupt on an idle session refuses", not r.ok and len(e.writes) == 1, r)
     data, model = view(a, ctx)
     check("an idle session with a checkpoint offers Fork, saying the original is untouched",
-          model["/agents/fork"][0]["id"] == "s1" and "untouched" in model["/agents/fork"][0]["text"],
+          model["/agents/fork"][0]["id"] == "s1@cp-1" and "untouched" in model["/agents/fork"][0]["text"],
           model["/agents/fork"])
     r = a.fork(ctx, data, {"row": "s1"})
+    check("a Fork row that names no checkpoint is refused", not r.ok and len(e.writes) == 1, r)
+    e.checkpoints.insert(0, {"id": "cp-2", "environmentId": "env-s1", "sessionId": "s1", "kind": "turn"})
+    r = a.fork(ctx, data, {"row": "s1@cp-1"})
+    check("a turn that landed after Fork was drawn moves the checkpoint, so the press refuses",
+          not r.ok and "newer turn" in r.line and len(e.writes) == 1, (r, e.writes))
+    e.checkpoints.pop(0)
+    e.sessions["s1"]["status"] = "running"
+    r = a.fork(ctx, data, {"row": "s1@cp-1"})
+    check("Fork on a session working again is refused", not r.ok and len(e.writes) == 1, r)
+    e.sessions["s1"]["status"] = "idle"
+    r = a.fork(ctx, data, {"row": "s1@cp-1"})
     check("Fork forks the newest checkpoint and opens the new session",
           r.ok and e.writes[-1] == ("sessions.fork", {"checkpointId": "cp-1"}) and a.pinned.startswith("s-fork"),
           (r, e.writes, a.pinned))
@@ -725,6 +740,10 @@ def live_tabs_and_import(tmp: Path) -> None:
         {"id": "tab-old", "agent": "claude", "transcript": "/scanned/tab-old.jsonl", "title": "Yesterday",
          "state": "finished", "ask": "", "detail": "", "project": "x", "last": now - 6 * 3600},
     ]
+    e.disk = [t["transcript"] for t in tabs] + ["/scanned/tab-lim.jsonl"]
+    tabs.append({"id": "tab-ghost", "agent": "claude", "transcript": "/scanned/../../etc/ghost.jsonl",
+                 "title": "Not a transcript realm found", "state": "working", "ask": "", "detail": "",
+                 "project": "x", "last": now - 10})
     a.tabs = lambda t: [dict(x) for x in tabs]
     clock = [5000.0]
     a.clock = lambda: clock[0]
@@ -741,6 +760,18 @@ def live_tabs_and_import(tmp: Path) -> None:
           ["/scanned/tab-wait.jsonl", "/scanned/tab-run.jsonl"]
           and all(x["profileId"] == "prof1" and x["spaceId"] is None for x in applied[0]["sessions"]), applied)
     check("a tab older than the import window stays out", "tab-old" not in json.dumps(applied))
+    check("the press-less import scans first and applies only keys that same scan found",
+          [m for m, _ in e.writes][:2] == ["import.scan", "import.apply"] and "ghost" not in json.dumps(applied),
+          e.writes)
+    refused = []
+    for method in ("sessions.send", "workspace.ship", "import.undo"):
+        try:
+            SA.import_call(FakeConn(e), method, {"id": "s1", "text": "x"}, 1.0)
+        except rc.RealmWriteRefused:
+            refused.append(method)
+    check("the press-less path refuses every write but import.scan and import.apply",
+          refused == ["sessions.send", "workspace.ship", "import.undo"]
+          and not any(m in refused for m, _ in e.writes), (refused, e.writes))
     check("a working tile says what it is doing, not the raw call", model["/agents/tiles"][1]["detail"] == "Editing realm.py",
           model["/agents/tiles"][1])
     check("tool calls read as phrases", [SA.doing(x) for x in (
@@ -755,7 +786,7 @@ def live_tabs_and_import(tmp: Path) -> None:
     data, model = view(a, ctx)
     check("once in, a tile is the engine's session with the tab's live state",
           model["/agents/tiles"][0]["id"].startswith("s-imp") and model["/agents/tiles"][0]["state"] == "needs"
-          and model["/agents/tiles"][0]["detail"] == "Bash: npm test" and len(model["/agents/tiles"]) == 2,
+          and model["/agents/tiles"][0]["detail"] == "Bash: npm test" and len(model["/agents/tiles"]) == 3,
           model["/agents/tiles"])
     clock[0] += SA.IMPORT_EVERY
     view(a, ctx)
@@ -773,7 +804,7 @@ def live_tabs_and_import(tmp: Path) -> None:
     r = a.pick(ctx, data, {"row": opened})
     data, model = view(a, ctx)
     check("tapping the open tile closes it and the others come back", r.ok and a.pinned == ""
-          and len(tile_ids(model)) == 3 and model["/agents/head"] == "", tile_ids(model))
+          and len(tile_ids(model)) == 4 and model["/agents/head"] == "", tile_ids(model))
 
     s_wait = next(sid for sid, x in e.sessions.items() if x["providerSessionId"] == "tab-wait")
     data, model = view(a, ctx, open=s_wait)
@@ -796,6 +827,7 @@ def live_tabs_and_import(tmp: Path) -> None:
     b.engine = None
     eng = FakeEngine()
     eng.fail["import.apply"] = rc.RealmRpcError("import.apply", "INTERNAL", "x")
+    eng.disk = [tabs[0]["transcript"]]
     b.connect = lambda _c: FakeConn(eng)
     tclock = [100.0]
     b.clock = lambda: tclock[0]

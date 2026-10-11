@@ -903,6 +903,49 @@ def test_engine_cli():
         code, out, _ = cli("plist", extra={"CHEWBACCA_PYTHON": "/usr/bin/python3"})
         args = plistlib.loads(out.encode()).get("ProgramArguments", []) if code == 0 else []
         check("CHEWBACCA_PYTHON overrides the plist's python", args[:2] == ["/usr/bin/env", "/usr/bin/python3"], args)
+
+        # install: a new person never runs a terminal, so the engine has to
+        # come back at every login on its own. Scratch HOME, scratch
+        # LaunchAgents, and a launchctl that only writes down what it was asked.
+        user = d / "user"
+        (user / ".local" / "bin").mkdir(parents=True)
+        (user / ".local" / "bin" / "realm-engine").symlink_to(engine)
+        agents, calls = d / "LaunchAgents", d / "launchctl.log"
+        fake_lc = d / "launchctl"
+        fake_lc.write_text(f"#!/bin/sh\necho \"$*\" >> {calls}\n")
+        fake_lc.chmod(0o755)
+        lenv = {"HOME": str(user), "CHEWBACCA_LAUNCH_AGENTS_DIR": str(agents), "CHEWBACCA_LAUNCHCTL": str(fake_lc)}
+        code, out, err = cli("install", extra=dict(lenv, CHEWBACCA_REALM_DIR=str(d / "not-built")))
+        check("install before a build is refused and loads nothing",
+              code == 1 and "build" in err and not calls.exists(), (code, err))
+        code, out, err = cli("install", extra=lenv)
+        written = agents / "com.chewbacca.realm.plist"
+        pl = plistlib.loads(written.read_bytes()) if written.exists() else {}
+        log = calls.read_text().splitlines() if calls.exists() else []
+        check("install writes the login agent and loads it with bootstrap",
+              code == 0 and pl.get("Label") == "com.chewbacca.realm"
+              and log == [f"bootout gui/{os.getuid()}/com.chewbacca.realm",
+                          f"bootstrap gui/{os.getuid()} {written}"], (code, err, log))
+        check("the login agent runs the ~/.local/bin link, never a kit snapshot path the next update prunes",
+              pl.get("ProgramArguments", [])[2:3] == [str(user / ".local" / "bin" / "realm-engine")],
+              pl.get("ProgramArguments"))
+        check("the login agent file is not writable by others", written.stat().st_mode & 0o022 == 0)
+        code, out, err = cli("uninstall", extra=lenv)
+        check("uninstall unloads and removes it", code == 0 and not written.exists()
+              and calls.read_text().splitlines()[-1] == f"bootout gui/{os.getuid()}/com.chewbacca.realm", (code, err))
+
+        # pnpm: a new Mac with brew's node has corepack and no pnpm.
+        bare = d / "bare"
+        bare.mkdir()
+        corepack = d / "corepack"
+        corepack.write_text("#!/bin/sh\nexit 0\n")
+        corepack.chmod(0o755)
+        probe = ("import importlib.machinery as m, json, sys; "
+                 f"mod = m.SourceFileLoader('re', {engine!r}).load_module(); print(json.dumps(mod.pnpm_argv()))")
+        got = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True, timeout=30,
+                             env={"PATH": str(bare), "HOME": str(user), "CHEWBACCA_COREPACK": str(corepack)})
+        check("no pnpm on PATH: the build runs pnpm through corepack",
+              got.returncode == 0 and json.loads(got.stdout) == [str(corepack), "pnpm"], (got.stdout, got.stderr))
     fake.close()
 
 

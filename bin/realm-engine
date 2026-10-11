@@ -7,6 +7,9 @@
     realm-engine stop               SIGTERM the engine named in engine.json
     realm-engine status [--json]    running, pid, port, built, reachable
     realm-engine plist              print the launchd plist filled for this Mac
+    realm-engine install            write that plist to ~/Library/LaunchAgents and load it,
+                                    so the engine starts at every login with no terminal
+    realm-engine uninstall          unload it and remove the file
 
 realm is Carlton Aikins' local-first agent control plane
 (github.com/31Carlton7/realm). Its checkout is read only here: this script
@@ -18,6 +21,7 @@ Paths, all overridable so a stranger's Mac works with no edits:
     CHEWBACCA_REALM_PORT   fixed port        (default 0, any free port)
     CHEWBACCA_NODE, CHEWBACCA_PNPM, CHEWBACCA_GIT   the binaries to use
     CHEWBACCA_PYTHON       the python the launch agent runs (default: python3 on PATH)
+    CHEWBACCA_LAUNCH_AGENTS_DIR, CHEWBACCA_LAUNCHCTL   where install writes, and what loads it
 
 Exit codes: 0 done, 1 failed or refused, 2 usage, 3 status says not running.
 `run` exits 0 when it refuses because an engine is already up, so launchd's
@@ -171,12 +175,27 @@ def target_ref(git: str | None) -> str:
     return got.stdout.strip() if got.returncode == 0 else ""
 
 
+def pnpm_argv() -> list[str] | None:
+    """pnpm, or corepack running the pnpm realm's packageManager pins. A new
+    Mac with brew's node has corepack and no pnpm, and `corepack enable`
+    writes into node's own folder, so corepack is run directly instead."""
+    pnpm = tool("CHEWBACCA_PNPM", "pnpm")
+    if pnpm:
+        return [pnpm]
+    corepack = tool("CHEWBACCA_COREPACK", "corepack")
+    if corepack:
+        return [corepack, "pnpm"]
+    return None
+
+
 def build(force: bool) -> int:
-    git, pnpm, node = tool("CHEWBACCA_GIT", "git"), tool("CHEWBACCA_PNPM", "pnpm"), tool("CHEWBACCA_NODE", "node")
+    git, node = tool("CHEWBACCA_GIT", "git"), tool("CHEWBACCA_NODE", "node")
+    pnpm = pnpm_argv()
     if not node:
         return die("node not found; realm needs Node 22.13 or newer (CHEWBACCA_NODE to point at one)")
     if not pnpm:
-        return die("pnpm not found; `corepack enable` or `npm i -g pnpm` installs it (CHEWBACCA_PNPM to point at one)")
+        return die("pnpm not found, and no corepack to run it; `npm i -g pnpm` installs it "
+                   "(CHEWBACCA_PNPM to point at one)")
     if not (REALM_DIR / "package.json").exists():
         if REALM_DIR.exists() and any(REALM_DIR.iterdir()):
             return die(f"{REALM_DIR} exists and is not a realm checkout; set CHEWBACCA_REALM_DIR")
@@ -206,13 +225,16 @@ def build(force: bool) -> int:
         print(f"realm already built at {head[:12]}", file=sys.stderr)
         return 0
     steps = [
-        [pnpm, "install", "--filter", FILTER, "--frozen-lockfile"],
-        [pnpm, "--filter", FILTER, "build"],
+        ["install", "--filter", FILTER, "--frozen-lockfile"],
+        ["--filter", FILTER, "build"],
     ]
+    # corepack asks "download pnpm?" on a TTY and waits; a build pressed on
+    # the glass has nobody to answer.
+    env = dict(os.environ, COREPACK_ENABLE_DOWNLOAD_PROMPT="0")
     for cmd in steps:
-        print("$ " + " ".join(cmd[1:]), file=sys.stderr)
-        if subprocess.run(cmd, cwd=REALM_DIR).returncode:
-            return die(f"`pnpm {' '.join(cmd[1:])}` failed in {REALM_DIR}")
+        print("$ pnpm " + " ".join(cmd), file=sys.stderr)
+        if subprocess.run(pnpm + cmd, cwd=REALM_DIR, env=env).returncode:
+            return die(f"`pnpm {' '.join(cmd)}` failed in {REALM_DIR}")
     if not main_js().exists():
         return die(f"build finished but {main_js()} is missing")
     home().mkdir(parents=True, exist_ok=True)
@@ -396,8 +418,25 @@ def status(as_json: bool) -> int:
     return 0 if info["running"] else 3
 
 
+def engine_path() -> str:
+    """The ~/.local/bin link setup makes, when there is one. The resolved file
+    is under ~/.chewbacca/kit/snapshots/<sha> on a kit install, and the next
+    update prunes that folder, after which launchd would fail at every login
+    without a word."""
+    link = Path.home() / ".local" / "bin" / "realm-engine"
+    return str(link) if link.exists() else str(Path(__file__).resolve())
+
+
 def plist() -> int:
-    """The launchd template filled for this Mac. Printed, never installed.
+    text = render_plist()
+    if isinstance(text, int):
+        return text
+    sys.stdout.write(text)
+    return 0
+
+
+def render_plist() -> str | int:
+    """The launchd template filled for this Mac. `plist` prints it, `install` writes it.
 
     launchd starts jobs with PATH=/usr/bin:/bin:/usr/sbin:/sbin, and children
     of the engine (claude, codex, git) then fail to launch with no error in
@@ -418,7 +457,7 @@ def plist() -> int:
     subs = {
         "__LABEL__": LABEL,
         "__PYTHON__": os.environ.get("CHEWBACCA_PYTHON") or "python3",
-        "__ENGINE__": str(Path(__file__).resolve()),
+        "__ENGINE__": engine_path(),
         "__REALM_HOME__": str(home()),
         "__REALM_DIR__": str(REALM_DIR),
         "__NODE__": node,
@@ -428,7 +467,50 @@ def plist() -> int:
     text = PLIST_TEMPLATE.read_text()
     for key, value in subs.items():
         text = text.replace(key, _xml(value))
-    sys.stdout.write(text)
+    return text
+
+
+def agents_dir() -> Path:
+    return Path(os.environ.get("CHEWBACCA_LAUNCH_AGENTS_DIR")
+                or Path.home() / "Library" / "LaunchAgents").expanduser()
+
+
+def launchctl(*args: str) -> subprocess.CompletedProcess:
+    exe = os.environ.get("CHEWBACCA_LAUNCHCTL") or "/bin/launchctl"
+    return subprocess.run([exe, *args], capture_output=True, text=True, timeout=30)
+
+
+def install() -> int:
+    """Start at every login, under launchd, with nobody at a terminal. Loading
+    starts it now too (RunAtLoad); a `run` that finds an engine already up
+    exits 0, so one started by hand is left alone."""
+    if not main_js().exists():
+        return die(f"{main_js()} missing; run realm-engine build first")
+    text = render_plist()
+    if isinstance(text, int):
+        return text
+    folder = agents_dir()
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / f"{LABEL}.plist"
+    tmp = path.with_suffix(".plist.tmp")
+    tmp.write_text(text)
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, path)
+    domain = f"gui/{os.getuid()}"
+    # An older copy may be loaded; bootstrap refuses a label already there.
+    launchctl("bootout", f"{domain}/{LABEL}")
+    got = launchctl("bootstrap", domain, str(path))
+    if got.returncode:
+        return die(f"launchctl bootstrap said {got.returncode}: {(got.stderr or got.stdout).strip()[:200]}")
+    print(json.dumps({"installed": str(path), "label": LABEL}))
+    return 0
+
+
+def uninstall() -> int:
+    launchctl("bootout", f"gui/{os.getuid()}/{LABEL}")
+    path = agents_dir() / f"{LABEL}.plist"
+    path.unlink(missing_ok=True)
+    print(json.dumps({"removed": str(path)}))
     return 0
 
 
@@ -453,6 +535,10 @@ def main(argv: list[str]) -> int:
         return status("--json" in rest)
     if cmd == "plist":
         return plist()
+    if cmd == "install":
+        return install()
+    if cmd == "uninstall":
+        return uninstall()
     return die(f"unknown command {cmd!r}; see realm-engine --help", 2)
 
 

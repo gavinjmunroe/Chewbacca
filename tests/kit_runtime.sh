@@ -86,13 +86,21 @@ python3 -I "$KR" update --repo "$S" --fetch --link-bin "$BIN" >/dev/null || fail
 [ "$(sh "$OLD/bin/alpha")" = v1 ] || fail "the previous snapshot vanished under a running tool"
 [ -L "$RT/current" ] || fail "current is not a symlink"
 
-# 4. Old snapshots are pruned to three, current always kept.
+# 4. Old snapshots are pruned to three, current always kept, and never one a
+# live process is running from (hud-listen lost its snapshot on 2026-10-10).
+HELD="$OLD"  # the oldest, which the next prune would remove
+(cd "$HELD" && exec sleep 60) & HOLDER=$!
 release v3; python3 -I "$KR" update --repo "$S" --fetch >/dev/null
 release v4; python3 -I "$KR" update --repo "$S" --fetch >/dev/null
 N="$(find "$RT/snapshots" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
-[ "$N" = 3 ] || fail "expected 3 snapshots after 4 builds, found $N"
+[ -d "$HELD" ] || fail "a snapshot a live process runs from was pruned"
+kill "$HOLDER" 2>/dev/null; wait "$HOLDER" 2>/dev/null
+release v4b; python3 -I "$KR" update --repo "$S" --fetch >/dev/null
+N="$(find "$RT/snapshots" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
+[ "$N" = 3 ] || fail "expected 3 snapshots once nothing holds the old one, found $N"
+[ -d "$HELD" ] && fail "the released snapshot was not pruned on the next update"
 [ -d "$OLD" ] && fail "the oldest snapshot was not pruned"
-[ "$("$BIN/alpha")" = v4 ] || fail "PATH alpha is not v4"
+[ "$("$BIN/alpha")" = v4b ] || fail "PATH alpha is not v4b"
 
 # 5. Two updaters at once: both finish, current is valid.
 release v5

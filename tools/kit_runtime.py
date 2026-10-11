@@ -229,8 +229,29 @@ def swap_current(base: Path, sha: str) -> None:
     os.replace(tmp, base / "current")  # rename(2): never a moment without `current`
 
 
+def in_use(snaps: Path) -> set:
+    """Snapshot names some running process still has open: a file, a
+    directory or its cwd, per lsof. On 2026-10-10 hud-listen ran from
+    95e730c4 from 18:29, four updates pruned that snapshot under it, and
+    "show my agents" failed because the kyber-sessions path it had resolved
+    at start no longer existed. Python closes a script once read, so a
+    process can still miss this; that is why hud-listen should also restart
+    on update, and why KEEP stays above one."""
+    prefix = str(snaps.resolve()) + os.sep
+    try:
+        out = subprocess.run(["lsof", "-nP", "-Fn"], capture_output=True, text=True, timeout=60).stdout
+    except (OSError, subprocess.SubprocessError):
+        return set()
+    names = set()
+    for line in out.splitlines():
+        if line.startswith("n") and line[1:].startswith(prefix):
+            names.add(line[1 + len(prefix):].split(os.sep, 1)[0])
+    return names
+
+
 def prune(source: Path, base: Path, keep_sha: str) -> List[str]:
     snaps = base / "snapshots"
+    busy = in_use(snaps) if snaps.is_dir() else set()
     rows = []
     for d in snaps.iterdir() if snaps.is_dir() else []:
         if d.is_dir() and not d.name.endswith(SIDECAR):
@@ -243,6 +264,8 @@ def prune(source: Path, base: Path, keep_sha: str) -> List[str]:
             if d.name != keep_sha:
                 kept += 1
             continue
+        if d.name in busy:
+            continue  # a live process runs from it; the next update tries again
         remove_snapshot(source, d)
         removed.append(d.name[:12])
     return removed

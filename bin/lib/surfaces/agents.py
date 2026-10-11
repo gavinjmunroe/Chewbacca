@@ -170,6 +170,15 @@ AGENT_LABELS = {"claude": "Claude", "codex": "Codex", "acp:gemini": "Gemini", "a
                 "acp:opencode": "OpenCode", "acp:copilot": "Copilot", "acp:goose": "goose", "acp:qwen": "Qwen Code",
                 "acp:grok": "Grok", "acp:fx": "fx", "acp:deepseek": "DeepSeek", "acp:openhands": "OpenHands",
                 "acp:hermes": "Hermes"}
+# Changed files listed on an open agent's card, and the lines of one patch
+# drawn. DiffView keeps the last 600 lines (hud/CLAUDE.md, Diff); twelve
+# files is a glance, the rest are counted. Guessed.
+CHANGED_SHOWN = 12
+PATCH_LINES = 600
+# Seconds between `git status` reads for the open agent's folder. Realm calls
+# workspace.diff cheap (one status, two numstats); still, git is a process
+# per call. Guessed.
+DIFF_EVERY = 10.0
 # The order Start offers what is ready: the agents the engine ships first
 # (presets.ts SELECTABLE_AGENT_KINDS order), anything else after.
 AGENT_ORDER = ("claude", "codex", "acp:cursor", "acp:gemini", "acp:opencode", "acp:copilot", "acp:goose",
@@ -423,6 +432,32 @@ def start_id(kind: str, label: str, task: str) -> str:
     return f"{kind}|{label}|{digest}"
 
 
+def patch_text(diff) -> str:
+    """workspace.fileDiff's hunks as unified diff text for the Diff view:
+    `@@` headers, then +, - and space lines, stripped like every engine
+    string, cut to PATCH_LINES from the top."""
+    if not isinstance(diff, dict):
+        return ""
+    if diff.get("binary"):
+        return "Binary file, no text diff."
+    out = []
+    for h in diff.get("hunks") or []:
+        if not isinstance(h, dict):
+            continue
+        out.append(clean(f"@@ -{h.get('oldStart')},{h.get('oldLines')} +{h.get('newStart')},{h.get('newLines')} @@ "
+                         f"{h.get('header') or ''}", 200))
+        for line in h.get("lines") or []:
+            if not isinstance(line, dict):
+                continue
+            mark = {"add": "+", "del": "-", "context": " "}.get(line.get("kind"), "\\ ")
+            # Indentation is the code's, so only hidden characters go, not spaces.
+            text = "".join(ch for ch in str(line.get("text") or "") if not hidden(ch) or ch == "\t")
+            out.append(mark + text[:400])
+    if diff.get("truncated"):
+        out.append("(cut short by the engine)")
+    return "\n".join(out[:PATCH_LINES])
+
+
 _KS = None
 
 
@@ -533,7 +568,8 @@ class Agents(Provider):
         p = ACTION_PREFIX
         self.actions = {f"{p}pick": self.pick, f"{p}send": self.send, f"{p}allow": self.allow,
                         f"{p}deny": self.deny, f"{p}interrupt": self.interrupt, f"{p}fork": self.fork,
-                        f"{p}new": self.new, f"{p}engine": self.start_engine, f"{p}agent": self.choose}
+                        f"{p}new": self.new, f"{p}engine": self.start_engine, f"{p}agent": self.choose,
+                        f"{p}file": self.show_file}
         self._lock = threading.Lock()
         # The session a press acts on. Set by a pick (or the first fetch, to
         # the session that needs the person most), never by a re-sort.
@@ -561,6 +597,10 @@ class Agents(Provider):
         self._imported: set[str] = set()
         self._imported_at = -IMPORT_EVERY
         self._importing = False
+        # The open agent's changed files (sid, at, summary) and the patch a
+        # press opened (sid, path, text).
+        self._changes: tuple | None = None
+        self._patch: tuple | None = None
         # What layout() draws, set by each model (_replan).
         self._plan: dict = {}
         self._shape = "{}"
@@ -627,6 +667,7 @@ class Agents(Provider):
                 if row is not None:
                     self.catch_up(conn, log)
                     checkpoint = self.newest_checkpoint(conn, row)
+                    self.read_changes(conn, row)
                     with self._lock:
                         # Published only if no press moved the pin meanwhile.
                         mine = self._log is base or self._log is None or self._log.sid != pinned
@@ -651,6 +692,8 @@ class Agents(Provider):
         return {"rows": rows, "pinned": pinned, "gone": gone, "checkpoint": checkpoint,
                 "folders": self.folders(ctx, listed), "items": list(log.items), "pending": dict(log.pending),
                 "caught_up": log.caught_up, "agents": self._agents, "probe_error": self._probe_error,
+                "changes": self._changes[2] if self._changes and self._changes[0] == pinned else None,
+                "patch": self._patch if self._patch and self._patch[0] == pinned else None,
                 "tabs": tabs, "now": self.wall()}
 
     # ── bringing tabs in ─────────────────────────────────────────────────
@@ -727,6 +770,22 @@ class Agents(Provider):
 
         self.spawn(work)
 
+    def read_changes(self, conn, row: dict) -> None:
+        """The open agent's changed files, from realm's own git read
+        (workspace.diff, an EXEC method: it runs git in the session's folder,
+        the same read Realm's diff pane makes), every DIFF_EVERY seconds."""
+        cwd = row.get("cwd_raw") or ""
+        with self._lock:
+            fresh = self._changes and self._changes[0] == row["id"] and self.clock() - self._changes[1] < DIFF_EVERY
+        if fresh or not cwd.startswith("/"):
+            return
+        try:
+            got = conn.call("workspace.diff", {"cwd": cwd}, timeout=CALL_TIMEOUT, allow_exec=True)
+        except realm_client.RealmRpcError:
+            got = None  # not a repository, or git refused: the card shows no Changed list
+        with self._lock:
+            self._changes = (row["id"], self.clock(), got if isinstance(got, dict) else None)
+
     @staticmethod
     def catch_up(conn, log: Log) -> None:
         for _ in range(EVENTS_PAGES):
@@ -761,6 +820,7 @@ class Agents(Provider):
                 "space": names.get(s.get("spaceId")) or "a space", "status": status,
                 "state": STATE_WORDS.get(status, clean(status, 20) or "unknown"),
                 "folder": clean(Path(cwd).name, 40) if cwd else "", "cwd": clean(tilde(cwd, Path(ctx.home)), 80),
+                "cwd_raw": cwd if not any(hidden(ch) for ch in cwd) else "",
                 "agent": label_of(s.get("agentKind")), "kind": clean(s.get("agentKind"), 40),
                 "mode": clean(s.get("permissionMode"), 30),
                 "environment": s.get("environmentId") if isinstance(s.get("environmentId"), str) else "",
@@ -870,6 +930,13 @@ class Agents(Provider):
                       comp(c("fork"), "Events", caption="", items=Bind(p("fork")), action=f"{ACTION_PREFIX}fork",
                            actionLabel="Fork")]
             order += ["allow", "deny", "draft", "send", "interrupt", "fork"]
+            if plan.get("changed"):
+                parts.append(comp(c("changed"), "Events", caption=Bind(p("changedCap")), items=Bind(p("changed")),
+                                  action=f"{ACTION_PREFIX}file", actionLabel="Diff"))
+                order.append("changed")
+            if plan.get("patch"):
+                parts.append(comp(c("patch"), "Diff", text=Bind(p("patch")), path=Bind(p("patchPath"))))
+                order.append("patch")
         if plan.get("start"):
             parts += [comp(c("kinds"), "Chips", options=Bind(p("kinds")), value=Bind(p("agent")),
                            action=f"{ACTION_PREFIX}agent"),
@@ -891,7 +958,8 @@ class Agents(Provider):
         return {p("note"): "", p("setup"): [], p("engine"): [], p("engineLabel"): "Start the engine", p("head"): "",
                 p("meta"): "", p("transcript"): [], p("ask"): "", p("allow"): [], p("deny"): [], p("send"): [],
                 p("interrupt"): [], p("fork"): [], p("new"): [], p("kinds"): [], p("tiles"): [],
-                p("counts"): {"needs": 0, "running": 0, "done": 0},
+                p("counts"): {"needs": 0, "running": 0, "done": 0}, p("changed"): [], p("changedCap"): "",
+                p("patch"): "", p("patchPath"): "",
                 p("placeholder"): "Typed here, sent only by Send"}
 
     def model(self, data, error, values, ctx) -> dict:
@@ -914,6 +982,7 @@ class Agents(Provider):
             plan["down"] = True
         elif data is not None:
             plan.update(tiles=bool(out.get(p("tiles"))), pinned=bool(out.get(p("head"))),
+                        changed=bool(out.get(p("changed"))), patch=bool(out.get(p("patch"))),
                         ask=bool(out.get(p("ask"))), start=bool(out.get(p("kinds"))))
         with self._lock:
             self._plan = plan
@@ -999,6 +1068,19 @@ class Agents(Provider):
                 else "decides when it asks")
         out[p("meta")] = " · ".join(x for x in (shown["agent"], shown["state"], shown["cwd"], mode) if x)
         out[p("transcript")] = list(data.get("items") or [])
+        changes = data.get("changes") or {}
+        files = [f for f in changes.get("files") or [] if isinstance(f, dict) and isinstance(f.get("path"), str)
+                 and not any(hidden(ch) for ch in f["path"])]
+        if files:
+            total = int(changes.get("totalFiles") or len(files))
+            out[p("changedCap")] = f"Changed, {total} file{'s' if total != 1 else ''}" + (
+                f" on {clean(changes.get('branch'), 40)}" if changes.get("branch") else "")
+            out[p("changed")] = [{"id": f["path"], "text": clean(f["path"], 70), "time": " · ".join(x for x in (
+                clean(f.get("status"), 12), f"+{int(f.get('additions') or 0)} -{int(f.get('deletions') or 0)}"
+                if not f.get("binary") else "binary") if x)} for f in files[:CHANGED_SHOWN]]
+        patch = data.get("patch")
+        if patch:
+            out[p("patch")], out[p("patchPath")] = patch[2], clean(patch[1], 120)
         if not data.get("caught_up"):
             out[p("meta")] += " · catching up on older turns"
         where = shown["folder"] or "its folder"
@@ -1096,6 +1178,26 @@ class Agents(Provider):
         if not isinstance(got, dict) or got.get("id") != sid:
             raise realm_client.RealmProtocolError("sessions.get answered for another session")
         return got
+
+    def show_file(self, ctx: Context, data, values: dict) -> Result:
+        """Draw one changed file's patch on the open agent's card. A read:
+        workspace.fileDiff runs git and changes nothing."""
+        path = str(values.get("row") or "")
+        with self._lock:
+            sid = self.pinned
+        row = next((r for r in (data or {}).get("rows") or [] if r["id"] == sid), None)
+        listed = [f.get("path") for f in ((data or {}).get("changes") or {}).get("files") or [] if isinstance(f, dict)]
+        if row is None or path not in listed or not row.get("cwd_raw"):
+            return Result(False, "That file isn't in the open agent's changes any more.", refetch=True)
+        try:
+            with self.connect(ctx) as conn:
+                got = conn.call("workspace.fileDiff", {"cwd": row["cwd_raw"], "path": path}, timeout=CALL_TIMEOUT,
+                                allow_exec=True)
+        except realm_client.RealmError as err:
+            return Result(False, f"Couldn't read that diff: {rpc_words(err)}", refetch=True)
+        with self._lock:
+            self._patch = (sid, path, patch_text(got))
+        return Result(True, f"Showing the diff of {Path(path).name}.", refetch=True)
 
     def choose(self, ctx: Context, data, values: dict) -> Result:
         """A chip press: which agent Start makes."""

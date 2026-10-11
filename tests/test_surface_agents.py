@@ -48,7 +48,7 @@ tks.COMPONENTS.add("Transcript")
 # Launcher.swift, outside the generated vocabulary list the checker reads.
 tks.COMPONENTS.add("Avatar")
 # Tiles and Chips: hud/CLAUDE.md "Agents as tiles", AgentTiles.swift.
-tks.COMPONENTS.update({"Tiles", "Chips"})
+tks.COMPONENTS.update({"Tiles", "Chips", "Diff"})
 BIDI = "‮"
 LINE_SEP = " "
 ZWSP = "​"
@@ -87,6 +87,7 @@ class FakeEngine:
         self.after: dict = {}
         self.n = 0
         self.imported_keys: set = set()
+        self.diff = None
         # agents.probe's answer, shaped as on this Mac on 2026-10-10: Claude
         # and Gemini installed with sign-in unknown, Codex installed but not
         # runnable by the engine, Cursor absent.
@@ -138,6 +139,15 @@ class FakeEngine:
         return result
 
     def answer(self, method, p):
+        if method == "workspace.diff":
+            return self.diff
+        if method == "workspace.fileDiff":
+            return {"path": p["path"], "oldPath": None, "staged": False, "binary": False, "truncated": False,
+                    "truncatedReason": None, "additions": 1, "deletions": 1, "hunks": [
+                        {"header": "def rail():", "oldStart": 1, "oldLines": 2, "newStart": 1, "newLines": 2,
+                         "lines": [{"kind": "context", "text": "    keep = 1", "oldLine": 1, "newLine": 1},
+                                   {"kind": "del", "text": "    old" + BIDI, "oldLine": 2, "newLine": None},
+                                   {"kind": "add", "text": "    new", "oldLine": None, "newLine": 2}]}]}
         if method == "agents.probe":
             return [dict(x) for x in self.probe]
         if method == "import.apply":
@@ -735,6 +745,43 @@ def live_tabs_and_import(tmp: Path) -> None:
           " ".join(c.layout()))
 
 
+def agent_card(tmp: Path) -> None:
+    """Open on a tile draws its card: conversation, reply, and what it changed, with one file's diff."""
+    e = FakeEngine()
+    e.add_session("s1", "idle", title="Fix the rail", cwd=str(tmp / "card" / "repo"))
+    e.event("s1", "user_message", {"text": "fix the rail", "attachments": []})
+    e.event("s1", "assistant_text", {"messageId": "m", "text": "Done."})
+    e.diff = {"root": "/r", "branch": "main", "totalFiles": 2, "truncated": False, "files": [
+        {"path": "hud/Glass.swift", "oldPath": None, "status": "modified", "staged": False, "unstaged": True,
+         "binary": False, "additions": 3, "deletions": 1},
+        {"path": "evil" + BIDI + ".txt", "oldPath": None, "status": "added", "staged": False, "unstaged": True,
+         "binary": False, "additions": 1, "deletions": 0}]}
+    a, ctx = world(tmp / "card", e)
+    data, model = view(a, ctx)
+    check("a closed card reads no diff", not any(m == "workspace.diff" for m, _, _ in e.calls))
+    data, model = view(a, ctx, open="s1")
+    check("an open card lists what the agent changed, as a read",
+          [x["id"] for x in model["/agents/changed"]] == ["hud/Glass.swift"]
+          and model["/agents/changed"][0]["time"] == "modified · +3 -1"
+          and model["/agents/changedCap"] == "Changed, 2 files on main"
+          and all(not w for m, _, w in e.calls if m == "workspace.diff"), model["/agents/changed"])
+    order = a.layout()[-2]
+    check("the card is conversation, reply, then changes, all under the tiles",
+          order.index("agents-tiles") < order.index("agents-transcript") < order.index("agents-draft")
+          < order.index("agents-changed"), order)
+    r = a.show_file(ctx, data, {"row": "hud/Glass.swift"})
+    data, model = view(a, ctx)
+    check("Diff on a file draws its patch on the card, indentation kept and hidden characters gone",
+          r.ok and model["/agents/patch"].splitlines() == ["@@ -1,2 +1,2 @@ def rail():", "     keep = 1",
+                                                          "-    old", "+    new"]
+          and model["/agents/patchPath"] == "hud/Glass.swift" and "agents-patch Diff" in " ".join(a.layout()),
+          model["/agents/patch"])
+    r = a.show_file(ctx, data, {"row": "/etc/passwd"})
+    check("a file not in its changes is never read", not r.ok and sum(m == "workspace.fileDiff" for m, _, _ in e.calls)
+          == 1, r)
+    check("reading the card wrote nothing", e.writes == [], e.writes)
+
+
 def untrusted(tmp: Path) -> None:
     e = FakeEngine()
     e.add_session("s1", "idle", title="T" + BIDI + "itle" + LINE_SEP + "x" + ESC + "[31m",
@@ -893,6 +940,7 @@ def main() -> int:
         new_sessions(tmp)
         any_agent(tmp)
         live_tabs_and_import(tmp)
+        agent_card(tmp)
         untrusted(tmp)
         through_the_daemon(tmp)
         review_fixes(tmp)

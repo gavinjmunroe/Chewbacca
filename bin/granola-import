@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Bring every Granola meeting into Chewbacca's meetings, read only, once.
 
-    granola-import connect [--wait-hours 24]   print one link; after it is approved, import
+    granola-import connect [--wait-hours 24] [--open]
+                                               print one link (--open opens it in the browser);
+                                               after it is approved, import
     granola-import run                         import (needs a saved connection)
     granola-import status [--json]             connected, imported, last run
 
@@ -147,6 +149,17 @@ def access_token() -> str:
     return fresh["access_token"]
 
 
+def open_link(url: str) -> None:
+    """The browser, for a person who never sees the printed link (onboarding
+    runs connect in the background). CHEWBACCA_OPEN is the tests' stand-in."""
+    exe = os.environ.get("CHEWBACCA_OPEN") or "/usr/bin/open"
+    try:
+        subprocess.run([exe, url], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, timeout=30)
+    except (OSError, subprocess.TimeoutExpired) as err:
+        log(f"could not open the browser ({err}); the link is above")
+
+
 def connect(args) -> int:
     client = register()
     verifier = secrets.token_urlsafe(48)
@@ -158,6 +171,8 @@ def connect(args) -> int:
     save("pending.json", {"url": url, "since": datetime.now(timezone.utc).isoformat(),
                           "until": (datetime.now(timezone.utc) + timedelta(hours=args.wait_hours)).isoformat()})
     print(f"Open this once and approve: {url}", flush=True)
+    if getattr(args, "open", False):
+        open_link(url)
     got: dict = {}
 
     class Handler(httpserver.BaseHTTPRequestHandler):
@@ -591,6 +606,7 @@ def main(argv=None) -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("connect")
     c.add_argument("--wait-hours", type=float, default=24.0)
+    c.add_argument("--open", action="store_true", help="open the link in the browser")
     sub.add_parser("run")
     sub.add_parser("repair")
     s = sub.add_parser("status")

@@ -99,5 +99,36 @@ check("repair is idempotent", GI.repair(real, {"g3": "rc-old"}) == 0)
 check("the stdlib server is reachable under the name connect uses (a helper named http hid it, 10/10)",
       hasattr(GI.httpserver, "HTTPServer") and callable(GI.http))
 check("the CLI parses", compile((ROOT / "bin" / "granola-import").read_text(), "granola-import", "exec") is not None)
+
+# connect --open: onboarding runs connect in the background, so the person
+# never sees the printed link; the browser has to open it for them. No
+# network and no port: register and the callback server are stand-ins.
+import argparse as _ap  # noqa: E402
+opened = []
+GI.register = lambda: "cid-test"
+GI.open_link = lambda url: opened.append(url)
+
+
+class _NoServer:
+    timeout = 0
+
+    def __init__(self, *a, **k):
+        pass
+
+    def handle_request(self):
+        pass
+
+    def server_close(self):
+        pass
+
+
+GI.httpserver.HTTPServer = _NoServer
+GI.connect(_ap.Namespace(wait_hours=0, open=True))
+check("connect --open opens Granola's sign-in page in the browser",
+      len(opened) == 1 and opened[0].startswith(GI.AUTH + "/oauth2/authorize?") and "cid-test" in opened[0], opened)
+opened.clear()
+GI.connect(_ap.Namespace(wait_hours=0, open=False))
+check("connect without --open only prints the link", opened == [], opened)
+check("--open parses", GI.main.__code__ is not None and "--open" in (ROOT / "bin" / "granola-import").read_text())
 print("all passed" if not failed else f"{failed} failed")
 sys.exit(1 if failed else 0)

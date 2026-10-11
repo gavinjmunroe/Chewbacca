@@ -80,7 +80,8 @@ def funnel_lines(f: dict) -> list[str]:
         f"(clay analytics counts {c['replies']} replies, {c['repliesExcludingOoo']} excluding OOO)",
         f"  positive                 {pos['n']:>6}   {pos['n']}/{rep} replied = {pct(pos['n'], rep)}, decided by: {by}",
         f"  meetings (calendar)      {f['meetings']['n']:>6}   {f['meetings']['n']}/{em} emailed = "
-        f"{pct(f['meetings']['n'], em)}, Google + Mac calendar events with a lead's address",
+        f"{pct(f['meetings']['n'], em)}, Google + Mac calendar events with a lead's address, on this "
+        "Mac's calendars only: a call the client booked on their own calendar is not counted",
         f"  booking signals (inbox)  {bs.get('confirmed', 0):>6}   confirmed, by distinct lead ({how}); "
         "clay inbox threads, never added to meetings",
         f"    proposed only          {bs.get('proposed_only', 0):>6}   a time was proposed and nothing confirmed it; "

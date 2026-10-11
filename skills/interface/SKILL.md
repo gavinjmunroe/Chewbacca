@@ -327,6 +327,19 @@ Read them before drafting any club or startup landing page.
   site, Mail compose with To and Subject, an inbox with other mail in it,
   Messages with the contact header and input bar. A blue bar with the app's
   name over grey text was "lazy ahh" (2026-10-10).
+- The phone is never the lesser version (Firm Foundation, 2026-10-10: "So
+  much of the mobile version is 10x lamer than the desktop version, make sure
+  that never happens again"). A pinned scene stays pinned on a phone in a
+  compact layout; a drawing that is the point stays on the first screen (three
+  hero plates, not one); a two-sided demo shows its main side with the other
+  as one line. Before shipping, `site-gate parity <url>` must pass: phone
+  figure share and screens with motion at 75% of desktop's or more, and no
+  desktop pinned scene lost.
+- No flashes, no whiplash on a phone ("some of the mobile
+  animations/transitions are literal whiplash and flashbangs"). `site-gate
+  flash <url>` must pass. A bar that hides on scroll turns on travel (24px
+  down, 64px up) and ignores the rubber band; turning on every 8px delta
+  flipped it several times a second under momentum scroll.
 - Interactive Playwright on clay.com trips the outbound send guard, which
   reads the word as a campaign. Screenshot it, or drive it from a
   standalone script.

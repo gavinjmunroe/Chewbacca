@@ -1599,6 +1599,7 @@ if group "hud"; then
   check  "the agent board folds every session and picks by Jev" python3 "$ROOT/tests/test_agent_board.py"
   check  "fanout runs the JevBacca kill test with injected judges" python3 "$ROOT/tests/test_fanout.py"
   check  "site-fast types a field value or nothing" python3 "$ROOT/tests/test_site_fast.py"
+  check  "site-gate calls a flash a flash and a thin phone thin" python3 "$ROOT/tests/test_site_gate_flash_parity.py"
   check  "untrusted-screen flags text aimed at the agent, and only that" python3 "$ROOT/tests/test_screen.py"
   check  "model-route maps Jev's class to the router's targets" python3 "$ROOT/tests/test_model_route.py"
   check  "model-route hands a plan to a cheaper session only with runnable acceptance checks" python3 "$ROOT/tests/test_model_handoff.py"

@@ -14,6 +14,13 @@ library/crafts/website.md. Prose does not fire, so this is the half that does.
                                        source page), research/SOURCES.md (which
                                        kit tools ran), research/STEAL.md and
                                        docs/COPY.md exist. Run it FIRST.
+    site-gate flash <url>...           exit 1 if scrolling at phone size flashes:
+                                       a frame where over a quarter of the
+                                       screen swings brightness hard
+    site-gate parity <url>...          exit 1 if the phone version is thinner
+                                       than desktop: figure share or screens
+                                       with motion under 75% of desktop's, or
+                                       a desktop pinned scene the phone lost
     site-gate story <url>...           exit 1 if the page is an essay: figure
                                        share under 0.35, or under 60% of
                                        screens with scroll-linked motion
@@ -411,12 +418,13 @@ RATES = r"""(dy) => {
 }"""
 
 
-def story(pw, url):
-    b = launch(pw); pg = b.new_page(viewport={"width": 1440, "height": 900})
+def story(pw, url, size=(1440, 900)):
+    W, H = size
+    b = launch(pw); pg = b.new_page(viewport={"width": W, "height": H}, is_mobile=W < 700, has_touch=W < 700)
     pg.goto(url, wait_until="networkidle", timeout=60000); pg.wait_for_timeout(3000)
     total = pg.evaluate("document.documentElement.scrollHeight")
     rows = []
-    for y in range(0, max(1, total - 900), 900):
+    for y in range(0, max(1, total - H), H):
         pg.evaluate(f"scrollTo(0,{y})"); pg.wait_for_timeout(1500)
         s = pg.evaluate(STORY)
         pg.evaluate(RATES, 120)
@@ -430,7 +438,7 @@ def story(pw, url):
     # parent's height) is at least three viewports. uselemma.ai's hero runs
     # 1200vh; Caleb, 2026-10-04: "Scroll activated intentional scenes like the
     # lemma one are a MUST".
-    b2 = launch(pw); pg2 = b2.new_page(viewport={"width": 1440, "height": 900})
+    b2 = launch(pw); pg2 = b2.new_page(viewport={"width": W, "height": H}, is_mobile=W < 700, has_touch=W < 700)
     pg2.goto(url, wait_until="networkidle", timeout=60000); pg2.wait_for_timeout(1500)
     pinned = pg2.evaluate("""() => { let best = 0; for (const e of document.querySelectorAll('body *')) {
         if (getComputedStyle(e).position !== 'sticky' || !e.parentElement) continue;
@@ -830,6 +838,81 @@ def seams(pg):
                        "Match the page exactly at its edges, or render it with alpha")
     return out
 
+# Caleb, 2026-10-10, on the Firm Foundation site on his phone: "Some of the
+# mobile animations/transitions are literal whiplash and flashbangs, fix chewb
+# to make sure that never happens again." A flash here follows WCAG 2.3.1's
+# general flash: a big brightness swing over a quarter of the view. Grey
+# values are 0-255; a swing over 40 (about 16%) counts, on a 4x downscaled
+# frame so grain and text antialiasing do not. Pinned scenes hold still while
+# the page scrolls, so each frame is compared unshifted and shifted by the
+# scroll, and the closer match is the one that counts.
+FLASH_SWING = 40
+FLASH_AREA = 0.25
+
+
+def flash_area(prev, cur, w, h, shift):
+    """Share of a w x h grey frame that swung more than FLASH_SWING against the
+    previous frame moved up by `shift` rows."""
+    rows = max(0, h - shift)
+    if not rows:
+        return 0.0
+    big = 0
+    for r in range(rows):
+        a0, b0 = (r + shift) * w, r * w
+        for c in range(w):
+            if abs(prev[a0 + c] - cur[b0 + c]) > FLASH_SWING:
+                big += 1
+    return big / (rows * w)
+
+
+def flash(pw, url, step=48, scale=4):
+    from PIL import Image
+    W, H = 390, 844
+    b = launch(pw); pg = b.new_page(viewport={"width": W, "height": H}, is_mobile=True, has_touch=True)
+    pg.goto(url, wait_until="networkidle", timeout=60000); pg.wait_for_timeout(1500)
+    end = pg.evaluate("document.documentElement.scrollHeight - innerHeight")
+    w, h = W // scale, H // scale
+
+    def grab():
+        im = Image.open(io.BytesIO(pg.screenshot())).convert("L").resize((w, h))
+        return list(im.getdata())
+
+    found, prev, prev_y, y = [], grab(), 0, 0
+    while y < end:
+        y = min(end, y + step)
+        pg.evaluate(f"scrollTo(0,{y})"); pg.wait_for_timeout(17)
+        cur = grab()
+        shift = round((y - prev_y) / scale)
+        area = min(flash_area(prev, cur, w, h, 0), flash_area(prev, cur, w, h, shift))
+        if area > FLASH_AREA:
+            found.append({"y": y, "area": round(area, 2)})
+        prev, prev_y = cur, y
+    b.close()
+    return found
+
+
+# Caleb, 2026-10-10, same night: "So much of the mobile version is 10x lamer
+# than the desktop version, make sure that never happens again for what chewb
+# makes." The phone had one hero plate where desktop had five, and its scroll
+# scene had been unpinned into a stack. Measured with story() at both sizes.
+PARITY_MIN = 0.75
+
+
+def parity_fails(desk: dict, phone: dict) -> list[str]:
+    fails = []
+    for key, label in (("figure_share", "figure share"), ("motion_share", "share of screens with motion")):
+        d, m = desk.get(key, 0), phone.get(key, 0)
+        if d > 0 and m < PARITY_MIN * d:
+            fails.append(f"phone {label} {m:.2f} is under {PARITY_MIN:.0%} of desktop's {d:.2f}")
+    if desk.get("pinned_scene_screens", 0) >= 3 and phone.get("pinned_scene_screens", 0) < 3:
+        fails.append(f"desktop has a pinned scene of {desk['pinned_scene_screens']} screens, the phone has none")
+    return fails
+
+
+def _with_motion_share(summ: dict) -> dict:
+    return {**summ, "motion_share": round(summ["screens_with_motion"] / max(1, summ["screens"]), 2)}
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -843,6 +926,8 @@ def main():
     s.add_argument("--min-motion", type=float, default=0.6)
     s.add_argument("--min-pinned", type=float, default=3.0,
                    help="viewports of runway the longest pinned scene needs")
+    f = sub.add_parser("flash"); f.add_argument("urls", nargs="+")
+    pa = sub.add_parser("parity"); pa.add_argument("urls", nargs="+")
     i = sub.add_parser("idle"); i.add_argument("url"); i.add_argument("--ref")
     i.add_argument("--ys", help="comma separated scroll positions; default every 900px")
     r = sub.add_parser("research", help="exit 1 unless the repo holds the research receipt")
@@ -869,6 +954,24 @@ def main():
                     for f in fails:
                         print(f"        {f}")
                 print(f"site-gate: {bad} problem(s) across {len(out)} page(s)")
+            sys.exit(1 if bad else 0)
+        if a.cmd == "flash":
+            bad = 0
+            for u in a.urls:
+                found = flash(pw, u)
+                bad += bool(found)
+                print(f"{'FAIL' if found else 'ok  '}  {u}" + (f" {len(found)} flashing frame(s): {found[:6]}" if found else ""))
+            sys.exit(1 if bad else 0)
+        if a.cmd == "parity":
+            bad = 0
+            for u in a.urls:
+                desk = _with_motion_share(story(pw, u, (1440, 900))[1])
+                phone = _with_motion_share(story(pw, u, (390, 844))[1])
+                fails = parity_fails(desk, phone)
+                bad += bool(fails)
+                print(f"{'FAIL' if fails else 'ok  '}  {u}\n        desktop {json.dumps(desk)}\n        phone   {json.dumps(phone)}")
+                for x in fails:
+                    print(f"        {x}")
             sys.exit(1 if bad else 0)
         if a.cmd == "story":
             bad = 0

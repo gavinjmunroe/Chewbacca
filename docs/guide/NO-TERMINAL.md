@@ -53,8 +53,16 @@ account on the same Mac can read the port's refusal but never write through it.
 ## You do not configure anything
 
 `setup.sh` runs `chewbacca-mcp --register`, which writes the server into every
-MCP client already on the machine: Claude Desktop, Claude Code and Codex. You
-open the app and the tools are there. **No port, no URL, no JSON, no settings
+MCP client already on the machine: Claude Desktop, Claude Code, Cursor and
+Codex (including the Codex inside the ChatGPT app). An app that is installed
+but never opened has no config file yet, so one is created for it. The entry
+names node and the `~/.local/bin` link outright, because an app opened from the
+Dock sees only `/usr/bin:/bin` and a kit snapshot path is pruned on the next
+update. You open the app and the tools are there.
+
+ChatGPT's own chat is the one that cannot get it: it connects only to servers
+at a public https address, run from OpenAI's cloud, so it can never start a
+program on your Mac. `--register` says so instead of claiming it. **No port, no URL, no JSON, no settings
 page.**
 
 That is the whole point, and an earlier version of this document got it wrong

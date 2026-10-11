@@ -518,10 +518,30 @@ function serveHttp(port) {
 // programs depend on, and a corrupted claude_desktop_config.json means their
 // existing servers stop working, which is a far worse outcome than this tool
 // not being registered.
-function register() {
-  const home = require("node:os").homedir();
-  const self = path.join(BIN, "chewbacca-mcp");
+function register(asJson) {
+  const os = require("node:os");
+  const home = os.homedir();
+  // The link the person's setup made (~/.local/bin/chewbacca-mcp), never the
+  // file it points at: __dirname resolves symlinks, and on a kit install that
+  // is ~/.chewbacca/kit/snapshots/<sha>/bin, a folder the next update prunes.
+  // A checkout path in another app's config is the failure setup/SKILL.md
+  // already paid for once.
+  const linked = path.join(home, ".local/bin/chewbacca-mcp");
+  const script = fs.existsSync(linked) ? linked
+    : path.isAbsolute(process.argv[1] || "") ? process.argv[1] : path.join(BIN, "chewbacca-mcp");
+  // A Dock-launched app's PATH is /usr/bin:/bin, so `#!/usr/bin/env node`
+  // finds no node there. Name node outright, and prefer brew's stable link
+  // over process.execPath, which is a versioned Cellar path that breaks on the
+  // next `brew upgrade`.
+  const node = ["/opt/homebrew/bin/node", "/usr/local/bin/node"].find((p) => fs.existsSync(p)) || process.execPath;
+  const apps = (process.env.CHEWBACCA_APPS_DIR || "/Applications").split(":").concat([path.join(home, "Applications")]);
+  const hasApp = (name) => apps.some((d) => fs.existsSync(path.join(d, name)));
+  const entry = { command: node, args: [script] };
+  // Where an existing entry points. Kept when that file still exists, so a
+  // working registration someone made by hand is never rewritten.
+  const target = (e) => (e && Array.isArray(e.args) && e.args.length ? e.args[0] : e && e.command) || "";
   const done = [];
+  const say = (host, state, detail) => done.push({ host, state, detail: detail || "" });
 
   const backup = (f) => {
     try {
@@ -529,60 +549,80 @@ function register() {
     } catch {}
   };
 
-  // Claude Desktop and Claude Code both take JSON with an mcpServers map.
-  for (const [label, file, key] of [
-    ["Claude Desktop", path.join(home, "Library/Application Support/Claude/claude_desktop_config.json"), "mcpServers"],
-    ["Claude Code", path.join(home, ".claude.json"), "mcpServers"],
+  // Claude Desktop, Claude Code and Cursor all take JSON with an mcpServers
+  // map. A config that does not exist yet is created when the app is on this
+  // Mac: a fresh Claude Desktop has no claude_desktop_config.json until its
+  // developer settings are opened once, so "only if the file exists" skipped
+  // exactly the new person this is for.
+  const claudeDir = path.join(home, "Library/Application Support/Claude");
+  for (const [label, file, present] of [
+    ["Claude Desktop", path.join(claudeDir, "claude_desktop_config.json"), hasApp("Claude.app") || fs.existsSync(claudeDir)],
+    ["Claude Code", path.join(home, ".claude.json"), fs.existsSync(path.join(home, ".claude.json"))],
+    ["Cursor", path.join(home, ".cursor/mcp.json"), hasApp("Cursor.app") || fs.existsSync(path.join(home, ".cursor"))],
   ]) {
-    if (!fs.existsSync(file)) continue;
+    if (!present) continue;
     try {
-      const raw = fs.readFileSync(file, "utf8");
-      const cfg = JSON.parse(raw);
-      cfg[key] = cfg[key] || {};
-      if (cfg[key].chewbacca && cfg[key].chewbacca.command === self) {
-        done.push(`${label}: already registered`);
+      const raw = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
+      const cfg = raw.trim() ? JSON.parse(raw) : {};
+      cfg.mcpServers = cfg.mcpServers || {};
+      const had = cfg.mcpServers.chewbacca;
+      if (had && fs.existsSync(target(had))) {
+        say(label, "already");
         continue;
       }
-      backup(file);
-      cfg[key].chewbacca = { command: self };
-      fs.writeFileSync(file, JSON.stringify(cfg, null, 2) + "\n");
-      done.push(`${label}: registered`);
+      if (raw) backup(file);
+      cfg.mcpServers.chewbacca = entry;
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, JSON.stringify(cfg, null, 2) + "\n", { mode: 0o600 });
+      say(label, "registered", had ? "replaced an entry whose file is gone" : "");
     } catch (e) {
-      done.push(`${label}: SKIPPED, its config did not parse (${e.message})`);
+      say(label, "skipped", `its config did not parse (${e.message})`);
     }
   }
 
-  // Codex uses TOML. Appending a table is safe where rewriting is not: this
-  // file is hand-edited and a naive round-trip would drop its comments.
-  const codex = path.join(home, ".codex/config.toml");
-  if (fs.existsSync(codex)) {
+  // Codex uses TOML, and so does the Codex inside the ChatGPT app. Appending
+  // a table is safe where rewriting is not: this file is hand-edited and a
+  // naive round-trip would drop its comments.
+  const codexDir = path.join(home, ".codex");
+  const codex = path.join(codexDir, "config.toml");
+  if (fs.existsSync(codexDir) || hasApp("Codex.app") || hasApp("ChatGPT.app")) {
     try {
-      const raw = fs.readFileSync(codex, "utf8");
+      const raw = fs.existsSync(codex) ? fs.readFileSync(codex, "utf8") : "";
       if (raw.includes("[mcp_servers.chewbacca]")) {
-        done.push("Codex: already registered");
+        say("Codex", "already");
       } else {
-        backup(codex);
-        fs.appendFileSync(
-          codex,
-          `\n[mcp_servers.chewbacca]\ncommand = "${self}"\nargs = []\n`,
-        );
-        done.push("Codex: registered");
+        if (raw) backup(codex);
+        fs.mkdirSync(codexDir, { recursive: true });
+        fs.appendFileSync(codex,
+          `\n[mcp_servers.chewbacca]\ncommand = ${JSON.stringify(node)}\nargs = [${JSON.stringify(script)}]\n`);
+        say("Codex", "registered", hasApp("ChatGPT.app") ? "also the Codex inside the ChatGPT app" : "");
       }
     } catch (e) {
-      done.push(`Codex: SKIPPED (${e.message})`);
+      say("Codex", "skipped", e.message);
     }
   }
+  // ChatGPT's own chat (not its Codex) takes only connectors at a public
+  // https address, run in OpenAI's cloud. It cannot start a program on this
+  // Mac, so there is nothing to write; say so rather than claim it.
+  if (hasApp("ChatGPT.app")) {
+    say("ChatGPT chat", "not-possible", "ChatGPT's chat only connects to servers at a public https address");
+  }
 
-  if (!done.length) {
-    console.log("No MCP client found. Install Claude Desktop, Claude Code or Codex first.");
+  if (asJson) {
+    console.log(JSON.stringify({ command: node, script, hosts: done }, null, 2));
     return;
   }
-  for (const line of done) console.log("  " + line);
+  if (!done.length) {
+    console.log("No MCP client found. Install Claude, Cursor, Codex or ChatGPT first.");
+    return;
+  }
+  const words = { already: "already registered", registered: "registered", skipped: "SKIPPED", "not-possible": "not possible" };
+  for (const d of done) console.log(`  ${d.host}: ${words[d.state]}${d.detail ? ` (${d.detail})` : ""}`);
   console.log("\nRestart the app and the tools are there. Nothing to paste.");
 }
 
 const argv = process.argv.slice(2);
 const hi = argv.indexOf("--http");
-if (argv.includes("--register")) register();
+if (argv.includes("--register")) register(argv.includes("--json"));
 else if (hi !== -1) serveHttp(Number(argv[hi + 1] || 7788));
 else serveStdio();

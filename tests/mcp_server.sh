@@ -73,6 +73,53 @@ assert "chewbacca" in d["mcpServers"], "did not register itself"
 
 [ -f "$cfg.before-chewbacca" ] || fail "--register did not back the config up"
 
+# 6b. A new person's Mac, end to end in a scratch HOME: Claude, Cursor and
+#     ChatGPT installed, none ever opened, so no config file exists yet. The
+#     old --register skipped every one of them ("only if the file exists").
+new="$(mktemp -d)"; apps="$new/Apps"
+mkdir -p "$apps/Claude.app" "$apps/Cursor.app" "$apps/ChatGPT.app" "$new/.local/bin"
+ln -s "$MCP" "$new/.local/bin/chewbacca-mcp"
+out="$(HOME="$new" CHEWBACCA_APPS_DIR="$apps" "$MCP" --register --json)" || fail "--register --json failed"
+python3 - "$new" "$out" <<'PY' || fail "--register on a new Mac"
+import json, os, sys
+home, out = sys.argv[1], json.loads(sys.argv[2])
+states = {h["host"]: h["state"] for h in out["hosts"]}
+assert states == {"Claude Desktop": "registered", "Cursor": "registered", "Codex": "registered",
+                  "ChatGPT chat": "not-possible"}, states
+link = os.path.join(home, ".local/bin/chewbacca-mcp")
+for f in ("Library/Application Support/Claude/claude_desktop_config.json", ".cursor/mcp.json"):
+    e = json.load(open(os.path.join(home, f)))["mcpServers"]["chewbacca"]
+    assert e["args"] == [link], ("registered a resolved path, not the stable link", e)
+    assert os.path.isabs(e["command"]) and os.path.basename(e["command"]) == "node", e
+    assert os.stat(os.path.join(home, f)).st_mode & 0o077 == 0, "config readable by others"
+toml = open(os.path.join(home, ".codex/config.toml")).read()
+assert "[mcp_servers.chewbacca]" in toml and json.dumps(link) in toml, toml
+PY
+out="$(HOME="$new" CHEWBACCA_APPS_DIR="$apps" "$MCP" --register --json)"
+echo "$out" | python3 -c 'import json,sys; s={h["host"]:h["state"] for h in json.load(sys.stdin)["hosts"]}; assert s["Claude Desktop"]=="already" and s["Codex"]=="already", s' \
+  || fail "second --register was not idempotent"
+[ "$(grep -c 'mcp_servers.chewbacca' "$new/.codex/config.toml")" = 1 ] || fail "Codex table duplicated"
+# The registered command, run exactly as the app would with a Dock PATH,
+# answers initialize.
+cmd="$(python3 -c 'import json,sys; e=json.load(open(sys.argv[1]))["mcpServers"]["chewbacca"]; print(e["command"]); print(e["args"][0])' "$new/.cursor/mcp.json")"
+node_bin="$(echo "$cmd" | sed -n 1p)"; script="$(echo "$cmd" | sed -n 2p)"
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}' \
+  | env -i HOME="$new" PATH=/usr/bin:/bin "$node_bin" "$script" 2>/dev/null | head -1 | grep -q '"serverInfo"' \
+  || fail "the registered command does not start the server under a Dock PATH"
+# A stale entry (its file was pruned) is replaced; a working hand-made one is kept.
+printf '%s' '{"mcpServers":{"chewbacca":{"command":"/gone/kit/snapshots/abc/bin/chewbacca-mcp"}}}' > "$new/.cursor/mcp.json"
+printf '%s' '{"mcpServers":{"chewbacca":{"command":"/usr/bin/true"}}}' > "$new/Library/Application Support/Claude/claude_desktop_config.json"
+HOME="$new" CHEWBACCA_APPS_DIR="$apps" "$MCP" --register >/dev/null
+python3 - "$new" <<'PY' || fail "stale entry handling"
+import json, os, sys
+h = sys.argv[1]
+c = json.load(open(os.path.join(h, ".cursor/mcp.json")))["mcpServers"]["chewbacca"]
+assert c.get("args") == [os.path.join(h, ".local/bin/chewbacca-mcp")], ("stale entry kept", c)
+d = json.load(open(os.path.join(h, "Library/Application Support/Claude/claude_desktop_config.json")))["mcpServers"]["chewbacca"]
+assert d == {"command": "/usr/bin/true"}, ("a working entry was rewritten", d)
+PY
+rm -rf "$new"
+
 # 7. find_capability and kit_read reach the rest of the kit, read only.
 #    2026-10-11: HockeyStack shipped ~20 MCP tools and no approval on deletes;
 #    this exposes reads only, through a fixed registry with typed params.

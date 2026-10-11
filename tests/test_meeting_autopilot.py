@@ -5,14 +5,14 @@ Hermetic. No mic is opened, nothing records: a snapshot here is the JSON line
 `room-capture --watch-mic` prints, written by hand, and the clock is a
 variable.
 
-What is held: a work call app holding the mic for Anarlog's 15 s starts a
-recording and its going quiet for 20 s stops it; a dip shorter than that
-does not; Siri's corespeechd, Chewbacca's own listener, an IDE and an
-unknown app never count; a browser counts only with a meeting tab or a call
-on the calendar; FaceTime and WhatsApp count only with a call on the
-calendar; a lecture on the calendar is not a call; a recording someone
-started by hand is never stopped; a Stop press on one this started holds
-until the call ends; and the CLI parses and answers status with no loop.
+What is held: only a work call app whose process carries its vendor's valid
+signature and Team ID can start a recording, and only after Anarlog's 15 s;
+20 s quiet stops it and a shorter dip does not. A forged name, a fake bundle,
+another team's signature, a broken signature, odd JSON types, a browser with
+a meeting title, a hostile title, FaceTime, Siri and Chewbacca's own listener
+never record, and the calendar is not an input at all (security review,
+2026-10-10). A recording someone started by hand is never stopped; a Stop
+press holds until the call ends; the CLI parses and answers status.
 """
 import importlib.machinery
 import importlib.util
@@ -38,19 +38,32 @@ def check(name, ok, got=None):
 
 
 T0 = datetime(2026, 10, 10, 18, 0, tzinfo=timezone.utc)
-ZOOM = {"id": "us.zoom.xos", "name": "zoom.us", "pid": 10}
-CHROME = {"id": "com.google.Chrome", "name": "Google Chrome", "pid": 11}
-FACETIME = {"id": "com.apple.FaceTime", "name": "FaceTime", "pid": 12}
-SIRI = {"id": "/System/Library/PrivateFrameworks/CoreSpeech.framework/corespeechd", "name": "corespeechd", "pid": 791}
-LISTENER = {"id": "/Users/x/.local/share/uv/tools/mlx-whisper/bin/python3", "name": "python3", "pid": 13}
-VSCODE = {"id": "com.microsoft.VSCode", "name": "Code", "pid": 14}
-ROOM = {"id": "/Users/x/code/chewbacca/mac/room-capture/.build/release/room-capture", "name": "room-capture", "pid": 15}
-MEET_TAB = {"app": "com.google.Chrome", "title": "Meet - abc-defg-hij"}
-CALL = {"title": "Zeutara sync", "start": T0.isoformat(), "end": (T0 + timedelta(minutes=30)).isoformat(),
-        "isAllDay": False, "location": "https://meet.google.com/abc-defg-hij", "attendees": []}
-LECTURE = {"title": "BISC 101", "start": T0.isoformat(), "end": (T0 + timedelta(hours=1)).isoformat(),
-           "isAllDay": False, "location": "SGM 123", "attendees": [{"email": "caleb@usc.example"}]}
-ME = {"caleb@usc.example"}
+# Rows exactly as room-capture --watch-mic prints them, signatures included.
+ZOOM = {"id": "us.zoom.xos", "name": "zoom.us", "pid": 10, "signed": True, "signing_id": "us.zoom.xos",
+        "team": "BJ4HAAB9B3"}
+TEAMS = {"id": "com.microsoft.teams2", "name": "Microsoft Teams", "pid": 16, "signed": True,
+         "signing_id": "com.microsoft.teams2", "team": "UBF8T346G9"}
+CHROME = {"id": "com.google.Chrome", "name": "Google Chrome", "pid": 11, "signed": True,
+          "signing_id": "com.google.Chrome.helper", "team": "EQHXZ8M8AV"}
+FACETIME = {"id": "com.apple.FaceTime", "name": "FaceTime", "pid": 12, "signed": True,
+            "signing_id": "com.apple.FaceTime", "team": ""}
+SIRI = {"id": "/System/Library/PrivateFrameworks/CoreSpeech.framework/corespeechd", "name": "corespeechd",
+        "pid": 791, "signed": True, "signing_id": "com.apple.corespeechd", "team": ""}
+LISTENER = {"id": "/Users/x/.local/share/uv/tools/mlx-whisper/bin/python3", "name": "python3", "pid": 13,
+            "signed": True, "signing_id": "org.python.python", "team": ""}
+ROOM = {"id": "/Users/x/code/chewbacca/mac/room-capture/.build/release/room-capture", "name": "room-capture",
+        "pid": 15, "signed": False, "signing_id": "", "team": ""}
+# Forgeries: a script that names itself zoom, a fake zoom.us.app with Zoom's
+# bundle id but ad hoc signed, one signed by someone else's team, one whose
+# signature broke after launch, and odd types where strings belong.
+FAKE_NAME = {"id": "/tmp/zoom.us", "name": "zoom.us", "pid": 20, "signed": True, "signing_id": "zoom.us", "team": ""}
+FAKE_BUNDLE = {**ZOOM, "pid": 21, "signed": True, "team": "", "signing_id": "a.out"}
+WRONG_TEAM = {**ZOOM, "pid": 22, "team": "ABCDE12345"}
+INVALID = {**ZOOM, "pid": 23, "signed": False}
+ODD_TYPES = {"id": ["us.zoom.xos"], "team": "BJ4HAAB9B3", "signed": "true"}
+PADDED = {**ZOOM, "id": "us.zoom.xos ", "pid": 24}
+MEET_TITLE = {"app": "com.google.Chrome", "title": "Meet - abc-defg-hij"}
+HOSTILE_TITLE = {"app": "us.zoom.xos", "title": "Zoom Meeting $(rm -rf ~) ../../etc"}
 
 
 def snap(*mic, windows=()):
@@ -75,37 +88,35 @@ def drive(pilot, frames, running=None):
 
 
 def main() -> int:
-    # what counts
-    zoom = AP.meeting_in(snap(ZOOM, SIRI), None)
-    check("a work call app holding the mic is a meeting, named", zoom and zoom["name"] == "Zoom", zoom)
+    # what counts: only a signed work call app
+    zoom = AP.meeting_in(snap(ZOOM, SIRI))
+    check("Zoom holding the mic under Zoom's own signature is a meeting, named", zoom and zoom["name"] == "Zoom", zoom)
+    check("Teams under Microsoft's Team ID is a meeting", (AP.meeting_in(snap(TEAMS)) or {}).get("name")
+          == "Microsoft Teams")
+    for name, row in (("a process that only names itself zoom.us", FAKE_NAME),
+                      ("a fake zoom.us.app with Zoom's bundle id, ad hoc signed", FAKE_BUNDLE),
+                      ("Zoom's bundle id signed by another team", WRONG_TEAM),
+                      ("Zoom's bundle id with a signature that no longer validates", INVALID),
+                      ("strings replaced by a list and a 'true' string", ODD_TYPES),
+                      ("Zoom's bundle id with a trailing space", PADDED)):
+        check(f"forged process: {name} never records", AP.meeting_in(snap(row)) is None)
     check("Siri's corespeechd holding the mic is never a meeting (measured on this Mac 2026-10-10)",
-          AP.meeting_in(snap(SIRI), AP.event_now([CALL], T0, ME)) is None)
-    check("Chewbacca's own listener, an IDE, and its own capture helper never count",
-          AP.meeting_in(snap(LISTENER, VSCODE, ROOM), AP.event_now([CALL], T0, ME)) is None)
-    check("a browser holding the mic with nothing else is not a meeting", AP.meeting_in(snap(CHROME), None) is None)
-    tab = AP.meeting_in(snap(CHROME, windows=[MEET_TAB]), None)
-    check("a browser with a Meet tab on screen is a meeting, and says why", tab and "Meet - " in tab["why"], tab)
-    cal = AP.meeting_in(snap(CHROME), AP.event_now([CALL], T0 + timedelta(minutes=3), ME))
-    check("a browser during a calendar call with a link is a meeting", cal and "Zeutara sync" in cal["why"], cal)
-    check("a meeting tab on screen with nobody on the mic is not a meeting",
-          AP.meeting_in(snap(windows=[MEET_TAB]), None) is None)
-    check("FaceTime with no call on the calendar is a personal call, not a meeting",
-          AP.meeting_in(snap(FACETIME), None) is None)
-    check("FaceTime during a calendar call is a meeting",
-          (AP.meeting_in(snap(FACETIME), AP.event_now([CALL], T0, ME)) or {}).get("name") == "FaceTime")
-    check("a lecture block with only the owner invited is not a call",
-          AP.event_now([LECTURE], T0 + timedelta(minutes=5), ME) is None)
-    check("an event with another attendee is a call", AP.is_call_event(
-        {**LECTURE, "attendees": [{"email": "caleb@usc.example"}, {"email": "jonah@zeutara.example"}]}, ME))
-    check("an all-day event is never a call", not AP.is_call_event({**CALL, "isAllDay": True}, ME))
-    check("a call counts from 5 min before its start to 10 min after its end (Anarlog's windows)",
-          AP.event_now([CALL], T0 - timedelta(minutes=4), ME) is not None
-          and AP.event_now([CALL], T0 - timedelta(minutes=6), ME) is None
-          and AP.event_now([CALL], T0 + timedelta(minutes=39), ME) is not None
-          and AP.event_now([CALL], T0 + timedelta(minutes=41), ME) is None)
+          AP.meeting_in(snap(SIRI)) is None)
+    check("Chewbacca's own listener and its own capture helper never count", AP.meeting_in(snap(LISTENER, ROOM)) is None)
+    check("a browser on the mic with a Meet title on screen never records: a page sets its own title",
+          AP.meeting_in(snap(CHROME, windows=[MEET_TITLE])) is None)
+    check("a hostile title beside a forged zoom changes nothing",
+          AP.meeting_in(snap(FAKE_NAME, windows=[HOSTILE_TITLE])) is None)
+    check("FaceTime is a personal call and never records on its own", AP.meeting_in(snap(FACETIME)) is None)
+    check("a calendar event with no call cannot start a recording: the policy takes no calendar at all",
+          AP.meeting_in.__code__.co_argcount == 1 and AP.meeting_in(snap()) is None)
+    check("a garbage snapshot is no meeting", AP.meeting_in({"mic": "us.zoom.xos"}) is None
+          and AP.meeting_in([]) is None)
+    check("every allowed app has a measured 10-character Team ID",
+          all(AP.TEAM_ID.match(team) for _, team in AP.WORK_CALL_APPS.values()))
 
     # when it starts and stops
-    m = AP.meeting_in(snap(ZOOM), None)
+    m = AP.meeting_in(snap(ZOOM))
     acts = drive(AP.Autopilot(), [(t, m) for t in range(0, 30, 2)] + [(t, None) for t in range(30, 60, 2)])
     check("it starts once the call has held the mic 15 s and stops 20 s after it lets go",
           acts == [(16, "start"), (50, "stop")], acts)

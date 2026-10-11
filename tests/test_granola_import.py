@@ -68,6 +68,8 @@ check("attendees carry over", m["participants"][0]["email"] == "jonah@zeutara.ex
 check("no action items are queued from history", m["action_items"] == [])
 twin = GI.to_meeting("g9", {"id": "g9", "title": "Twin", "date": "2026-10-01T17:00:00Z"}, [], [], used)
 check("two meetings starting the same second get two files", twin["id"] != m["id"] and MC.is_native(twin["id"]))
+check("the stdlib server is reachable under the name connect uses (a helper named http hid it, 10/10)",
+      hasattr(GI.httpserver, "HTTPServer") and callable(GI.http))
 check("the CLI parses", compile((ROOT / "bin" / "granola-import").read_text(), "granola-import", "exec") is not None)
 print("all passed" if not failed else f"{failed} failed")
 sys.exit(1 if failed else 0)

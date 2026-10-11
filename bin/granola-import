@@ -29,7 +29,7 @@ from __future__ import annotations
 import argparse
 import base64
 import hashlib
-import http.server
+import http.server as httpserver
 import json
 import os
 import re
@@ -159,8 +159,8 @@ def connect(args) -> int:
     print(f"Open this once and approve: {url}", flush=True)
     got: dict = {}
 
-    class Handler(http.server.BaseHTTPRequestHandler):
-        def do_GET(self):  # noqa: N802  http.server's name
+    class Handler(httpserver.BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802  the stdlib's name
             query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             ok = self.path.startswith("/callback") and query.get("state", [""])[0] == state
             if ok and query.get("code"):
@@ -176,7 +176,7 @@ def connect(args) -> int:
         def log_message(self, *_):
             pass
 
-    server = http.server.HTTPServer(("127.0.0.1", PORT), Handler)
+    server = httpserver.HTTPServer(("127.0.0.1", PORT), Handler)
     server.timeout = 5
     deadline = time.time() + args.wait_hours * 3600
     while not got and time.time() < deadline:

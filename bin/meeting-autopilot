@@ -25,8 +25,8 @@ Kyber spawns `meeting-autopilot run` at launch and again whenever it exits;
 Environment:
     CHEWBACCA_MEETING_AUTOPILOT=0     the same as `off`
     CHEWBACCA_MEETING_NO_MIC=1        record the call's audio only, never this Mac's mic
-    MEETING_AUTOPILOT_WATCH_CMD       a command printing --watch-mic lines in place of the
-                                      helper (a replay; the live test drives a fake Zoom with it)
+    MEETING_AUTOPILOT_WATCH_CMD       argv (split like a shell, never run by one) printing
+                                      --watch-mic lines in place of the helper: a replay for tests
 
 Exit codes: 0 done, 1 failed, 2 usage, 3 status says not running.
 """
@@ -36,6 +36,7 @@ import argparse
 import fcntl
 import json
 import os
+import shlex
 import signal
 import subprocess
 import sys
@@ -54,10 +55,6 @@ import meeting_capture as MC  # noqa: E402
 ROOM_CAPTURE = ROOT / "bin" / "room-capture"
 PACKAGE = ROOT / "mac" / "room-capture"
 HELPER = Path(os.environ.get("ROOM_CAPTURE_HELPER") or PACKAGE / ".build" / "release" / "room-capture")
-# The calendar changes rarely and `mac calendar list` takes a second, so it is
-# read at most this often. A call added less than this before it starts is
-# still caught by a meeting window or a work call app. Guessed, never measured.
-CALENDAR_EVERY_S = 300.0
 # How long `room-capture start` may take: it builds the helper on first use
 # (6.6 s on 2026-10-05) and waits for the first status. Its own START_TIMEOUT_S
 # in the meetings surface is the same 180.
@@ -113,17 +110,8 @@ class Loop:
     def __init__(self) -> None:
         self.pilot = AP.Autopilot()
         self.ours_pid = 0
-        self.calendar: list[dict] | None = None
-        self.calendar_at = 0.0
-        self.me = AP.owner_emails(home())
         self.last: dict = {}
         self.decided: list[dict] = []
-
-    def events(self) -> list[dict] | None:
-        if time.time() - self.calendar_at >= CALENDAR_EVERY_S:
-            self.calendar = MC.calendar_events(now())
-            self.calendar_at = time.time()
-        return self.calendar
 
     def capture(self) -> tuple[bool, int]:
         state = MC.capture_state(home())
@@ -155,8 +143,7 @@ class Loop:
 
     def look(self, snapshot: dict) -> None:
         self.last = snapshot
-        event = AP.event_now(self.events(), now(), self.me)
-        meeting = AP.meeting_in(snapshot, event)
+        meeting = AP.meeting_in(snapshot)
         running, pid = self.capture()
         ours = bool(self.ours_pid) and pid == self.ours_pid
         if is_off():
@@ -173,10 +160,10 @@ class Loop:
         self.save()
 
     def save(self) -> None:
-        mic = [{"id": a.get("id"), "name": a.get("name")} for a in self.last.get("mic") or []]
+        mic = [{"id": a.get("id"), "name": a.get("name"), "verified": AP.verified_call_app(a) is not None}
+               for a in self.last.get("mic") or [] if isinstance(a, dict)]
         write_state({"pid": os.getpid(), "updated": now().isoformat(), "off": is_off(), **self.pilot.state(),
-                     "mic": mic, "windows": len(self.last.get("windows") or []),
-                     "screen": self.last.get("screen"), "calendar": self.calendar is not None,
+                     "mic": mic, "screen": self.last.get("screen"),
                      "decided": self.decided})
 
 
@@ -195,7 +182,7 @@ def run(args) -> int:
         log(f"cannot watch: {problem}")
         return 1
     loop = Loop()
-    argv = ["/bin/sh", "-c", replay] if replay else [str(HELPER), "--watch-mic", "--interval", "2"]
+    argv = shlex.split(replay) if replay else [str(HELPER), "--watch-mic", "--interval", "2"]
     helper = subprocess.Popen(argv, stdout=subprocess.PIPE,
                               stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL, text=True)
     stopping = threading.Event()

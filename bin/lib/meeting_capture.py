@@ -430,6 +430,10 @@ def apply_summary(meeting: dict, body: dict, at: datetime) -> None:
 
 
 LEDGER_OFF = SUMMARY_OFF
+# At most this many items per meeting reach the ledger on their own; anyone
+# on a call can say "add a task" forty times. The rest stay on the panel for
+# a press. Guessed, never measured against real meetings.
+MAX_QUEUED = 8
 
 
 def queue_action_items(meeting: dict, run, env: dict) -> list[dict]:
@@ -446,7 +450,7 @@ def queue_action_items(meeting: dict, run, env: dict) -> list[dict]:
     names = [clean(p.get("display_name") or p.get("email"), 40) for p in meeting.get("participants") or []
              if p.get("role") != "owner" and (p.get("display_name") or p.get("email"))]
     out = []
-    for item in meeting.get("action_items") or []:
+    for item in (meeting.get("action_items") or [])[:MAX_QUEUED]:
         who = by_human.get(item.get("assignee_human_id") or "")
         owner = "" if who is None else ("you" if who.get("role") == "owner"
                                         else clean(who.get("display_name") or who.get("email"), 40))

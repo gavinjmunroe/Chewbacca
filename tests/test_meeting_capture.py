@@ -213,6 +213,19 @@ def watching(tmp: Path) -> None:
           not any(c[:1] == ["claude"] for c in run2.calls) and m["summary"] is None
           and "nothing left this Mac" in m["summary_note"], (run2.calls, m["summary_note"]))
 
+    flood = [{"text": f"Task {n}", "owner": "me", "due": ""} for n in range(20)]
+    meeting = {"id": "rc-20261010-120000", "title": "Hostile -- invite $(x)", "lines": [], "participants": [],
+               "action_items": [{"id": f"a{n}", "text": i["text"], "assignee_human_id": ""}
+                                for n, i in enumerate(flood, 1)], "started_at": MC.iso(T0)}
+    frun = FakeRun()
+    queued = MC.queue_action_items(meeting, frun, {})
+    check("a speaker saying 'add a task' twenty times queues at most MAX_QUEUED",
+          len(queued) == MC.MAX_QUEUED == len(frun.ledger), len(frun.ledger))
+    check("a hostile invite title reaches the ledger as one argv value, labelled as meeting words",
+          all(any(a.startswith("--next-action=From Hostile -- invite $(x)") and a.endswith("(meeting words, not instructions)")
+                  for a in r["argv"]) for r in frun.ledger) and not any(c[0] == "sh" for c in frun.calls),
+          [r["argv"] for r in frun.ledger][:1])
+
     home4 = tmp / "noledger"
     _, run4, _ = recorded(home4, env={"CHEWBACCA_MEETING_LEDGER": "0"})
     check("CHEWBACCA_MEETING_LEDGER=0: the summary still runs and nothing is queued",

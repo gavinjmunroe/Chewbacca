@@ -21,18 +21,23 @@ HOW A MEETING IS NOTICED. Ported from Anarlog (MIT, Copyright (c)
 
 WHERE THIS IS STRICTER THAN ANARLOG. Anarlog asks "Are you in a meeting?"
 with a notification and records only on a press. This records with no press,
-so it says yes only on evidence, and uses an allow list rather than Anarlog's
-deny list. The deny list would miss Chewbacca's own always-on listener
-(hud-listen) and Plynn, which hold the mic all day:
+so it records only on evidence nobody else can forge (security review,
+2026-10-10):
 
-1. A work call app (Zoom, Teams, Webex, Slack huddles) holding the mic: a meeting.
-2. A browser holding the mic: a meeting only while a meeting window is on
-   screen ("Meet - abc-defg-hij", "Zoom Meeting"...) or a calendar event with a
-   call link or another attendee is happening now.
-3. A personal call app (FaceTime, iPhone, WhatsApp, Discord, Telegram, Signal,
-   Messenger, LINE, KakaoTalk): a meeting only while such a calendar event is
-   happening now. A call with family is not a meeting.
-4. Anything else, including Chewbacca's own capture, never.
+1. A work call app holding the mic, and only when the process holding it
+   carries a valid code signature under that vendor's Team ID, with that
+   exact bundle id. A name, a path, an Info.plist or a process title can be
+   made by anyone; Zoom's signature cannot. Unknown, unsigned or mismatched:
+   no recording.
+2. Nothing else. A calendar event never starts a recording (anyone can put
+   one on Caleb's calendar), a window or tab title never does (any web page
+   sets its own), and a browser or a personal call app (FaceTime, WhatsApp,
+   Discord) never does. Those calls are recorded with the Start press on the
+   meetings panel. The calendar only names a meeting afterwards
+   (meeting_capture.finish).
+
+Allow list, not Anarlog's deny list: Siri's corespeechd and Chewbacca's own
+listener hold the mic all day (seen 2026-10-10), and a deny list counts them.
 
 When room-capture is already running because someone pressed Start, this
 never stops it; when someone presses Stop on a recording this started, it
@@ -43,7 +48,7 @@ from __future__ import annotations
 import json
 import os
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 
 # Anarlog's DEFAULT_MIC_ACTIVE_THRESHOLD_SECS (plugins/detect/src/mic_usage_tracker.rs).
 START_AFTER_S = 15.0
@@ -53,121 +58,42 @@ START_AFTER_S = 15.0
 # rides out a call app that reopens its mic when the person switches
 # headphones. Guessed, never measured on a real call.
 STOP_AFTER_S = 20.0
-# A calendar event counts from 5 minutes before its start
-# (AUTO_STOP_CALENDAR_EARLY_START_BUFFER_MS) to 10 minutes after its end
-# (AUTO_STOP_EVENT_END_GRACE_MS), Anarlog's own windows.
-EARLY_START = timedelta(minutes=5)
-END_GRACE = timedelta(minutes=10)
 
-# Work call apps: holding the mic is the meeting. Ids from Anarlog's
-# meeting-apps.ts.
+# Work call apps: (name, Team ID). The Team IDs were read with `codesign -dv`
+# from the copies installed on Caleb's Mac on 2026-10-10. Webex and the App
+# Store Slack were not installed, so their Team IDs are unmeasured and they
+# are left out: unknown means no recording.
 WORK_CALL_APPS = {
-    "us.zoom.xos": "Zoom",
-    "com.microsoft.teams": "Microsoft Teams",
-    "com.microsoft.teams2": "Microsoft Teams",
-    "com.cisco.webex": "Webex",
-    "com.cisco.webexmeetingsapp": "Webex",
-    "Cisco-Systems.Spark": "Webex",
-    "com.tinyspeck.slackmacgap": "Slack",
-    "com.slack.Slack": "Slack",
+    "us.zoom.xos": ("Zoom", "BJ4HAAB9B3"),
+    "com.microsoft.teams2": ("Microsoft Teams", "UBF8T346G9"),
+    "com.microsoft.teams": ("Microsoft Teams", "UBF8T346G9"),
+    "com.tinyspeck.slackmacgap": ("Slack", "BQR82RBBHL"),
 }
-# Personal call apps: a meeting only with a calendar event. Ids from the same
-# file; com.apple.mobilephone is what the helper relabels Apple's call daemon
-# to while the Phone app runs.
-PERSONAL_CALL_APPS = {
-    "com.apple.FaceTime": "FaceTime",
-    "com.apple.mobilephone": "iPhone call",
-    "net.whatsapp.WhatsApp": "WhatsApp",
-    "com.hnc.Discord": "Discord",
-    "com.discordapp.Discord": "Discord",
-    "ru.keepcoder.Telegram": "Telegram",
-    "ru.keepcoder.TelegramLite": "Telegram",
-    "org.whispersystems.signal-desktop": "Signal",
-    "com.facebook.archon": "Messenger",
-    "jp.naver.line.mac": "LINE",
-    "com.kakao.KakaoTalkMac": "KakaoTalk",
-}
-# Anarlog's BROWSER_AUTO_STOP_APP_IDS, the macOS bundle ids.
-BROWSERS = {
-    "at.studio.AsideBrowser", "app.zen-browser.zen", "ai.perplexity.comet", "com.apple.Safari",
-    "com.apple.SafariTechnologyPreview", "com.browseros.BrowserOS", "com.brave.Browser",
-    "com.brave.Browser.beta", "com.brave.Browser.nightly", "com.duckduckgo.macos.browser",
-    "com.google.Chrome", "com.google.Chrome.canary", "com.kagi.kagimacOS", "com.kagi.kagimacOS.RC",
-    "com.microsoft.edgemac", "com.microsoft.edgemac.Beta", "com.microsoft.edgemac.Canary",
-    "com.microsoft.edgemac.Dev", "com.operasoftware.Opera", "com.operasoftware.OperaDeveloper",
-    "com.operasoftware.OperaGX", "com.operasoftware.OperaNext", "com.nousresearch.hermes",
-    "com.sigmaos.sigmaos.macos", "com.vivaldi.Vivaldi", "company.thebrowser.Browser",
-    "company.thebrowser.dia", "net.imput.helium", "net.mullvad.mullvadbrowser", "net.waterfox.waterfox",
-    "org.chromium.Chromium", "org.mozilla.firefox", "org.mozilla.firefoxdeveloperedition",
-    "org.mozilla.librewolf", "org.mozilla.nightly", "org.torproject.torbrowser",
-}
-# A link in an event's location, notes or url that makes it a call.
-CALL_LINK = re.compile(r"(zoom\.us/|meet\.google\.com/|teams\.microsoft\.com/|teams\.live\.com/|webex\.com/|"
-                       r"whereby\.com/|meet\.jit\.si/|around\.co/|facetime\.apple\.com/|cal\.com/video|"
-                       r"app\.slack\.com/huddle)", re.I)
+TEAM_ID = re.compile(r"^[A-Z0-9]{10}$")
 
 
-def parse_iso(stamp) -> datetime | None:
-    if not stamp:
+def verified_call_app(app) -> tuple[str, str] | None:
+    """(bundle id, name) when this mic holder is a work call app proven by its
+    code signature, else None. Every field must match exactly; a missing or
+    odd-typed field is a no."""
+    if not isinstance(app, dict):
         return None
-    try:
-        moment = datetime.fromisoformat(str(stamp).replace("Z", "+00:00"))
-    except ValueError:
+    app_id, team = app.get("id"), app.get("team")
+    if not isinstance(app_id, str) or not isinstance(team, str) or app.get("signed") is not True:
         return None
-    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+    known = WORK_CALL_APPS.get(app_id)
+    if known is None or not TEAM_ID.match(team) or team != known[1]:
+        return None
+    return app_id, known[0]
 
 
-def is_call_event(event: dict, me: set[str] | frozenset = frozenset()) -> bool:
-    """A calendar event that is a call: it carries a call link, or someone
-    other than the owner is invited. A lecture block on the calendar is
-    neither, so it never turns a browser's mic into a recording."""
-    if not isinstance(event, dict) or event.get("isAllDay"):
-        return False
-    text = " ".join(str(event.get(k) or "") for k in ("location", "notes", "url", "conferenceUrl", "description"))
-    if CALL_LINK.search(text):
-        return True
-    for person in event.get("attendees") or []:
-        email = str((person.get("email") if isinstance(person, dict) else person) or "").lower()
-        if email and email not in me:
-            return True
-    return False
-
-
-def event_now(events: list[dict] | None, now: datetime, me: set[str] | frozenset = frozenset()) -> dict | None:
-    """The call event happening at `now`, with Anarlog's buffers, or None."""
-    for event in events or []:
-        start, end = parse_iso(event.get("start")), parse_iso(event.get("end"))
-        if start is None or end is None:
-            continue
-        if start - EARLY_START <= now <= end + END_GRACE and is_call_event(event, me):
-            return event
-    return None
-
-
-def meeting_in(snapshot: dict, event: dict | None) -> dict | None:
+def meeting_in(snapshot: dict) -> dict | None:
     """What makes this moment a meeting, or None. {"id", "name", "why"}."""
-    mic = snapshot.get("mic") or []
-    windows = snapshot.get("windows") or []
-    for app in mic:
-        app_id = str(app.get("id") or "")
-        if app_id in WORK_CALL_APPS:
-            return {"id": app_id, "name": WORK_CALL_APPS[app_id], "why": f"{WORK_CALL_APPS[app_id]} is using the mic"}
-    for app in mic:
-        app_id = str(app.get("id") or "")
-        if app_id in BROWSERS:
-            window = next((w for w in windows if w.get("app") == app_id), None) \
-                or next((w for w in windows if w.get("app") in BROWSERS), None)
-            if window:
-                return {"id": app_id, "name": str(app.get("name") or "Browser"),
-                        "why": f"a meeting tab is open ({str(window.get('title') or '')[:60]})"}
-            if event is not None:
-                return {"id": app_id, "name": str(app.get("name") or "Browser"),
-                        "why": f"{str(event.get('title') or 'a calendar call')[:60]} is happening now"}
-    for app in mic:
-        app_id = str(app.get("id") or "")
-        if app_id in PERSONAL_CALL_APPS and event is not None:
-            return {"id": app_id, "name": PERSONAL_CALL_APPS[app_id],
-                    "why": f"{str(event.get('title') or 'a calendar call')[:60]} is happening now"}
+    mic = snapshot.get("mic") if isinstance(snapshot, dict) else None
+    for app in mic if isinstance(mic, list) else []:
+        hit = verified_call_app(app)
+        if hit:
+            return {"id": hit[0], "name": hit[1], "why": f"{hit[1]} (signed by its vendor) is using the mic"}
     return None
 
 
@@ -239,14 +165,6 @@ def snapshot_of(line: str) -> dict | None:
     except ValueError:
         return None
     return body if isinstance(body, dict) else None
-
-
-def owner_emails(home) -> set[str]:
-    try:
-        body = json.loads((home / ".chewbacca" / "meetings.json").read_text())
-    except (OSError, ValueError):
-        return set()
-    return {str(x).lower() for x in body.get("me") or [] if isinstance(x, str) and "@" in x}
 
 
 def env_flag(name: str, env: dict | None = None) -> bool:

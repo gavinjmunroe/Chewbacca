@@ -21,7 +21,7 @@ PRE-DEPLOY
 [ ] No .env files staged in git
 [ ] No hardcoded localhost URLs (grep -r "localhost" src/)
 [ ] No console.log in critical paths (grep -r "console.log" src/)
-[ ] All env vars set in Vercel dashboard
+[ ] All env vars set on the Railway service (never Vercel, 2026-10-10)
 [ ] NEXT_PUBLIC_APP_URL points to production domain
 
 UI CHECK
@@ -42,8 +42,8 @@ PERFORMANCE
 POST-DEPLOY
 [ ] Open production URL and verify it loads
 [ ] Test primary user flow end-to-end
-[ ] Check Vercel Function logs for runtime errors
-[ ] Check Vercel Speed Insights (first day)
+[ ] Check Railway deploy logs for runtime errors
+[ ] Load the live URL on a phone and a laptop (first day)
 ```
 
 ---

@@ -73,11 +73,12 @@ check`, `story` and `idle` also pass on every route.
    template.
 8. **Screenshot every section at 1440 and 390 before calling it done**, after
    scrolling, so reveal animations have fired. Read each shot.
-9. Ship it as a private draft, meaning a private repo, a Vercel deploy and
-   `robots: noindex` until the owner says to swap, with the URL taken from the
-   aliases in `vercel inspect`, because `<name>.vercel.app` may belong to a
-   stranger and the team-scoped alias sits behind deployment protection (it
-   answers 302).
+9. Ship it as a private draft on **Railway, never Vercel** (Caleb,
+   2026-10-10: "never do anything on vercel ever again"; `vercel-guard`
+   refuses it). A private repo, `robots: noindex` until the owner says to
+   swap, `railway init` in "Caleb Newton's Projects", a `web` service that
+   auto-deploys from main (or `railway up` until the GitHub app can see the
+   repo), the start script on `${PORT:-3000}`, then `railway-domain <name>`.
 
 ## Food and drink sites: what the practitioners agree on
 

@@ -1717,6 +1717,10 @@ _register("PreToolUse", hooks_dir + "/load-guard.sh", timeout=10,
 # another session's worktree (2026-10-09). See the hook's header.
 _register("PreToolUse", hooks_dir + "/destructive-guard.sh", timeout=5,
           matcher="Bash", status="Checking nothing unsaved gets thrown away...")
+# 2026-10-10: Erik's site draft went to Vercel; "never do anything on vercel
+# ever again". Railway is the host. See the hook's header.
+_register("PreToolUse", hooks_dir + "/vercel-guard.sh", timeout=5,
+          matcher="Bash", status="Checking this deploys to Railway, not Vercel...")
 _register("PreToolUse", hooks_dir + "/zsh-guard.sh", timeout=5,
           matcher="Bash",
           status="Checking this reads right in zsh...")

@@ -35,7 +35,25 @@ const testEnv = (name) => (FIXTURES ? process.env[name] : undefined);
 const ROOT = testEnv("CHEWBACCA_ROOT") || path.resolve(__dirname, "..");
 const LIB = testEnv("CHEWBACCA_CLAY_LIB") || path.join(ROOT, "library", "clay-api");
 const MEASURED = process.env.CHEWBACCA_CLAY_MEASURED || path.join(LIB, "measured.json");
-const ENGINE_HOME = process.env.API_ANYTHING_HOME || path.join(os.homedir(), ".chewbacca", "api-anything");
+// --session NAME reads Clay through a second login, kept in its own engine
+// home so it never overwrites the BMA one. 2026-10-11: Caleb said "We hv the
+// amber workspace in clay", and the only imported session (Chrome Profile 7,
+// caleb@bluemodernadvisory.com) saw five workspaces and no Amber; two other
+// Chrome profiles held Clay cookies.
+const SESSION_NAME = (() => {
+  const i = process.argv.indexOf("--session");
+  if (i < 0) return "";
+  const name = String(process.argv[i + 1] || "");
+  process.argv.splice(i, 2);
+  if (!/^[a-z0-9][a-z0-9-]{0,30}$/.test(name)) {
+    process.stdout.write(`${JSON.stringify({ ok: false, class: "usage", reason: "--session takes a short lowercase name like personal or usc" })}\n`);
+    process.exit(2);
+  }
+  return name;
+})();
+const ENGINE_HOME = SESSION_NAME
+  ? path.join(os.homedir(), ".chewbacca", `api-anything-${SESSION_NAME}`)
+  : process.env.API_ANYTHING_HOME || path.join(os.homedir(), ".chewbacca", "api-anything");
 
 const EXIT = { ok: 0, failed: 1, usage: 2, refused: 3 };
 
@@ -1245,6 +1263,24 @@ function doctor() {
   out({ ok: checks.every((c) => c.ok), checks }, checks.every((c) => c.ok) ? EXIT.ok : EXIT.failed);
 }
 
+// Import a Chrome profile's Clay cookies into the --session engine home. Local
+// only: it reads the profile's cookie store and writes one session file.
+function sessionLogin(profile) {
+  if (!SESSION_NAME) out({ ok: false, class: "usage", reason: "session-login needs --session NAME" }, EXIT.usage);
+  if (!/^(Default|Profile \d{1,3})$/.test(String(profile || ""))) {
+    out({ ok: false, class: "usage", reason: 'name the Chrome profile: Default or "Profile N"' }, EXIT.usage);
+  }
+  fs.mkdirSync(ENGINE_HOME, { recursive: true });
+  // A fresh engine home knows no sites until the Clay spec is copied in.
+  process.env.API_ANYTHING_HOME = ENGINE_HOME;
+  syncSpec();
+  const r = spawnSync("api-anything", ["login", registry.engine.site, "--profile", `Chrome/${profile}`], {
+    encoding: "utf8", env: { ...process.env, API_ANYTHING_HOME: ENGINE_HOME }, timeout: 120000,
+  });
+  const ok = r.status === 0;
+  out({ ok, session: SESSION_NAME, profile, home: ENGINE_HOME, ...(ok ? {} : { reason: (r.stderr || r.stdout || String(r.error)).trim().slice(0, 300) }) }, ok ? EXIT.ok : EXIT.failed);
+}
+
 const HELP = `chewbacca clay: Clay without opening Clay
 
   chewbacca clay ops                     every op with its surfaces, gate, measured ms
@@ -1256,6 +1292,8 @@ const HELP = `chewbacca clay: Clay without opening Clay
   --surface cli|api-anything|bin         force one surface
   --allow-writes                         a write; a person must type the op name at a terminal
   --dry-run                              print the exact request (method, URL, body; no cookie) and send nothing
+  --session NAME                         use a second Clay login (api-anything only); import it once with
+                                         chewbacca clay --session NAME session-login "Profile N"
 
 ws is ws=<id>, else $CLAY_WORKSPACE_ID, else the one workspace in
 ~/.chewbacca/gtm/clients.json; with none or several it refuses. Output is one line of JSON.`;
@@ -1269,6 +1307,10 @@ ws is ws=<id>, else $CLAY_WORKSPACE_ID, else the one workspace in
   }
   if (cmd === "ops") out(listOps(), EXIT.ok);
   if (cmd === "doctor") doctor();
+  if (cmd === "session-login") sessionLogin(rest[0]);
+  // The clay CLI is signed in to one account of its own, so a second session
+  // reads through api-anything only, or the CLI would answer for the wrong login.
+  if (SESSION_NAME) flags.surface = "api-anything";
   if (cmd === "route") {
     const op = opByName.get(rest[0]);
     if (!op) out({ ok: false, class: "usage", reason: `unknown op ${rest[0] ?? ""}` }, EXIT.usage);

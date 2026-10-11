@@ -841,6 +841,18 @@ def test_new_reads_are_reads_with_a_measured_surface():
     ok(code == 2, "a run id shaped like a flag never reaches the CLI argv")
 
 
+def test_second_session_reads_through_its_own_login():
+    # 2026-10-11: the Amber workspace wasn't visible to the BMA login, so a
+    # second Chrome profile's session has to be readable without touching it.
+    code, out, _ = run({}, {}, "--session", "Bad Name", "workspaces")
+    ok(code == 2 and out["class"] == "usage", "a session name is a short lowercase slug")
+    code, route, _ = run({}, {"tables": {"cli:tables list --limit 100": {"ms": 10}, "api-anything:listResources": {"ms": 900}}},
+                         "--session", "personal", "route", "tables", "ws=1000001")
+    ok({r["surface"] for r in route["order"]} == {"api-anything"}, "a second session never falls to the CLI's own login")
+    code, out, _ = run({}, {}, "--session", "personal", "session-login", "Profile; rm")
+    ok(code == 2, "session-login takes only Default or Profile N")
+
+
 def test_fixtures_are_scrubbed():
     text = Path(__file__).read_text()
     import re
@@ -857,7 +869,8 @@ def main():
                test_every_mutating_surface_is_gated, test_nothing_changes_between_approval_and_send,
                test_values_that_change_when_decoded_are_refused, test_workspace_has_no_built_in_default,
                test_ui_only_prints_route, test_chat_approval_stands_in_for_the_terminal, test_campaign_build_ops_touch_drafts_only, test_a_relabelled_write_is_still_gated, test_refuses_an_unpinned_engine, test_inbox_adapter_keeps_clay_inbox_shape,
-               test_query_slot_reads_build, test_new_reads_are_reads_with_a_measured_surface, test_fixtures_are_scrubbed):
+               test_query_slot_reads_build, test_new_reads_are_reads_with_a_measured_surface,
+               test_second_session_reads_through_its_own_login, test_fixtures_are_scrubbed):
         fn()
     print(f"chewbacca clay: {checks} checks passed")
 

@@ -333,7 +333,7 @@ OUT_OF_OFFICE = js_regex(
     "|this is an automated (message|response|reply))", "i")
 LENDER = js_regex(r"\b(lender|lending|debt financing|venture debt|credit facility)\b", "i")
 MOVED_ON = js_regex(
-    r"(i'?ve left|i have left|no longer (with|at|monitor|active)|nicht mehr aktiv|has retired from"
+    r"(i'?ve left|i have left|no longer\s+(with|at|monitor|active)|nicht\s+mehr\s+aktiv|has retired from"
     r"|please contact|please direct all|please email|reach out to office|has (now )?taken over"
     r"|is (now )?the best person|best person to (reach|contact)|reach out to (him|her|them|anyone)"
     r"|feel free to reach out to|is more on the|\(cc'?d\)|cc'?ing|looping in)", "i")

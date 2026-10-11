@@ -91,6 +91,12 @@ class ReplyIntentRealReplies(unittest.TestCase):
             with self.subTest(body):
                 self.assertEqual(reply.reply_intent(body)["kind"], kind)
 
+    def test_moved_on_wrapped_across_lines(self):
+        # A Swiss mailbox notice on 2026-10-11 broke "nicht mehr aktiv" over a
+        # line and came out "unclear"; reworded.
+        body = "Danke für Ihre Nachricht.\nDas Postfach ist nicht\nmehr aktiv. Bei Rückfragen wenden Sie sich an Herrn Muster."
+        self.assertEqual(reply.reply_intent(body)["kind"], "referral")
+
     def test_no_inside_a_sentence_is_not_a_pass(self):
         self.assertNotEqual(reply.reply_intent("No problem, send the deck over")["kind"], "pass")
 

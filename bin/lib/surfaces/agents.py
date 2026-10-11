@@ -105,6 +105,7 @@ from . import ACTION_PREFIX, Bind, Context, Provider, Result, SurfaceError, ago,
 from .agent_history import History
 from .agent_hunks import Hunks
 from .agent_ide import Ide
+from .agent_replace import Replace
 from .agent_space import Space
 from .code import candidates, code_root
 
@@ -312,7 +313,7 @@ STATE_ORDER = {"waiting_permission": 0, "error": 1, "running": 2, "idle": 3, "en
 BUSY = ("running", "waiting_permission")
 # The pointers holding a row a press can write through.
 VERBS = ("send", "allow", "deny", "interrupt", "fork", "new", "stage", "unstage", "ship", "upstream", "run", "ctrlc",
-         "restore", "pr", "hunks", "hunkUndo",
+         "restore", "pr", "hunks", "hunkUndo", "replaceGo", "replaceUndo",
          "termopen", "mode", "go")
 MODE_WORDS = {"default": "asks before each tool", "acceptEdits": "edits without asking",
               "bypassPermissions": "never asks (full access)", "plan": "plans only"}
@@ -895,7 +896,7 @@ class Log:
         return any(seq > after and sent == text for seq, sent in self.sent)
 
 
-class Agents(Ide, Hunks, History, Space, Provider):
+class Agents(Ide, Replace, Hunks, History, Space, Provider):
     name = "agents"
     title = "AGENTS"
     region = "center"
@@ -979,6 +980,7 @@ class Agents(Ide, Hunks, History, Space, Provider):
         self.wall = time.time
         self._ide_init()
         self._hunks_init()
+        self._replace_init()
         self._history_init()
         self._space_init()
 
@@ -1480,8 +1482,10 @@ class Agents(Ide, Hunks, History, Space, Provider):
             # The finder sits under the card's name: what is opened from it
             # is the thing being worked on while it is open (agent_ide.py).
             find_parts, find_order = self.find_parts(plan)
-            card_parts += find_parts
-            card_order += find_order
+            # Replace sits right under Find, which it reads its word from.
+            rep_parts, rep_order = self.replace_parts(plan)
+            card_parts += find_parts[:1] + rep_parts + find_parts[1:]
+            card_order += find_order[:1] + rep_order + find_order[1:]
             card_parts.append(comp(c("transcript"), "Transcript", items=Bind(p("transcript"))))
             card_order.append("transcript")
             if plan.get("ask"):
@@ -1583,7 +1587,7 @@ class Agents(Ide, Hunks, History, Space, Provider):
 
     def initial(self) -> dict:
         return {self.p("draft"): "", self.p("task"): "", self.p("agent"): "", self.p("message"): "",
-                self.p("command"): "", self.p("address"): "", self.p("find"): "",
+                self.p("command"): "", self.p("address"): "", self.p("find"): "", self.p("replaceWith"): "",
                 self.p("status"): "", self.p("level"): "info"}
 
     def blank(self) -> dict:
@@ -1598,7 +1602,7 @@ class Agents(Ide, Hunks, History, Space, Provider):
                 p("termopen"): [], p("termOn"): False,
                 p("models"): [], p("modelValue"): "", p("efforts"): [], p("effortValue"): "", p("modes"): [],
                 p("mode"): [], p("webHead"): "", p("webUrl"): "", p("go"): [], p("addressOn"): False,
-                p("placeholder"): "Typed here, sent only by Send", p("pinnedRow"): "", **self.find_blank(), **self.hunks_blank(),
+                p("placeholder"): "Typed here, sent only by Send", p("pinnedRow"): "", **self.find_blank(), **self.hunks_blank(), **self.replace_blank(),
                 **self.history_blank(), **self.space_blank()}
 
     def model(self, data, error, values, ctx) -> dict:
@@ -1626,7 +1630,7 @@ class Agents(Ide, Hunks, History, Space, Provider):
                         shipped=bool(out.get(p("shipped"))), upstream=bool(out.get(p("upstream"))),
                         terminal=bool(out.get(p("termOn"))), termopen=bool(out.get(p("termopen"))),
                         web=bool(out.get(p("webUrl"))), address=bool(out.get(p("addressOn"))),
-                        ask=bool(out.get(p("ask"))), start=bool(out.get(p("kinds"))), **self.find_plan(out), **self.hunks_plan(out),
+                        ask=bool(out.get(p("ask"))), start=bool(out.get(p("kinds"))), **self.find_plan(out), **self.hunks_plan(out), **self.replace_plan(out),
                         **self.history_plan(out), **self.space_plan(out))
         with self._lock:
             self._plan = plan
@@ -1749,6 +1753,7 @@ class Agents(Ide, Hunks, History, Space, Provider):
         self.options_model(shown, data, values, out)
         self.browser_model(shown, data.get("browser"), values, out)
         self.find_model(shown, values, out, ctx)
+        self.replace_model(shown, values, out)
         if not data.get("caught_up"):
             out[p("meta")] += " · catching up on older turns"
         where = shown["folder"] or "its folder"

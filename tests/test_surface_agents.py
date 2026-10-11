@@ -41,6 +41,7 @@ import test_kyber_surfaces as tks  # noqa: E402  validate(), FakeHud and the dae
 import realm_client as rc  # noqa: E402
 import surfaces  # noqa: E402
 import surfaces.agent_ide  # noqa: E402,F401  MAX_TABS
+import surfaces.agent_replace  # noqa: E402,F401  MAX_FILES
 from surfaces import Context  # noqa: E402
 from surfaces import agents as SA  # noqa: E402
 from surfaces.agents import Agents  # noqa: E402
@@ -1361,6 +1362,95 @@ def file_tabs(tmp: Path) -> None:
     check("tabs wrote nothing", e.writes == [], e.writes)
 
 
+def replace_across(tmp: Path) -> None:
+    """Replace from the Find field: every hit counted and previewed as it
+    will read, one press writes them all with each file copied aside, a
+    preview the files moved under refuses, secrets are left out, Undo puts
+    each file back, and nothing is replaced while the agent works."""
+    repo = git_repo(tmp / "replace" / "repo", {
+        "a.py": "glow = 1\nprint(glow)\n", "b/c.py": "def glow():\n    return 'glow'\n",
+        "notes.md": "no match here\n", ".env": "GLOW=secret\nglow=1\n"})
+    e = FakeEngine()
+    e.add_session("s1", "idle", cwd=str(repo))
+    a, ctx = world(tmp / "replace", e)
+    backups = tmp / "replace" / "backups"
+    a.backups = lambda: backups
+    data, model = view(a, ctx, open="s1")
+    values = {"/agents/find": "gl"}
+    model = a.model(data, None, values, ctx)
+    check("a short word offers no Replace", not model["/agents/replaceOn"])
+    values = {"/agents/find": "glow"}
+    model = a.model(data, None, values, ctx)
+    check("from three letters Find offers a Replace field under it, and nothing to press yet",
+          model["/agents/replaceOn"] and model["/agents/replaceGo"] == []
+          and drawn_order(a).index("agents-find ") < drawn_order(a).index("agents-replacewith"), drawn_order(a))
+    values = {"/agents/find": "glow", "/agents/replaceWith": "shine"}
+    a.model(data, None, values, ctx)
+    model = a.model(data, None, values, ctx)
+    rows = model["/agents/replaceRows"]
+    check("every hit is counted, the secret file is left out and said so",
+          model["/agents/replaceCap"] == "As it will read · 4 hits in 2 files · 1 secret file left out",
+          model["/agents/replaceCap"])
+    check("each preview line reads as it will, the new text lit",
+          rows and rows[0]["segments"] == [{"text": "shine", "match": True}, {"text": " = 1", "match": False}]
+          and rows[0]["where"] == "a.py · 1", rows[:2])
+    go = model["/agents/replaceGo"]
+    check("the Replace row says how many, where, and that each file is copied aside with an Undo",
+          go and go[0]["text"] == "Replaces 4 hits in 2 files · each file copied aside first, Undo puts them back",
+          go)
+    check("previewing wrote nothing", (repo / "a.py").read_text() == "glow = 1\nprint(glow)\n"
+          and not backups.exists() and e.writes == [])
+    r = a.replace_all(ctx, data, {"row": go[0]["id"], "/agents/find": "glow", "/agents/replaceWith": "other"})
+    check("a press whose replacement isn't the previewed one refuses", not r.ok
+          and "glow" in (repo / "a.py").read_text(), r)
+    e.sessions["s1"]["status"] = "running"
+    r = a.replace_all(ctx, data, {"row": go[0]["id"], **values})
+    check("nothing is replaced while the agent works", not r.ok and "working" in r.line, r)
+    e.sessions["s1"]["status"] = "idle"
+    (repo / "notes.md").write_text("now glow is here\n")
+    r = a.replace_all(ctx, data, {"row": go[0]["id"], **values})
+    check("a file that gained a hit since the preview refuses the whole press",
+          not r.ok and "changed since the preview" in r.line and "glow" in (repo / "a.py").read_text(), r)
+    a.model(data, None, values, ctx)
+    model = a.model(data, None, values, ctx)
+    go = model["/agents/replaceGo"]
+    check("after a refused press the preview reads the files again, counting the new hit",
+          go and go[0]["text"].startswith("Replaces 5 hits in 3 files"), go)
+    r = a.replace_all(ctx, data, {"row": go[0]["id"], **values})
+    check("one press replaces every hit in every file",
+          r.ok and (repo / "a.py").read_text() == "shine = 1\nprint(shine)\n"
+          and (repo / "b/c.py").read_text() == "def shine():\n    return 'shine'\n"
+          and (repo / "notes.md").read_text() == "now shine is here\n", r)
+    check("the secret file was never touched", (repo / ".env").read_text() == "GLOW=secret\nglow=1\n")
+    check("each file was copied aside first", len(list(backups.iterdir())) == 3, list(backups.iterdir()))
+    model = a.model(data, None, values, ctx)
+    undo = model["/agents/replaceUndo"]
+    check("an Undo row names what it puts back",
+          undo and undo[0]["text"] == "Puts 3 files back as they were before the replace", undo)
+    (repo / "b/c.py").write_text("edited after\n")
+    r = a.replace_undo(ctx, data, {"row": undo[0]["id"]})
+    check("Undo puts back each file still as written and leaves alone one changed since",
+          not r.ok and "left alone" in r.line and (repo / "a.py").read_text() == "glow = 1\nprint(glow)\n"
+          and (repo / "b/c.py").read_text() == "edited after\n", r)
+    r = a.replace_undo(ctx, data, {"row": undo[0]["id"]})
+    check("an Undo can't run twice", not r.ok, r)
+    values = {"/agents/find": "zzzz", "/agents/replaceWith": "y"}
+    a.model(data, None, values, ctx)
+    model = a.model(data, None, values, ctx)
+    check("a word with no hit says so and offers nothing", model["/agents/replaceGo"] == []
+          and "Nothing in repo" in model["/agents/replaceNote"], model["/agents/replaceNote"])
+    many = git_repo(tmp / "replace" / "many", {f"f{i}.txt": "tok\n" for i in range(surfaces.agent_replace.MAX_FILES + 1)})
+    e.sessions["s1"]["cwd"] = str(many)
+    data = a.fetch(ctx)
+    values = {"/agents/find": "tok", "/agents/replaceWith": "x"}
+    a.model(data, None, values, ctx)
+    model = a.model(data, None, values, ctx)
+    check("more files than one press should change asks for a narrower word",
+          model["/agents/replaceGo"] == [] and "Narrow the word" in model["/agents/replaceNote"],
+          model["/agents/replaceNote"])
+    check("replacing made no engine write", e.writes == [], e.writes)
+
+
 def mention_picker(tmp: Path) -> None:
     """The @ list under the reply: realm's own list for the session's files,
     a pick puts @[name] in the text, and Send carries only the files whose
@@ -2162,6 +2252,7 @@ def main() -> int:
         hunk_loop(tmp)
         finder(tmp)
         file_tabs(tmp)
+        replace_across(tmp)
         mention_picker(tmp)
         real_repo(tmp)
         history(tmp)

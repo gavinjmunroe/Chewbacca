@@ -238,17 +238,23 @@ struct AgentChip: Identifiable, Equatable {
 struct AgentChipsView: View {
     let chips: [AgentChip]
     let selected: String
+    /// A provider's colour dot per chip: on for agents, off for a session's
+    /// model, effort or permission picks, whose ids are no provider.
+    var dots: Bool = true
     let onPick: (String) -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.hudFocusedRow) private var focusedRow
 
     var body: some View {
-        HStack(spacing: 6) {
+        // Wraps: eight model chips do not fit one 460-point row.
+        FlowLayout(spacing: 6) {
             ForEach(chips) { chip in
                 let on = chip.id == selected
                 Button { onPick(chip.id) } label: {
                     HStack(spacing: 5) {
-                        Circle().fill(AgentPalette.provider(chip.id)).frame(width: 8, height: 8)
+                        if dots {
+                            Circle().fill(AgentPalette.provider(chip.id)).frame(width: 8, height: 8)
+                        }
                         Text(chip.label).font(.system(size: 11.5, weight: on ? .semibold : .medium))
                     }
                     .foregroundStyle(on ? HUD.ink : HUD.dim)
@@ -256,7 +262,8 @@ struct AgentChipsView: View {
                     .padding(.vertical, 5)
                     .background(Color.white.opacity(on ? 0.14 : 0.05), in: Capsule())
                     .overlay(Capsule().strokeBorder(
-                        on ? AgentPalette.provider(chip.id).opacity(0.8) : .clear, lineWidth: 1))
+                        on ? (dots ? AgentPalette.provider(chip.id) : HUD.accent).opacity(0.8) : .clear,
+                        lineWidth: 1))
                     .frame(minHeight: HitTarget.minimum)
                     .contentShape(Rectangle())
                 }

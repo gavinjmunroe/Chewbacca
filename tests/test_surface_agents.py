@@ -49,7 +49,7 @@ tks.COMPONENTS.add("Transcript")
 # Launcher.swift, outside the generated vocabulary list the checker reads.
 tks.COMPONENTS.add("Avatar")
 # Tiles and Chips: hud/CLAUDE.md "Agents as tiles", AgentTiles.swift.
-tks.COMPONENTS.update({"Tiles", "Chips", "Diff"})
+tks.COMPONENTS.update({"Tiles", "Chips", "Diff", "Web"})
 BIDI = "‮"
 LINE_SEP = " "
 ZWSP = "​"
@@ -93,6 +93,7 @@ class FakeEngine:
         # Transcript keys import.scan finds on disk.
         self.disk: list = []
         self.items: list = []
+        self.browsers: dict = {}
         # terminal id -> {run, out, programs}: realm's scrollback ring, as one string.
         self.term: dict = {}
         # agents.probe's answer, shaped as on this Mac on 2026-10-10: Claude
@@ -183,6 +184,30 @@ class FakeEngine:
                                    {"kind": "add", "text": "    new", "oldLine": None, "newLine": 2}]}]}
         if method == "agents.probe":
             return [dict(x) for x in self.probe]
+        if method == "models.catalog":
+            return {"rows": [{"key": "5.5-claude-opus", "label": "Claude Opus 5.5", "vendor": "Anthropic",
+                              "priceIn": 4, "priceOut": 20, "context": 1000000, "efforts": ["low", "high", "max"],
+                              "blurb": None}]}
+        if method == "sessions.setOptions":
+            s = self.sessions[p["id"]]
+            for key in ("model", "effort", "permissionMode"):
+                if key in p:
+                    s[key] = p[key]
+            return dict(s)
+        if method == "browsers.get":
+            if p["browserId"] not in self.browsers:
+                raise rc.RealmRpcError(method, "NOT_FOUND", "no browser")
+            return dict(self.browsers[p["browserId"]])
+        if method == "browsers.update":
+            self.browsers[p["browserId"]]["url"] = p["url"]
+            return {"ok": True}
+        if method == "browsers.create":
+            bid, iid = self.nid("br"), self.nid("item")
+            self.browsers[bid] = {"id": bid, "spaceId": p["spaceId"], "url": p["url"], "title": "", "favicon": "",
+                                  "createdAt": NOW_MS, "updatedAt": NOW_MS + self.n}
+            self.items.append({"id": iid, "spaceId": p["spaceId"], "kind": "browser", "title": "Browser",
+                               "refId": bid})
+            return {"browserId": bid, "itemId": iid, "url": p["url"]}
         if method == "items.list":
             return [dict(i) for i in self.items if i["spaceId"] == p["spaceId"]]
         if method == "sessions.openTerminal":
@@ -1091,6 +1116,144 @@ def terminal(tmp: Path) -> None:
     check("the terminal never opens a surface of its own", sum(x.startswith("@ ") for x in lines) == 1)
 
 
+def options(tmp: Path) -> None:
+    """Model, effort and permission chips on the opened card, set through
+    realm's sessions.setOptions; a permission switch only from a row naming it."""
+    e = FakeEngine()
+    e.add_session("s1", "idle", title="Fix the rail", cwd="/Users/x/code/chewbacca")
+    e.add_session("s2", "idle", title="Port it", kind="codex")
+    e.probe = [x for x in e.probe if x["kind"] != "codex"]
+    e.probe.append({"kind": "codex", "available": True, "version": "1", "loggedIn": True, "reason": None,
+                    "models": [{"id": "gpt-6-sol", "label": "GPT-6-Sol", "efforts": ["low", "high"]},
+                               {"id": "gpt-6-astra", "label": "GPT-6-Astra", "isDefault": True,
+                                "efforts": ["low"]},
+                               {"id": "bad" + BIDI, "label": "Bad"}]})
+    a, ctx = world(tmp / "opts", e)
+    data, model = view(a, ctx, open="s1")
+    check("Claude's models are chips, the first the one an unpinned session runs, Claude dropped from labels",
+          [c["label"] for c in model["/agents/models"]][:3] == ["Fable 5.1", "Fable 5", "Opus 5.5"]
+          and model["/agents/modelValue"] == "s1|claude-fable-5-1", model["/agents/models"])
+    check("the chips carry no provider dot", "agents-models Chips" in " ".join(a.layout())
+          and "dots=false" in next(x for x in a.layout() if "agents-models" in x))
+    check("a model with no efforts known shows no effort chips", model["/agents/efforts"] == [])
+    check("permission chips show the level it runs at, and nothing to switch yet",
+          [c["label"] for c in model["/agents/modes"]] == ["Ask each time", "Accept edits", "Full access"]
+          and model["/agents/modeValue"] == "s1|default" and model["/agents/mode"] == [], model["/agents/modes"])
+    r = a.pick_model(ctx, data, {"row": "s1|claude-opus-5-5"})
+    check("a model chip sets that model through realm",
+          r.ok and e.writes == [("sessions.setOptions", {"id": "s1", "model": "claude-opus-5-5"})], (r, e.writes))
+    r = a.pick_model(ctx, data, {"row": "s1|gpt-6-sol"})
+    check("a model another agent offers is refused", not r.ok and len(e.writes) == 1, r)
+    r = a.pick_model(ctx, data, {"row": "s2|claude-opus-5-5"})
+    check("a chip for an agent that isn't open is refused", not r.ok and len(e.writes) == 1, r)
+    data, model = view(a, ctx)
+    check("its efforts come from realm's model catalog, with the model's own default first",
+          [c["label"] for c in model["/agents/efforts"]] == ["Default effort", "Low", "High", "Max"]
+          and model["/agents/effortValue"] == "s1|", model["/agents/efforts"])
+    r = a.pick_effort(ctx, data, {"row": "s1|max"})
+    check("an effort chip sets it", r.ok and e.writes[-1] == ("sessions.setOptions", {"id": "s1", "effort": "max"}),
+          e.writes[-1])
+    r = a.pick_effort(ctx, data, {"row": "s1|ultra"})
+    check("an effort the model doesn't take is refused", not r.ok and len(e.writes) == 2, r)
+    e.sessions["s1"]["model"] = "claude-sonnet-5"
+    r = a.pick_effort(ctx, data, {"row": "s1|low"})
+    check("an effort drawn for a model it's no longer on is refused", not r.ok and len(e.writes) == 2, r)
+    e.sessions["s1"]["model"] = "claude-opus-5-5"
+    data, model = view(a, ctx)
+    r = a.pick_effort(ctx, data, {"row": "s1|"})
+    check("Default effort clears it to the model's own", r.ok and e.writes[-1][1] == {"id": "s1", "effort": None},
+          e.writes[-1])
+
+    r = a.pick_mode(ctx, data, {"row": "s1|bypassPermissions"})
+    check("a permission chip writes nothing on its own", r.ok and len(e.writes) == 3, e.writes)
+    model = a.model(data, None, r.updates, ctx)
+    check("it draws a Switch row saying what the agent may then do",
+          model["/agents/mode"] == [{"id": "s1|default>bypassPermissions", "accent": True,
+                                     "text": "Full access for Fix the rail: it runs every tool without asking you"}]
+          and model["/agents/modeValue"] == "s1|bypassPermissions", model["/agents/mode"])
+    e.sessions["s1"]["permissionMode"] = "acceptEdits"
+    r = a.set_mode(ctx, data, {"row": "s1|default>bypassPermissions"})
+    check("a switch drawn from a level it's no longer at is refused", not r.ok and len(e.writes) == 3, r)
+    e.sessions["s1"]["permissionMode"] = "default"
+    r = a.set_mode(ctx, data, {"row": "s1|default>bypassPermissions"})
+    check("Switch sets that level through realm",
+          r.ok and e.writes[-1] == ("sessions.setOptions", {"id": "s1", "permissionMode": "bypassPermissions"}),
+          e.writes[-1])
+    r = a.set_mode(ctx, data, {"row": "s1|default>plan"})
+    check("a level realm doesn't offer is refused", not r.ok and len(e.writes) == 4, r)
+
+    data, model = view(a, ctx, open="s2")
+    check("Codex's models come from the probe, its default selected, a hidden-character id dropped",
+          [c["label"] for c in model["/agents/models"]] == ["GPT-6-Sol", "GPT-6-Astra"]
+          and model["/agents/modelValue"] == "s2|gpt-6-astra", model["/agents/models"])
+    lines = [f"@ {a.name} at=center w={a.width}"] + a.layout() + [surfaces.data_line(k, v) for k, v in
+                                                                   {**a.initial(), **model}.items()]
+    check("the card with its chips is valid Kyber Lines", not tks.validate(lines), tks.validate(lines))
+    check("no hidden character reaches the glass", glass_clean(model), model)
+    g = FakeEngine()
+    g.add_session("s9", "idle", kind="acp:gemini")
+    b, bctx = world(tmp / "opts-acp", g)
+    _, bmodel = view(b, bctx, open="s9")
+    check("an agent realm can't set a permission level on gets no permission chips",
+          bmodel["/agents/modes"] == [] and bmodel["/agents/models"] == [], bmodel["/agents/modes"])
+
+
+def browser(tmp: Path) -> None:
+    """The agent's browser pane as a live page inside its card, pointed only
+    from a Go row that says where it loads."""
+    e = FakeEngine()
+    e.add_session("s1", "idle", title="Fix the rail", cwd="/Users/x/code/chewbacca")
+    a, ctx = world(tmp / "web", e)
+    data, model = view(a, ctx, open="s1")
+    check("no pane in its space draws no page, only the address field",
+          model["/agents/webUrl"] == "" and model["/agents/addressOn"] and "agents-web Web" not in " ".join(a.layout()),
+          model["/agents/webUrl"])
+    model = a.model(data, None, {"/agents/address": "file:///etc/passwd"}, ctx)
+    check("an address that isn't http(s) offers no Go", model["/agents/go"] == [], model["/agents/go"])
+    url = "http://localhost:3000/rail"
+    model = a.model(data, None, {"/agents/address": url}, ctx)
+    row = model["/agents/go"][0]["id"]
+    check("a typed web address offers to open a pane in its space, saying so",
+          row.startswith("new:sp1|") and "new browser pane" in model["/agents/go"][0]["text"], model["/agents/go"])
+    r = a.go(ctx, data, {"row": row, "/agents/address": "https://evil.example"})
+    check("Go with an address other than the one drawn is refused", not r.ok and e.writes == [], r)
+    r = a.go(ctx, data, {"row": row, "/agents/address": url})
+    check("Go opens a browser pane in the agent's space at that address",
+          r.ok and e.writes == [("browsers.create", {"spaceId": "sp1", "url": url})]
+          and r.updates.get("/agents/address") == "" and "localhost" not in r.line, (r, e.writes))
+    bid = next(iter(e.browsers))
+    e.browsers[bid]["title"] = "Rail" + BIDI
+    data, model = view(a, ctx)
+    layout = " ".join(a.layout())
+    check("the pane draws as a live page inside the card, saying what it shows",
+          model["/agents/webUrl"] == url and "agents-web Web" in layout
+          and model["/agents/webHead"] == "Browser · Rail · localhost:3000", (model["/agents/webUrl"],
+                                                                          model["/agents/webHead"]))
+    e.browsers[bid]["url"] = "javascript:alert(1)"
+    a._browser = None
+    data, model = view(a, ctx)
+    check("an address the engine holds that isn't http(s) is never drawn", model["/agents/webUrl"] == "",
+          model["/agents/webUrl"])
+    url2 = "https://example.com/docs"
+    model = a.model(data, None, {"/agents/address": url2}, ctx)
+    row = model["/agents/go"][0]["id"]
+    check("with a pane, Go points that pane", row.startswith(f"go:{bid}|") and "its browser pane" in
+          model["/agents/go"][0]["text"], model["/agents/go"])
+    e.browsers[bid]["spaceId"] = "sp2"
+    r = a.go(ctx, data, {"row": row, "/agents/address": url2})
+    check("a pane that moved to another space is refused", not r.ok and len(e.writes) == 1, r)
+    e.browsers[bid]["spaceId"] = "sp1"
+    r = a.go(ctx, data, {"row": row, "/agents/address": url2})
+    check("Go points it there through realm",
+          r.ok and e.writes[-1] == ("browsers.update", {"browserId": bid, "url": url2}), e.writes[-1])
+    data, model = view(a, ctx)
+    lines = [f"@ {a.name} at=center w={a.width}"] + a.layout() + [surfaces.data_line(k, v) for k, v in
+                                                                   {**a.initial(), **model}.items()]
+    check("the card with its page is valid Kyber Lines", not tks.validate(lines), tks.validate(lines))
+    check("no hidden character reaches the glass", glass_clean(model), model)
+    check("the page never opens a surface of its own", sum(x.startswith("@ ") for x in lines) == 1)
+
+
 def untrusted(tmp: Path) -> None:
     e = FakeEngine()
     e.add_session("s1", "idle", title="T" + BIDI + "itle" + LINE_SEP + "x" + ESC + "[31m",
@@ -1252,6 +1415,8 @@ def main() -> int:
         agent_card(tmp)
         shipping(tmp)
         terminal(tmp)
+        options(tmp)
+        browser(tmp)
         untrusted(tmp)
         through_the_daemon(tmp)
         review_fixes(tmp)

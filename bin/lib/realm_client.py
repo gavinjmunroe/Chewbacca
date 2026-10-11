@@ -86,6 +86,12 @@ READ_METHODS = frozenset({
     # a cursor and what each terminal is running. Both read realm's own
     # buffers; neither writes to the pty.
     "terminals.read", "terminals.programs",
+    # The model picker's public catalog (prices, efforts). Writes nothing in
+    # realm; with force false it answers from realm's cache.
+    "models.catalog",
+    # A browser pane's row: its address and title. Realm's server keeps only
+    # that; the page itself lives in the desktop app (rpc.ts, Plan 11 W1).
+    "browsers.get",
 })
 # Reads that run a process. agents.probe and cli.status take force:true and
 # spawn every agent CLI; the workspace three run git in whatever cwd the

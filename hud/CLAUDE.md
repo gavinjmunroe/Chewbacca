@@ -290,7 +290,20 @@ press on a tile sends `e action <action> row=<id> surface=<surface>`.
 
 **Chips** is a row of small capsules, one per option, each with a dot in its
 provider's colour. A press writes the pick to `value`'s pointer and sends the
-same row-action line. Both are keyboard targets, one per tile and per chip.
+same row-action line. Chips wrap onto as many rows as they need, and
+`dots=false` drops the colour dot, for picks that are not agents (a session's
+model, effort or permission level). Both are keyboard targets, one per tile
+and per chip.
+
+```
+c w Web url=@/agents/webUrl
+```
+
+**Web** is a live web page inside a card, 300 points tall (WebPane.swift):
+the agent card draws its realm browser pane with it, since the headless
+engine keeps only the pane's address. Only http and https load, every
+navigation inside the page is held to that, and the page gets a fresh
+non-persistent data store, so it sees no cookie or login from anything else.
 
 ## Files
 

@@ -240,6 +240,33 @@ TERM_WATCH_S = 30.0
 # belongs in a script.
 COMMAND_CHARS = 1000
 
+# Claude's models, which no probe can list (the claude CLI has no model list),
+# so realm curates them: presets.ts AGENT_MODELS at 59afd9e4, first is the
+# one an un-pinned session runs (DEFAULT_MODEL_LABEL "Fable 5.1"). Every
+# other agent's models come from agents.probe, live.
+CLAUDE_MODELS = (("claude-fable-5-1", "Claude Fable 5.1"), ("claude-fable-5", "Claude Fable 5"),
+                 ("claude-opus-5-5", "Claude Opus 5.5"), ("claude-opus-5", "Claude Opus 5"),
+                 ("claude-sonnet-5", "Claude Sonnet 5"), ("claude-haiku-4-5", "Claude Haiku 4.5"))
+# realm's permission levels (presets.ts PERMISSION_MODES at 59afd9e4), what
+# each chip says, and what its switch row says the press does.
+PERMISSION_CHIPS = (("default", "Ask each time", "asks you before every tool it runs"),
+                    ("acceptEdits", "Accept edits", "edits files without asking, asks before anything else"),
+                    ("bypassPermissions", "Full access", "runs every tool without asking you"))
+# Chips a picker shows. Realm lists 13 codex models on this Mac (2026-10-10);
+# a glance holds about two rows of chips. Guessed.
+MODEL_CHIPS = 8
+# Seconds between models.catalog reads. Realm caches the catalog itself; the
+# panel only needs each model's efforts, which change with a release.
+# Guessed.
+CATALOG_EVERY = 3600.0
+
+# The longest address the browser pane takes, realm's own cap on a browser
+# suggestion query (rpc.ts browsers.suggest, max 2,048 at 59afd9e4).
+URL_CHARS = 2048
+# Browser panes in one space read per refresh; the card shows the newest.
+# Guessed: a space with more than three open panes is rare.
+BROWSERS_READ = 3
+
 # The order Start offers what is ready: the agents the engine ships first
 # (presets.ts SELECTABLE_AGENT_KINDS order), anything else after.
 AGENT_ORDER = ("claude", "codex", "acp:cursor", "acp:gemini", "acp:opencode", "acp:copilot", "acp:goose",
@@ -271,7 +298,7 @@ STATE_ORDER = {"waiting_permission": 0, "error": 1, "running": 2, "idle": 3, "en
 BUSY = ("running", "waiting_permission")
 # The pointers holding a row a press can write through.
 VERBS = ("send", "allow", "deny", "interrupt", "fork", "new", "stage", "unstage", "ship", "upstream", "run", "ctrlc",
-         "termopen")
+         "termopen", "mode", "go")
 MODE_WORDS = {"default": "asks before each tool", "acceptEdits": "edits without asking",
               "bypassPermissions": "never asks (full access)", "plan": "plans only"}
 # The input keys a one-line tool row names, in the order a reader wants them.
@@ -438,7 +465,15 @@ def agent_rows(probed) -> list[dict]:
             why = "signed out"
         else:
             why = "" if signed is True else "sign-in not checked"
-        out.append({"kind": kind, "label": label_of(kind), "ready": available and signed is not False, "why": why})
+        models = []
+        for m in item.get("models") if isinstance(item.get("models"), list) else []:
+            if isinstance(m, dict) and isinstance(m.get("id"), str) and m["id"] and not any(hidden(c) for c in m["id"]):
+                models.append({"id": m["id"][:120], "label": clean(m.get("label") or m["id"], 40),
+                               "default": m.get("isDefault") is True,
+                               "efforts": [clean(x, 12) for x in m.get("efforts") or [] if isinstance(x, str)
+                                           and KIND_SHAPE.match(x)]})
+        out.append({"kind": kind, "label": label_of(kind), "ready": available and signed is not False, "why": why,
+                    "models": models})
     rank = {k: i for i, k in enumerate(AGENT_ORDER)}
     out.sort(key=lambda a: (rank.get(a["kind"], len(rank)), a["kind"]))
     return out
@@ -564,6 +599,17 @@ def command_id(tid: str, command: str) -> str:
     types exactly what was in the field when the row was drawn."""
     digest = hashlib.sha256(command.encode("utf-8", "surrogatepass")).hexdigest()[:10]
     return f"run:{tid}:{digest}"
+
+
+def web_address(text) -> str:
+    """text as an address the card's browser pane may load: http or https
+    with a host, no hidden character, no space, within URL_CHARS; else "".
+    The Web view refuses anything else again on its own (WebPane.swift)."""
+    url = str(text or "").strip()
+    if not url or len(url) > URL_CHARS or any(hidden(ch) or ch.isspace() for ch in url):
+        return ""
+    m = re.match(r"^(https?)://([^/?#@\s]+)", url, re.I)
+    return url if m and m.group(2) else ""
 
 
 def git_files(changes) -> list[dict]:
@@ -792,7 +838,9 @@ class Agents(Provider):
                         f"{p}new": self.new, f"{p}engine": self.start_engine, f"{p}agent": self.choose,
                         f"{p}file": self.show_file, f"{p}stage": self.stage, f"{p}unstage": self.unstage,
                         f"{p}ship": self.ship, f"{p}upstream": self.upstream, f"{p}termopen": self.term_open,
-                        f"{p}run": self.run, f"{p}ctrlc": self.ctrl_c}
+                        f"{p}run": self.run, f"{p}ctrlc": self.ctrl_c, f"{p}model": self.pick_model,
+                        f"{p}effort": self.pick_effort, f"{p}modepick": self.pick_mode, f"{p}mode": self.set_mode,
+                        f"{p}go": self.go}
         self._lock = threading.Lock()
         # The session a press acts on. Set by a pick (or the first fetch, to
         # the session that needs the person most), never by a re-sort.
@@ -830,6 +878,12 @@ class Agents(Provider):
         # program}, and until when a press keeps it read every REFRESH_BUSY.
         self._term: dict | None = None
         self._term_watch = 0.0
+        # The open agent's space's newest browser pane: (sid, at, {id, url,
+        # title, count}) or (sid, at, None).
+        self._browser: tuple | None = None
+        # models.catalog's efforts by lowercased model name, and when read.
+        self._catalog: dict = {}
+        self._catalog_at = -CATALOG_EVERY
         # What layout() draws, set by each model (_replan).
         self._plan: dict = {}
         self._shape = "{}"
@@ -898,6 +952,7 @@ class Agents(Provider):
                     checkpoint = self.newest_checkpoint(conn, row)
                     self.read_changes(conn, row)
                     self.read_terminal(conn, row)
+                    self.read_browser(conn, row)
                     with self._lock:
                         # Published only if no press moved the pin meanwhile.
                         mine = self._log is base or self._log is None or self._log.sid != pinned
@@ -906,6 +961,8 @@ class Agents(Provider):
         except realm_client.RealmError as err:
             raise SurfaceError(f"The engine stopped answering: {why_words(err)}") from None
         self._maybe_probe(ctx)
+        if pinned:
+            self._maybe_catalog(ctx)
         try:
             tabs = self.tabs(self.wall())
         except Exception:  # noqa: BLE001  a tab we can't read is a tile we don't draw, never a dead panel
@@ -928,7 +985,8 @@ class Agents(Provider):
                 "changes": self._changes[2] if self._changes and self._changes[0] == pinned else None,
                 "patch": self._patch if self._patch and self._patch[0] == pinned else None,
                 "shipped": self._shipped[1] if self._shipped and self._shipped[0] == pinned else None,
-                "terminal": term,
+                "terminal": term, "catalog": dict(self._catalog),
+                "browser": self._browser[2] if self._browser and self._browser[0] == pinned else None,
                 "tabs": tabs, "now": self.wall()}
 
     # ── bringing tabs in ─────────────────────────────────────────────────
@@ -1014,6 +1072,32 @@ class Agents(Provider):
 
         self.spawn(work)
 
+    def _maybe_catalog(self, ctx: Context) -> None:
+        """models.catalog's efforts per model name, on a thread, at most every
+        CATALOG_EVERY seconds, only while an agent's card is open."""
+        with self._lock:
+            if self.clock() - self._catalog_at < CATALOG_EVERY:
+                return
+            self._catalog_at = self.clock()
+
+        def work() -> None:
+            try:
+                with self.connect(ctx) as conn:
+                    got = conn.call("models.catalog", {"force": False}, timeout=PROBE_TIMEOUT)
+            except realm_client.RealmError:
+                return  # no catalog: the effort chips fall back to what the agent itself reported
+            rows = got.get("rows") if isinstance(got, dict) else None
+            table = {}
+            for r in rows if isinstance(rows, list) else []:
+                if isinstance(r, dict) and isinstance(r.get("label"), str) and isinstance(r.get("efforts"), list):
+                    table[clean(r["label"], 60).lower()] = [clean(x, 12) for x in r["efforts"]
+                                                            if isinstance(x, str) and KIND_SHAPE.match(x)]
+            with self._lock:
+                self._catalog = table
+                self._soon = True
+
+        self.spawn(work)
+
     def read_changes(self, conn, row: dict) -> None:
         """The open agent's changed files, from realm's own git read
         (workspace.diff, an EXEC method: it runs git in the session's folder,
@@ -1071,6 +1155,31 @@ class Agents(Provider):
                           "program": clean(program.get("label"), 30) if isinstance(program, dict) else "",
                           "running": bool(got.get("running"))}
 
+    def read_browser(self, conn, row: dict) -> None:
+        """The newest browser pane in the open agent's space (items of kind
+        browser, then browsers.get for each), every DIFF_EVERY seconds."""
+        with self._lock:
+            fresh = self._browser and self._browser[0] == row["id"] and self.clock() - self._browser[1] < DIFF_EVERY
+        if fresh or not row.get("space_id"):
+            return
+        items = conn.call("items.list", {"spaceId": row["space_id"]}, timeout=CALL_TIMEOUT)
+        refs = [i.get("refId") for i in items if isinstance(i, dict) and i.get("kind") == "browser"
+                and not i.get("archived") and isinstance(i.get("refId"), str)] if isinstance(items, list) else []
+        panes = []
+        for ref in refs[-BROWSERS_READ:]:
+            try:
+                got = conn.call("browsers.get", {"browserId": ref}, timeout=CALL_TIMEOUT)
+            except realm_client.RealmRpcError:
+                continue  # closed between the list and the read
+            if isinstance(got, dict) and got.get("id") == ref:
+                panes.append(got)
+        panes.sort(key=lambda b: b.get("updatedAt") if isinstance(b.get("updatedAt"), (int, float)) else 0)
+        pane = panes[-1] if panes else None
+        found = {"id": pane["id"], "url": str(pane.get("url") or ""), "title": clean(pane.get("title"), 60),
+                 "count": len(refs)} if pane and not any(hidden(ch) for ch in pane["id"]) else None
+        with self._lock:
+            self._browser = (row["id"], self.clock(), found)
+
     @staticmethod
     def catch_up(conn, log: Log) -> None:
         for _ in range(EVENTS_PAGES):
@@ -1108,6 +1217,8 @@ class Agents(Provider):
                 "cwd_raw": cwd if not any(hidden(ch) for ch in cwd) else "",
                 "agent": label_of(s.get("agentKind")), "kind": clean(s.get("agentKind"), 40),
                 "mode": clean(s.get("permissionMode"), 30),
+                "model": s.get("model") if isinstance(s.get("model"), str) else "",
+                "effort": s.get("effort") if isinstance(s.get("effort"), str) else "",
                 "environment": s.get("environmentId") if isinstance(s.get("environmentId"), str) else "",
                 "space_id": s.get("spaceId") if isinstance(s.get("spaceId"), str) else "",
                 "terminal_item": s.get("terminalItemId") if isinstance(s.get("terminalItemId"), str) else "",
@@ -1216,11 +1327,19 @@ class Agents(Provider):
                            value=Bind(p("draft"))),
                       comp(c("send"), "Events", caption="", items=Bind(p("send")), action=f"{ACTION_PREFIX}send",
                            actionLabel="Send"),
+                      comp(c("models"), "Chips", options=Bind(p("models")), value=Bind(p("modelValue")),
+                           action=f"{ACTION_PREFIX}model", dots=False),
+                      comp(c("efforts"), "Chips", options=Bind(p("efforts")), value=Bind(p("effortValue")),
+                           action=f"{ACTION_PREFIX}effort", dots=False),
+                      comp(c("modes"), "Chips", options=Bind(p("modes")), value=Bind(p("modeValue")),
+                           action=f"{ACTION_PREFIX}modepick", dots=False),
+                      comp(c("mode"), "Events", caption="", items=Bind(p("mode")), action=f"{ACTION_PREFIX}mode",
+                           actionLabel="Switch"),
                       comp(c("interrupt"), "Events", caption="", items=Bind(p("interrupt")),
                            action=f"{ACTION_PREFIX}interrupt", actionLabel="Stop"),
                       comp(c("fork"), "Events", caption="", items=Bind(p("fork")), action=f"{ACTION_PREFIX}fork",
                            actionLabel="Fork")]
-            order += ["allow", "deny", "draft", "send", "interrupt", "fork"]
+            order += ["allow", "deny", "draft", "send", "models", "efforts", "modes", "mode", "interrupt", "fork"]
             if plan.get("changed"):
                 parts.append(comp(c("changed"), "Events", caption=Bind(p("changedCap")), items=Bind(p("changed")),
                                   action=f"{ACTION_PREFIX}file", actionLabel="Diff"))
@@ -1257,6 +1376,16 @@ class Agents(Provider):
                           comp(c("ctrlc"), "Events", caption="", items=Bind(p("ctrlc")),
                                action=f"{ACTION_PREFIX}ctrlc", actionLabel="Ctrl-C")]
                 order += ["termhead", "terminal", "command", "run", "ctrlc"]
+            if plan.get("web"):
+                parts += [comp(c("webhead"), "Text", value=Bind(p("webHead")), tone="muted"),
+                          comp(c("web"), "Web", url=Bind(p("webUrl")))]
+                order += ["webhead", "web"]
+            if plan.get("address"):
+                parts += [comp(c("address"), "Field", label="Address", placeholder="https://",
+                               value=Bind(p("address"))),
+                          comp(c("go"), "Events", caption="", items=Bind(p("go")), action=f"{ACTION_PREFIX}go",
+                               actionLabel="Go")]
+                order += ["address", "go"]
             if plan.get("termopen"):
                 parts.append(comp(c("termopen"), "Events", caption="", items=Bind(p("termopen")),
                                   action=f"{ACTION_PREFIX}termopen", actionLabel="Open"))
@@ -1275,7 +1404,7 @@ class Agents(Provider):
 
     def initial(self) -> dict:
         return {self.p("draft"): "", self.p("task"): "", self.p("agent"): "", self.p("message"): "",
-                self.p("command"): "",
+                self.p("command"): "", self.p("address"): "",
                 self.p("status"): "", self.p("level"): "info"}
 
     def blank(self) -> dict:
@@ -1288,6 +1417,8 @@ class Agents(Provider):
                 p("shipped"): "", p("upstream"): [], p("shipping"): False,
                 p("termHead"): "", p("terminal"): "", p("commandHint"): "", p("run"): [], p("ctrlc"): [],
                 p("termopen"): [], p("termOn"): False,
+                p("models"): [], p("modelValue"): "", p("efforts"): [], p("effortValue"): "", p("modes"): [],
+                p("mode"): [], p("webHead"): "", p("webUrl"): "", p("go"): [], p("addressOn"): False,
                 p("placeholder"): "Typed here, sent only by Send"}
 
     def model(self, data, error, values, ctx) -> dict:
@@ -1314,6 +1445,7 @@ class Agents(Provider):
                         git=bool(out.get(p("stage")) or out.get(p("unstage"))), ship=bool(out.get(p("shipping"))),
                         shipped=bool(out.get(p("shipped"))), upstream=bool(out.get(p("upstream"))),
                         terminal=bool(out.get(p("termOn"))), termopen=bool(out.get(p("termopen"))),
+                        web=bool(out.get(p("webUrl"))), address=bool(out.get(p("addressOn"))),
                         ask=bool(out.get(p("ask"))), start=bool(out.get(p("kinds"))))
         with self._lock:
             self._plan = plan
@@ -1426,6 +1558,8 @@ class Agents(Provider):
             out[p("patch")], out[p("patchPath")] = patch[2], clean(patch[1], 120)
         self.git_model(shown, files, changes, patch, data.get("shipped"), values, out)
         self.terminal_model(shown, data.get("terminal"), values, out)
+        self.options_model(shown, data, values, out)
+        self.browser_model(shown, data.get("browser"), values, out)
         if not data.get("caught_up"):
             out[p("meta")] += " · catching up on older turns"
         where = shown["folder"] or "its folder"
@@ -1499,6 +1633,76 @@ class Agents(Provider):
                 f"{plural(len(staged), 'staged file')} on {branch or 'this checkout'}, then pushed"
                 " · a push can't be taken back here", 120)}]
         out[p("shipping")] = True
+
+    def models_for(self, kind: str, data) -> list[dict]:
+        """The models a session of this agent can be switched to: Claude's
+        curated list, else what agents.probe reported, each with the
+        efforts it takes (the agent's own word first, then the catalog's)."""
+        catalog = (data or {}).get("catalog") or {}
+        if kind == "claude":
+            models = [{"id": i, "label": label, "default": n == 0, "efforts": []}
+                      for n, (i, label) in enumerate(CLAUDE_MODELS)]
+        else:
+            agent = next((a for a in (data or {}).get("agents") or [] if a["kind"] == kind), None)
+            models = [dict(m) for m in (agent or {}).get("models") or []]
+        for m in models:
+            if not m["efforts"]:
+                m["efforts"] = list(catalog.get(m["label"].lower()) or [])
+        return models
+
+    def options_model(self, shown: dict, data, values: dict, out: dict) -> None:
+        """Model, effort and permission chips for the open session. A model
+        or effort chip applies on its press; a permission chip only picks,
+        and a Switch row naming what the agent may then do applies it."""
+        p, sid = self.p, shown["id"]
+        models = self.models_for(shown["kind"], data)
+        current = next((m for m in models if m["id"] == shown["model"]), None) or next(
+            (m for m in models if m["default"]), None) or (models[0] if models else None)
+        if models:
+            shown_models = models[:MODEL_CHIPS]
+            if current and current not in shown_models:
+                shown_models = shown_models[:-1] + [current]
+            out[p("models")] = [{"id": f"{sid}|{m['id']}", "label": m["label"].removeprefix("Claude ")}
+                                for m in shown_models]
+            out[p("modelValue")] = f"{sid}|{current['id']}" if current else ""
+        efforts = (current or {}).get("efforts") or []
+        if efforts:
+            out[p("efforts")] = [{"id": f"{sid}|", "label": "Default effort"}] + [
+                {"id": f"{sid}|{e}", "label": e.capitalize()} for e in efforts]
+            out[p("effortValue")] = f"{sid}|{shown['effort'] if shown['effort'] in efforts else ''}"
+        if shown["kind"] not in ASKS_FIRST:
+            return
+        out[p("modes")] = [{"id": f"{sid}|{m}", "label": label} for m, label, _ in PERMISSION_CHIPS]
+        now = shown["mode"] if shown["mode"] in [m for m, _, _ in PERMISSION_CHIPS] else "default"
+        picked = str(values.get(p("modeValue")) or "")
+        want = picked.partition("|")[2] if picked.startswith(f"{sid}|") else now
+        want = want if want in [m for m, _, _ in PERMISSION_CHIPS] else now
+        out[p("modeValue")] = f"{sid}|{want}"
+        if want != now:
+            label, does = next((lbl, d) for m, lbl, d in PERMISSION_CHIPS if m == want)
+            out[p("mode")] = [{"id": f"{sid}|{now}>{want}", "accent": True, "text": clean(
+                f"{label} for {shown['title']}: it {does}", 120)}]
+
+    def browser_model(self, shown: dict, pane, values: dict, out: dict) -> None:
+        """The agent's browser pane, live, inside its card, and an address
+        field whose Go row says which pane it loads into."""
+        p = self.p
+        if not shown.get("space_id"):
+            return
+        out[p("addressOn")] = True
+        if pane:
+            url = web_address(pane["url"])
+            host = re.sub(r"^https?://", "", url, flags=re.I).split("/", 1)[0] if url else ""
+            more = f" · {plural(pane['count'], 'pane')} in this space" if pane["count"] > 1 else ""
+            out[p("webUrl")] = url
+            out[p("webHead")] = clean(f"Browser · {pane['title'] or host or 'a blank page'}"
+                                      f"{' · ' + host if host and pane['title'] else ''}{more}", 100)
+        typed = web_address(values.get(p("address")))
+        if typed:
+            target = "its browser pane" if pane else "a new browser pane in its space"
+            out[p("go")] = [{"id": ("go:" if pane else "new:") + (pane["id"] if pane else shown["space_id"]) + "|"
+                             + hashlib.sha256(typed.encode()).hexdigest()[:10], "accent": True,
+                             "text": clean(f"Loads it in {target} · only http and https", 90)}]
 
     def terminal_model(self, shown: dict, term, values: dict, out: dict) -> None:
         """The agent's own terminal inside its card: the last lines it printed,
@@ -1895,6 +2099,142 @@ class Agents(Provider):
             self._soon = True
         return Result(True, f"Opened a shell in {row['folder'] or 'its folder'}.",
                       updates={self.p("level"): "success"}, refetch=True)
+
+    def _set_options(self, ctx: Context, data, sid: str, params: dict, check, said: str) -> Result:
+        """sessions.setOptions on the open session, after reading it again and
+        `check(fresh session)` still holding; else nothing is set."""
+        bad = {self.p("level"): "error"}
+        with self._lock:
+            pinned = self.pinned
+        row = next((r for r in (data or {}).get("rows") or [] if r["id"] == sid), None)
+        if not sid or sid != pinned or row is None:
+            return Result(False, "That chip is for an agent that isn't the open one.", updates=bad)
+        if not self._claim("options", sid):
+            return Result(False, "Still setting the last one.")
+        try:
+            with self.connect(ctx) as conn:
+                fresh = self._fresh(conn, sid)
+                why = check(fresh)
+                if why:
+                    return Result(False, why, updates=bad, refetch=True)
+                conn.call("sessions.setOptions", {"id": sid, **params}, timeout=CALL_TIMEOUT, write=True)
+        except realm_client.RealmError as err:
+            if err.maybe_applied:
+                return Result(False, "It may have changed; the engine didn't confirm.",
+                              updates={self.p("level"): "warning"}, refetch=True)
+            return Result(False, f"Not changed: {rpc_words(err)}", updates=bad, refetch=True)
+        finally:
+            self._release("options", sid)
+        return Result(True, f"{said} in {row['folder'] or 'its folder'}.", updates={self.p("level"): "success"},
+                      refetch=True)
+
+    def pick_model(self, ctx: Context, data, values: dict) -> Result:
+        """A model chip: that model for the open session, from its next turn."""
+        sid, _, model = str(values.get("row") or "").partition("|")
+        row = next((r for r in (data or {}).get("rows") or [] if r["id"] == sid), None)
+        kind = (row or {}).get("kind", "")
+        offered = {m["id"]: m for m in self.models_for(kind, data)}
+        if model not in offered:
+            return Result(False, "That model isn't offered for this agent.", updates={self.p("level"): "error"})
+
+        def check(fresh: dict) -> str:
+            return "" if fresh.get("agentKind") == kind else "Not changed: the agent behind it changed."
+
+        return self._set_options(ctx, data, sid, {"model": model}, check,
+                                 f"{offered[model]['label']} from the next turn")
+
+    def pick_effort(self, ctx: Context, data, values: dict) -> Result:
+        """An effort chip: that reasoning level, or the model's own default."""
+        sid, _, effort = str(values.get("row") or "").partition("|")
+        row = next((r for r in (data or {}).get("rows") or [] if r["id"] == sid), None)
+        if row is None:
+            return Result(False, "That chip is for an agent that isn't the open one.",
+                          updates={self.p("level"): "error"})
+        models = self.models_for(row["kind"], data)
+        current = next((m for m in models if m["id"] == row["model"]), None) or next(
+            (m for m in models if m["default"]), None)
+        if effort and effort not in ((current or {}).get("efforts") or []):
+            return Result(False, "That effort isn't offered for this model.", updates={self.p("level"): "error"})
+
+        def check(fresh: dict) -> str:
+            same = (fresh.get("model") or "") == (row["model"] or "")
+            return "" if same else "Not changed: its model changed since the chips were drawn."
+
+        return self._set_options(ctx, data, sid, {"effort": effort or None}, check,
+                                 f"{effort.capitalize() if effort else 'Default'} effort")
+
+    def pick_mode(self, ctx: Context, data, values: dict) -> Result:
+        """A permission chip only picks: its Switch row is what applies it."""
+        key = str(values.get("row") or "")
+        sid, _, mode = key.partition("|")
+        with self._lock:
+            pinned = self.pinned
+        if sid != pinned or mode not in [m for m, _, _ in PERMISSION_CHIPS]:
+            return Result(False, "That chip is for an agent that isn't the open one.",
+                          updates={self.p("level"): "error"})
+        return Result(True, "", updates={self.p("modeValue"): key})
+
+    def set_mode(self, ctx: Context, data, values: dict) -> Result:
+        """Switch the open session's permission level, from the row that
+        named both levels; refused if it moved since."""
+        sid, _, change = str(values.get("row") or "").partition("|")
+        was, _, want = change.partition(">")
+        modes = [m for m, _, _ in PERMISSION_CHIPS]
+        row = next((r for r in (data or {}).get("rows") or [] if r["id"] == sid), None)
+        if row is None or want not in modes or was not in modes or row["kind"] not in ASKS_FIRST:
+            return Result(False, "That switch isn't on the panel any more.", updates={self.p("level"): "error"})
+
+        def check(fresh: dict) -> str:
+            now = fresh.get("permissionMode") if fresh.get("permissionMode") in modes else "default"
+            return "" if now == was else "Not switched: its permission level changed since that was drawn."
+
+        label = next(lbl for m, lbl, _ in PERMISSION_CHIPS if m == want)
+        return self._set_options(ctx, data, sid, {"permissionMode": want}, check, f"Switched to {label}")
+
+    def go(self, ctx: Context, data, values: dict) -> Result:
+        """Point the open agent's browser pane at the typed address
+        (browsers.update), or open one in its space at it (browsers.create)."""
+        key = str(values.get("row") or "")
+        url = web_address(values.get(self.p("address")))
+        bad = {self.p("level"): "error"}
+        verb, _, rest = key.partition(":")
+        target, _, digest = rest.partition("|")
+        if not url or verb not in ("go", "new") or digest != hashlib.sha256(url.encode()).hexdigest()[:10]:
+            return Result(False, "Nothing was loaded: the address changed since that was drawn, or isn't http(s).",
+                          updates=bad)
+        with self._lock:
+            sid = self.pinned
+            pane = self._browser[2] if self._browser and self._browser[0] == sid else None
+        row = next((r for r in (data or {}).get("rows") or [] if r["id"] == sid), None)
+        if row is None:
+            return Result(False, "No agent is open.", updates=bad)
+        if (verb == "go" and (not pane or pane["id"] != target)) or (verb == "new" and target != row["space_id"]):
+            return Result(False, "Nothing was loaded: that pane isn't this agent's any more.", updates=bad,
+                          refetch=True)
+        if not self._claim("browser", sid):
+            return Result(False, "Still loading the last one.")
+        try:
+            with self.connect(ctx) as conn:
+                if verb == "go":
+                    if conn.call("browsers.get", {"browserId": target}, timeout=CALL_TIMEOUT).get("spaceId") \
+                            != row["space_id"]:
+                        return Result(False, "Nothing was loaded: that pane isn't in this agent's space.",
+                                      updates=bad, refetch=True)
+                    conn.call("browsers.update", {"browserId": target, "url": url}, timeout=CALL_TIMEOUT, write=True)
+                else:
+                    conn.call("browsers.create", {"spaceId": target, "url": url}, timeout=CALL_TIMEOUT, write=True)
+        except realm_client.RealmError as err:
+            if err.maybe_applied:
+                return Result(False, "It may have loaded; the engine didn't confirm.",
+                              updates={self.p("level"): "warning"}, refetch=True)
+            return Result(False, f"Nothing was loaded: {rpc_words(err)}", updates=bad, refetch=True)
+        finally:
+            self._release("browser", sid)
+        with self._lock:
+            self._browser = None
+            self._soon = True
+        return Result(True, f"Loaded it in the browser pane for {row['folder'] or 'its folder'}.",
+                      updates={self.p("address"): "", self.p("level"): "success"}, refetch=True)
 
     def choose(self, ctx: Context, data, values: dict) -> Result:
         """A chip press: which agent Start makes."""

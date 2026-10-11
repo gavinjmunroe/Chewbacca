@@ -585,6 +585,7 @@ public struct SurfaceView: View {
                 AgentChipsView(
                     chips: chips,
                     selected: p["value"]?.display ?? chips.first?.id ?? "",
+                    dots: p["dots"] != .bool(false),
                     onPick: segmentedPick(element, p)))
 
         case "Transcript":
@@ -597,6 +598,9 @@ public struct SurfaceView: View {
         case "Diff":
             return AnyView(DiffView(text: p["text"]?.display ?? "", path: p["path"]?.stringValue ?? "",
                                     plain: p["plain"] == .bool(true)))
+
+        case "Web":
+            return AnyView(WebPaneView(url: p["url"]?.display ?? ""))
 
         case "Tree":
             let action = p["action"]?.stringValue

@@ -90,6 +90,8 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 
 - feedback_hud_agents_build_on_realm: HUD agent work builds on Carlton's Realm inside the HUD, any LLM or account; a parallel kyber-sessions cockpit drew "TS lame" (10/10)
 
+- feedback_caleb_standing_answers_hud_2026_10_10: HUD relaunch anytime, always the latest agent engine, seamless failover, Anarlog records on its own; never ask again (10/10)
+
 ## References
 
 - reference_amber_ios_eas_testflight: How to build + submit amber-ios to TestFlight via EAS (ascAppId, ASC API key...

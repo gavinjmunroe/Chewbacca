@@ -1628,6 +1628,9 @@ if group "hud"; then
     python3 "$ROOT/tests/test_osgraph_missing.py"
   check  "surfaces draw valid ops, refresh with d only, and send only on a press" \
     python3 "$ROOT/tests/test_kyber_surfaces.py"
+  # 2026-10-10: "fix chewb so we NEVER make a wall of text ever again".
+  check  "no panel on the glass is a wall of text: row length, first-view text, plumbing, text runs" \
+    python3 "$ROOT/tests/test_surface_lint.py"
   # CHW-203. Scripted Jev and a scripted model, recorded query answers: no
   # network, no display. It was never wired in before the tiers landed.
   check  "generated surfaces: tiers answer before the model, math picks components, every layout validates" \

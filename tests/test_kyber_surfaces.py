@@ -22,6 +22,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import surfaces_fixture as fx  # noqa: E402
+import surface_lint  # noqa: E402
 
 import osgraph  # noqa: E402
 import surfaces  # noqa: E402
@@ -144,6 +145,8 @@ def drawing(tmp: Path) -> None:
             line.startswith(("@ ", "d ")) for line in after) and after[0] == f"@ {name}", after[:3])
         check(f"{name}: the data model after a refresh is still valid", validate(first + after) == [],
               validate(first + after)[:3])
+        walls = surface_lint.lint(first + after)
+        check(f"{name}: reads at a glance, no wall of text", walls == [], walls[:3])
         d.refresh(name)
         check(f"{name}: an unchanged refresh sends nothing", hud.take() == [])
         err = provider.model(live.data, "Calendar: access is off.", live.values, ctx)

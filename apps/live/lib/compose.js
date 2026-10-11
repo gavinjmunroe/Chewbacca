@@ -460,6 +460,7 @@ export function reconcileReplies(threads, togariRows, m, hashEmail) {
       return {
         label: k,
         value: b.n,
+        ...(QUIET.has(k) ? { tone: "muted" } : {}),
         sub:
           [...b.parts].map(([p, n]) => `${n} ${p}`).join(", ") ||
           BUCKET_SUB[k] ||
@@ -477,6 +478,10 @@ export function reconcileReplies(threads, togariRows, m, hashEmail) {
     items,
   };
 }
+
+// Outcomes that need nothing from him: drawn grey, so the one bar that does
+// ("Waiting on you") is the one his eye lands on.
+const QUIET = new Set(["Said no", "Asked not to be emailed", "Out of office"]);
 
 const DID_BUCKET = {
   "Sent to you as a card in Slack": "Waiting on you",

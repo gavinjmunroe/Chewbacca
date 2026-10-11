@@ -175,6 +175,9 @@ test("this week's replies reconcile into one number with where each went", async
   ]);
   const total = b.items.reduce((a, i) => a + i.value, 0);
   assert.equal(total, 6, "the parts add up to the one number in the title");
+  const tone = Object.fromEntries(b.items.map((i) => [i.label, i.tone || "plain"]));
+  assert.equal(tone["Waiting on you"], "plain", "what needs him is drawn in color");
+  assert.equal(tone["Said no"], "muted", "what needs nothing from him is drawn quiet");
   assert.ok(
     !JSON.stringify(b).match(/\binterested\b/i),
     "a Clay tag is never shown as interest",
@@ -545,6 +548,11 @@ test("a Clay category is never shown as what Togari did", () => {
 test("the suggestion chips answer from fixed plans with no model", () => {
   const cos = ["Goldies Good Vibes", "Ivy", "Qube Finance", "Vertocol"];
   assert.equal(tier0("How did this week go?", cos)[0].view, "stats_headline");
+  const week = tier0("How did this week go?", cos).map((p) => p.view);
+  assert.ok(
+    week.indexOf("replies_for_me") === 2 && week.indexOf("replies_for_me") < week.indexOf("stats_rates_company"),
+    "the people waiting on him come right after the numbers, before any chart",
+  );
   assert.equal(
     tier0("Which campaign is working?", cos)[1].view,
     "stats_rates_campaign",

@@ -111,6 +111,13 @@ function ask(q) {
     status.remove();
     for (const s of slots)
       if (s && s.classList.contains("skeleton")) s.remove();
+    // Five cards each ended "Live from your campaigns, 4:12 PM" on 2026-10-11.
+    // A line identical to the next card's is hidden; the last one stays.
+    const lines = [...answer.querySelectorAll(".fresh")];
+    lines.forEach((el, i) => {
+      if (lines.slice(i + 1).some((n) => n.textContent === el.textContent))
+        el.classList.add("repeat");
+    });
   };
   es.addEventListener("status", (e) => {
     status.lastChild.textContent = JSON.parse(e.data).text;

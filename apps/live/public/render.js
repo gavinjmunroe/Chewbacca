@@ -97,7 +97,7 @@ const DRAW = {
           `${Math.max(0, Math.min(100, ((x || 0) / max) * 100)).toFixed(2)}%`;
         return h(
           "div",
-          { class: `bar verdict-${it.verdict || "none"}` },
+          { class: `bar verdict-${it.verdict || "none"}${it.tone ? ` tone-${it.tone}` : ""}` },
           h(
             "div",
             { class: "bar-head" },
@@ -243,12 +243,14 @@ const DRAW = {
             it.when ? h("time", {}, when(it.when)) : null,
           ),
           h("blockquote", {}, it.wrote),
-          h(
-            "footer",
-            {},
-            h("span", { class: "did-label" }, "What happened"),
-            h("span", { class: "did" }, it.did || ""),
-          ),
+          it.did
+            ? h(
+                "footer",
+                {},
+                h("span", { class: "did-label" }, "What happened"),
+                h("span", { class: "did" }, it.did),
+              )
+            : null,
         ),
       ),
     ),

@@ -88,8 +88,12 @@ export function tier0(question, companies = []) {
     return [
       { view: "stats_headline", args: { window: "7d", company: co } },
       { view: "stats_kpis", args: { window: "7d", company: co } },
-      { view: "stats_rates_company", args: { window: "7d" } },
+      // The people waiting on him, in their own words, before any chart. On
+      // 2026-10-11 the opening page showed "Waiting on you 25" as a bar third
+      // down and never one name; Caleb wanted Jonah to "cry tears of joy".
+      { view: "replies_for_me", args: { days: 7 } },
       { view: "replies_reconciled", args: { window: "7d" } },
+      { view: "stats_rates_company", args: { window: "7d" } },
       { view: "stats_table", args: { window: "7d", company: co } },
     ];
   }
@@ -223,13 +227,15 @@ async function fill(p, at, ctx) {
         if (p.view === "replies_for_me") list = list.filter((x) => isCardForClient(x.togari_did));
         const title =
           p.view === "replies_for_me"
-            ? `Replies waiting on you, last ${a.days || 14} days`
+            ? `${list.length} ${list.length === 1 ? "person is" : "people are"} waiting on you in Slack`
             : `${a.company ? `${a.company} replies` : "Replies"}, last ${a.days || 14} days`;
         if (!list.length) {
           put(ctx, at, { ...C.notice(`empty-${at}`, p.view === "replies_for_me" ? "Nothing is waiting on you. Every reply in this window was handled." : "No replies match that in this window.") , ...C.meta("togari", r.as_of) });
           return;
         }
-        put(ctx, at, C.replyCards(list, C.meta("togari", r.as_of), { id: `replies-${at}`, title }));
+        const block = C.replyCards(list, C.meta("togari", r.as_of), { id: `replies-${at}`, title });
+        if (p.view === "replies_for_me") for (const it of block.items) it.did = "";
+        put(ctx, at, block);
         return;
       }
       case "investor": {

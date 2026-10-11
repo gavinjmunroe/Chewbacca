@@ -60,6 +60,7 @@ const CHECKS = {
       ...(it.low === undefined || isNumOrNull(it.low) ? [] : [`${ip}.low must be a number`]),
       ...(it.high === undefined || isNumOrNull(it.high) ? [] : [`${ip}.high must be a number`]),
       ...(it.verdict === undefined || ["ahead", "behind", "early", "none"].includes(it.verdict) ? [] : [`${ip}.verdict is unknown`]),
+      ...(it.tone === undefined || ["muted"].includes(it.tone) ? [] : [`${ip}.tone must be muted`]),
     ]),
   ],
   table: (b, p) => {

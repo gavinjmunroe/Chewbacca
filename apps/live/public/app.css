@@ -176,6 +176,9 @@ a:focus-visible { outline: 2px solid var(--teal-2); outline-offset: 2px; border-
 .fresh { display: flex; align-items: center; gap: 7px; margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); font-size: 12px; color: var(--ink-3); }
 .bare .fresh { border-top: 0; padding-top: 0; margin-top: 6px; }
 .fresh.stale { color: var(--amber); }
+.bar.tone-muted .fill { background: var(--line-2); }
+.bar.tone-muted .bar-label, .bar.tone-muted .bar-value { color: var(--ink-3); font-weight: 500; }
+.fresh.repeat { display: none; }
 .fresh.stale .dot { background: var(--amber); }
 .fresh.refreshing .dot { animation: pulse 1s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: 0.3; } }

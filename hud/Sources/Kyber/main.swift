@@ -97,6 +97,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setUpHands()
         setUpMenuBar()
         setUpKeys()
+        observeKeyboardLoss()
         observeScreenChanges()
         observeFrontApp()
 
@@ -310,7 +311,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.toggleKeyboard()
                 return nil
             }
-            guard self.model.keyboardFocus != nil,
+            // Only keys aimed at the glass. The conversation panel and the
+            // command bar are this app's windows too, and a Space typed into
+            // either must not press whatever the ring was last on.
+            guard self.model.keyboardFocus != nil, event.window === self.overlay,
                   let command = KeyboardFocus.command(
                     keyCode: event.keyCode, flags: event.modifierFlags,
                     editing: self.model.editingField)
@@ -664,6 +668,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             app.activate()
         }
         keyboardReturn = nil
+    }
+
+    /// A click into another app takes key from the glass; keyboard mode
+    /// ends with it, so no ring is left on a glass that no longer has keys.
+    private func observeKeyboardLoss() {
+        guard let overlay else { return }
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didResignKeyNotification, object: overlay, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.model.keyboardFocus != nil else { return }
+                self.model.leaveKeyboard()
+                self.keyboardReturn = nil
+            }
+        }
     }
 
     private var keyboardMonitor: Any?

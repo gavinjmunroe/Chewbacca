@@ -81,6 +81,16 @@ def log(message: str) -> None:
     print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} {message}", flush=True)
 
 
+def real_home() -> bool:
+    """HOME is this account's own home folder (from the password database,
+    which no environment variable changes)."""
+    import pwd  # noqa: PLC0415
+    try:
+        return home().resolve() == Path(pwd.getpwuid(os.getuid()).pw_dir).resolve()
+    except (KeyError, OSError):
+        return True
+
+
 def is_off() -> bool:
     return (state_dir() / "off").exists() or AP.env_flag("CHEWBACCA_MEETING_AUTOPILOT")
 
@@ -184,6 +194,13 @@ class Loop:
 
 
 def run(args) -> int:
+    replay = os.environ.get("MEETING_AUTOPILOT_WATCH_CMD", "").strip()
+    if replay and real_home():
+        # A replay is a test, and a test recording landed in Caleb's real
+        # meetings and ledger on 2026-10-10 ("Meeting at 10:28pm", two
+        # queued tasks). Replays run only with HOME set to a scratch folder.
+        log("refusing: MEETING_AUTOPILOT_WATCH_CMD needs HOME set to a scratch folder, never the real one")
+        return 2
     lock_path = state_dir() / "run.lock"
     lock = open(lock_path, "w")
     try:
@@ -192,7 +209,6 @@ def run(args) -> int:
         # Kyber respawns this whenever it exits, so a refusal is the normal
         # case and exits 0 (realm-engine's rule).
         return 0
-    replay = os.environ.get("MEETING_AUTOPILOT_WATCH_CMD", "").strip()
     problem = "" if replay else build_helper()
     if problem:
         log(f"cannot watch: {problem}")

@@ -223,6 +223,13 @@ def main() -> int:
     subprocess.run([sys.executable, str(ROOT / "bin" / "meeting-autopilot"), "on"], capture_output=True, env=env)
     check("on removes it", not (tmp / ".chewbacca" / "meeting-autopilot" / "off").exists())
 
+    real = {**os.environ, "HOME": str(Path.home()), "MEETING_AUTOPILOT_WATCH_CMD": "echo {}"}
+    import pwd
+    real["HOME"] = pwd.getpwuid(os.getuid()).pw_dir
+    done = subprocess.run([sys.executable, str(ROOT / "bin" / "meeting-autopilot"), "run"], capture_output=True,
+                          text=True, env=real, timeout=30)
+    check("a replay against the real home folder is refused before anything runs",
+          done.returncode == 2 and "scratch folder" in done.stdout, (done.returncode, done.stdout[-200:]))
     cli = load_cli()
     me = os.getpid()
     check("a process's identity is its executable and start time, read from the kernel",

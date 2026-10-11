@@ -65,14 +65,13 @@ they hired, through `chewbacca gtme`:
      2 hours. Run the send through `chewbacca jobs submit`, because it waits
      45 to 90 seconds between emails.
    - Positive replies: write the answer and save it with `chewbacca gtme
-reply`, which makes a Gmail draft and never sends.
-     - A lead with a name but no email on its site: `chewbacca gtme find --paid`
+reply`, which makes a Gmail draft and never sends. - A lead with a name but no email on its site: `chewbacca gtme find --paid`
      prices ONE lookup through treg and stops. Show the cost, and only an
      amount the person approves goes in `--spend`. Every call is billed to
      that customer and capped at 5 cents. `chewbacca gtme costs` is the
      month's real cost per customer, and `gtme package` sets the mailboxes,
      domains, data budget and price.
-   Volume starts at 5 a day and tops out at 20, because it is their primary
+     Volume starts at 5 a day and tops out at 20, because it is their primary
      inbox. Say so if they ask for more. More volume means separate sending
      domains, which cost money and need their ok.
 5. `gtme` explains each term the first time a person meets it
@@ -81,6 +80,28 @@ reply`, which makes a Gmail draft and never sends.
    answer the follow-ups.
 6. Friday: `chewbacca gtme report --client NAME --week` writes the client
    summary as markdown and a PDF in ~/Downloads.
+
+## A team running its own outbound (2026-10-11, Firm Foundation)
+
+Caleb: "everything chewbs can do to be smth we can sell to other ppl who want a
+gtme". Two founders, two territories, one shared memory, all from Chewbacca
+with nothing team-specific in the kit:
+
+- One `gtme` client per sender (Firm Foundation SoCal, Firm Foundation DFW),
+  each kept in the team's own repo with `chewbacca gtme share --client X --dir
+<repo>/ops/gtme/<region>`. Every gtme command pulls first and pushes only
+  that folder; `*.jsonl` merges by union. `share` also starts DECISIONS.json
+  at the repo root, and rulings load from there.
+- The team's sequence goes in with `chewbacca gtme copy --file seq.json
+--require-line`: every first email then needs a sourced personal line (for
+  churches, the worst thing their own site gets wrong).
+- A company is one account: the next contact there waits 3 days, and a reply
+  from anyone there stops the rest.
+- `chewbacca gtme autosend --interested "..."` answers a plain yes from the
+  person emailed, in the thread. Questions wait.
+
+Code lives once, in the kit. The team repo holds only its rulings, copy,
+lists and ledger (`ops/README.md` in gavinjmunroe/firm-foundation is the model).
 
 ## Client rulings beat your strategy (2026-10-09)
 

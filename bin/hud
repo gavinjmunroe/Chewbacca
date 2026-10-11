@@ -262,8 +262,11 @@ hud_doctor() {
 case "${1:-}" in
   draw)   # A background agent may not draw over the person's work while they
           # are using the Mac (bin/lib/live_glass.py, 2026-10-11).
-          if command -v python3 >/dev/null 2>&1; then
-            python3 "$(dirname "$0")/lib/live_glass.py" || exit 3
+          # Resolved through the ~/.local/bin symlink: $0's own folder has no lib/,
+          # and a missing helper refused every draw for 3 minutes on 2026-10-11.
+          gate="$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")/lib/live_glass.py"
+          if [ -n "${CLAUDECODE:-}" ] && [ -f "$gate" ] && command -v python3 >/dev/null 2>&1; then
+            python3 "$gate" || exit 3
           fi
           send ;;
   rim)    # The rim editor: sliders for the rim's thickness, frost, tint,

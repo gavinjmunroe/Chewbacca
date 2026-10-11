@@ -27,8 +27,11 @@ check, at 1440x900 and 390x844, on every url given:
       itself or any descendant (group hovers count) none allowed
     infinite animations running under
       prefers-reduced-motion                        none allowed
-    a boring section: nothing in it moves on
-      entry, at rest or on scroll                  none allowed
+    a boring section: nothing moves on entry, at
+      rest or on scroll; a still image over 20% of
+      a section; a band under 15% content that sits
+      dead once it lands; an empty block over 30%
+      of a section                                  none allowed
 
 Chromium runs on Metal. Without it a WebGL-heavy page fell to about 1 fps
 headless and screenshots timed out after 30 s; with it the same page ran 50 to
@@ -372,15 +375,24 @@ def story(pw, url):
 # reference. story averages over screens, so one dead section hid behind a
 # lively hero; this reads every section on its own.
 SECTION_LIST = r"""() => {
-  const vis = e => { const r = e.getBoundingClientRect(), c = getComputedStyle(e);
-    return r.width > 1 && r.height > 1 && c.visibility !== 'hidden' && c.display !== 'none'; };
-  let secs = [...document.querySelectorAll('main section, body > section')]
-    .filter(s => vis(s) && !s.querySelector('section') && !s.closest('nav, footer, header'));
-  if (!secs.length && document.querySelector('main'))
-    secs = [...document.querySelector('main').children].filter(vis);
-  secs = secs.filter(s => s.getBoundingClientRect().height >= 0.4 * innerHeight);
-  secs.forEach((s, i) => s.setAttribute('data-sg-sec', i));
-  return secs.map(s => ((s.querySelector('h1, h2, h3') || s).textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40));
+  // Sections by layout, not by tag: from <body>, keep descending into any
+  // block that holds two or more full-width blocks at least 40% of a screen
+  // tall; a block that doesn't is a section. A <section>-only search found
+  // none on the Lemma reference (all divs) and so passed it by reading nothing.
+  const W = innerWidth, H = innerHeight;
+  const vis = e => { const c = getComputedStyle(e); return c.visibility !== 'hidden' && c.display !== 'none'; };
+  const band = e => { const r = e.getBoundingClientRect();
+    return vis(e) && r.width >= 0.85 * W && r.height >= 0.4 * H && !e.matches('nav, footer, header, script, style'); };
+  const out = [];
+  const walk = (el, depth) => {
+    const kids = [...el.children].filter(band);
+    if (depth < 12 && kids.length >= 2) { kids.forEach(k => walk(k, depth + 1)); return; }
+    if (depth < 12 && kids.length === 1 && !el.matches('section')) { walk(kids[0], depth + 1); return; }
+    if (el !== document.body && band(el)) out.push(el);
+  };
+  walk(document.body, 0);
+  out.forEach((s, i) => s.setAttribute('data-sg-sec', i));
+  return out.map(s => ((s.querySelector('h1, h2, h3') || s).textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40));
 }"""
 
 SECTION_STILL = r"""(i) => {
@@ -388,31 +400,94 @@ SECTION_STILL = r"""(i) => {
   const r = s.getBoundingClientRect(), W = innerWidth, H = innerHeight;
   const top = Math.max(0, r.top), bot = Math.min(H, r.bottom);
   const seen = Math.max(1, (bot - top) * W);
-  let area = 0;
-  for (const e of s.querySelectorAll('canvas, svg, img, video')) {
-    if (e.tagName.toLowerCase() === 'svg' && e.parentElement.closest('svg')) continue;
-    const b = e.getBoundingClientRect(), c = getComputedStyle(e);
-    if (b.width < 24 || b.height < 24 || c.visibility === 'hidden' || +c.opacity < 0.05) continue;
-    area += Math.max(0, Math.min(b.right, W) - Math.max(b.left, 0)) * Math.max(0, Math.min(b.bottom, bot) - Math.max(b.top, top));
+  const clip = b => Math.max(0, Math.min(b.right, W) - Math.max(b.left, 0)) * Math.max(0, Math.min(b.bottom, bot) - Math.max(b.top, top));
+  const shown = e => { const c = getComputedStyle(e); return c.visibility !== 'hidden' && +c.opacity >= 0.05; };
+  // content: painted text lines plus figures and controls, never the ground
+  let content = 0, figure = 0;
+  const tw = document.createTreeWalker(s, NodeFilter.SHOW_TEXT);
+  for (let n; (n = tw.nextNode());) {
+    if (!n.textContent.trim() || !shown(n.parentElement)) continue;
+    const rg = document.createRange(); rg.selectNodeContents(n);
+    for (const b of rg.getClientRects()) content += clip(b);
   }
+  const stills = [];
+  for (const e of s.querySelectorAll('canvas, svg, img, video, picture, button, a, input, [role=img]')) {
+    if (e.tagName.toLowerCase() === 'svg' && e.parentElement.closest('svg')) continue;
+    const b = e.getBoundingClientRect();
+    if (b.width < 24 || b.height < 24 || !shown(e) || clip(b) > 0.85 * seen) continue;
+    content += clip(b);
+    if (e.matches('canvas, svg, img, video, picture, [role=img]')) figure += clip(b);
+    // a big raster image is a poster unless something animates it
+    if (e.matches('img') && clip(b) >= 0.2 * seen) {
+      let moving = false;
+      for (const a of document.getAnimations())
+        if (a.playState === 'running' && a.effect && a.effect.target && a.effect.target.nodeType === 1 &&
+            (a.effect.target === e || a.effect.target.contains(e))) moving = true;
+      if (!moving) stills.push({ x: Math.max(0, b.left), y: Math.max(top, b.top),
+        width: Math.min(b.right, W) - Math.max(0, b.left), height: Math.min(b.bottom, bot) - Math.max(top, b.top),
+        src: (e.currentSrc || e.src || '').split('/').pop().slice(0, 50) });
+    }
+  }
+  // Dead space: split the visible band into 6 x 4 cells, mark a cell taken
+  // when anything (text line, figure, control) covers 10% of it, then find
+  // the largest all-empty rectangle of cells.
+  const C = 6, R = 4, cw = W / C, ch = Math.max(1, bot - top) / R;
+  const taken = Array.from({ length: R }, () => Array(C).fill(0));
+  const mark = b => {
+    for (let y = 0; y < R; y++) for (let x = 0; x < C; x++) {
+      const cx = x * cw, cy = top + y * ch;
+      const ix = Math.max(0, Math.min(b.right, cx + cw) - Math.max(b.left, cx));
+      const iy = Math.max(0, Math.min(b.bottom, cy + ch) - Math.max(b.top, cy));
+      taken[y][x] += ix * iy;
+    } };
+  const tw2 = document.createTreeWalker(s, NodeFilter.SHOW_TEXT);
+  for (let n; (n = tw2.nextNode());) {
+    if (!n.textContent.trim() || !shown(n.parentElement)) continue;
+    const rg = document.createRange(); rg.selectNodeContents(n);
+    for (const b of rg.getClientRects()) mark(b);
+  }
+  for (const e of s.querySelectorAll('canvas, svg, img, video, picture, button, a, input, [role=img]')) {
+    if (e.tagName.toLowerCase() === 'svg' && e.parentElement.closest('svg')) continue;
+    const b = e.getBoundingClientRect();
+    if (b.width < 24 || b.height < 24 || !shown(e) || clip(b) > 0.85 * seen) continue;
+    mark(b);
+  }
+  const empty = taken.map(row => row.map(v => v < 0.1 * cw * ch));
+  let hole = 0;
+  for (let y0 = 0; y0 < R; y0++) for (let x0 = 0; x0 < C; x0++)
+    for (let y1 = y0; y1 < R; y1++) for (let x1 = x0; x1 < C; x1++) {
+      let ok = true;
+      for (let y = y0; y <= y1 && ok; y++) for (let x = x0; x <= x1 && ok; x++) ok = empty[y][x];
+      if (ok) hole = Math.max(hole, (y1 - y0 + 1) * (x1 - x0 + 1));
+    }
   const words = (s.innerText.match(/\S+/g) || []).length;
   const anims = document.getAnimations().filter(a => a.playState === 'running' && a.effect &&
     a.effect.target && a.effect.target.nodeType === 1 && s.contains(a.effect.target)).length;
+  // what can move under the scroll, ground layers excluded
   window.__sgSec = [...s.querySelectorAll('*')].map(e => [e, e.getBoundingClientRect().top])
-    .filter(([e]) => { const b = e.getBoundingClientRect(); return b.width >= 40 && b.height >= 20; });
-  return { figure: Math.min(1, area / seen), words, anims,
+    .filter(([e]) => { const b = e.getBoundingClientRect();
+      return b.width >= 40 && b.height >= 20 && clip(b) <= 0.85 * seen; });
+  return { figure: Math.min(1, figure / seen), cover: Math.min(1, content / seen), hole: hole / (C * R), words, anims, stills,
            clip: { x: 0, y: top, width: W, height: Math.max(1, bot - top) } };
 }"""
 
-SECTION_SCROLLED = r"""() => (window.__sgSec || []).filter(([e, t]) =>
-  Math.abs(e.getBoundingClientRect().top - t + 120) > 12).length"""
+SECTION_SCROLLED = r"""(dy) => (window.__sgSec || []).filter(([e, t]) =>
+  Math.abs(e.getBoundingClientRect().top - t + dy) > 12).length"""
+
+
+def _changed(pg, clip, gap=1000):
+    from PIL import Image, ImageChops
+    a = Image.open(io.BytesIO(pg.screenshot(clip=clip))).convert("L")
+    pg.wait_for_timeout(gap)
+    c = Image.open(io.BytesIO(pg.screenshot(clip=clip))).convert("L")
+    return ImageChops.difference(a, c).point(lambda v: 255 if v > DIFF_LEVEL else 0).histogram()[255]
 
 
 def boring_sections(pg):
-    from PIL import Image, ImageChops
     names = pg.evaluate(SECTION_LIST)
     out = []
     for i, name in enumerate(names):
+        label = f'"{name or "untitled"}"'
         try:
             pg.evaluate("i => document.querySelector('[data-sg-sec=\"' + i + '\"]').scrollIntoView({block: 'start'})", i)
             # an entrance that plays once and ends counts, so look early too
@@ -422,24 +497,53 @@ def boring_sections(pg):
             st = pg.evaluate(SECTION_STILL, i)
             if st["clip"]["height"] < 80:
                 continue
-            a = Image.open(io.BytesIO(pg.screenshot(clip=st["clip"]))).convert("L")
-            pg.wait_for_timeout(1000)
-            c = Image.open(io.BytesIO(pg.screenshot(clip=st["clip"]))).convert("L")
-            idle_px = ImageChops.difference(a, c).point(lambda v: 255 if v > DIFF_LEVEL else 0).histogram()[255]
+            area = st["clip"]["width"] * st["clip"]["height"]
+            idle_px = _changed(pg, st["clip"])
+            still_imgs = [s for s in st["stills"] if s["width"] > 8 and s["height"] > 8
+                          and _changed(pg, {k: s[k] for k in ("x", "y", "width", "height")}, 800)
+                          < 0.01 * s["width"] * s["height"]]
+            # At the foot of a page scrollBy(0, 120) moves nothing, and every
+            # element then read as "moving differently". That passed the
+            # /apply close on 2026-10-10. Measure the real delta, and go up
+            # when down is blocked.
+            y0 = pg.evaluate("scrollY")
             pg.evaluate("scrollBy(0, 120)"); pg.wait_for_timeout(600)
-            scrolled = pg.evaluate(SECTION_SCROLLED)
+            dy = pg.evaluate("scrollY") - y0
+            if abs(dy) < 40:
+                pg.evaluate("i => document.querySelector('[data-sg-sec=\"' + i + '\"]').scrollIntoView({block: 'start'})", i)
+                pg.wait_for_timeout(300)
+                st = pg.evaluate(SECTION_STILL, i)
+                y0 = pg.evaluate("scrollY")
+                pg.evaluate("scrollBy(0, -120)"); pg.wait_for_timeout(600)
+                dy = pg.evaluate("scrollY") - y0
+            scrolled = pg.evaluate(SECTION_SCROLLED, dy) if abs(dy) >= 40 else 0
         except Exception:
             continue
-        # A still figure doesn't rescue it. The section Caleb called lame on
-        # 2026-10-10 was a still render filling its frame; on usctts.com that
-        # day 5 of 9 sections had figures over a third of the screen and
-        # nothing moving, which is what "boring" looked like to him.
-        alive = idle_px > 400 or scrolled >= 2 or early > 0 or st["anims"] > 0
-        if not alive:
-            out.append(f'"{name or "untitled"}": nothing moves on entry, at rest or on scroll '
+        # A still render, however big, is a poster. Caleb, 2026-10-10, on a
+        # still clay world in the who-we-are card: "they need to be 3d
+        # animated videos like the clay site!!!!!!!! ALL OF THEM".
+        for s in still_imgs:
+            out.append(f'{label}: still image {s["src"] or "(inline)"} fills {s["width"] * s["height"] / area:.0%} of it. '
+                       'Make it a looping video or animate it')
+        settled = idle_px > max(400, 0.002 * area) or scrolled >= 2
+        if not (settled or early > 0 or st["anims"] > 0):
+            out.append(f'{label}: nothing moves on entry, at rest or on scroll '
                        f'(figures {st["figure"]:.0%}, {st["words"]} words). Give it motion: '
                        'an entrance, an ambient loop or a scroll-linked scene')
+        # A slab: a near-empty band whose only motion was getting there. The
+        # /apply close on 2026-10-10 was one sentence and a button on 1.3
+        # screens of flat cardinal; it grew in on scroll, then sat dead.
+        elif st["cover"] < 0.15 and not settled:
+            out.append(f'{label}: {st["cover"]:.0%} of it holds anything and nothing moves once it lands. '
+                       'Fill it with a figure or scene, or cut it down to its content')
+        # Every region is filled on purpose. Caleb, 2026-10-10, on an advisor
+        # band whose right half and top third were empty blue: "Chewb should
+        # ALWAYS be intentional with how it chooses to fill EVERY space".
+        if st["hole"] >= 0.3 and not settled:
+            out.append(f'{label}: {st["hole"]:.0%} of it is one empty block with nothing in it or moving through it. '
+                       'Fill it on purpose, or size the section to what it holds')
     return out
+
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)

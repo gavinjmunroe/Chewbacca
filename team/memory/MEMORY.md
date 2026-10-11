@@ -243,6 +243,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_links_resolve_from_session_root: file links in replies resolve from the session root, not the shell's cwd; a Downloads-relative render link was dead when Caleb clicked it, link-guard refuses them now (10/11)
 - feedback_suggested_chip_fix_it_here: When he asks about a Suggested task chip, verify it and fix it in this tab; never tell him to click it
 - feedback_subtree_import_merge_not_rebase: After git subtree add, merge origin; rebase replays the import at the repo root
+- feedback_one_background_item: ONE Login Items row (com.chewbacca, chewbacca-daemon); new background jobs register as services, never their own plist (10/11)
 - feedback_new_tools_never_reached_path: New bin/ tools stayed command-not-found until setup reran (26 on 10/10, text-command too); kit-autopull links them now via tools_link.py
 - project_kit_runtime: PATH tools run from ~/.chewbacca/kit/current, a detached worktree of origin/main; atomic swap, 15 min timer, doctor checks the sha (10/10)
 - feedback_run_ported_classifiers_on_real_inbox: Parity proves a port copied the bugs; run it on real traffic. 65 real replies showed bounces reaching the client (10/10)

@@ -300,6 +300,22 @@ Read them before drafting any club or startup landing page.
   brand's logo (Clay's stacked arch) is out. Build the mark from the org's
   own symbols, fewest pieces, render it in clay, and look at the still
   before animating it.
+- Firm Foundation, 2026-10-10, after a text cut: "It reads like a slide
+  deck bro", "so 1 dimensional unlike the lemma site", "this doesn't even fit
+  in 1 section", "we don't need 2 start sections". Cutting words is not the
+  fix. Never stack eyebrow + giant heading + boxed drawing section after
+  section. Pin a scene (sticky h-screen inside a tall run) and swap steps on
+  scroll, scale each drawing to fit the held screen, and merge any two
+  sections that ask for the same next step. Display headings stop around
+  3rem inside a scene; 5rem made one section taller than a laptop screen.
+- A demo of a site or a phone inside the page gets solid colour and a real
+  device frame (bezel, rounded screen, real bubbles and buttons), so a reader
+  can tell it is the product and not part of the line drawing ("make the
+  colors solid so they can tell it represents a demo site", 2026-10-10).
+- Every tool or vendor name on a page needs a usage source in the repo's
+  research folder before it ships. A name said on a call ("Church Connect or
+  Churchly or whatever") is a research task, not copy (2026-10-10: "go look
+  for what churches actually use").
 - Interactive Playwright on clay.com trips the outbound send guard, which
   reads the word as a campaign. Screenshot it, or drive it from a
   standalone script.

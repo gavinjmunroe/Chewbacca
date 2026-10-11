@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 import Testing
 @testable import KyberKit
 
@@ -126,5 +127,52 @@ struct FlightTests {
         #expect(anchors.flights.filter { $0.surface == "t-flight" }.count == 1)
         anchors.forget(surface: "t-flight")
         #expect(anchors.flights.filter { $0.surface == "t-flight" }.isEmpty)
+    }
+
+    @Test("the light starts on the pressed row's frame, even when the list moved before the card opened")
+    func originIsThePressedRow() {
+        let anchors = RowAnchors.shared
+        let a = CGRect(x: 12, y: 40, width: 300, height: 44)
+        let b = CGRect(x: 12, y: 84, width: 300, height: 44)
+        let c = CGRect(x: 12, y: 128, width: 300, height: 44)
+        for (id, frame) in [("a", a), ("b", b), ("c", c)] {
+            anchors.report(surface: "t-press", row: id, local: frame, screen: frame)
+        }
+        let store = SurfaceStore()
+        store.surfaceID = "t-press"
+        store.fireRow("open", row: "c")
+        // The answer redraws the list (a row above arrives) before the card
+        // opens: c is now drawn one row lower.
+        anchors.report(surface: "t-press", row: "c", local: c.offsetBy(dx: 0, dy: 44), screen: c)
+        #expect(anchors.origin(surface: "t-press", row: "c") == c)
+        // Another row's card never starts from the pressed row.
+        #expect(anchors.origin(surface: "t-press", row: "b") == b)
+        // The flight it launches starts exactly there.
+        let card = CGRect(x: 12, y: 230, width: 356, height: 200)
+        let flight = Flight(surface: "t-press", source: anchors.origin(surface: "t-press", row: "c")!,
+                            target: card, returning: false)
+        #expect(ContainerTransform.frame(of: flight, at: 0) == c)
+        // An old press does not decide a card a refresh opened later.
+        anchors.press(surface: "t-press", row: "a", at: Date().addingTimeInterval(-60))
+        #expect(anchors.origin(surface: "t-press", row: "a") == a)
+        anchors.forget(surface: "t-press")
+    }
+
+    @Test("the light stretches off its row: the source edge holds, so it never sits row-sized on a neighbour")
+    func stretches() {
+        let row = CGRect(x: 12, y: 84, width: 300, height: 44)
+        let card = CGRect(x: 12, y: 230, width: 356, height: 200)
+        let out = Flight(surface: "s", source: row, target: card, returning: false)
+        for step in 0...30 {
+            let p = Double(step) / 100
+            #expect(ContainerTransform.frame(of: out, at: p).minY == row.minY)
+        }
+        for step in 1..<100 {
+            let light = ContainerTransform.frame(of: out, at: Double(step) / 100)
+            #expect(light.height >= row.height)
+        }
+        let back = Flight(surface: "s", source: card, target: row, returning: true)
+        #expect(ContainerTransform.frame(of: back, at: 0.2).maxY == card.maxY)
+        #expect(ContainerTransform.frame(of: back, at: 1) == row)
     }
 }

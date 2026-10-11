@@ -53,6 +53,15 @@ final class RowAnchors {
     @ObservationIgnored private var local: [String: CGRect] = [:]
     @ObservationIgnored private var screen: [String: CGRect] = [:]
     @ObservationIgnored private var born: [String: Date] = [:]
+    /// The last row pressed on each surface, where it was when pressed.
+    @ObservationIgnored private var pressed: [String: (row: String, frame: CGRect, at: Date)] = [:]
+
+    /// How long a press is the origin of the card it asked for. The daemon
+    /// answers an Open in a fetch (Anarlog reads took 0.00 to 0.05 s on
+    /// 2026-10-05; a Granola-sized meeting list is one file read), so five
+    /// seconds covers a slow answer without letting an old press decide a
+    /// card a refresh opened later. Guessed, never measured.
+    nonisolated static let pressWindow: TimeInterval = 5
 
     /// The light currently travelling. Observed: the layer that draws it is
     /// the one view that redraws when a flight starts or lands.
@@ -66,6 +75,25 @@ final class RowAnchors {
         local[key] = rect
         screen[key] = global
         if born[surface] == nil { born[surface] = Date() }
+    }
+
+    /// A row was pressed: keep where it was, at the moment of the press.
+    func press(surface: String, row: String, at moment: Date = Date()) {
+        guard let frame = local[Self.key(surface: surface, row: row)] else { return }
+        pressed[surface] = (row, frame, moment)
+    }
+
+    /// Where a card opened for `row` starts its light. The pressed row's
+    /// frame when this card is the answer to that press: the person's eye is
+    /// on the row they pressed, and the list may have moved under it before
+    /// the answer landed. Otherwise wherever that row is drawn now. Never a
+    /// different row's frame: the light and the card must name the same row,
+    /// or the eye is sent to the wrong place (Caleb's 2026-10-11 screenshot).
+    func origin(surface: String, row: String, now: Date = Date()) -> CGRect? {
+        if let hit = pressed[surface], hit.row == row, now.timeIntervalSince(hit.at) <= Self.pressWindow {
+            return hit.frame
+        }
+        return local(surface: surface, row: row)
     }
 
     /// The row's frame inside its surface, for a card in the same surface.
@@ -98,6 +126,7 @@ final class RowAnchors {
 
     func forget(surface: String) {
         born[surface] = nil
+        pressed[surface] = nil
         let prefix = surface + "/"
         local = local.filter { !$0.key.hasPrefix(prefix) }
         screen = screen.filter { !$0.key.hasPrefix(prefix) }
@@ -186,10 +215,29 @@ enum ContainerTransform {
     }
 
     /// Where a flight's light is at `p`, in the surface's space.
+    ///
+    /// It stretches, it does not slide. The edge facing the target leads and
+    /// the edge on the source lets go late, so for the first `holdBack` of
+    /// the trip the light is still anchored on the row it came from and is
+    /// never a row-sized box sitting on a neighbour. The 2026-10-11
+    /// recording had the old sliding box pass over the next row at exactly
+    /// that row's size, and it read as the light lifting off the wrong row.
     static func frame(of flight: Flight, at p: Double) -> CGRect {
-        pose(progress: p, source: flight.source, target: flight.target, returning: false, reduced: false)
-            .window.offsetBy(dx: flight.target.minX, dy: flight.target.minY)
+        let s = flight.source, t = flight.target
+        let lead = ramp(min(1, p / (1 - holdBack)), 0...1)
+        let trail = ramp(max(0, (p - holdBack) / (1 - holdBack)), 0...1)
+        func mix(_ a: CGFloat, _ b: CGFloat, _ k: Double) -> CGFloat { a + (b - a) * CGFloat(k) }
+        let down = t.midY >= s.midY
+        let top = mix(s.minY, t.minY, down ? trail : lead)
+        let bottom = mix(s.maxY, t.maxY, down ? lead : trail)
+        let left = mix(s.minX, t.minX, p), right = mix(s.maxX, t.maxX, p)
+        return CGRect(x: left, y: top, width: max(0, right - left), height: max(0, bottom - top))
     }
+
+    /// The share of the trip the source edge holds still. Guessed, never
+    /// measured; 0.3 keeps the light on its row for the first frames of a
+    /// 0.42 s spring at 60 Hz, which is where the eye looks for the cause.
+    static let holdBack = 0.3
 
     /// The light's brightness: up as it lifts, out as it lands, so nothing
     /// is lit once the change is over (motion rule 6).
@@ -317,7 +365,7 @@ struct MorphCard<Content: View>: View {
         // initial state and not an animated change (an animated jump to
         // hidden rode the surface's own spring on 2026-10-11).
         let flies = RowAnchors.shared.age(of: surface) > Self.settle
-            && RowAnchors.shared.local(surface: surface, row: row) != nil
+            && RowAnchors.shared.origin(surface: surface, row: row) != nil
         _shown = State(initialValue: flies ? 0 : 1)
     }
 
@@ -342,7 +390,7 @@ struct MorphCard<Content: View>: View {
                 guard shown < 1 else { return }
                 try? await Task.sleep(for: .milliseconds(ContainerTransform.firstFrameMs))
                 let anchors = RowAnchors.shared
-                if !reduceMotion, let from = anchors.local(surface: surface, row: row),
+                if !reduceMotion, let from = anchors.origin(surface: surface, row: row),
                    let to = anchors.local(surface: surface, row: "#card:\(card)") {
                     anchors.launch(Flight(surface: surface, source: from, target: to, returning: false))
                 }

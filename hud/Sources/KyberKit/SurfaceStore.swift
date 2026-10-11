@@ -346,6 +346,10 @@ public final class SurfaceStore {
             report("action \(OutboundEvent.jsonString(action)) is not a word: letters, digits, _ - . : / only")
             return
         }
+        // Where the pressed row is now, so the card it opens grows out of
+        // this row and not out of wherever a row of that id is when the
+        // answer lands (ContainerTransform.swift, RowAnchors.press).
+        if let surfaceID { RowAnchors.shared.press(surface: surfaceID, row: row) }
         onEvent?(.rowAction(name: action, row: row, surface: surfaceID))
     }
 

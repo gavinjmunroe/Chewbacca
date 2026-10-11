@@ -41,8 +41,11 @@ fi
 # 2026-10-10. The proper noun passes, the figure of speech still does not.
 printf 'Realm runs the agents.\n' >"$TMP/realm-name.md"
 printf 'This is in the realm of possibility.\n' >"$TMP/realm-figure.md"
-if ! prose-check "$TMP/realm-name.md" 2>&1 | grep -q banned-word \
-   && prose-check "$TMP/realm-figure.md" 2>&1 | grep -q banned-word; then
+# Captured first: prose-check exits 1 when it flags, and pipefail would turn
+# a found flag into a failed pipe.
+name_out=$(prose-check "$TMP/realm-name.md" 2>&1 || true)
+figure_out=$(prose-check "$TMP/realm-figure.md" 2>&1 || true)
+if ! grep -q banned-word <<<"$name_out" && grep -q banned-word <<<"$figure_out"; then
   echo "ok    Realm the product passes, realm the figure of speech is still banned"
 else
   echo "FAIL  Realm handling in prose-check"; fail=1

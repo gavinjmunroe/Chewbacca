@@ -27,19 +27,28 @@ export function campaignKpis(rows, m, window) {
         format: "int",
         sub: `${live} campaign${live === 1 ? "" : "s"} sending${t.leads ? ` to ${t.leads.toLocaleString("en-US")} investors` : ""}`,
       },
-      { label: "Delivered", value: t.delivered, format: "pct", sub: `${(t.sent - t.bounces).toLocaleString("en-US")} of ${t.sent.toLocaleString("en-US")}` },
+      {
+        label: "Delivered",
+        value: t.delivered,
+        format: "pct",
+        sub: `${(t.sent - t.bounces).toLocaleString("en-US")} of ${t.sent.toLocaleString("en-US")}`,
+      },
       {
         label: "Reply rate",
         value: t.reply ? t.reply.rate : null,
         format: "pct",
-        sub: t.reply ? `${t.replies} replies, likely ${pct(t.reply.low)} to ${pct(t.reply.high)}` : "nothing sent yet",
+        sub: t.reply
+          ? `${t.replies} replies, likely ${pct(t.reply.low)} to ${pct(t.reply.high)}`
+          : "nothing sent yet",
         tone: "good",
       },
       {
         label: "Bounced",
         value: t.bounce,
         format: "pct",
-        sub: t.bounce_flag ? `${t.bounces} bounced, over the ${pct(BOUNCE_FLAG, 0)} line where inboxes start to push back` : `${t.bounces} bounced`,
+        sub: t.bounce_flag
+          ? `${t.bounces} bounced, over the ${pct(BOUNCE_FLAG, 0)} line where inboxes start to push back`
+          : `${t.bounces} bounced`,
         tone: t.bounce_flag ? "bad" : "muted",
       },
     ],
@@ -54,11 +63,17 @@ export function campaignKpis(rows, m, window) {
  */
 export function shortNames(rows) {
   const firstOf = (r) => String(r.sequence || "").split(", ")[0];
-  const shared = rows.length > 1 && rows.every((r) => firstOf(r) === firstOf(rows[0])) ? firstOf(rows[0]) : null;
+  const shared =
+    rows.length > 1 && rows.every((r) => firstOf(r) === firstOf(rows[0]))
+      ? firstOf(rows[0])
+      : null;
   const out = new Map();
   for (const r of rows) {
     const s = String(r.sequence || r.campaign || "");
-    out.set(r, shared && s.startsWith(`${shared}, `) ? s.slice(shared.length + 2) : s);
+    out.set(
+      r,
+      shared && s.startsWith(`${shared}, `) ? s.slice(shared.length + 2) : s,
+    );
   }
   return out;
 }
@@ -66,10 +81,16 @@ export function shortNames(rows) {
 function group(rows, by) {
   if (by === "campaign") {
     const byCo = new Map();
-    for (const r of rows) byCo.set(r.company, [...(byCo.get(r.company) || []), r]);
+    for (const r of rows)
+      byCo.set(r.company, [...(byCo.get(r.company) || []), r]);
     const names = new Map();
-    for (const rs of byCo.values()) for (const [r, n] of shortNames(rs)) names.set(r, n);
-    return rows.map((r) => ({ label: [r.company, names.get(r)].filter(Boolean).join(", "), sub: "", row: r }));
+    for (const rs of byCo.values())
+      for (const [r, n] of shortNames(rs)) names.set(r, n);
+    return rows.map((r) => ({
+      label: [r.company, names.get(r)].filter(Boolean).join(", "),
+      sub: "",
+      row: r,
+    }));
   }
   const g = new Map();
   for (const r of rows) {
@@ -77,12 +98,19 @@ function group(rows, by) {
     if (!g.has(k)) g.set(k, []);
     g.get(k).push(r);
   }
-  return [...g].map(([label, rs]) => ({ label, sub: `${rs.length} campaign${rs.length === 1 ? "" : "s"}`, row: sum(rs) }));
+  return [...g].map(([label, rs]) => ({
+    label,
+    sub: `${rs.length} campaign${rs.length === 1 ? "" : "s"}`,
+    row: sum(rs),
+  }));
 }
 
 /** Reply rate per company or campaign, each with its 95% interval and a verdict. */
 export function replyRateBars(rows, m, window, by = "company") {
-  const groups = group(rows.filter((r) => r.sent > 0), by);
+  const groups = group(
+    rows.filter((r) => r.sent > 0),
+    by,
+  );
   const scored = groups.map((g) => ({ ...g, r: rates(g.row) }));
   const v = verdicts(scored.map((s) => ({ interval: s.r.reply })));
   const separated = v.some((x) => x === "ahead" || x === "behind");
@@ -120,7 +148,9 @@ export function replyRateBars(rows, m, window, by = "company") {
 function columns(withLeads) {
   return [
     { key: "name", label: "Campaign" },
-    ...(withLeads ? [{ key: "leads", label: "Leads", align: "right", format: "int" }] : []),
+    ...(withLeads
+      ? [{ key: "leads", label: "Leads", align: "right", format: "int" }]
+      : []),
     { key: "sent", label: "Sent", align: "right", format: "int" },
     { key: "delivered", label: "Delivered", align: "right", format: "pct" },
     { key: "replies", label: "Replies", align: "right", format: "int" },
@@ -138,7 +168,9 @@ function tableRow(name, r, level) {
     sent: r.sent,
     delivered: r.delivered,
     replies: r.replies,
-    reply: r.reply ? { rate: r.reply.rate, low: r.reply.low, high: r.reply.high } : null,
+    reply: r.reply
+      ? { rate: r.reply.rate, low: r.reply.low, high: r.reply.high }
+      : null,
     bounces: r.bounces,
     bounce: r.bounce,
     flag: r.bounce_flag ? "bounce" : undefined,
@@ -158,10 +190,13 @@ export function campaignTable(rows, m, window, { title, id } = {}) {
     byCompany.get(k).push(r);
   }
   const out = [];
-  for (const [company, rs] of [...byCompany].sort((a, b) => a[0].localeCompare(b[0]))) {
+  for (const [company, rs] of [...byCompany].sort((a, b) =>
+    a[0].localeCompare(b[0]),
+  )) {
     out.push(tableRow(company, rates(sum(rs)), 0));
     const names = shortNames(rs);
-    for (const r of [...rs].sort((a, b) => b.sent - a.sent)) out.push(tableRow(names.get(r) || r.campaign, rates(r), 1));
+    for (const r of [...rs].sort((a, b) => b.sent - a.sent))
+      out.push(tableRow(names.get(r) || r.campaign, rates(r), 1));
   }
   return {
     type: "table",
@@ -179,18 +214,27 @@ export function campaignTable(rows, m, window, { title, id } = {}) {
 export function headline(rows, window) {
   const t = rates(sum(rows));
   if (!t.sent) return `Nothing has gone out in ${WINDOW_WORDS[window]}.`;
-  const groups = group(rows.filter((r) => r.sent > 0), "company").map((g) => ({ label: g.label, r: rates(g.row) }));
+  const groups = group(
+    rows.filter((r) => r.sent > 0),
+    "company",
+  ).map((g) => ({ label: g.label, r: rates(g.row) }));
   const v = verdicts(groups.map((g) => ({ interval: g.r.reply })));
   const ahead = groups.filter((_, i) => v[i] === "ahead").map((g) => g.label);
   const when = window === "all" ? "So far" : "In the last 7 days";
-  const all = Math.max(rows.reduce((a, r) => a + (Number(r.replies) || 0), 0), t.replies);
+  const all = Math.max(
+    rows.reduce((a, r) => a + (Number(r.replies) || 0), 0),
+    t.replies,
+  );
   const parts = [
     `${when}, ${t.sent.toLocaleString("en-US")} emails went out and ${all.toLocaleString("en-US")} ${all === 1 ? "reply" : "replies"} came back, ${t.replies} of them from real people rather than out of office notices (${pct(t.reply.rate)} of emails).`,
     ahead.length
       ? `${ahead.join(" and ")} ${ahead.length > 1 ? "are" : "is"} getting replies at a clearly higher rate than the rest.`
       : "No company is clearly ahead of another yet, because the counts are still too small to separate them.",
   ];
-  if (t.bounce_flag) parts.push(`Bounces are at ${pct(t.bounce)}, above the ${pct(BOUNCE_FLAG, 0)} line, so the lists need cleaning before the next wave.`);
+  if (t.bounce_flag)
+    parts.push(
+      `Bounces are at ${pct(t.bounce)}, above the ${pct(BOUNCE_FLAG, 0)} line, so the lists need cleaning before the next wave.`,
+    );
   return parts.join(" ");
 }
 
@@ -201,36 +245,68 @@ function shorten(s, max) {
   return `${cut.slice(0, Math.max(cut.lastIndexOf(" "), max - 20)).replace(/[\s,;:]+$/, "")}...`;
 }
 
-export function replyCards(list, m, { id = "replies", title = "Replies" } = {}) {
+export function replyCards(
+  list,
+  m,
+  { id = "replies", title = "Replies" } = {},
+) {
   const cards = (Array.isArray(list) ? list : []).map((x) => ({
     investor: String(x.investor || x.email || "Unknown"),
     firm: x.firm ? String(x.firm) : "",
     company: x.company ? String(x.company) : "",
     // Togari's list read keeps the first 400 characters (SUBSTR in
     // list_replies), so a 400-long body was cut there and gets an ellipsis.
-    wrote: shorten(cleanReply(x.wrote), 360) + (String(x.wrote || "").length >= 400 && cleanReply(x.wrote).length <= 360 ? "..." : ""),
+    wrote:
+      shorten(cleanReply(x.wrote), 360) +
+      (String(x.wrote || "").length >= 400 && cleanReply(x.wrote).length <= 360
+        ? "..."
+        : ""),
     did: togariDid(x.togari_did),
     when: x.received ? String(x.received) : "",
   }));
   const { items, more } = capItems("reply_cards", cards);
-  return { type: "reply_cards", id, title, ...m, items, ...(more ? { more } : {}) };
+  return {
+    type: "reply_cards",
+    id,
+    title,
+    ...m,
+    items,
+    ...(more ? { more } : {}),
+  };
 }
 
-export function followupTimeline(list, m, { id = "followups", title = "Follow ups Togari has scheduled" } = {}) {
+export function followupTimeline(
+  list,
+  m,
+  { id = "followups", title = "Follow ups scheduled" } = {},
+) {
   const rows = (Array.isArray(list) ? list : [])
     .filter((x) => x && x.due)
     .sort((a, b) => String(a.due).localeCompare(String(b.due)))
     .map((x) => ({
       when: String(x.due),
       title: String(x.investor || x.email || "Investor"),
-      detail: x.status === "scheduled" ? "One follow up email" : `Follow up ${String(x.status || "")}`.trim(),
+      detail:
+        x.status === "scheduled"
+          ? "One follow up email"
+          : `Follow up ${String(x.status || "")}`.trim(),
     }));
   const { items, more } = capItems("timeline", rows);
-  return { type: "timeline", id, title, ...m, items, ...(more ? { more } : {}) };
+  return {
+    type: "timeline",
+    id,
+    title,
+    ...m,
+    items,
+    ...(more ? { more } : {}),
+  };
 }
 
 export function decksTable(list, m) {
-  const rows = (Array.isArray(list) ? list : []).map((d) => ({ name: String(d.company || ""), link: String(d.url || "") }));
+  const rows = (Array.isArray(list) ? list : []).map((d) => ({
+    name: String(d.company || ""),
+    link: String(d.url || ""),
+  }));
   return {
     type: "table",
     id: "decks",
@@ -245,7 +321,10 @@ export function decksTable(list, m) {
 }
 
 export function outcomeBars(summary, m) {
-  const did = summary && typeof summary.what_togari_did === "object" ? summary.what_togari_did : {};
+  const did =
+    summary && typeof summary.what_togari_did === "object"
+      ? summary.what_togari_did
+      : {};
   const items = Object.entries(did)
     .map(([k, n]) => ({ label: togariDid(k), value: Number(n) || 0 }))
     .reduce((acc, it) => {
@@ -258,7 +337,7 @@ export function outcomeBars(summary, m) {
   return {
     type: "bar_list",
     id: "togari-did",
-    title: `What Togari did with the ${Number(summary?.replies_received) || 0} replies it read`,
+    title: `What happened with ${Number(summary?.replies_received) || 0} replies`,
     mode: "count",
     ...m,
     items: capItems("bar_list", items).items,
@@ -275,21 +354,6 @@ const TAG_GROUP = {
   "Wrong Person": "Wrong person",
 };
 
-const DID_PHRASE = {
-  "Sent to you as a card in Slack": ["sent to you in Slack", "sent to you in Slack"],
-  "Follow up scheduled": ["with a follow up scheduled", "with follow ups scheduled"],
-  "Logged as a pass": ["logged as a pass", "logged as passes"],
-  Blocklisted: ["blocklisted", "blocklisted"],
-  Logged: ["logged", "logged"],
-  "Forwarded to their new address": ["forwarded to a new address", "forwarded to new addresses"],
-  "Forwarded to the person they referred": ["forwarded to the person they referred", "forwarded to the people they referred"],
-};
-
-function didPhrase(label, n) {
-  const forms = DID_PHRASE[label];
-  return `${n} ${forms ? forms[n === 1 ? 0 : 1] : label.toLowerCase()}`;
-}
-
 /** A reply as a person would quote it: no link blobs, image tags or legal footers. */
 export function cleanReply(text) {
   return String(text || "")
@@ -297,7 +361,10 @@ export function cleanReply(text) {
     .replace(/\[\s*(https?:|mailto:)[^\]]*\]/gi, "")
     .replace(/\(\s*https?:[^)]*\)/gi, "")
     .replace(/\[image:[^\]]*\]/gi, "")
-    .replace(/\b(CONFIDENTIALITY NOTICE|This (e-?mail|message) (and any attachments )?(is|may contain) confidential|Sent from my iPhone|Get Outlook for)[\s\S]*$/i, "")
+    .replace(
+      /\b(CONFIDENTIALITY NOTICE|This (e-?mail|message) (and any attachments )?(is|may contain) confidential|Sent from my iPhone|Get Outlook for)[\s\S]*$/i,
+      "",
+    )
     .replace(/\s*ᐧ\s*/g, " ")
     .replace(/[ \t]+/g, " ")
     .replace(/\s+([,.!?])/g, "$1")
@@ -314,7 +381,8 @@ export function cleanReply(text) {
 export function reconcileReplies(threads, togariRows, m, hashEmail) {
   const read = new Map();
   for (const x of Array.isArray(togariRows) ? togariRows : []) {
-    if (x && x.email) read.set(hashEmail(String(x.email).trim().toLowerCase()), x);
+    if (x && x.email)
+      read.set(hashEmail(String(x.email).trim().toLowerCase()), x);
   }
   const seen = new Set();
   const people = [];
@@ -323,41 +391,86 @@ export function reconcileReplies(threads, togariRows, m, hashEmail) {
     seen.add(t.who);
     people.push(t);
   }
-  const handled = people.filter((t) => read.has(t.who));
-  const waiting = people.filter((t) => !read.has(t.who));
-  const did = new Map();
-  for (const t of handled) {
-    const label = togariDid(read.get(t.who).togari_did);
-    did.set(label, (did.get(label) || 0) + 1);
+  // Grouped by what the person said or what happened next, in the client's
+  // words. The page used to split them by which of our systems had read each
+  // one ("Read by Togari", "still in the Clay inbox"), which is process
+  // chatter under Zeutara's client-channel ruling and told Jonah nothing he
+  // could act on (Caleb, 2026-10-11: "The jonah dashbaord site sucks on so
+  // many levels").
+  const bucket = new Map();
+  const add = (label, part) => {
+    const b = bucket.get(label) || { n: 0, parts: new Map() };
+    b.n += 1;
+    if (part) b.parts.set(part, (b.parts.get(part) || 0) + 1);
+    bucket.set(label, b);
+  };
+  for (const t of people) {
+    if (read.has(t.who)) {
+      const did = togariDid(read.get(t.who).togari_did);
+      add(
+        DID_BUCKET[did] || "Other",
+        DID_BUCKET[did] === "Waiting on you" ? "sent to you in Slack" : null,
+      );
+    } else {
+      const tag = TAG_GROUP[t.category];
+      add(
+        tag === "Wrong person"
+          ? "Pointed to someone else"
+          : tag || "Waiting on you",
+        tag ? null : "not read yet",
+      );
+    }
   }
-  const groups = new Map();
-  for (const t of waiting) {
-    const label = TAG_GROUP[t.category] || "Needs a look";
-    groups.set(label, (groups.get(label) || 0) + 1);
-  }
-  const order = ["Needs a look", "Said no", "Asked not to be emailed", "Wrong person", "Out of office"];
-  const items = [
-    {
-      label: "Read by Togari",
-      value: handled.length,
-      sub: [...did].sort((a, b) => b[1] - a[1]).map(([k, n]) => didPhrase(k, n)).join(", ") || "none yet",
-    },
-    ...order.filter((k) => groups.has(k)).map((k) => ({
-      label: k,
-      value: groups.get(k),
-      sub: k === "Needs a look" ? "Still in the inbox, untagged or tagged as possibly positive. Read these before counting any as interest." : "Still in the inbox, as the inbox tagged it",
-    })),
+  const order = [
+    "Waiting on you",
+    "Following up later",
+    "Pointed to someone else",
+    "Said no",
+    "Asked not to be emailed",
+    "Out of office",
+    "Other",
   ];
+  const items = order
+    .filter((k) => bucket.has(k))
+    .map((k) => {
+      const b = bucket.get(k);
+      return {
+        label: k,
+        value: b.n,
+        sub:
+          [...b.parts].map(([p, n]) => `${n} ${p}`).join(", ") ||
+          BUCKET_SUB[k] ||
+          "",
+      };
+    });
   return {
     type: "bar_list",
     id: "replies-reconciled",
     title: `${people.length} ${people.length === 1 ? "person" : "people"} wrote back in the last 7 days`,
-    caption: `Togari has read ${handled.length} of them. The other ${waiting.length} are still in the Clay inbox, grouped by the tag the inbox gave them.`,
+    caption:
+      "Grouped by what each person said or what happened next. Nobody counts as a yes until their own reply says so.",
     mode: "count",
     ...m,
     items,
   };
 }
+
+const DID_BUCKET = {
+  "Sent to you as a card in Slack": "Waiting on you",
+  "Follow up scheduled": "Following up later",
+  "Logged as a pass": "Said no",
+  Blocklisted: "Asked not to be emailed",
+  "Forwarded to their new address": "Pointed to someone else",
+  "Forwarded to the person they referred": "Pointed to someone else",
+};
+
+const BUCKET_SUB = {
+  "Following up later": "One follow up is scheduled for each",
+  "Pointed to someone else":
+    "Sent on to the person they named, or the wrong contact",
+  "Asked not to be emailed": "Never emailed again",
+  "Out of office": "Followed up when they are back",
+};
 
 export function notice(id, text, tone = "info") {
   return { type: "notice", id, text, tone };

@@ -33,7 +33,7 @@ const VIEWS = {
   investor: { title: "Investor", needs: "togari" },
   followups: { title: "Follow ups", needs: "togari" },
   decks: { title: "Decks on file", needs: "togari" },
-  togari_outcomes: { title: "What Togari did", needs: "togari" },
+  togari_outcomes: { title: "What happened with replies", needs: "togari" },
   replies_reconciled: { title: "Who wrote back", needs: "stats" },
   say: { title: "", needs: null },
 };
@@ -142,9 +142,9 @@ function statsBlock(p, snap, m, extra = {}) {
     case "stats_table": return C.campaignTable(rows, m, w);
     case "replies_reconciled": {
       if (!Array.isArray(snap.threads)) return { ...C.notice("reconciled", "The list of who wrote back this week is still loading. Ask again in a minute."), ...m };
-      if (!extra.togari) return { ...C.notice("reconciled", "Togari did not answer, so this week's replies cannot be matched to what it handled. Ask again in a minute."), ...m };
+      if (!extra.togari) return { ...C.notice("reconciled", "This week's replies did not load. Ask again in a minute."), ...m };
       const b = C.reconcileReplies(snap.threads, extra.togari.rows, m, sha256);
-      if (extra.togari.capped) b.caption += ` Togari read ${extra.togari.total} replies this week and only the newest ${extra.togari.rows.length} were matched, so the read count may be low.`;
+      if (extra.togari.capped) b.caption += ` Only the newest ${extra.togari.rows.length} of ${extra.togari.total} replies were matched, so the waiting count may be high.`;
       return b;
     }
     case "stats_completed": {
@@ -196,7 +196,7 @@ async function statsPhase(window, plan, ctx) {
     draw(cached, null);
     return;
   }
-  if (cached) draw(cached, { age: ageWords(age), note: "Refreshing from Clay", refreshing: true });
+  if (cached) draw(cached, { age: ageWords(age), note: "Updating", refreshing: true });
   else ctx.emit("status", { text: "Reading the latest campaign numbers from Clay" });
   const res = await hub.read(clientId, window, { maxAgeMs: ctx.maxAgeMs, waitMs: ctx.waitMs, timers: ctx.timers });
   if (res.snap) {
@@ -223,10 +223,10 @@ async function fill(p, at, ctx) {
         if (p.view === "replies_for_me") list = list.filter((x) => isCardForClient(x.togari_did));
         const title =
           p.view === "replies_for_me"
-            ? `Replies Togari passed to you, last ${a.days || 14} days`
+            ? `Replies waiting on you, last ${a.days || 14} days`
             : `${a.company ? `${a.company} replies` : "Replies"}, last ${a.days || 14} days`;
         if (!list.length) {
-          put(ctx, at, { ...C.notice(`empty-${at}`, p.view === "replies_for_me" ? "Nothing is waiting on you. Togari handled every reply in this window on its own." : "No replies match that in this window.") , ...C.meta("togari", r.as_of) });
+          put(ctx, at, { ...C.notice(`empty-${at}`, p.view === "replies_for_me" ? "Nothing is waiting on you. Every reply in this window was handled." : "No replies match that in this window.") , ...C.meta("togari", r.as_of) });
           return;
         }
         put(ctx, at, C.replyCards(list, C.meta("togari", r.as_of), { id: `replies-${at}`, title }));
@@ -268,7 +268,7 @@ async function fill(p, at, ctx) {
     put(ctx, at, C.notice(`slot-${at}`, "This part of the answer could not be drawn.", "warn"));
   } catch (err) {
     ctx.log?.("source failed", p.view, err?.message);
-    put(ctx, at, C.notice(`err-${at}`, "Togari did not answer for this part. Ask again in a minute.", "warn"));
+    put(ctx, at, C.notice(`err-${at}`, "This part did not load. Ask again in a minute.", "warn"));
   }
 }
 

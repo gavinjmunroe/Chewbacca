@@ -189,7 +189,7 @@ export function createApp({ hub = new StatsHub(), togari, modelKey = env.ANTHROP
     if (path === "/api/me" && req.method === "GET") {
       if (!session) return json(res, 401, { error: "Sign in with your link" });
       const c = await liveClient(session.c);
-      if (!c) return json(res, 503, { error: "Togari is not answering right now" });
+      if (!c) return json(res, 503, { error: "Your numbers are not loading right now" });
       return json(res, 200, { client: c.clientId, name: c.displayName, who: session.w, companies: companiesFor(c.clientId), clay_sync_online: hub.agentOnline() });
     }
 
@@ -202,7 +202,7 @@ export function createApp({ hub = new StatsHub(), togari, modelKey = env.ANTHROP
       if (!q) return sseError(res, 400, "Ask a question first.");
       if (limited(session.c + session.w)) return sseError(res, 429, "That is a lot of questions at once. Give it a minute.");
       const client = await liveClient(session.c);
-      if (!client) return sseError(res, 503, "Togari is not answering right now. Try again in a minute.");
+      if (!client) return sseError(res, 503, "Your numbers are not loading right now. Try again in a minute.");
       res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache, no-transform", Connection: "keep-alive", "X-Accel-Buffering": "no" });
       let open = true;
       // The browser leaving ends the work too: no more model rounds billed for

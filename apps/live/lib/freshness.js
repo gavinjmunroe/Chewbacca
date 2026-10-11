@@ -157,9 +157,9 @@ export function staleNote(result) {
   if (!result || result.fresh) return null;
   const age = result.age_ms == null ? null : ageWords(result.age_ms);
   const why = {
-    offline: "The Clay connection is offline right now",
-    timeout: "Clay did not answer in time",
-    failed: "Clay refused the refresh",
+    offline: "The campaign numbers are offline right now",
+    timeout: "The campaign numbers did not load in time",
+    failed: "The campaign numbers could not refresh",
   }[result.reason] || "These could not be refreshed";
   return age ? `${why}, so these numbers are from ${age} ago.` : `${why}, and no earlier numbers are on file yet.`;
 }

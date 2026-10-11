@@ -41,3 +41,20 @@ deleted the whole "Private context and second brain" section, which carries
 exports**, and Chewbacca is a public repo.
 
 See a private note and a private note.
+
+## 2026-10-11: what the listing really costs, and the two new mechanisms
+
+`bin/context-budget` reads what a session was actually sent, which beats
+`tools/context_cost.py`'s file estimate. On 10/11 the first turn was 121,260
+tokens; the full team MEMORY.md import was 11,636 of it, the largest single
+file, and the skill listing 9,270. The listing held 392 entries but only 56
+with a description: past its own cap Claude Code keeps the name and drops the
+description, so a long description crowds other skills down to a bare name.
+
+- Teammates import `~/.chewbacca/team-memory-index.md` (tools/team_index.py):
+  every slug, every lesson line whole, project and reference lines by slug.
+  kit-autopull rebuilds it each session. Add lines to the full index only.
+- Kit skill descriptions stay at 220 chars or less (tools/frontmatter.py fails
+  past it). The full routing text goes in a `triggers: >-` block, which
+  skill_match and skill-route read instead, and Claude Code never loads.
+- context_cost now counts enabled plugin skills and commands too.

@@ -94,6 +94,21 @@ ACTIVITY_KEEP = 2000
 # Seconds between ingests. A full 7-day ingest took 4.2 to 5.3 s on
 # 2026-10-04 (imessage dominates), so once a minute costs under a tenth of one core.
 INGEST_EVERY_S = 60.0
+# With nothing on the glass only the badge needs the graph. On 2026-10-10 the
+# daemon sat at 25% of a core for 90 minutes with no panel open, at load 71 and
+# 27.6 of 28.7 GB swap, because a full ingest no longer took 5 s. Idle, it
+# ingests every five minutes. Guessed, never measured.
+INGEST_IDLE_S = 300.0
+# An ingest may take at most this share of the time between ingests, so a slow
+# Mac stretches the wait instead of the daemon eating a core. Guessed.
+INGEST_MAX_SHARE = 0.1
+
+
+def next_ingest_in(took_s: float, panels_open: bool) -> float:
+    """Seconds until the next ingest: the base cadence for the glass's state,
+    stretched so one ingest is at most INGEST_MAX_SHARE of the cycle."""
+    base = INGEST_EVERY_S if panels_open else INGEST_IDLE_S
+    return max(base, took_s / INGEST_MAX_SHARE)
 # The pilot window (brief, 2026-10-04: "ingest only the last 7 days ... then
 # widen"). KYBER_SURFACES_DAYS widens it.
 INGEST_DAYS = int(os.environ.get("KYBER_SURFACES_DAYS") or 7)
@@ -188,6 +203,7 @@ class Daemon:
             if self.ingesting:
                 return {}
             self.ingesting = True
+        started = time.monotonic()
         try:
             if self.ingester is not None:
                 report = self.ingester(self.ctx)
@@ -204,7 +220,7 @@ class Daemon:
         finally:
             with self.lock:
                 self.ingesting = False
-                self.next_ingest = self.clock() + INGEST_EVERY_S
+                self.next_ingest = self.clock() + next_ingest_in(time.monotonic() - started, bool(self.open))
                 for live in self.open.values():
                     live.due = 0.0
         self.write_badges()
@@ -421,7 +437,8 @@ class Daemon:
     def tick(self) -> None:
         now = self.clock()
         if now >= self.next_ingest and not self.ingesting:
-            self.next_ingest = now + INGEST_EVERY_S
+            # Held off while it runs; ingest() sets the real next time when done.
+            self.next_ingest = now + INGEST_IDLE_S
             self.spawn(self.ingest)
         with self.lock:
             due = [n for n, s in self.open.items() if not s.busy and s.due <= now]

@@ -644,6 +644,10 @@ def payload_parse() -> None:
 def main() -> int:
     payload_parse()
     listener_ignores_surface_actions()
+    check("idle glass ingests every five minutes, open glass every minute",
+          ks.next_ingest_in(4.0, False) == ks.INGEST_IDLE_S and ks.next_ingest_in(4.0, True) == ks.INGEST_EVERY_S)
+    check("a slow ingest stretches the wait so it stays a tenth of a core",
+          ks.next_ingest_in(30.0, True) == 300.0, ks.next_ingest_in(30.0, True))
     for fn in (drawing, safety, security, one_person_every_network, genui_wiring, files_and_music,
                spaces_and_state,
                socket_protocol):

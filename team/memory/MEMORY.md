@@ -247,6 +247,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - project_chewbacca_live_genui_service: Chewbacca Live (apps/live) is ours, hosted genui for clients; BMA/Amber is a customer, Togari only a data source (10/10)
 - feedback_hud_lag_is_the_mac: "HUD laggy" 10/10 was load 95 from 14 tabs + builds + Xprotect, Kyber at 1.4%; measure uptime and Kyber CPU before touching HUD code
 - project_mog_plan: The 6-step plan to prove Chewbacca learns (ledger cc438a52) + 10/10 baseline: r@5 ~55%, 49/190 enforced, 0 kept self-fixes
+- feedback_vendor_names_need_a_source: Vendor or tool names on a client site need a usage source; "X or Y or whatever" on a call is a research task (FF site, 10/10)
 - feedback_signed_in_but_403_is_chrome: 403 while he has signed-in tabs = Chrome stopped saving cookies (19h on 10/10); Cmd+Q and reopen, never "sign in"
 - reference_chewbacca_launch: `chewbacca launch` opens a named, briefed desktop tab (seed via -p --session-id, --desktop --resume under script); kickoff via send_message; LAUNCHED_BY marker
 - feedback_we_good_means_closeout_first: "we good?" = run closeout, answer once with what landed + whose files fail; a yes then no drew "Wtfffff" (10/10)

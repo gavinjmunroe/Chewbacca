@@ -126,6 +126,11 @@ EXTRA = [
         r"|what came out of (?:my|the|that) (?:last )?(?:call|meeting)"
         r"|what (?:was|got) decided(?: (?:on|in) (?:the|my|that) (?:call|meeting))?)(?: today)?$")),
     ("apps", re.compile(r"^(?:what (?:apps|surfaces) (?:are there|do (?:i|you) have)|what can (?:kyber|the hud) do)(?: now)?$")),
+    # The rest of the install, one press each (bin/lib/surfaces/setup.py).
+    # "Set up my permissions" is PERMISSIONS above, matched first.
+    ("setup", re.compile(
+        r"^(?:(?:finish|continue|keep) )?(?:set ?up|setting up) (?:chewbacca|kyber|everything|the rest|my mac)"
+        r"|what(?:'s|s| is) left to set up|(?:show|open)(?: me)? (?:the )?set ?up(?: panel)?$")),
 ]
 SPACE = re.compile(
     r"^(?:open|switch to|go to|pull up|show|bring up|load)(?: up)? (?:my |the )?"

@@ -1695,6 +1695,8 @@ if group "hud"; then
     python3 "$ROOT/tests/test_surface_agents.py"
   check  "the launcher lists only real surfaces and the hud-apps sentence reaches it, not genui" \
     python3 "$ROOT/tests/test_surface_apps.py"
+  check  "setup lists what's left, one press each, the recording press is the only yes, a real press registers MCP" \
+    python3 "$ROOT/tests/test_surface_setup.py"
   check  "a sentence opens the right surface and a near miss goes to the model" \
     python3 "$ROOT/tests/test_surface_intent.py"
   check  "apps.json names a replacement or says not yet for every app" \

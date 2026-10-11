@@ -283,7 +283,7 @@ def note_for(data, error: str | None, empty: str, stale_at: datetime | None = No
 
 KINDS = ("needs-you", "missing", "today", "tasks", "conversations", "people", "person", "space", "music", "files",
          "oss", "engine", "code", "notes", "github", "whatsapp", "meetings", "agents", "apps", "dash-notes",
-         "doc")
+         "doc", "setup")
 # Kinds that need an argument: `person karthik`, `space school`, `engine ollama-models`.
 # `oss` is not one: it opens empty, and "what replaces Notion" seeds its query
 # with the preset {"/oss/q": "Notion"} instead.
@@ -293,7 +293,7 @@ PARAMETRIC = ("person", "space", "engine")
 def make(kind: str, arg: str = "") -> Provider:
     """A provider instance. Walk surfaces read the graph; music and files are
     thin surfaces over their own CLI and folder."""
-    from . import agents, apps, code, engine, files, github, meetings, music, notes, oss, walks, whatsapp  # noqa: PLC0415  cycle-free lazy load
+    from . import agents, apps, code, engine, files, github, meetings, music, notes, oss, setup, walks, whatsapp  # noqa: PLC0415  cycle-free lazy load
 
     if kind == "engine":
         return engine.EngineSurface(arg)
@@ -312,7 +312,7 @@ def make(kind: str, arg: str = "") -> Provider:
         "conversations": walks.Conversations, "people": walks.People,
         "music": music.Music, "files": files.Files,
         "code": code.Code, "notes": notes.Notes, "github": github.GitHub, "whatsapp": whatsapp.WhatsApp,
-        "meetings": meetings.Meetings, "agents": agents.Agents, "apps": apps.Apps,
+        "meetings": meetings.Meetings, "agents": agents.Agents, "apps": apps.Apps, "setup": setup.Setup,
     }
     if kind == "person":
         return walks.Person(arg)
@@ -347,6 +347,7 @@ ALIASES = {
     # VS Code was opened to talk to Claude; the code panel only reads diffs.
     "vscode": "agents", "vs-code": "agents", "claude": "agents", "sessions": "agents", "agent": "agents",
     "agent-sessions": "agents", "realm": "agents",
+    "set-up": "setup", "onboarding": "setup", "onboard": "setup", "welcome": "setup",
 }
 
 

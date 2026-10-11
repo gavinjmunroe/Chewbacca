@@ -23,8 +23,13 @@ kyber-surfaces close all
 ```
 
 Kinds: `needs-you`, `missing`, `today`, `tasks`, `conversations`, `people`,
-`person <name>`, `space <name>`, `music`, `files`, `meetings`, `doc`. `kyber-surfaces list` shows
+`person <name>`, `space <name>`, `music`, `files`, `meetings`, `doc`, `setup`. `kyber-surfaces list` shows
 what is open and where; `activity` shows what the panels did.
+
+`setup` answers "set up chewbacca" and "what's left to set up": the steps
+`chewbacca welcome stack` lists, each with one Set up press that runs
+`chewbacca welcome connect` and opens the browser page or Settings pane itself.
+Recording's press is the person's yes; nothing else passes it.
 
 `missing` answers "what am I missing" and "what's about to bite me": each
 commitment joined to what it needs (a meeting whose person is waiting on your

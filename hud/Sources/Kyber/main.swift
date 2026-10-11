@@ -535,6 +535,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onDismiss: { [weak self] in
                 Task { @MainActor in self?.model.closeChat() }
             })
+        // Marks follow the element under them (bd_2026-Code-j3m).
+        model.resolveAnchor = { AXMarkAnchor.resolve($0) }
         model.onChatOpen = { [weak self] in
             guard let self else { return }
             self.previousApp = NSWorkspace.shared.frontmostApplication

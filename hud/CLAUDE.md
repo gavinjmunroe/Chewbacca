@@ -681,6 +681,14 @@ m bug 420 260 380 90 label="This is the one failing" tone=bad
 EOF
 ```
 
+A mark drawn over an accessibility element of about its size (a button, a
+row, a field: half or more of the two rectangles shared) is tied to that
+element. Four times a second the element is read again: a scroll or a window
+drag moves the mark with it, keeping its margins, and an element that is gone,
+or scrolled out of its scroll area or window, takes the mark down and sends
+`e mark.gone <id>`. A mark over nothing its size, a stretch of a picture or a
+word inside a paragraph, stays where it was drawn. Source: `MarkAnchor.swift`.
+
 Marks decay. The default life is twelve seconds, `life=0` pins one, and re-sending
 the same id with a new rectangle moves it rather than leaving a trail. That is
 deliberate and it is the rule that makes the layer trustworthy: a mark that

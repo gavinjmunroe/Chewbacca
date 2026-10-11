@@ -259,8 +259,10 @@ public final class OverlayModel {
         case .unmark(let id):
             if id.isEmpty {
                 markers = []
+                anchors = [:]
             } else {
                 markers.removeAll { $0.id == id }
+                anchors[id] = nil
             }
             // The sweep is deliberately *not* cancelled here.
             //
@@ -496,6 +498,14 @@ public final class OverlayModel {
             ? nil
             : Date().addingTimeInterval(life ?? Marker.defaultLife)
         let marker = Marker(id: id, rect: rect, label: label, tone: tone, expires: expires)
+        // Tied to the element under it when there is one its size, so it
+        // follows a scroll and goes when the element does (bd_2026-Code-j3m).
+        if let handle = resolveAnchor?(rect) {
+            anchors[id] = (handle, rect)
+            startAnchorTracking()
+        } else {
+            anchors[id] = nil
+        }
 
         if let index = markers.firstIndex(where: { $0.id == id }) {
             markers[index] = marker
@@ -505,6 +515,63 @@ public final class OverlayModel {
         }
         revision += 1
         startSweep()
+    }
+
+    /// Finds what a new mark is about. Set by the app to
+    /// `AXMarkAnchor.resolve`; nil leaves every mark an absolute rectangle.
+    @ObservationIgnored public var resolveAnchor: ((CGRect) -> (any MarkAnchorHandle)?)?
+    /// Each anchored mark's element and the rectangle it was drawn at.
+    @ObservationIgnored private var anchors: [String: (handle: any MarkAnchorHandle, drawn: CGRect)] = [:]
+    @ObservationIgnored private var anchorTask: Task<Void, Never>?
+
+    /// Whether a mark is tied to an element.
+    public func isAnchored(_ id: String) -> Bool { anchors[id] != nil }
+
+    /// Read every anchored mark's element once: follow it, or take the mark
+    /// down and say so with `e mark.gone <id>`.
+    public func trackAnchors() {
+        var changed = false
+        for (id, anchor) in anchors {
+            guard let index = markers.firstIndex(where: { $0.id == id }) else {
+                anchors[id] = nil
+                continue
+            }
+            let now = anchor.handle.read()
+            switch MarkAnchoring.verdict(
+                mark: anchor.drawn, anchoredAt: anchor.handle.anchoredAt, now: now.frame, clip: now.clip) {
+            case .stay:
+                if markers[index].rect != anchor.drawn {
+                    markers[index].rect = anchor.drawn
+                    changed = true
+                }
+            case .move(let rect):
+                if markers[index].rect != rect {
+                    markers[index].rect = rect
+                    changed = true
+                }
+            case .remove:
+                markers.remove(at: index)
+                anchors[id] = nil
+                changed = true
+                onEvent?(.action(name: "mark.gone", component: id, payload: [:]))
+            }
+        }
+        if changed { revision += 1 }
+    }
+
+    private func startAnchorTracking() {
+        guard anchorTask == nil else { return }
+        anchorTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(MarkAnchoring.interval))
+                guard let self else { return }
+                self.trackAnchors()
+                if self.anchors.isEmpty {
+                    self.anchorTask = nil
+                    return
+                }
+            }
+        }
     }
 
     /// A click on the screen, in points with a top-left origin.
@@ -567,6 +634,7 @@ public final class OverlayModel {
 
     public func reset(keepChat: Bool = false) {
         markers = []
+        anchors = [:]
         glances = []
         agentCursorTask?.cancel()
         agentCursor = nil

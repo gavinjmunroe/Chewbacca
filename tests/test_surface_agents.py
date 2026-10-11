@@ -40,6 +40,7 @@ import test_kyber_surfaces as tks  # noqa: E402  validate(), FakeHud and the dae
 
 import realm_client as rc  # noqa: E402
 import surfaces  # noqa: E402
+import surfaces.agent_ide  # noqa: E402,F401  MAX_TABS
 from surfaces import Context  # noqa: E402
 from surfaces import agents as SA  # noqa: E402
 from surfaces.agents import Agents  # noqa: E402
@@ -1290,6 +1291,76 @@ def finder(tmp: Path) -> None:
     check("searching wrote nothing", e.writes == [], e.writes)
 
 
+def file_tabs(tmp: Path) -> None:
+    """Several files open on the card's editor as tabs: a second open adds a
+    tab and shows it, opening one already open switches to it, a press names
+    only a tab that's open on the pinned card, Close shows the tab before it,
+    and past MAX_TABS the oldest tab not shown goes."""
+    e = FakeEngine()
+    repo = tmp / "tabs" / "repo"
+    (repo / ".git").mkdir(parents=True)
+    names = [f"f{i}.py" for i in range(surfaces.agent_ide.MAX_TABS + 2)]
+    for n in names:
+        (repo / n).write_text(f"# {n}\n")
+    e.files = names
+    e.add_session("s1", "idle", cwd=str(repo))
+    e.add_session("s2", "idle", cwd=str(repo))
+    a, ctx = world(tmp / "tabs", e)
+    data, model = view(a, ctx, open="s1")
+
+    def open_name(name):
+        values = {"/agents/find": name.removesuffix(".py")}
+        a.model(data, None, values, ctx)
+        m = a.model(data, None, values, ctx)
+        row = next(r for r in m["/agents/findFiles"] if "".join(x["text"] for x in r["segments"]) == name)
+        return a.open_hit(ctx, data, {"row": row["id"]})
+
+    open_name("f0.py")
+    model = a.model(data, None, {}, ctx)
+    check("one open file draws no tab strip", model["/agents/fileTabs"] == [] and
+          model["/agents/filePath"].endswith("f0.py"), model["/agents/fileTabs"])
+    open_name("f1.py")
+    model = a.model(data, None, {}, ctx)
+    tabs = model["/agents/fileTabs"]
+    check("a second file opens as a second tab and is the one shown",
+          [t["name"] for t in tabs] == ["f0.py", "f1.py"] and model["/agents/filePath"].endswith("f1.py"), tabs)
+    check("the File component carries the tabs and their press",
+          "tabs=@/agents/fileTabs" in " ".join(a.layout()) and 'tabAction="ks-filetab"' in " ".join(a.layout()))
+    r = a.pick_tab(ctx, data, {"row": tabs[0]["id"]})
+    model = a.model(data, None, {}, ctx)
+    check("a tab press shows that file and keeps both tabs", r.ok and model["/agents/filePath"].endswith("f0.py")
+          and len(model["/agents/fileTabs"]) == 2, r)
+    open_name("f1.py")
+    model = a.model(data, None, {}, ctx)
+    check("opening a file already open switches to its tab, no second copy",
+          len(model["/agents/fileTabs"]) == 2 and model["/agents/filePath"].endswith("f1.py"))
+    for bad in ("", "tab:/etc/passwd", f"tab:{repo}/f5.py", "f0.py"):
+        check(f"a tab press {bad!r} names nothing open, so nothing is shown",
+              not a.pick_tab(ctx, data, {"row": bad}).ok and a.model(data, None, {}, ctx)["/agents/filePath"]
+              .endswith("f1.py"))
+    for n in names[2:]:
+        open_name(n)
+    model = a.model(data, None, {}, ctx)
+    shown = [t["name"] for t in model["/agents/fileTabs"]]
+    check("past MAX_TABS the oldest tab goes and the newest is shown",
+          len(shown) == surfaces.agent_ide.MAX_TABS and shown[-1] == names[-1] and "f0.py" not in shown
+          and model["/agents/filePath"].endswith(names[-1]), shown)
+    close = model["/agents/fileClose"][0]["id"]
+    r = a.close_file(ctx, data, {"row": close})
+    model = a.model(data, None, {}, ctx)
+    check("Close takes the shown tab off and shows the one before it",
+          r.ok and model["/agents/filePath"].endswith(names[-2]) and names[-1] not in
+          [t["name"] for t in model["/agents/fileTabs"]], (r, model["/agents/filePath"]))
+    a.pick(ctx, data, {"row": "s2"})
+    data = a.fetch(ctx)
+    model = a.model(data, None, {}, ctx)
+    check("another session's card has none of these tabs", model["/agents/fileTabs"] == []
+          and model["/agents/filePath"] == "", model["/agents/fileTabs"])
+    r = a.pick_tab(ctx, data, {"row": f"tab:{(repo / names[2]).resolve()}"})
+    check("a tab of another card can't be pressed from this one", not r.ok, r)
+    check("tabs wrote nothing", e.writes == [], e.writes)
+
+
 def mention_picker(tmp: Path) -> None:
     """The @ list under the reply: realm's own list for the session's files,
     a pick puts @[name] in the text, and Send carries only the files whose
@@ -2090,6 +2161,7 @@ def main() -> int:
         agent_card(tmp)
         hunk_loop(tmp)
         finder(tmp)
+        file_tabs(tmp)
         mention_picker(tmp)
         real_repo(tmp)
         history(tmp)

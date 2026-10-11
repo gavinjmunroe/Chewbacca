@@ -1,9 +1,11 @@
+import Foundation
 import Testing
 
 @testable import KyberKit
 
 /// The agent card's IDE pieces that live in Swift: Keep and Reject on each
-/// hunk of a Diff (bin/lib/surfaces/agent_hunks.py).
+/// hunk of a Diff (bin/lib/surfaces/agent_hunks.py), and the File editor's
+/// tabs keeping each file's draft and version check (agent_ide.py).
 @Suite("Agent card IDE")
 @MainActor
 struct IdeTests {
@@ -30,5 +32,31 @@ struct IdeTests {
     @Test("a plain diff (terminal output) numbers no hunks")
     func plainHasNoHunks() {
         #expect(DiffView.lines("@@ not a hunk\n+x", path: "", plain: true).allSatisfy { $0.hunk == nil })
+    }
+
+    @Test("file tabs parse, and a tab with no path is dropped")
+    func fileTabsParse() throws {
+        let items = try #require(JSONDecoding.parse(#"[{"id":"tab:/r/a.py","path":"/r/a.py","name":"a.py"},{"id":"tab:x"}]"#)?.arrayValue)
+        #expect(FileView.FileTab.parse(items) == [FileView.FileTab(id: "tab:/r/a.py", path: "/r/a.py", name: "a.py")])
+    }
+
+    @Test("a switched-away editor is kept with its version, and unsaved marks flip per path")
+    func keptEditors() {
+        let store = SurfaceStore()
+        let stamp = FileSafety.Stamp(data: Data("on disk".utf8))
+        store.markUnsaved(path: "/r/a.py", draft: "half")
+        store.keepEditor(path: "/r/a.py", FileSafety.Kept(draft: "half", baseline: "on disk", stamp: stamp))
+        store.markUnsaved(path: "/r/b.py", draft: "other")
+        #expect(store.unsavedPaths == ["/r/a.py", "/r/b.py"])
+        #expect(store.keptEditors["/r/a.py"]?.stamp == stamp)
+        #expect(store.keptEditors["/r/a.py"]?.draft == "half")
+        store.markUnsaved(path: "/r/b.py", draft: nil)
+        #expect(store.unsavedPaths == ["/r/a.py"])
+        // Closing the surface rescues the drafts to disk and forgets the
+        // kept editors, so a reopened surface starts from the files.
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("kept-\(UUID().uuidString)")
+        store.rescueUnsaved(in: folder)
+        #expect(store.unsavedPaths.isEmpty && store.keptEditors.isEmpty)
+        try? FileManager.default.removeItem(at: folder)
     }
 }

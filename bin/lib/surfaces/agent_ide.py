@@ -77,6 +77,14 @@ WHERE_CHARS = 90
 # files has stopped pointing").
 MENTION_FILES = 8
 MAX_REFS = 12
+# Files open as tabs on one card's editor. VS Code keeps any number; a
+# card on the glass is about 420 points wide and a name is read, not
+# scrolled to, so the strip holds what fits on one line at caption size.
+# Guessed, never measured on the glass. Past it, the oldest tab that isn't
+# shown is closed; Kyber keeps its draft (SurfaceStore.keptEditors).
+MAX_TABS = 5
+# A tab's name, clipped in the middle by Kyber past this.
+TAB_CHARS = 28
 # realm's CHIP_LABEL_MAX: a chip's name, clipped.
 LABEL_CHARS = 56
 # The word being typed after an `@` at the end of the reply: no space,
@@ -172,8 +180,10 @@ class Ide:
         self._found: dict | None = None
         self._searching = False
         self._find_gen = 0
-        # The open file: (sid, absolute path, line, root).
+        # The open file: (sid, absolute path, line, root), and every file
+        # open as a tab on a session's card, oldest first, the same tuples.
         self._file: tuple | None = None
+        self._tabs: dict[str, list[tuple]] = {}
         # The `@` list's last answer: {sid, root, query, gen, hits}.
         self._mention_found: dict | None = None
         self._mentioning = False
@@ -181,7 +191,7 @@ class Ide:
         self._refs: dict = {}
         p = ACTION_PREFIX
         self.actions.update({f"{p}open": self.open_hit, f"{p}fileclose": self.close_file,
-                             f"{p}mention": self.pick_mention})
+                             f"{p}mention": self.pick_mention, f"{p}filetab": self.pick_tab})
 
     # ── where a session's code is ────────────────────────────────────────
 
@@ -283,6 +293,11 @@ class Ide:
             out[p("fileEdit")] = session_tree.editable(opened[1], opened[3])
             out[p("fileClose")] = [{"id": f"close:{opened[1]}", "text": _clean(
                 f"{Path(opened[1]).name} · an unsaved edit is kept as a draft", 90)}]
+            with self._lock:
+                tabs = list(self._tabs.get(shown["id"]) or [])
+            if len(tabs) > 1:
+                out[p("fileTabs")] = [{"id": f"tab:{t[1]}", "path": t[1],
+                                       "name": _clean(Path(t[1]).name, TAB_CHARS)} for t in tabs]
 
     # ── the @ picker ─────────────────────────────────────────────────────
 
@@ -432,7 +447,8 @@ class Ide:
             # The editable flag is fixed per draw: a File reads `editable`
             # once, so the plan carries it and a change redraws the card.
             parts += [comp(c("file"), "File", path=Bind(p("filePath")), line=Bind(p("fileLine")),
-                           editable=bool(plan.get("fileEdit"))),
+                           editable=bool(plan.get("fileEdit")), tabs=Bind(p("fileTabs")),
+                           tabAction=f"{ACTION_PREFIX}filetab"),
                       comp(c("fileclose"), "Events", caption="", items=Bind(p("fileClose")),
                            action=f"{ACTION_PREFIX}fileclose", actionLabel="Close")]
             order += ["file", "fileclose"]
@@ -449,7 +465,7 @@ class Ide:
         p = self.p
         return {p("findOn"): False, p("findNote"): "", p("findFiles"): [], p("findLines"): [],
                 p("findFilesCap"): "", p("findLinesCap"): "", p("filePath"): "", p("fileLine"): 0,
-                p("fileEdit"): False, p("fileClose"): [], p("mentions"): [], p("mentionsCap"): ""}
+                p("fileEdit"): False, p("fileClose"): [], p("fileTabs"): [], p("mentions"): [], p("mentionsCap"): ""}
 
     # ── presses ──────────────────────────────────────────────────────────
 
@@ -476,18 +492,52 @@ class Ide:
         if not Path(path).is_file():
             return Result(False, f"{PurePosixPath(rel).name} isn't on disk any more.", updates=bad)
         line = hit.get("line") if head[0] == "g" and isinstance(hit.get("line"), int) else 0
-        with self._lock:
-            self._file = (sid, path, line, str(root.resolve()))
+        self._show_tab((sid, path, line, str(root.resolve())))
         name = PurePosixPath(rel).name
         return Result(True, f"{name}, line {line}." if line else f"{name}.", updates={self.p("level"): "info"})
 
+    def _show_tab(self, opened: tuple) -> None:
+        """Show `opened` on its session's card: its own tab when it's
+        already open (at the new line), else a new tab at the end, closing
+        the oldest one not shown past MAX_TABS."""
+        with self._lock:
+            tabs = self._tabs.setdefault(opened[0], [])
+            at = next((i for i, t in enumerate(tabs) if t[1] == opened[1]), None)
+            if at is None:
+                tabs.append(opened)
+                while len(tabs) > MAX_TABS:
+                    tabs.pop(0)
+            else:
+                tabs[at] = opened
+            self._file = opened
+
+    def pick_tab(self, ctx: Context, data, values: dict) -> Result:
+        """Show another open file. Only a file already open as a tab on the
+        pinned card can be named; Kyber keeps the one switched away from,
+        its draft and the version it was edited from."""
+        key = str(values.get("row") or "")
+        with self._lock:
+            sid = self.pinned
+            tab = next((t for t in self._tabs.get(sid) or [] if f"tab:{t[1]}" == key), None)
+            if tab is None:
+                return Result(False, "That file isn't open on this card.", updates={self.p("level"): "error"})
+            self._file = (tab[0], tab[1], 0, tab[3])
+        return Result(True, f"{Path(tab[1]).name}.")
+
     def close_file(self, ctx: Context, data, values: dict) -> Result:
-        """Take the open file off the card. Kyber keeps an unsaved draft
-        (FileSafety.rescue) and offers it the next time that file opens."""
+        """Take the shown file off the card; the tab before it is shown, if
+        any. Kyber keeps an unsaved draft (FileSafety.rescue) and offers it
+        the next time that file opens."""
         key = str(values.get("row") or "")
         with self._lock:
             if not self._file or key != f"close:{self._file[1]}":
                 return Result(False, "That file isn't the open one.")
-            name = Path(self._file[1]).name
-            self._file = None
-        return Result(True, f"Closed {name}.")
+            sid, path = self._file[0], self._file[1]
+            name = Path(path).name
+            tabs = self._tabs.get(sid) or []
+            at = next((i for i, t in enumerate(tabs) if t[1] == path), None)
+            if at is not None:
+                tabs.pop(at)
+            nxt = tabs[min(at or 0, len(tabs) - 1)] if tabs else None
+            self._file = (nxt[0], nxt[1], 0, nxt[3]) if nxt else None
+        return Result(True, f"Closed {name}." + (f" Showing {Path(nxt[1]).name}." if nxt else ""))

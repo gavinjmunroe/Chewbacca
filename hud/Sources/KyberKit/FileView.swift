@@ -28,6 +28,33 @@ struct FileView: View {
     let onSave: (String, FileSafety.Stamp?, Bool) -> FileSafety.Outcome
     /// Called with the unsaved draft as the person types, nil once saved.
     var onDirty: (String?) -> Void = { _ in }
+    /// Other files open in this same editor, drawn as a strip of names over
+    /// it; the one whose path is `path` is the one shown. A press on another
+    /// sends its id (`onTab`). Empty, the header is the file's name alone.
+    var tabs: [FileTab] = []
+    var onTab: ((String) -> Void)?
+    /// Paths with an unsaved draft, marked on their tab.
+    var unsavedPaths: Set<String> = []
+    /// An editor kept from the last time this path was shown, and where to
+    /// keep this one as it is typed in (SurfaceStore.keepEditor).
+    var kept: (String) -> FileSafety.Kept? = { _ in nil }
+    var onKeep: (FileSafety.Kept?) -> Void = { _ in }
+
+    /// One open file: `{"id","path","name"}`.
+    struct FileTab: Equatable {
+        let id: String
+        let path: String
+        let name: String
+
+        static func parse(_ items: [JSON]) -> [FileTab] {
+            items.compactMap { item in
+                guard let o = item.objectValue, let id = o["id"]?.stringValue, let path = o["path"]?.stringValue,
+                      !id.isEmpty, !path.isEmpty else { return nil }
+                return FileTab(id: id, path: path,
+                               name: o["name"]?.display ?? URL(fileURLWithPath: path).lastPathComponent)
+            }
+        }
+    }
 
     /// A ceiling on what will be read into memory.
     ///
@@ -67,7 +94,16 @@ struct FileView: View {
         }
     }
 
+    @ViewBuilder
     private var header: some View {
+        if tabs.count > 1, let onTab {
+            TabStrip(tabs: tabs, shown: path, unsaved: unsavedPaths, onTab: onTab)
+        } else {
+            name
+        }
+    }
+
+    private var name: some View {
         HStack(spacing: 6) {
             Image(systemName: icon)
                 .font(.system(size: 9))
@@ -118,7 +154,7 @@ struct FileView: View {
                 text: body, stamp: stamp, path: url.path, editable: editable, line: line,
                 language: Syntax.language(forPath: url.path)
                     ?? Syntax.language(forShebang: String(body.prefix(200).split(separator: "\n").first ?? "")),
-                onSave: onSave, onDirty: onDirty)
+                onSave: onSave, onDirty: onDirty, kept: kept(path), onKeep: onKeep)
             // One editor per file: its draft, baseline and stamp are that
             // file's and nobody else's.
             .id(loadedFrom)
@@ -194,6 +230,10 @@ private struct TextPane: View {
     let language: Syntax.Language?
     let onSave: (String, FileSafety.Stamp?, Bool) -> FileSafety.Outcome
     let onDirty: (String?) -> Void
+    /// The draft, baseline and stamp this file had when it was last
+    /// switched away from, taken over instead of the disk's text.
+    var kept: FileSafety.Kept? = nil
+    var onKeep: (FileSafety.Kept?) -> Void = { _ in }
 
     /// Past this many UTF-16 units the read-only view is drawn plain:
     /// coloring a whole generated file to show its first screen stalls the
@@ -276,16 +316,29 @@ private struct TextPane: View {
         }
         .onAppear {
             guard !loaded else { return }
-            draft = text
-            baseline = text
-            onDisk = stamp
+            if editable, let kept, kept.draft != kept.baseline {
+                // Back to a tab with a draft: the draft, and the version it
+                // was edited from, so a save still refuses over a change on
+                // disk made while another tab was shown.
+                draft = kept.draft
+                baseline = kept.baseline
+                onDisk = kept.stamp
+                if kept.stamp != stamp { conflict = true }
+            } else {
+                draft = text
+                baseline = text
+                onDisk = stamp
+            }
             loaded = true
-            if editable, let kept = FileSafety.rescued(path), kept != text { rescued = kept }
+            if editable, kept == nil, let rescued = FileSafety.rescued(path), rescued != text {
+                self.rescued = rescued
+            }
         }
         .onChange(of: draft) { _, next in
             saved = false
             failure = nil
             onDirty(next == baseline ? nil : next)
+            onKeep(next == baseline ? nil : FileSafety.Kept(draft: next, baseline: baseline, stamp: onDisk))
         }
     }
 
@@ -299,6 +352,7 @@ private struct TextPane: View {
             failure = nil
             FileSafety.forget(path)
             onDirty(nil)
+            onKeep(nil)
         case .conflict:
             conflict = true
         case .failed(let message):
@@ -437,6 +491,51 @@ struct CodeEditor: NSViewRepresentable {
                 Syntax.paint(storage, parent.language, font: CodeEditor.font)
                 view.selectedRanges = selected
             }
+        }
+    }
+}
+
+/// The open files over the card's editor, Realm's editor tabs re-drawn for
+/// the glass: names only, the shown one in full ink with one lit line under
+/// it, the rest in the quiet ink, a dot on one with an unsaved draft. The
+/// name is the press (hud/CLAUDE.md, Past the window 2).
+private struct TabStrip: View {
+    let tabs: [FileView.FileTab]
+    let shown: String
+    let unsaved: Set<String>
+    let onTab: (String) -> Void
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(tabs, id: \.id) { tab in
+                let on = tab.path == shown
+                Button { if !on { onTab(tab.id) } } label: {
+                    HStack(spacing: 4) {
+                        Text(tab.name)
+                            .font(Realm.font(Realm.Size.caption, on ? Realm.Weight.medium : Realm.Weight.label))
+                            .tracking(Realm.tracking(Realm.Size.caption))
+                            .foregroundStyle(on ? Realm.ink : Realm.ink3)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        if unsaved.contains(tab.path) {
+                            Circle().fill(HUD.warn).frame(width: 5, height: 5)
+                                .accessibilityLabel("unsaved")
+                        }
+                    }
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .overlay(alignment: .bottom) {
+                        if on {
+                            Rectangle().fill(Realm.accent).frame(height: 1.5)
+                                .padding(.horizontal, 5)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(tab.name)\(on ? ", shown" : "")")
+            }
+            Spacer(minLength: 0)
         }
     }
 }

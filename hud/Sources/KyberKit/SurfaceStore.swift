@@ -135,13 +135,31 @@ public final class SurfaceStore {
     /// goes through. Cleared when the edits are saved.
     public var closeWarned = false
 
+    /// The paths with an unsaved draft, changed only when a path flips,
+    /// so a tab strip can mark them without redrawing per keystroke.
+    public private(set) var unsavedPaths: Set<String> = []
+
+    /// Editors whose file was switched away from, by path: read once when
+    /// that file is shown again, so never observed.
+    @ObservationIgnored public private(set) var keptEditors: [String: FileSafety.Kept] = [:]
+
     public func markUnsaved(path: String, draft: String?) {
         let was = unsaved.isEmpty
         if let draft { unsaved[path] = draft } else { unsaved.removeValue(forKey: path) }
         if unsaved.isEmpty { closeWarned = false }
+        let marked = draft != nil
+        if marked != unsavedPaths.contains(path) {
+            if marked { unsavedPaths.insert(path) } else { unsavedPaths.remove(path) }
+        }
         // Only when it flips: a redraw per keystroke would repaint the
         // whole surface while the person types.
         if was != unsaved.isEmpty { revision += 1 }
+    }
+
+    /// Keep or forget an editor's state for a path (nil once it's saved or
+    /// matches the disk again).
+    public func keepEditor(path: String, _ kept: FileSafety.Kept?) {
+        keptEditors[path] = kept
     }
 
     /// Keep every unsaved draft on disk, because the surface is going away.
@@ -150,6 +168,8 @@ public final class SurfaceStore {
     public func rescueUnsaved(in folder: URL = FileSafety.drafts) -> [URL] {
         let kept = unsaved.compactMap { FileSafety.rescue(draft: $0.value, of: $0.key, in: folder) }
         unsaved = [:]
+        unsavedPaths = []
+        keptEditors = [:]
         closeWarned = false
         return kept
     }

@@ -171,7 +171,12 @@ public struct SurfaceView: View {
                     onSave: { [store] body, expecting, force in
                         store.saveFile(path: path, contents: body, expecting: expecting, force: force)
                     },
-                    onDirty: { [store] draft in store.markUnsaved(path: path, draft: draft) }))
+                    onDirty: { [store] draft in store.markUnsaved(path: path, draft: draft) },
+                    tabs: FileView.FileTab.parse(p["tabs"]?.arrayValue ?? []),
+                    onTab: p["tabAction"]?.stringValue.map { name in { [store] id in store.fireRow(name, row: id) } },
+                    unsavedPaths: store.unsavedPaths,
+                    kept: { [store] path in store.keptEditors[path] },
+                    onKeep: { [store] kept in store.keepEditor(path: path, kept) }))
 
         case "Diagram":
             let parts = p["parts"]?.arrayValue ?? []

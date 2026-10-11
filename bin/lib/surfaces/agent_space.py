@@ -201,8 +201,7 @@ class Space:
         if key == "memory":
             if not got["memory"]:
                 return Result(False, "This space has no memory file yet.")
-            with self._lock:
-                self._file = (sid, got["memory"], 0, str(Path(got["memory"]).parent))
+            self._show_tab((sid, got["memory"], 0, str(Path(got["memory"]).parent)))
             return Result(True, "The space's memory, in the editor.")
         known = {"review"} | {f"run:{r['id']}" for r in got["runs"]} | {f"sch:{s['id']}" for s in got["schedules"]} \
             | {f"mcp:{m['id']}" for m in got["mcp"]}

@@ -12,6 +12,24 @@ import Foundation
 /// loaded, the version it is about to replace is copied aside first, and a
 /// draft nobody saved is written somewhere before its panel goes away.
 public enum FileSafety {
+    /// An editor's state kept while its file is not the one on screen: the
+    /// draft, the text it was edited from, and the stamp of the bytes that
+    /// text came from, which the next save is still checked against. The
+    /// agent card's File tabs (bin/lib/surfaces/agent_ide.py) switch files
+    /// in one editor, and a switch must cost neither the draft nor its
+    /// version check.
+    public struct Kept: Equatable, Sendable {
+        public let draft: String
+        public let baseline: String
+        public let stamp: Stamp?
+
+        public init(draft: String, baseline: String, stamp: Stamp?) {
+            self.draft = draft
+            self.baseline = baseline
+            self.stamp = stamp
+        }
+    }
+
     /// What the editor saw on disk: a digest of the bytes, not the
     /// modification date, because a date has a one-second grain on some
     /// volumes and a save and an outside edit inside one second compare equal.

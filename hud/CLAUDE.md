@@ -483,6 +483,16 @@ agent_space.py). surface_lint counts Hits as opened-on-purpose text.
 and in view. Re-pointing a bound `path=` swaps the whole editor, so a
 draft, its baseline and its version stamp belong to one file only.
 
+`File` takes `tabs=` (`[{"id","path","name"}]`) and `tabAction=`: with two
+or more, the header is a strip of the open files' names, the shown one in
+full ink over one lit line, a dot on any with an unsaved draft, and a press
+on another sends `e action <tabAction> row=<id>`. The editor switched away
+from is kept in the store (`SurfaceStore.keptEditors`: draft, the text it was
+edited from, and that text's stamp), so coming back shows the draft and a
+save is still checked against the version it was edited from; a file that
+changed on disk meanwhile opens with the conflict notice. The agent card
+keeps up to five tabs per session (agent_ide.py MAX_TABS).
+
 ### Carlton's language on the glass
 
 Caleb, 2026-10-11: "Not just functionality of carlton's thing, but his UIUX

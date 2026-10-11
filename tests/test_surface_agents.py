@@ -1533,6 +1533,85 @@ def branches(tmp: Path) -> None:
     check("branches made no engine write", e.writes == [], e.writes)
 
 
+def problems(tmp: Path) -> None:
+    """Inline diagnostics: a changed Python file is compiled by itself and
+    its error lands on its row and as a line that opens there; tsc and swift
+    build run only from a Check press that names them, through the build
+    queue, and their errors are read from the job's log."""
+    root = tmp / "checks" / "repo"
+    for rel, body in (("bad.py", "def f(:\n    pass\n"), ("ok.py", "x = 1\n"), ("web/app.ts", "let x: number = 'a'\n"),
+                      ("tsconfig.json", "{}"), ("hud/Package.swift", "// swift-tools-version:5.9\n"),
+                      ("hud/Sources/K/Glass.swift", "let a = b\n")):
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text(body)
+    (root / ".git").mkdir()
+    (root / "node_modules" / ".bin").mkdir(parents=True)
+    (root / "node_modules" / ".bin" / "tsc").write_text("#!/bin/sh\n")
+    e = FakeEngine()
+    e.add_session("s1", "idle", cwd=str(root))
+    e.diff = {"root": str(root), "branch": "main", "totalFiles": 4, "truncated": False, "files": [
+        {"path": p, "oldPath": None, "status": "modified", "staged": False, "unstaged": True, "binary": False,
+         "additions": 1, "deletions": 0} for p in ("bad.py", "ok.py", "web/app.ts", "hud/Sources/K/Glass.swift")]}
+    a, ctx = world(tmp / "checks", e)
+    jobs = tmp / "checks" / "jobs"
+    a.jobs_dir = lambda: jobs
+    submitted = []
+
+    def submit(cmd):
+        jid = f"1011-1630{len(submitted):02d}-abcd"
+        submitted.append(cmd)
+        (jobs / jid).mkdir(parents=True)
+        (jobs / jid / "job.json").write_text(json.dumps({"id": jid, "status": "running"}))
+        return jid, ""
+    a.submit_job = submit
+    data, model = view(a, ctx, open="s1")
+    data, model = view(a, ctx)
+    probs = model["/agents/problems"]
+    check("a changed Python file's syntax error is found with nothing pressed, on its row and as a line",
+          len(probs) == 1 and probs[0]["where"] == "bad.py · 1" and "SyntaxError" in probs[0]["segments"][0]["text"]
+          and next(r for r in model["/agents/changed"] if r["id"] == "bad.py")["time"].endswith("· 1 error")
+          and not next(r for r in model["/agents/changed"] if r["id"] == "ok.py")["time"].endswith("error"),
+          (probs, model["/agents/changed"]))
+    check("the caption counts them and names the checker", model["/agents/problemsCap"]
+          == "Problems · 1 error in 1 file · from python", model["/agents/problemsCap"])
+    chk = model["/agents/check"]
+    check("tsc and swift build are offered on one Check row that names each and runs nothing yet",
+          chk and chk[0]["text"].startswith("Runs tsc --noEmit in repo and swift build in hud")
+          and "queued with this Mac's builds" in chk[0]["text"] and submitted == [], chk)
+    r = a.open_problem(ctx, data, {"row": probs[0]["id"]})
+    model = a.model(data, None, {}, ctx)
+    check("a problem's press opens its file at its line", r.ok and model["/agents/filePath"].endswith("bad.py")
+          and model["/agents/fileLine"] == 1, r)
+    check("a forged problem id opens nothing", not a.open_problem(ctx, data, {"row": "d99:0"}).ok)
+    r = a.run_checks(ctx, data, {"row": "check:forged"})
+    check("a Check whose commands moved runs nothing", not r.ok and submitted == [], r)
+    r = a.run_checks(ctx, data, {"row": chk[0]["id"]})
+    check("Check queues each command on the build queue, in its own folder",
+          r.ok and [c["argv"][-1] for c in submitted] == ["false", "build"]
+          and submitted[1]["cwd"] == str((root / "hud").resolve()), (r, submitted))
+    data, model = view(a, ctx)
+    check("while they run, the card says so and offers no second Check",
+          "tsc --noEmit in repo · running" in model["/agents/checkNote"] and model["/agents/check"] == [],
+          model["/agents/checkNote"])
+    for jid, log in (("1011-163000-abcd", "web/app.ts(1,5): error TS2322: Type 'string' is not assignable.\n"),
+                     ("1011-163001-abcd", f"{(root / 'hud/Sources/K/Glass.swift').resolve()}:1:9: error: cannot "
+                                          "find 'b' in scope\n/etc/x.swift:1:1: error: outside\n")):
+        (jobs / jid / "out.log").write_text(log)
+        (jobs / jid / "job.json").write_text(json.dumps({"id": jid, "status": "done", "exit": 1}))
+    data, model = view(a, ctx)
+    wheres = [x["where"] for x in model["/agents/problems"]]
+    check("finished checks' errors join the list; a path outside the repo is dropped",
+          sorted(wheres) == ["bad.py · 1", "hud/Sources/K/Glass.swift · 1", "web/app.ts · 1"]
+          and model["/agents/problemsCap"] == "Problems · 3 errors in 3 files · from python, swift, tsc", wheres)
+    stale = probs[0]["id"]
+    check("a problem row from the older list refuses", not a.open_problem(ctx, data, {"row": stale}).ok)
+    (root / "bad.py").write_text("def f():\n    pass\n")
+    data, model = view(a, ctx)
+    check("fixing the file clears its error on the next read",
+          "bad.py · 1" not in [x["where"] for x in model["/agents/problems"]], model["/agents/problems"])
+    check("checking made no engine write", e.writes == [], e.writes)
+
+
 def mention_picker(tmp: Path) -> None:
     """The @ list under the reply: realm's own list for the session's files,
     a pick puts @[name] in the text, and Send carries only the files whose
@@ -2336,6 +2415,7 @@ def main() -> int:
         file_tabs(tmp)
         replace_across(tmp)
         branches(tmp)
+        problems(tmp)
         mention_picker(tmp)
         real_repo(tmp)
         history(tmp)

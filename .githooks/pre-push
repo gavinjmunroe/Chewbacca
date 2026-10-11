@@ -80,6 +80,9 @@ touched '(\.py$|^bin/|^tools/|^mac/|^hud/scripts/)' && run "no undefined names" 
 touched '\.md$' && run "doc links resolve" python3 tools/linkcheck.py
 touched '^(setup\.sh|\.claude/hooks/)' && run "every hook is registered" bash tests/hooks_registered.sh
 touched '^(setup\.sh|\.claude/hooks/)' && run "setup hook registration" python3 tests/test_setup_hooks.py
+# Six team notes reached main with no index line on 2026-10-10 and the
+# team_memory test sat red for a day: only the full suite ran it.
+touched '^team/memory/' && run "team memory index matches its files" bash tests/team_memory.sh
 
 if [ "$fail" -ne 0 ]; then
   echo "pre-push: refused. Fix the above, or for an emergency: git push --no-verify"

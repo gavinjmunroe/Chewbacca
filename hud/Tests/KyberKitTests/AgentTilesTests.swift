@@ -41,13 +41,14 @@ struct AgentTilesTests {
 
     @Test("every state word holds 4.5:1 on a tile, needs you the loudest of them")
     func stateContrast() {
-        for state in ["needs", "failed", "running", "done"] {
+        for state in ["needs", "failed", "running", "done", "out"] {
             let (r, g, b) = rgb(AgentPalette.state(state).tone)
             let measured = ratio(AgentPalette.luminance(r, g, b), tileGround)
             #expect(measured >= 4.5, "\(state) is \(measured):1")
         }
         #expect(AgentPalette.state("needs").tone == HUD.warn)
         #expect(AgentPalette.state("needs").word == "Needs you")
+        #expect(AgentPalette.state("out").word == "Paused")
     }
 
     @Test("every provider mark holds 3:1 as a graphic on the glass, and its initial 4.5:1 on the mark")

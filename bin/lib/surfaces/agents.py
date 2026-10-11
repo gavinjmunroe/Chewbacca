@@ -202,7 +202,7 @@ DETAIL_CHARS = 80
 # The tile state of each realm status and each kyber-sessions state.
 REALM_STATE = {"waiting_permission": "needs", "error": "failed", "running": "running"}
 TAB_STATE = {"needs": "needs", "failed": "failed", "working": "running", "finished": "done"}
-TILE_ORDER = {"needs": 0, "failed": 1, "running": 2, "done": 3}
+TILE_ORDER = {"needs": 0, "failed": 1, "running": 2, "out": 3, "done": 4}
 STATE_WORDS = {"waiting_permission": "waiting on you", "running": "working", "error": "failed",
                "idle": "idle", "ended": "idle"}
 # What needs the person first, then what is moving, then the rest.
@@ -493,6 +493,21 @@ def doing(detail: str) -> str:
     if word == "curl":
         return "Fetching a URL"
     return f"Running {word}" if word else ""
+
+
+# A Claude Code tab that stopped on its plan's limit says "You've hit your
+# weekly limit · resets Oct 16 at 7am (America/Los_Angeles)" (2026-10-10,
+# two tabs). That is a wait, not a failure, so its tile is one calm line.
+LIMIT = re.compile(r"hit your (?:\w+ )?limit.*?resets (?:on )?([A-Z][a-z]{2,8} \d{1,2})(?: at (\d{1,2}(?::\d\d)?\s?[ap]m))?",
+                   re.I | re.S)
+
+
+def out_until(text: str, name: str) -> str:
+    """"Out of Claude until Oct 16, 7am", or "" when text is no limit."""
+    m = LIMIT.search(clean(text))
+    if not m:
+        return ""
+    return f"Out of {name} until {m.group(1)}" + (f", {m.group(2).replace(' ', '')}" if m.group(2) else "")
 
 
 _KS = None
@@ -1057,6 +1072,10 @@ class Agents(Provider):
                             doing(t.get("detail")) if t.get("state") == "working" else t.get("detail") or ""),
                         "where": t.get("project") or "", "last": float(t.get("last") or 0),
                         "open_in": t.get("open_in", "")})
+        for t in out:
+            calm = out_until(t["detail"], t["name"]) if t["state"] in ("failed", "needs") else ""
+            if calm:
+                t["state"], t["detail"] = "out", calm
         out.sort(key=lambda x: (TILE_ORDER.get(x["state"], 9), -x["last"]))
         return out
 
@@ -1084,7 +1103,12 @@ class Agents(Provider):
         tiles = self.tiles(data)
         counts = {"needs": 0, "running": 0, "done": 0}
         for t in tiles:
-            counts["needs" if t["state"] in ("needs", "failed") else t["state"]] += 1
+            if t["state"] in counts or t["state"] == "failed":
+                counts["needs" if t["state"] in ("needs", "failed") else t["state"]] += 1
+        if pinned and any(t["id"] == pinned for t in tiles):
+            # Open: the tile stays and the others give it the room, so the
+            # card reads as that tile opened. A press on it closes it again.
+            tiles = [t for t in tiles if t["id"] == pinned]
         out[p("counts")] = counts
         out[p("tiles")] = [{
             "id": t["id"], "state": t["state"], "provider": t["provider"], "name": t["name"],
@@ -1248,19 +1272,62 @@ class Agents(Provider):
         return Result(True, "", updates={self.p("agent"): kind})
 
     def pick(self, ctx: Context, data, values: dict) -> Result:
+        """Open a tile into its agent's card, or close the open one. A tab
+        that isn't in the engine yet is brought in by this press, then opened."""
         sid = str(values.get("row") or "")
+        with self._lock:
+            if sid and sid == self.pinned:
+                self.pinned, self._log = "", None
+                self._gen += 1
+                self._soon = True
+                return Result(True, "", updates={self.p("draft"): ""}, refetch=True)
         if sid.startswith("tab:"):
-            return Result(False, "That tab is still coming into the engine. It opens here in a moment.",
-                          refetch=True)
+            got = self._bring_in(ctx, data, sid[4:])
+            if isinstance(got, Result):
+                return got
+            sid = got
+            with self._lock:
+                self._repin(sid)
+            return Result(True, "", updates={self.p("draft"): ""}, refetch=True)
         row = next((r for r in (data or {}).get("rows") or [] if r["id"] == sid), None)
         if row is None:
-            return Result(False, "That session isn't on the list any more.")
+            return Result(False, "That agent isn't here any more.")
         with self._lock:
             moved = self.pinned != sid
             self._repin(sid)
         # A draft typed for one session is not carried to the next.
         cleared = {self.p("draft"): ""} if moved else {}
-        return Result(True, f"Opened the session in {row['folder'] or 'its folder'}.", updates=cleared, refetch=True)
+        return Result(True, "", updates=cleared, refetch=True)
+
+    def _bring_in(self, ctx: Context, data, tab_id: str):
+        """import.apply for the one tab a press opened; its new session id,
+        or a Result saying why not."""
+        tab = next((t for t in (data or {}).get("tabs") or [] if t.get("id") == tab_id), None)
+        if tab is None or not tab.get("transcript"):
+            return Result(False, "That tab isn't open any more.", refetch=True)
+        try:
+            with self.connect(ctx) as conn:
+                profiles = conn.call("profiles.list", timeout=CALL_TIMEOUT)
+                profile = next((x["id"] for x in profiles if isinstance(x, dict) and isinstance(x.get("id"), str)),
+                               None) if isinstance(profiles, list) else None
+                if profile is None:
+                    return Result(False, "The engine has no profile to bring it into yet.", refetch=True)
+                got = conn.call("import.apply", {"sessions": [{"key": tab["transcript"], "spaceId": None,
+                                                               "profileId": profile}]},
+                                timeout=APPLY_TIMEOUT, write=True)
+        except realm_client.RealmError as err:
+            return Result(False, f"Couldn't open it: {rpc_words(err)}", refetch=True)
+        with self._lock:
+            self._imported.add(tab["transcript"])
+        out = next((o for o in (got.get("sessions") if isinstance(got, dict) else None) or []
+                    if isinstance(o, dict)), {})
+        if out.get("state") == "imported" and isinstance(out.get("refId"), str):
+            return out["refId"]
+        # Already in: the realm session that carries this tab's id.
+        row = next((r for r in (data or {}).get("rows") or [] if r.get("provider_sid") == tab_id), None)
+        if row is not None:
+            return row["id"]
+        return Result(False, "It's still coming into the engine. Tap it again in a moment.", refetch=True)
 
     def send(self, ctx: Context, data, values: dict) -> Result:
         row, why = self._pinned_row(data, values)
@@ -1270,6 +1337,13 @@ class Agents(Provider):
         text = typed.strip()
         if not text:
             return Result(False, "Type a message first.", updates={self.p("level"): "error"})
+        tab = next((t for t in (data or {}).get("tabs") or [] if row.get("provider_sid")
+                    and t.get("id") == row["provider_sid"] and t.get("open_in")), None)
+        if tab is not None:
+            # Two writers on one conversation: the engine would resume it while
+            # the tab it came from is still open and may be mid-turn.
+            return Result(False, f"It's open in {clean(tab['open_in'], 20)}. Answer it there, or close that tab "
+                                 "and Send here.", updates={self.p("level"): "warning"})
         if not self._claim("send", row["id"]):
             return Result(False, "Still sending the last one. Wait for it, then check the transcript.")
         try:

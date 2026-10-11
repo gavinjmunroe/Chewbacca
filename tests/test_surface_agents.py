@@ -726,9 +726,36 @@ def live_tabs_and_import(tmp: Path) -> None:
     clock[0] += SA.IMPORT_EVERY
     view(a, ctx)
     check("nothing comes in twice", sum(m == "import.apply" for m, _ in e.writes) == 1, e.writes)
+    data, model = view(a, ctx)
     r = a.pick(ctx, data, {"row": "tab:tab-old"})
-    check("a tab tile not in the engine yet says so on Open and writes nothing", not r.ok and
-          sum(m == "import.apply" for m, _ in e.writes) == 1, r)
+    applied = [p for m, p in e.writes if m == "import.apply"]
+    check("tapping a tab not in the engine yet brings that one in and opens it",
+          r.ok and len(applied) == 2 and [x["key"] for x in applied[-1]["sessions"]] == ["/scanned/tab-old.jsonl"]
+          and a.pinned.startswith("s-imp"), (r, applied[-1:], a.pinned))
+    opened = a.pinned
+    data, model = view(a, ctx)
+    check("an open tile is the only tile, so the card reads as that tile opened",
+          tile_ids(model) == [opened] and model["/agents/tiles"][0]["selected"] and model["/agents/head"], tile_ids(model))
+    r = a.pick(ctx, data, {"row": opened})
+    data, model = view(a, ctx)
+    check("tapping the open tile closes it and the others come back", r.ok and a.pinned == ""
+          and len(tile_ids(model)) == 3 and model["/agents/head"] == "", tile_ids(model))
+
+    s_wait = next(sid for sid, x in e.sessions.items() if x["providerSessionId"] == "tab-wait")
+    data, model = view(a, ctx, open=s_wait)
+    r = a.send(ctx, data, {"row": s_wait, "/agents/draft": "hi"})
+    check("Send into a session whose tab is still open in VS Code refuses, so one conversation has one writer",
+          not r.ok and "open in VS Code" in r.line and not any(m == "sessions.send" for m, _ in e.writes), r)
+
+    limit = dict(tabs[0], id="tab-lim", transcript="/scanned/tab-lim.jsonl", state="failed", ask="",
+                 detail="You've hit your weekly limit \u00b7 resets Oct 16 at 7am (America/Los_Angeles)")
+    a.tabs = lambda t: [limit]
+    a.pinned = ""
+    data, model = view(a, ctx)
+    tile = next(x for x in model["/agents/tiles"] if x["id"] == "tab:tab-lim")
+    check("a tab out of its plan's usage is one calm line, not an error, and doesn't count as needing you",
+          tile["state"] == "out" and tile["detail"] == "Out of Claude until Oct 16, 7am"
+          and model["/agents/counts"]["needs"] == 0, (tile, model["/agents/counts"]))
 
     b, bctx = world(tmp / "tabsfail", FakeEngine())
     b.tabs = lambda t: [dict(tabs[0])]

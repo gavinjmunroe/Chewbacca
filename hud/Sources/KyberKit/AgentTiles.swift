@@ -52,6 +52,9 @@ enum AgentPalette {
         case "needs": return (HUD.warn, "Needs you", "exclamationmark.triangle.fill")
         case "failed": return (HUD.warn, "Failed", "xmark.circle.fill")
         case "running": return (HUD.accent, "Working", "circle.dotted")
+        // Out of its plan's usage until a reset: nothing to do but wait, so
+        // it is quiet, not loud like a failure.
+        case "out": return (HUD.dim, "Paused", "moon.zzz.fill")
         default: return (HUD.good, "Done", "checkmark.circle.fill")
         }
     }
@@ -159,10 +162,9 @@ struct TileView: View {
                                 .font(.system(size: 10, weight: .bold, design: .rounded))
                                 .foregroundStyle(Color.black.opacity(0.85))
                         }
-                    Text(tile.name)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(HUD.dim)
-                        .lineLimit(1)
+                    // The provider by its mark alone: the name was the same
+                    // word on every tile (Realm design.md, show the part that
+                    // varies). It stays in the accessibility label.
                     Spacer(minLength: 4)
                     HStack(spacing: 3) {
                         Image(systemName: state.symbol).font(.system(size: 10, weight: .semibold))

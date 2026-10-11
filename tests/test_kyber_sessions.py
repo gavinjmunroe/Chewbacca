@@ -24,6 +24,7 @@ from pathlib import Path
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parent.parent
 ks = importlib.machinery.SourceFileLoader("kyber_sessions", str(ROOT / "bin" / "kyber-sessions")).load_module()
+ks.RUNS_DIR = Path(tempfile.mkdtemp()) / "kyber-runs"
 inbox = ks.sessions_inbox
 
 PASSED = 0
@@ -533,6 +534,7 @@ class FakeProc:
         self.argv = argv
         self.kw = kw
         self.fed = ""
+        self.pid = 999_999
         self.closed = threading.Event()
         proc = self
 
@@ -556,8 +558,8 @@ def test_review_fixes() -> None:
     print("the 2026-10-05 review: flags, prefixes, --fork, hidden characters, modes")
     tmp = tempfile.mkdtemp()
     session = {"id": "abc-123", "agent": "claude", "state": "finished", "cwd": tmp, "config": ""}
-    saved = (ks.subprocess.Popen, ks.live_record)
-    ks.subprocess.Popen, ks.live_record = FakeProc, (lambda s: None)
+    saved = (ks.subprocess.Popen, ks.live_record, ks.proc_start)
+    ks.subprocess.Popen, ks.live_record, ks.proc_start = FakeProc, (lambda s: None), (lambda pid: "")
     try:
         for fork in (False, True):
             FakeProc.made.clear()
@@ -573,8 +575,9 @@ def test_review_fixes() -> None:
         out = ks.send({**session, "id": "--dangerously-skip-permissions"}, "hi", lambda t: None)
         check("an id shaped like a flag is refused, nothing started",
               out.get("is_error") and FakeProc.made == [], out)
+        check("a resume from the glass is recorded, so Stop reaches it", "abc-123" in ks.runs())
     finally:
-        ks.subprocess.Popen, ks.live_record = saved
+        ks.subprocess.Popen, ks.live_record, ks.proc_start = saved
         os.rmdir(tmp)
 
     rows = [{"id": "b1-aaaa", "state": "finished", "last": 1}, {"id": "b2-bbbb", "state": "finished", "last": 2},
@@ -747,6 +750,111 @@ def test_origin() -> None:
     check("the rail row carries it", "VS Code" in rows[0]["time"], rows)
 
 
+def test_runs() -> None:
+    print("Start and Stop: a background run the glass owns, and nothing it does not")
+    saved_dir, saved_root, saved_default, saved_find = ks.RUNS_DIR, ks.CODE_ROOT, ks.DEFAULT_RUN_DIR, ks.find
+    tmp = Path(tempfile.mkdtemp())
+    ks.RUNS_DIR = tmp / "runs"
+    ks.CODE_ROOT = tmp / "code"
+    (ks.CODE_ROOT / "lemma").mkdir(parents=True)
+    (ks.CODE_ROOT / "work" / "tts-dev").mkdir(parents=True)
+    ks.DEFAULT_RUN_DIR = tmp
+    try:
+        task, cwd = ks.plan_task("in lemma: write the README")
+        check("'in <folder>:' picks that folder", task == "write the README" and cwd == (ks.CODE_ROOT / "lemma").resolve(), (task, cwd))
+        task, cwd = ks.plan_task("in TTS-Dev, fix the nav")
+        check("a folder one level down, any case", cwd == (ks.CODE_ROOT / "work" / "tts-dev").resolve(), cwd)
+        task, cwd = ks.plan_task("summarize my week")
+        check("no folder named runs in the default", cwd == tmp and task == "summarize my week", (task, cwd))
+        for bad, why in (("in nowhere: x", "No single folder"), ("   ", "Say what the task is")):
+            try:
+                ks.plan_task(bad)
+                check(f"refuses {bad!r}", False)
+            except ValueError as err:
+                check(f"refuses {bad!r} in words", why in str(err), err)
+
+        FakeProc.made.clear()
+        saved_starts = ks.sessions_inbox._proc_starts
+        ks.sessions_inbox._proc_starts = lambda pids: {p: "Sat Oct 10 17:00:00 2026" for p in pids}
+        rec, proc = ks.start_run("--version; rm -rf /", tmp, spawn=FakeProc)
+        argv = proc.argv
+        check("the task goes on stdin, never argv", "--version; rm -rf /" not in " ".join(argv) and proc.fed == "--version; rm -rf /", argv)
+        check("a fresh session id, headless, detached",
+              argv[:2] == [ks.CLAUDE_BIN, "-p"] and argv[argv.index("--session-id") + 1] == rec["id"]
+              and proc.kw.get("start_new_session") is True, (argv, proc.kw))
+        check("no permission flag is added", not any("permission" in a or "allowed" in a.lower() or "dangerously" in a for a in argv), argv)
+        check("its record is private", oct((ks.RUNS_DIR / f"{rec['id']}.json").stat().st_mode & 0o777) == "0o600")
+        ks.sessions_inbox._proc_starts = saved_starts
+
+        now = 1000.0
+        recs = {rec["id"]: dict(rec, t=now)}
+        found: dict = {}
+        ks.merge_runs(found, recs, now, alive=lambda r: True)
+        row = found.get(rec["id"]) or {}
+        check("a live run with no transcript yet is a working row", row.get("state") == "working" and row.get("origin") == "Kyber" and row.get("run"), row)
+        found = {rec["id"]: {"id": rec["id"], "state": "finished", "interactive": False, "detail": ""}}
+        ks.merge_runs(found, recs, now, alive=lambda r: True)
+        check("a script run the glass started is listed, and working while alive",
+              found[rec["id"]]["interactive"] and found[rec["id"]]["state"] == "working", found)
+        found = {}
+        ks.merge_runs(found, recs, now, alive=lambda r: False)
+        check("a dead run with no transcript is not drawn", found == {}, found)
+
+        signals: list = []
+        state = {"alive": True}
+        starts = lambda pid: rec["start"] if state["alive"] else ""
+
+        def kill(pid, sig):
+            signals.append((pid, sig))
+            state["alive"] = False
+
+        children: list = []
+        stopped, words = ks.stop_run(rec["id"], kill=kill, starts=starts, sleep=lambda s: None,
+                                     tree=lambda pid: [4242], kill_one=lambda pid, sig: children.append((pid, sig)))
+        check("Stop interrupts its own process group first", stopped and signals == [(rec["pid"], ks.signal.SIGINT)], (signals, words))
+        check("and ends what its tools started, read before the run exits", children == [(4242, ks.signal.SIGTERM)], children)
+        stopped, words = ks.stop_run(rec["id"], kill=kill, starts=starts, sleep=lambda s: None, tree=lambda pid: [])
+        check("a second Stop says it already stopped", not stopped and "already" in words, words)
+        state["alive"], signals[:] = True, []
+        recycled = lambda pid: "Sun Oct 11 09:00:00 2026"
+        stopped, words = ks.stop_run(rec["id"], kill=kill, starts=recycled, sleep=lambda s: None, tree=lambda pid: [])
+        check("a recycled pid is never signalled", not stopped and signals == [], (signals, words))
+        ks.find = lambda sid, now=None: {"id": sid, "open_in": "VS Code"}
+        stopped, words = ks.stop_run("not-a-run", kill=kill, starts=starts, sleep=lambda s: None, tree=lambda pid: [])
+        check("a VS Code tab is never stopped from the glass", not stopped and "VS Code" in words and signals == [], words)
+
+        card = ks.card_surface({"id": rec["id"], "project": "x", "title": "t", "model": "", "state": "working",
+                                "detail": "", "run": True}, [], [])
+        plain = ks.card_surface({"id": "b", "project": "x", "title": "t", "model": "", "state": "working",
+                                 "detail": ""}, [], [])
+        check("Stop is drawn only on a run the glass owns",
+              any("action=stop" in l for l in card) and not any("action=stop" in l for l in plain))
+        lines = ks.sessions_surface([])
+        check("the list has a New task box and Start", any("action=start" in l for l in lines)
+              and any("/sessions/draft" in l for l in lines), lines)
+    finally:
+        ks.RUNS_DIR, ks.CODE_ROOT, ks.DEFAULT_RUN_DIR, ks.find = saved_dir, saved_root, saved_default, saved_find
+
+
+def test_serve_start() -> None:
+    print("the list's Start, without a display")
+    srv = object.__new__(ks.Serve)
+    srv.lock = threading.Lock()
+    srv.cards, srv.drafts = {}, {}
+    sent: list[list[str]] = []
+    srv.send = sent.append
+    got: list = []
+    srv.start_task = lambda words: got.append(words)
+    srv.on_value('v /sessions/draft "in lemma: write the README"')
+    srv.handle({"name": "start", "component": "start", "surface": "sessions"})
+    check("Start takes what was typed in New task", got == ["in lemma: write the README"], got)
+    del srv.start_task
+    srv.drafts["sessions"] = "in nowhere-at-all: x"
+    srv.start_task("in nowhere-at-all: x")
+    check("a refused Start says why on the list and keeps the draft",
+          "No single folder" in json.dumps(sent[-1]) and srv.drafts["sessions"], sent[-1])
+
+
 def main() -> int:
     test_classify()
     test_meta_and_rows()
@@ -766,6 +874,8 @@ def main() -> int:
     test_tests_need_two_presses()
     test_tree()
     test_origin()
+    test_runs()
+    test_serve_start()
     print("all passed" if not FAILED else f"{FAILED} failed")
     return 1 if FAILED else 0
 

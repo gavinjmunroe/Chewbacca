@@ -1,12 +1,19 @@
 ---
 name: project_chewbacca_os
-description: "Chewbacca OS (2026-10-04): Kyber HUD as the place Caleb works instead of apps; surfaces are walks over one local typed graph."
+description: "Chewbacca is an OS, not an app (standing thesis, 10/11): Kyber HUD is where Caleb works instead of apps; surfaces are walks over one local typed graph."
 metadata:
   node_type: memory
   type: project
   originSessionId: b1764fac-8937-462d-a422-2ed187daef7c
   modified: 2026-10-05T17:55:56.587Z
 ---
+
+**The thesis, standing (Caleb, 2026-10-11 3:55pm): "Make sure we stay with the thesis that chewb is an os, not an app".** Test every new piece against it before building:
+
+- It is a system service or a surface the OS summons, never a separate app with its own window, dock icon, menu-bar identity or Login Items row. Background work registers with `chewbacca-daemon`, the OS's one system process ([[feedback_one_background_item]]).
+- Things appear on the glass only while there is something on them and leave on voice, Escape or click-away. A clone of another app's window is the failure ([[feedback_hud_agents_build_on_realm]]).
+- Capabilities live in the OS and every app-shaped engine is plumbing under it: wacli, gws, Realm, Anarlog are drivers, not destinations ([[feedback_everything_is_part_of_chewbacca]]).
+- Success is measured as apps he stops opening (knowledgeC / `screen-time`), not features shipped.
 
 Chewbacca OS is Caleb's goal set 2026-10-04: "I should literally need no app, just chewbacca os." Kyber (the HUD) draws glass surfaces that are walks over one local typed graph (`~/.chewbacca/os-graph.sqlite`, 0600, 7-day 80-char snippets, `kyber-surfaces forget` wipes it). Built that night on Chewbacca main: `kyber-surfaces` (needs-you, today, tasks, people, conversations, person, space), `kyber-genui` (generative panels, 14/20 first try, 19/20 after repair), `kyber-sessions` (Claude Code sessions on the glass, modeled on Carlton's desktop app), `oss-apps` (1,465 open-source app registry), glass that holds 4.5:1, token-authenticated HUD socket.
 

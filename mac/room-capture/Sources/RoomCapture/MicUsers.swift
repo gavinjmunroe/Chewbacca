@@ -1,4 +1,4 @@
-// Which apps hold the microphone right now, and which meeting windows are up.
+// Which apps hold the microphone right now, each with its own code signature.
 //
 //   room-capture --mic-users                  one JSON line, then exit
 //   room-capture --watch-mic [--interval 2]   one JSON line now and one on every change, until killed
@@ -12,9 +12,8 @@
 // needs no Rust toolchain and runs inside the helper that already records.
 //
 // Reading the process list does not touch audio and needs no permission.
-// Window titles come from CGWindowListCopyWindowInfo, which only names other
-// apps' windows when the responsible app has Screen Recording; without it
-// the list is empty and the policy falls back to the calendar.
+// Window titles are not read: any web page sets its own title, so a title
+// can never be evidence of a meeting (security review, 2026-10-10).
 //
 // Nothing here decides what a meeting is. bin/lib/meeting_autopilot.py reads
 // these lines and owns that policy.
@@ -23,6 +22,7 @@ import AppKit
 import CoreAudio
 import CoreGraphics
 import Foundation
+import Security
 
 // Core Audio selectors, spelled as their four-char codes so this target can
 // keep macOS 13 as its floor; they only answer on 14.2 and later.
@@ -37,19 +37,48 @@ private let appleCallDaemons: Set<String> = [
     "com.apple.TelephonyUtilities", "com.apple.TelephonyUtilities.callservicesd",
 ]
 
-// Title fragments that name a meeting in a browser tab. Each is the title the
-// service puts on its own call page: "Meet - abc-defg-hij", "Zoom Meeting",
-// "Microsoft Teams" call windows, "Webex", "Whereby", "Jitsi Meet". Guessed
-// from those services' page titles, never measured against this Mac's tabs.
-private let meetingTitleFragments = [
-    "Meet - ", "Google Meet", "Zoom Meeting", "Zoom Webinar", "Microsoft Teams", "| Microsoft Teams",
-    "Webex", "Whereby", "Jitsi Meet", "Around", "Huddle",
-]
-
 struct MicUser {
     let pid: Int32
     let id: String
     let name: String
+    var signature: Signature = Signature()
+}
+
+/// The running process's own code signature, as the kernel and Security
+/// framework see it: whether it is valid right now, its signing identifier,
+/// and its Team ID. A name, a path or a bundle's Info.plist can be made by
+/// anyone; a valid signature under a vendor's Team ID cannot. The policy in
+/// bin/lib/meeting_autopilot.py records only on this, never on a name.
+struct Signature {
+    var valid = false
+    var identifier = ""
+    var team = ""
+}
+
+// A pid's signature never changes while it runs, so it is read once per
+// (pid, path). Keyed with the path so a reused pid is read again.
+private var signatureCache: [String: Signature] = [:]
+
+func signature(of pid: Int32, path: String) -> Signature {
+    let key = "\(pid):\(path)"
+    if let hit = signatureCache[key] { return hit }
+    var out = Signature()
+    var code: SecCode?
+    let attributes = [kSecGuestAttributePid: NSNumber(value: pid)] as CFDictionary
+    if SecCodeCopyGuestWithAttributes(nil, attributes, [], &code) == errSecSuccess, let code {
+        out.valid = SecCodeCheckValidity(code, [], nil) == errSecSuccess
+        var staticCode: SecStaticCode?
+        if SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode {
+            var info: CFDictionary?
+            if SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: kSecCSSigningInformation), &info)
+                == errSecSuccess, let dict = info as? [String: Any] {
+                out.identifier = dict[kSecCodeInfoIdentifier as String] as? String ?? ""
+                out.team = dict[kSecCodeInfoTeamIdentifier as String] as? String ?? ""
+            }
+        }
+    }
+    signatureCache[key] = out
+    return out
 }
 
 private func propertyAddress(_ selector: AudioObjectPropertySelector) -> AudioObjectPropertyAddress {
@@ -86,6 +115,14 @@ private func outermostApp(_ path: String) -> String? {
 }
 
 private func resolve(pid: Int32) -> MicUser {
+    var user = resolveName(pid: pid)
+    var buffer = [CChar](repeating: 0, count: 4096)
+    let path = proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0 ? String(cString: buffer) : ""
+    user.signature = signature(of: pid, path: path)
+    return user
+}
+
+private func resolveName(pid: Int32) -> MicUser {
     var path = ""
     var buffer = [CChar](repeating: 0, count: 4096)
     if proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0 { path = String(cString: buffer) }
@@ -130,33 +167,27 @@ func micUsers(output: Bool = false) -> [MicUser]? {
         users.append(resolve(pid: Int32(bitPattern: pid)))
     }
     if let call = appleCallAppName() {
-        users = users.map { appleCallDaemons.contains($0.id) ? MicUser(pid: $0.pid, id: call.id, name: call.name) : $0 }
+        // Display only: the relabelled row keeps the daemon's own signature,
+        // so it can never pass as FaceTime's.
+        users = users.map {
+            appleCallDaemons.contains($0.id)
+                ? MicUser(pid: $0.pid, id: "apple-call:" + call.id, name: call.name, signature: $0.signature) : $0
+        }
     }
     return users
 }
 
-/// On-screen windows whose title names a meeting, as "bundle id: title".
-func meetingWindows() -> [[String: String]] {
-    guard let info = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
-            as? [[String: Any]] else { return [] }
-    var out: [[String: String]] = []
-    for window in info {
-        guard (window[kCGWindowLayer as String] as? Int) == 0,
-              let title = window[kCGWindowName as String] as? String, !title.isEmpty,
-              meetingTitleFragments.contains(where: { title.contains($0) }),
-              let pid = window[kCGWindowOwnerPID as String] as? Int32 else { continue }
-        let owner = NSRunningApplication(processIdentifier: pid)
-        out.append(["app": owner?.bundleIdentifier ?? "", "title": String(title.prefix(120))])
-    }
-    return out
-}
-
 func rows(_ users: [MicUser]) -> [[String: Any]] {
     // One row per app: a browser holds audio from several helper pids.
+    // Signed rows first, so an unsigned process claiming an app's path
+    // never hides that app's real, signed row (and vice versa: each row
+    // carries its own signature).
     var seen = Set<String>()
-    return users.compactMap { user -> [String: Any]? in
+    let ordered = users.sorted { $0.signature.valid && !$1.signature.valid }
+    return ordered.compactMap { user -> [String: Any]? in
         guard seen.insert(user.id).inserted else { return nil }
-        return ["id": user.id, "name": user.name, "pid": Int(user.pid)]
+        return ["id": user.id, "name": user.name, "pid": Int(user.pid), "signed": user.signature.valid,
+                "signing_id": user.signature.identifier, "team": user.signature.team]
     }
 }
 
@@ -164,7 +195,6 @@ func micSnapshot(playing: Bool = false) -> [String: Any] {
     let users = micUsers()
     var body: [String: Any] = [
         "at": ISO8601DateFormatter().string(from: Date()),
-        "windows": meetingWindows(),
         "screen": CGPreflightScreenCaptureAccess() ? "granted" : "not_granted",
     ]
     if let users = users {
@@ -177,8 +207,7 @@ func micSnapshot(playing: Bool = false) -> [String: Any] {
     return body
 }
 
-/// The fields that count as a change: who holds the mic and which meeting
-/// windows are up, never the timestamp.
+/// The fields that count as a change: who holds the mic, never the timestamp.
 private func fingerprint(_ body: [String: Any]) -> String {
     var copy = body
     copy.removeValue(forKey: "at")

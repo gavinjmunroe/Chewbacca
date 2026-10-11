@@ -82,6 +82,10 @@ out="$(rpc '{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"kit_
 echo "$out" | grep -q 'does not start with a dash' || fail "a flag-shaped value reached a CLI: $out"
 out="$(rpc '{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"kit_read","arguments":{"id":"glass.walk","params":{"kind":"../../etc"}}}}')"
 echo "$out" | grep -q 'expected one of' || fail "a choice param took a value off its list: $out"
+# `people calls sync` and `people texts sync` write: a bare write verb as a
+# positional value is refused, wherever the entry puts it.
+out="$(rpc '{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"kit_read","arguments":{"id":"people.thread","params":{"name":"sync"}}}}')"
+echo "$out" | grep -q 'command word' || fail "a write verb reached a CLI as a value: $out"
 out="$(rpc '{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"kit_read","arguments":{"id":"rm.everything"}}}')"
 echo "$out" | grep -q 'No capability' || fail "an unknown id did not refuse: $out"
 python3 - "$ROOT/config/data/mcp-reads.json" <<'PY' || fail "a registry entry looks like a write"
@@ -89,6 +93,14 @@ import json, sys
 bad = {"send", "add", "apply", "delete", "rm", "write", "set", "on", "off", "start", "stop", "submit", "push", "import"}
 for e in json.load(open(sys.argv[1]))["reads"]:
     assert not (set(e.get("argv", [])) & bad), e["id"]
+PY
+python3 - "$ROOT" <<'PY' || fail "a registry entry names a tool that is not in bin/, or repeats an id"
+import json, os, sys
+reads = json.load(open(os.path.join(sys.argv[1], "config/data/mcp-reads.json")))["reads"]
+ids = [e["id"] for e in reads]
+assert len(ids) == len(set(ids)), "duplicate id"
+for e in reads:
+    assert os.path.isfile(os.path.join(sys.argv[1], "bin", e["tool"])), e["id"]
 PY
 
 # 8. The HTTP mode refuses a browser page and a rebinding host. Any site the

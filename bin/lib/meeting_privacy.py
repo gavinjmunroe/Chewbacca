@@ -99,3 +99,43 @@ def safe_title(title, *also, label: str = PRIVATE_LABEL) -> str:
     or the label when it, or anything passed in `also`, reads as private."""
     full = decode(title)
     return label if is_private(full, *also) else full
+
+
+def redact(text: str, label: str = PRIVATE_LABEL) -> str:
+    """A whole CLI output with every private piece swapped for the label, for
+    readers that print meetings in bulk (chewbacca-mcp's kit_read: a walk, a
+    calendar, a ledger). JSON keeps its shape and each string goes through
+    `safe_title`; anything else is checked a line at a time, and a private
+    line keeps only its indent, because the time beside a title can be the
+    thing that identifies it ("Tue 3pm" every week)."""
+    import json
+    try:
+        data = json.loads(text)
+    except ValueError:
+        data = None
+    if isinstance(data, (dict, list)):
+        def walk(v):
+            if isinstance(v, str):
+                return safe_title(v, label=label)
+            if isinstance(v, list):
+                return [walk(x) for x in v]
+            if isinstance(v, dict):
+                return {k: walk(x) for k, x in v.items()}
+            return v
+        return json.dumps(walk(data), indent=1, ensure_ascii=False)
+    out = []
+    for line in str(text or "").split("\n"):
+        if is_private(line):
+            out.append(line[: len(line) - len(line.lstrip())] + label)
+        else:
+            # The raw line, so tabs survive (decode drops every Cc character);
+            # the check above already ran on its decoded form.
+            out.append(line)
+    return "\n".join(out)
+
+
+if __name__ == "__main__":
+    import sys
+    if sys.argv[1:] != ["--redact"]:
+        sys.exit("usage: meeting_privacy.py --redact < text")
+    sys.stdout.write(redact(sys.stdin.read()))

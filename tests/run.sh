@@ -1515,6 +1515,10 @@ if group "mcp"; then
   if command -v node >/dev/null 2>&1; then
     check "the MCP server speaks the protocol and refuses a shell" \
       bash "$ROOT/tests/mcp_server.sh" "$ROOT"
+    check "find_capability ranks the questions people actually ask" \
+      bash "$ROOT/tests/mcp_find_capability.sh" "$ROOT"
+    check "no MCP read prints a private meeting title" \
+      bash "$ROOT/tests/mcp_meeting_privacy.sh" "$ROOT"
   else
     skip "mcp" "node not installed"
   fi

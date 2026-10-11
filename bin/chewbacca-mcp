@@ -104,7 +104,9 @@ const TOOLS = [
 // one entry from config/data/mcp-reads.json. Every entry there is a fixed argv
 // plus typed params, read only. A write is never added there; it gets its own
 // tool with its own approval, the way a write on the glass needs a press.
-const READS_FILE = path.join(BIN, "..", "config", "data", "mcp-reads.json");
+// CHEWBACCA_MCP_READS points the tests at a fixture registry; whoever can set
+// this process's environment already runs code as the person.
+const READS_FILE = process.env.CHEWBACCA_MCP_READS || path.join(BIN, "..", "config", "data", "mcp-reads.json");
 function reads() {
   try {
     const got = JSON.parse(fs.readFileSync(READS_FILE, "utf8"));
@@ -130,8 +132,18 @@ function argFor(spec, value) {
   }
   if (!s.trim() || s.length > 200 || s.startsWith("-") || /[\x00-\x1f]/.test(s))
     throw new Error("expected plain text under 200 characters that does not start with a dash");
+  // A positional value lands where some CLIs read a subcommand: `people calls
+  // sync` files calls and `people texts sync` imports every app's messages.
+  // One bare write verb is refused even after a fixed subcommand, so an entry
+  // that forgets this can't be turned into a write.
+  if (!spec.flag && WRITE_VERBS.has(s.trim().toLowerCase()))
+    throw new Error(`"${s.trim()}" is a command word, not a value`);
   return s;
 }
+
+const WRITE_VERBS = new Set(
+  "add apply append assign clear comment create delete done drop edit forget import ingest kill link login logout merge move note off on purge push reindex remove reset rm run send serve set snapshot start stop submit sync tick unimport update write".split(" "),
+);
 
 function readArgv(entry, args) {
   const argv = [...(entry.argv || [])].map((a) => (a === "~" ? require("node:os").homedir() : a));
@@ -155,7 +167,7 @@ TOOLS.push(
   {
     name: "find_capability",
     description:
-      "Search everything this person's Chewbacca kit can read for them: classes and deadlines, grades and attendance, the people they know, every coding agent running on their Mac and which need them, dead agent tabs, meeting recording status, their HUD panels (needs-you, today, tasks, conversations, meetings), their open commitments, and Screen Time. Returns matching capability ids with what each returns and its parameters. Call this first, then kit_read with an id.",
+      "Search everything this person's Chewbacca kit can read for them: classes, deadlines, course AI policies, grades, attendance and Brightspace; the people they know, who they owe a reply, promises, birthdays, message threads and calls; their calendar, recent meetings and decisions, and whether anything is recording; every coding agent and job on their Mac, which need them and which died; the team board and backlog; GTM clients, accounts and credits; Mac data (notes, reminders, mail, browser history) and Screen Time; Google Docs and Office files. Returns matching capability ids with what each returns and its parameters. Call this first, then kit_read with an id.",
     inputSchema: {
       type: "object",
       properties: { query: { type: "string", description: "What you want to know, in plain words" } },
@@ -163,14 +175,21 @@ TOOLS.push(
     },
     run: async (a) => {
       const q = words(a.query);
-      const scored = reads()
-        .map((r) => {
-          const hay = words(`${r.about} ${r.tool}`);
-          const id = words(r.id);
-          // Five letters is a crude stem: "recording" finds "recorded".
-          const hit = (list, w) => list.some((h) => h.startsWith(w) || w.startsWith(h) || (w.length >= 5 && h.slice(0, 5) === w.slice(0, 5)));
+      // Five letters is a crude stem: "recording" finds "recorded". Two-letter
+      // words only match whole ("ai" must not find "air").
+      const hit = (list, w) =>
+        list.some((h) => h === w || (w.length > 2 && h.length > 2 && (h.startsWith(w) || w.startsWith(h))) || (w.length >= 5 && h.slice(0, 5) === w.slice(0, 5)));
+      const all = reads().map((r) => ({ r, id: words(r.id), hay: words(`${r.about} ${r.asks || ""} ${r.tool}`) }));
+      // A word that matches half the registry ("people", "time") says little
+      // about which one; idf weights it down. With 16 entries every word was
+      // rare, so it only mattered once the registry passed 80 (2026-10-11).
+      const idf = Object.fromEntries(
+        q.map((w) => [w, Math.log((all.length + 1) / (1 + all.filter((x) => hit(x.id, w) || hit(x.hay, w)).length)) + 1]),
+      );
+      const scored = all
+        .map(({ r, id, hay }) => {
           // The id names what the capability is; a match there counts double.
-          return { r, score: q.reduce((n, w) => n + (hit(id, w) ? 2 : 0) + (hit(hay, w) ? 1 : 0), 0) };
+          return { r, score: q.reduce((n, w) => n + idf[w] * ((hit(id, w) ? 2 : 0) + (hit(hay, w) ? 1 : 0)), 0) };
         })
         .filter((x) => x.score > 0)
         .sort((x, y) => y.score - x.score)
@@ -205,7 +224,8 @@ TOOLS.push(
       } catch (e) {
         return `${entry.id}: ${e.message}`;
       }
-      return cli(entry.tool, argv);
+      const out = await cli(entry.tool, argv);
+      return entry.private === "meetings" ? redactMeetings(out) : out;
     },
   },
 );
@@ -225,6 +245,25 @@ function cli(name, args) {
       // Strip ANSI: a browser client renders escape codes literally.
       resolve(body.replace(/\x1b\[[0-9;]*m/g, "") || "(nothing found)");
     });
+  });
+}
+
+// A read that can print a meeting (a walk, the calendar, ledger rows made
+// from action items) goes through meeting_privacy.redact, the same check the
+// glass uses, before any agent sees it. On 2026-10-11 the panel printed a
+// psychiatric intake by name; an agent in a browser is a wider audience than
+// the glass. If the check can't run, nothing is shown.
+function redactMeetings(text) {
+  return new Promise((resolve) => {
+    const withheld = "Withheld: the privacy check on meeting titles could not run.";
+    const child = execFile(
+      "python3",
+      ["-I", path.join(BIN, "lib", "meeting_privacy.py"), "--redact"],
+      { timeout: 10000, maxBuffer: 8 * 1024 * 1024 },
+      (err, out) => resolve(err ? withheld : String(out)),
+    );
+    child.stdin.on("error", () => {});
+    child.stdin.end(String(text));
   });
 }
 

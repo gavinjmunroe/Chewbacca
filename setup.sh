@@ -1737,6 +1737,11 @@ _register("PreToolUse", hooks_dir + "/destructive-guard.sh", timeout=5,
 # ever again". Railway is the host. See the hook's header.
 _register("PreToolUse", hooks_dir + "/vercel-guard.sh", timeout=5,
           matcher="Bash", status="Checking this deploys to Railway, not Vercel...")
+# 2026-10-11: generated prose went into a team Google Doc and a teammate
+# called it "the slop version". Long Doc writes now pass slop-check --essay
+# first. See the hook's header.
+_register("PreToolUse", hooks_dir + "/essay-gate.sh", timeout=15,
+          matcher="Bash", status="Checking this reads like a person wrote it...")
 _register("PreToolUse", hooks_dir + "/zsh-guard.sh", timeout=5,
           matcher="Bash",
           status="Checking this reads right in zsh...")

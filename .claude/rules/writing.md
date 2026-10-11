@@ -239,6 +239,23 @@ called it "the slop version." Measured side by side, the tells were:
 - **No point of view.** Mine summarized research notes. His tells a life with
   texture (busboy, glass factory, the preacher's trombone) and says what it means.
 
+The bar is higher than matching the teammate: beat their section. Andy's half
+was good because it told a life with texture and spent a paragraph on one
+primary source. It also had typos, two tacked-on "-ing" clauses, and a closer
+that said nothing ("it's no wonder why his impact is still relevant today").
+So every paragraph of ours:
+
+1. Opens on one claim a reader could argue with, stated plainly.
+2. Proves it with one specific: a work, a date, an object you could point at.
+3. Quotes one primary source (the designer's own words, the work itself) and
+   says what the quote shows, in a sentence of our own.
+4. Ends on the most concrete fact in the paragraph, never a moral.
+5. Has zero typos, sentence lengths that vary, and the course's register.
+
+Then score both sections with `slop-check --essay`. Ours goes in only if it
+scores at or under theirs. The essay-gate hook refuses any Google Doc write of
+150+ words that scores "rewrite" (20+).
+
 Before anything goes into a shared doc, read the teammate's section first and
 match its moves, and run `slop-check --essay` on the draft. A file that scores
 "rewrite" there does not go in.

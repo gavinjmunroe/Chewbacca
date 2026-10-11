@@ -892,6 +892,10 @@ class Agents(Provider):
             except (OSError, RuntimeError):
                 return
             text = str(real)
+            # The home folder is where a tab was opened, not a project: a new
+            # agent there read "Claude in joelnewton" (screenshot, 2026-10-10).
+            if text == os.path.realpath(ctx.home):
+                return
             if text in seen or not real.is_dir() or any(hidden(ch) for ch in text):
                 return
             seen.add(text)

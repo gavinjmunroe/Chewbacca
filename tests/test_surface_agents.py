@@ -26,6 +26,7 @@ would against the real client.
 Run: python3 tests/test_surface_agents.py
 """
 import json
+import os
 import sys
 import tempfile
 import threading
@@ -575,10 +576,13 @@ def new_sessions(tmp: Path) -> None:
     stranger = tmp / "elsewhere" / "proj"
     stranger.mkdir(parents=True)
     e.add_session("s-old", "idle", cwd=str(stranger), title="Old")
+    e.add_session("s-home", "idle", cwd=str(Path(ctx.home)), title="Home tab", updated=NOW_MS + 1)
     data, model = view(a, ctx)
     check("starting is chips, one field and one press", "agents-kinds Chips" in " ".join(a.layout())
           and "agents-task Field" in " ".join(a.layout()) and "Select" not in " ".join(a.layout()))
     row = model["/agents/new"][0]
+    check("the home folder is never offered as where a new agent runs",
+          all(f["path"] != os.path.realpath(ctx.home) for f in data["folders"]), [f["label"] for f in data["folders"]][:3])
     check("with nothing typed, Start names the agent and the folder worked in last",
           row["text"] == "Claude in proj" and row["id"].startswith("claude|") and e.writes == [], row)
     model = a.model(data, None, {"/agents/task": "in chewbacca: fix the rail"}, ctx)

@@ -307,7 +307,7 @@ In 2026 the SaaS front door moved to MCP. HockeyStack, Salesforce, HubSpot, Atti
 
 ### Cursor
 
-- Number: $3B ARR in May 2026; SpaceX bought Anysphere for $60B in stock, closed 2026-08-14 ([Wikipedia](<https://en.wikipedia.org/wiki/Cursor_(company)>) [read]).
+- Number: $3B ARR in May 2026; SpaceX bought Anysphere for $60B in stock, closed 2026-08-14 ([Wikipedia](https://en.wikipedia.org/wiki/Cursor_%28company%29) [read]).
 - Loses: stops at the repo; a July 2025 pricing change it apologized for and rolled back; a support bot that invented a login policy in April 2025 (same [read]). Cursor is itself a Granola enterprise customer ([TNW](https://thenextweb.com/news/granola-series-c-meeting-ai-enterprise-context) [read]).
 - Chewbacca only: runs inside Claude Code and Codex on the user's own plan and adds their texts, mail, calendar and meetings.
 

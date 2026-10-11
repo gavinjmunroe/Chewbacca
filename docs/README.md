@@ -94,7 +94,8 @@ relative link in here points nowhere.
 | [ENGINE-CANDIDATES.md](plans/ENGINE-CANDIDATES.md)     | Open source engines that could put an app's task on the glass                       |
 | [AFTER-PANES.md](plans/AFTER-PANES.md)                 | What comes after windows: the recommended interface, 2026-10-05                     |
 | [AFTER-PANES-MOTION.md](plans/AFTER-PANES-MOTION.md)   | The motion and material layer for AFTER-PANES                                       |
-| [COMPETITORS.md](plans/COMPETITORS.md)                 | Ghost, Instinct and the rest, checked 2026-10-05 and 2026-10-07                     |
+| [COMPETITORS.md](plans/COMPETITORS.md)                 | Ghost, Instinct, headless SaaS and the rest, checked 2026-10-05 to 2026-10-11       |
+| [MOG-PLAN.md](plans/MOG-PLAN.md)                       | Win the B2B wedge first: four layers, the proof rules, written 2026-10-10           |
 | [FIRST-COHORT.md](plans/FIRST-COHORT.md)               | The first B2B cohort plan from the 2026-10-06 call                                  |
 | [CLAY-MASTERY.md](plans/CLAY-MASTERY.md)               | Research on becoming the best Clay operator, 2026-09-23                             |
 | [CLAY-HUD.md](plans/CLAY-HUD.md)                       | Design spec for a Kyber layer drawn over Clay, 2026-10-09                           |

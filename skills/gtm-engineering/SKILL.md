@@ -157,6 +157,33 @@ finding, never a footnote. Reconcile person by person before a client sees
 it; on 10/10 the 62 vs 27 gap was 51 replies Togari never got, 10 of them
 opt-outs that had to be blocklisted before Monday.
 
+## Four more from the all-night GTME session, 2026-10-11
+
+- **Read the reply, never the snippet.** Until 65f7991d the reply snippet
+  was the raw HTML body's first 280 characters: 73 of 87 Zeutara replies
+  were `<div>` soup cut mid-sentence, so 12 classified "unclear" and two
+  investor deck asks sat 2 days with no answer. Classify and draft from
+  `text` (`gtm replies --json`), the whole reply in the lead's own words.
+  Run `gtme-reply intent` over every reply after any change and read each
+  one that isn't auto-handled.
+- **Every rule runs as code, or it doesn't count.** Caleb: "Make chewb not
+  just be a storage of a bunch of cool things, but make it actually
+  intelligently follow EVERY rule we set it!!!!!!!!!" A ruling in a client's
+  `DECISIONS.json` or a correction in this file that no gate, test or hook
+  checks is unenforced. Name it as unenforced when citing it, and turn it
+  into a check before building the next feature.
+- **Nothing an agent opens takes the screen.** Caleb, 1:38am: "Bro I thought
+  we had fixed chewbs so when it opens smth it does it in the background
+  instead of waking up the entire city with a flashbang tab". `open -g`,
+  `chrome-js --open`, headless browsers for screenshots. `focus-guard.sh`
+  refuses a foreground `open` or a browser `activate` (9d94ab8e).
+- **A client dashboard has to look like it's worth the retainer.** Caleb on
+  Chewbacca Live 10/11: "The jonah dashbaord site sucks on so many levels".
+  Before a client sees it: open it at the URL they'll use (the old Railway
+  domain died on rename and nobody checked), lead with what needs them and
+  what's working, and keep process words (Togari, Clay inbox, tags, wave
+  names) off the page.
+
 ## Grading a campaign before it goes out
 
 Run the five gates in [the playbook's grading section](references/demand-gen-playbooks.md#grading-a-campaign-before-it-goes-out)

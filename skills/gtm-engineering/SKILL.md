@@ -45,9 +45,30 @@ they hired, through `chewbacca gtme`:
    send is a small test of 200.
 3. Never tell them to open Clay unless the op is UI-only (`chewbacca clay ops`
    lists them). Then hand them the exact `clay-go` route the op prints.
-4. No Clay account is not a blocker: say what Clay is in one line, open the
-   signup page (their step, never ours), and build the first list from
-   `chewbacca api` and `gtme-signals formd` with `chewbacca gtme list`.
+4. No Clay account is not a blocker, and for one person with one Gmail it is
+   the normal case (2026-10-11, "a gtme any average joe can pay for"). Run the
+   own-inbox path, all on their Mac:
+   - `chewbacca gtme list` builds the free list (`chewbacca api`, `gtme-signals formd`).
+   - `chewbacca gtme sender` saves their name and mailing address. Every cold
+     email needs both plus an opt-out (CAN-SPAM); `batch` refuses without them.
+   - `chewbacca gtme find` reads each company's own site for an email it
+     printed there and a fact, never a bought or guessed one, and it never
+     fetches a private address.
+   - Before `batch`, read each lead's site yourself and write one personal
+     first line per lead, with the page it came from, into a JSON file
+     (`{"addr": {"line": "...", "source": "https://..."}}`) and pass
+     `--lines`. A line without a source link is held, never sent.
+   - `chewbacca gtme today` sorts replies (opt-outs and bounces are never
+     emailed again, any reply stops follow-ups), then shows today's batch in
+     full with an id. Show the person every email. Only their ok in chat
+     lets you run `chewbacca gtme send --batch <id>`, and the id dies after
+     2 hours. Run the send through `chewbacca jobs submit`, because it waits
+     45 to 90 seconds between emails.
+   - Positive replies: write the answer and save it with `chewbacca gtme
+reply`, which makes a Gmail draft and never sends.
+     Volume starts at 5 a day and tops out at 20, because it is their primary
+     inbox. Say so if they ask for more. More volume means separate sending
+     domains, which cost money and need their ok.
 5. `gtme` explains each term the first time a person meets it
    (`~/.chewbacca/gtm/learned.json`) and ends each brief with one lesson from
    their own numbers. `chewbacca gtme explain <term>` and `chewbacca gtme why`

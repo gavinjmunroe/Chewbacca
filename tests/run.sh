@@ -496,6 +496,10 @@ if group "gtme"; then
   # term explained; brief, next and report rank and render a synthetic graph.
   check "gtme onboards a stranger, ranks the brief, renders the report, strips escapes" \
     python3 "$ROOT/tests/test_gtme_operator.py"
+  # One person, one Gmail, no Clay: find on their sites, frozen batches, threaded
+  # follow-ups, replies sorted. A fake gws; nothing reaches Gmail or the network.
+  check "gtme own-inbox path finds, freezes, sends only an approved batch, sorts replies" \
+    python3 "$ROOT/tests/test_gtme_solo.py"
   check "gtme dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme --help
   expect "gtm appears in help" "chewbacca gtm" bash "$ROOT/bin/chewbacca" --help
   # Recorded, synthetic surface answers; nothing reads Clay, the clay CLI or Chrome.

@@ -534,6 +534,17 @@ def build_plan(ans: dict) -> dict:
     return plan
 
 
+def buyers(ans: dict) -> str:
+    """"the owner" -> "owners", so a sentence about the group reads right.
+    On 2026-10-11 the follow-up printed "most the owner we talk to"."""
+    b = re.sub(r"^(the|a|an)\s+", "", (ans.get("buyer") or "").strip(), flags=re.I)
+    if not b:
+        return "teams like yours"
+    head, _, tail = b.partition(" or ")
+    head = head if head.endswith("s") else head + "s"
+    return head
+
+
 def draft_copy(ans: dict, cta: str) -> list[dict]:
     sell = (ans.get("sell") or "what we do").rstrip(".")
     proof = (ans.get("proof") or "").rstrip(".")
@@ -541,10 +552,10 @@ def draft_copy(ans: dict, cta: str) -> list[dict]:
     line2 = f"{proof}." if proof else "We'd prove it on a small test before you pay anything."
     return [
         {"step": 1, "day": 0, "subject": "{{company}} " + (ans.get("topic") or "question").lower()[:30],
-         "body": f"Hi {{{{first_name}}}},\n\n{{{{signal_line}}}}\n\nWe help {ans.get('buyer') or 'teams like yours'} "
-                 f"with {sell.lower()}. {line2}\n\n{cta}\n\n{sender}"},
+         "body": f"Hi {{{{first_name}}}},\n\n{{{{signal_line}}}}\n\nWe help {buyers(ans)} "
+                 f"with {sell[:1].lower() + sell[1:]}. {line2}\n\n{cta}\n\n{sender}"},
         {"step": 2, "day": 3, "subject": "", "body": f"Hi {{{{first_name}}}}, one more thought: most "
-                 f"{ans.get('buyer') or 'teams'} we talk to lose time on this every week. Happy to show you "
+                 f"{buyers(ans)} we talk to lose time on this every week. Happy to show you "
                  f"how it would work for {{{{company}}}}.\n\n{sender}"},
         {"step": 3, "day": 7, "subject": "worth a look?", "body": "Hi {{first_name}}, if this isn't yours, who "
                  f"at {{{{company}}}} owns it? Either way, thanks for reading.\n\n{sender}"},
@@ -564,8 +575,19 @@ def plan_steps(plan: dict, clay_connected: bool) -> list[dict]:
         steps.append({"do": "Move the deduped list into Clay", "cost": "free to import",
                       "gate": "needs your approval", "command": "chewbacca clay route find-people"})
     else:
-        steps.append({"do": "Create a Clay account (your hands only: I open the signup page, you sign up)",
-                      "cost": "free plan to start", "gate": "your hands only", "command": CLAY_SIGNUP})
+        # No Clay: the own-inbox path (tools/gtme_solo.py). A person paying for
+        # this has one Gmail and no Clay plan, so the emails come from each
+        # company's own site and go out from that Gmail.
+        steps += [
+            {"do": "Set the name and mailing address every email signs with", "cost": "free",
+             "gate": "your answer", "command": f"chewbacca gtme sender --client \"{c}\" --name \"...\" "
+                                                f"--address \"...\""},
+            {"do": "Find each company's email and a fact on its own website", "cost": "free",
+             "gate": "read only, no approval", "command": f"chewbacca gtme find --client \"{c}\""},
+            {"do": "Today's batch: read every email, then ok it in chat", "cost": "free",
+             "gate": "needs your ok (it sends email)", "command": f"chewbacca gtme today --client \"{c}\""},
+        ]
+        return steps
     steps += [
         {"do": "Price work-email enrichment on ONE row before running the rest",
          "cost": "a few credits for one row; the full price is known after it", "gate": "needs your approval",
@@ -660,11 +682,8 @@ def cmd_start(a, t: Teacher) -> int:
     if cl["ok"]:
         t.say(f"Clay is connected ({len(cl['workspaces'])} workspaces). Run `chewbacca gtme setup` to name them.")
     else:
-        t.say("You don't have Clay connected. That's fine: I can build and clean your first list without it.")
-        t.say("Signing up for Clay is the one step only you can do. I'm opening the signup page; "
-              "I'll never create the account or type a password.")
-        if not a.no_open:
-            open_url(CLAY_SIGNUP)
+        t.say("No Clay needed. I'll find each company's email on its own website and send from your Gmail, "
+              "a few a day, only after you ok each day's emails.")
     if plan.get("approved") and ask.yes("Build your first list now from public sources? It's free and sends "
                                          "nothing.", True):
         build_list(t, plan)
@@ -2165,6 +2184,9 @@ def cmd_why(a, t: Teacher) -> int:
 
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] in ("sender", "find", "batch", "send", "inbox", "reply", "today"):
+        import gtme_solo
+        return gtme_solo.main(argv)
     if not argv or argv[0].startswith("-") and argv[0] not in ("-h", "--help"):
         argv = ["start"] + argv
     ap = argparse.ArgumentParser(prog="chewbacca gtme", description=__doc__.splitlines()[0],

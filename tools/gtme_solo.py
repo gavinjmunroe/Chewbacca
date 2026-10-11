@@ -1,0 +1,645 @@
+#!/usr/bin/env python3
+"""chewbacca gtme, the own-inbox half: outbound for one person with one Gmail.
+
+`chewbacca gtme start` makes the plan and the free list. Everything after that
+used to need Clay and a fleet of sending inboxes, which nobody running a small
+business has. This runs the rest on their own Mac, from their own Gmail:
+
+    chewbacca gtme sender --client X --name "Dana Ruiz" --address "12 Main St, Austin TX"
+    chewbacca gtme find   --client X        emails + a sourced fact from each company's own site
+    chewbacca gtme batch  --client X        today's emails, frozen, shown in full, with an id
+    chewbacca gtme send   --client X --batch ID [--dry-run]
+    chewbacca gtme inbox  --client X        replies sorted; opt-outs and bounces suppressed
+    chewbacca gtme reply  --client X --to ADDR --text "..."   a Gmail draft, never a send
+    chewbacca gtme today  --client X        inbox, then the next batch
+
+The person approves every batch. `batch` prints each email exactly as it will
+go out and an id that is a hash of that text; `send` refuses any id it didn't
+make, a batch older than two hours, and anything once CHEWBACCA_NO_SEND is set.
+Nothing here buys a domain, spends a credit or sends without that id.
+
+Volume is low on purpose. Every playbook says never cold email from your
+primary domain (references/bma/outbound-rules.md); a person with one Gmail has
+nothing else, so the ramp is half the warmed-inbox ramp and tops out at 20 a
+day, with real follow-ups threaded under the first email.
+"""
+from __future__ import annotations
+
+import argparse
+import base64
+import csv
+import email.message
+import email.utils
+import hashlib
+import html
+import ipaddress
+import json
+import os
+import random
+import re
+import socket
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+import zlib
+from datetime import timedelta
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import gtme_operator as op  # noqa: E402
+import gtme_reply  # noqa: E402
+
+# A warmed inbox ramps 5, 10, 20, 40 a day over four weeks (outbound-rules.md,
+# BMA). A primary Gmail never warmed for cold mail gets half of that ceiling:
+# the playbooks' own answer is "never the primary domain", and this is the
+# smallest volume that still books a meeting a week at 1 per 350-500 contacts
+# over a quarter. Guessed from those two sources, not measured on a fresh inbox.
+RAMP = ((7, 5), (14, 10), (21, 15))
+DAILY_CAP = 20
+# His standing rule for anything that sends: an ok in chat within 2 hours.
+BATCH_TTL = timedelta(hours=2)
+# Long enough that 20 sends look like a person, short enough to finish in a
+# coffee break. Guessed, never measured against a spam filter.
+GAP_SECONDS = (45, 90)
+FETCH_TIMEOUT = 8
+FETCH_BYTES = 400_000
+PAGES = ("", "/contact", "/contact-us", "/about")
+MAX_WORDS = 125
+ROLE = re.compile(r"^(info|contact|hello|hi|office|admin|sales|team|support|help|mail|enquiries|inquiries|"
+                  r"booking|bookings|appointments|frontdesk|reception)@", re.I)
+NEVER = re.compile(r"^(no-?reply|donotreply|postmaster|abuse|privacy|legal|webmaster|careers|jobs|"
+                   r"press|media|unsubscribe)@|@(sentry|wixpress|example|sentry-next)\.|\.(png|jpe?g|gif|svg|webp)$",
+                   re.I)
+EMAIL_RX = re.compile(r"[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,24}")
+TITLE_RX = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
+META_RX = re.compile(r"<meta[^>]+(?:name|property)=[\"'](?:og:)?description[\"'][^>]*content=[\"']([^\"']{10,400})",
+                     re.I)
+DASH = re.compile("[—–]")
+OPT_OUT = "If you'd rather not hear from me, reply stop and I won't email you again."
+
+
+class Refused(Exception):
+    pass
+
+
+# ── files ────────────────────────────────────────────────────────────────
+
+
+def cdir(client: str) -> Path:
+    return op.client_dir(client)
+
+
+def plan_of(client: str) -> dict:
+    plan = op.read_json(cdir(client) / "plan.json", None)
+    if not plan:
+        raise Refused(f"There's no plan for {client} yet. Run `chewbacca gtme start --client \"{client}\"` first.")
+    return plan
+
+
+def jsonl(path: Path) -> list[dict]:
+    try:
+        return [json.loads(x) for x in path.read_text().splitlines() if x.strip()]
+    except (OSError, ValueError):
+        return []
+
+
+def append(path: Path, row: dict) -> None:
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with path.open("a") as f:
+        f.write(json.dumps(row, default=str) + "\n")
+    os.chmod(path, 0o600)
+
+
+def suppressed(client: str) -> dict[str, str]:
+    return {r["email"]: r.get("why", "") for r in jsonl(cdir(client) / "suppress.jsonl")}
+
+
+def suppress(client: str, addr: str, why: str) -> None:
+    if addr.lower() not in suppressed(client):
+        append(cdir(client) / "suppress.jsonl", {"email": addr.lower(), "why": why, "at": op.stamp()})
+
+
+# ── find: the company's own site, never a paid lookup ─────────────────────
+
+
+def domain_of(url: str) -> str:
+    host = urllib.parse.urlsplit(url if "//" in url else "http://" + url).hostname or ""
+    return host.lower().removeprefix("www.")
+
+
+def public_host(host: str) -> bool:
+    """SSRF guard (rules/security.md): every address the name resolves to must
+    be public. A listing a stranger wrote can point its website at 127.0.0.1."""
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except (socket.gaierror, UnicodeError):
+        return False
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0].split("%")[0])
+        if not ip.is_global:
+            return False
+    return bool(infos)
+
+
+class _Guarded(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        host = urllib.parse.urlsplit(newurl).hostname or ""
+        if not public_host(host):
+            raise urllib.error.URLError(f"redirect to a private address: {host}")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def fetch(url: str) -> str:
+    fx = os.environ.get("GTME_FIXTURES")
+    parts = urllib.parse.urlsplit(url)
+    if fx:
+        name = (parts.hostname or "").removeprefix("www.") + (parts.path.replace("/", "_") or "")
+        p = Path(fx) / "sites" / (name + ".html")
+        return p.read_text() if p.exists() else ""
+    if parts.scheme not in ("http", "https") or not public_host(parts.hostname or ""):
+        return ""
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Macintosh) chewbacca-gtme"})
+    try:
+        with urllib.request.build_opener(_Guarded).open(req, timeout=FETCH_TIMEOUT) as r:
+            if "html" not in (r.headers.get("Content-Type") or "html"):
+                return ""
+            return decode_body(r.read(FETCH_BYTES), r.headers.get("Content-Encoding") or "",
+                               r.headers.get_content_charset() or "utf-8")
+    except (urllib.error.URLError, OSError, ValueError, zlib.error):
+        return ""
+
+
+def decode_body(raw: bytes, encoding: str, charset: str) -> str:
+    """python.org answered a plain request with gzip on 2026-10-11, and the
+    page read as binary noise: no title, no email. Some servers compress
+    whether or not they were asked, so the bytes decide, not the request."""
+    if "gzip" in encoding.lower() or raw[:2] == b"\x1f\x8b":
+        raw = zlib.decompressobj(16 + zlib.MAX_WBITS).decompress(raw)
+    elif "deflate" in encoding.lower():
+        try:
+            raw = zlib.decompress(raw)
+        except zlib.error:
+            raw = zlib.decompress(raw, -zlib.MAX_WBITS)
+    return raw.decode(charset, "replace")
+
+
+def emails_on(page: str, domain: str) -> list[str]:
+    text = html.unescape(urllib.parse.unquote(page))
+    seen = []
+    for m in EMAIL_RX.findall(text):
+        a = m.lower().strip(".")
+        own = a.split("@", 1)[1]
+        if NEVER.search(a) or not (own == domain or own.endswith("." + domain)):
+            continue
+        if a not in seen:
+            seen.append(a)
+    # A named person beats the shared inbox; both beat nothing.
+    return sorted(seen, key=lambda a: bool(ROLE.match(a)))
+
+
+def fact_on(page: str) -> str:
+    m = META_RX.search(page) or TITLE_RX.search(page)
+    return re.sub(r"\s+", " ", html.unescape(m.group(1))).strip()[:220] if m else ""
+
+
+def cmd_find(a) -> int:
+    d = cdir(a.client)
+    plan_of(a.client)
+    src = d / "deduped" / "golden.csv"
+    if not src.exists():
+        src = d / "list-raw.csv"
+    if not src.exists():
+        raise Refused(f"No list yet. Run `chewbacca gtme list --client \"{a.client}\"` first.")
+    with src.open() as f:
+        rows = list(csv.DictReader(f))
+    out, found = [], 0
+    for r in rows[: a.limit]:
+        site = (r.get("website") or "").strip()
+        dom = domain_of(site) if site else ""
+        addr, where, fact, fact_url = (r.get("email") or "").strip().lower(), "", "", ""
+        if dom:
+            base = site if "//" in site else "https://" + site
+            base = base.rstrip("/")
+            for path in PAGES:
+                page = fetch(base + path)
+                if not page:
+                    continue
+                if not fact:
+                    fact, fact_url = fact_on(page), base + path
+                if not addr:
+                    hits = emails_on(page, dom)
+                    if hits:
+                        addr, where = hits[0], base + path
+                if addr and fact:
+                    break
+        if addr:
+            found += 1
+        out.append({**{k: r.get(k, "") for k in op.LIST_COLUMNS}, "email": addr, "email_source": where,
+                    "role_inbox": "yes" if addr and ROLE.match(addr) else "", "site_fact": fact,
+                    "site_fact_source": fact_url})
+    cols = op.LIST_COLUMNS + ["email_source", "role_inbox", "site_fact", "site_fact_source"]
+    with (d / "leads.csv").open("w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=cols)
+        w.writeheader()
+        for r in out:
+            w.writerow({k: op.csv_cell(str(r.get(k) or "")) for k in cols})
+    print(f"Checked {len(out)} companies' own websites. Found an email for {found}, every one printed on "
+          f"that company's site (the page is saved next to it). Nothing was bought or guessed.")
+    print(f"Saved: {d / 'leads.csv'}")
+    return 0
+
+
+# ── batch: today's emails, frozen ────────────────────────────────────────
+
+
+def today_cap(client: str) -> int:
+    sent = [r for r in jsonl(cdir(client) / "sent.jsonl") if r.get("step") == 1]
+    if not sent:
+        return RAMP[0][1]
+    first = min(op.parse_time(r["at"]) for r in sent)
+    days = (op.utc_now() - first).days
+    return next((n for limit, n in RAMP if days < limit), DAILY_CAP)
+
+
+def sent_today(client: str) -> int:
+    day = op.utc_now().date()
+    return sum(1 for r in jsonl(cdir(client) / "sent.jsonl") if op.parse_time(r["at"]).date() == day)
+
+
+def fill(text: str, lead: dict) -> str:
+    first = (lead.get("name") or "").split(" ")[0].strip()
+    greet = first if first and not lead.get("role_inbox") else f"{lead.get('company') or 'there'} team"
+    out = (text.replace("{{first_name}}", greet).replace("{{company}}", lead.get("company") or "your team")
+               .replace("{{signal_line}}", lead.get("line") or ""))
+    return re.sub(r"\n{3,}", "\n\n", out).strip()
+
+
+def footer(sender: dict) -> str:
+    return f"{sender['name']}\n{sender['address']}\n\n{OPT_OUT}"
+
+
+def problems(mail: dict) -> list[str]:
+    """The gates every email passes before it can sit in a batch. The
+    playbook checklist (demand-gen-playbooks.md, Growth Engine X): a real
+    sender, a physical address and an opt-out, every variable resolved."""
+    body, out = mail["body"], []
+    if "{{" in body or "{{" in mail["subject"]:
+        out.append("a {{blank}} is still in it")
+    if DASH.search(body + mail["subject"]):
+        out.append("it has a long dash")
+    if OPT_OUT not in body:
+        out.append("no opt-out line")
+    words = len(body.split(OPT_OUT)[0].split())
+    if words > MAX_WORDS:
+        out.append(f"{words} words, over {MAX_WORDS}")
+    if mail.get("line") and not re.match(r"https?://", mail.get("line_source") or ""):
+        out.append("the personal line has no public source link")
+    return out
+
+
+def lines_from(path: str | None) -> dict[str, dict]:
+    """Personal first lines the agent wrote after reading each site, as
+    {email: {"line": "...", "source": "https://..."}}. Code checks them;
+    the agent writes them, because only judgment makes one worth reading."""
+    if not path:
+        return {}
+    body = op.read_json(Path(path), {})
+    return {k.lower(): v for k, v in body.items() if isinstance(v, dict)} if isinstance(body, dict) else {}
+
+
+def due_followups(client: str, plan: dict) -> list[dict]:
+    steps = {c["step"]: c for c in plan["copy"]}
+    sent = jsonl(cdir(client) / "sent.jsonl")
+    replied = {r["email"] for r in jsonl(cdir(client) / "replies.jsonl")}
+    off = suppressed(client)
+    last: dict[str, dict] = {}
+    for r in sent:
+        if r["email"] not in last or r["step"] > last[r["email"]]["step"]:
+            last[r["email"]] = r
+    first = {r["email"]: r for r in sent if r["step"] == 1}
+    out = []
+    for addr, r in last.items():
+        nxt = steps.get(r["step"] + 1)
+        if not nxt or addr in replied or addr in off or addr not in first:
+            continue
+        if op.utc_now() - op.parse_time(first[addr]["at"]) >= timedelta(days=nxt["day"]):
+            out.append({"lead": first[addr]["lead"], "step": nxt["step"], "thread": first[addr].get("thread"),
+                        "message_id": first[addr].get("message_id"), "subject": "Re: " + first[addr]["subject"]})
+    return out
+
+
+def cmd_batch(a) -> int:
+    plan = plan_of(a.client)
+    sender = plan.get("sender") or {}
+    if not (sender.get("name") and sender.get("address")):
+        raise Refused("Every cold email has to carry your name and a mailing address (CAN-SPAM). Run "
+                      f"`chewbacca gtme sender --client \"{a.client}\" --name \"...\" --address \"...\"` first.")
+    if op.utc_now().weekday() >= 5 and not a.weekend:
+        raise Refused("It's the weekend. Cold email goes out Monday to Friday, in their business hours.")
+    room = max(0, today_cap(a.client) - sent_today(a.client))
+    d = cdir(a.client)
+    lines = lines_from(a.lines)
+    off = suppressed(a.client)
+    contacted = {r["email"] for r in jsonl(d / "sent.jsonl")}
+    steps = {c["step"]: c for c in plan["copy"]}
+    sign = plan["answers"].get("sender") or "{{your first name}}"
+    mails, held = [], []
+    for f in due_followups(a.client, plan):
+        if len(mails) >= room:
+            break
+        lead, c = f["lead"], steps[f["step"]]
+        body = fill(c["body"], lead).replace(sign, "").strip()
+        mail = {"to": lead["email"], "step": f["step"], "subject": f["subject"], "lead": lead,
+                "thread": f["thread"], "message_id": f["message_id"], "body": f"{body}\n\n{footer(sender)}"}
+        bad = problems(mail)
+        (held if bad else mails).append({**mail, "held_for": bad} if bad else mail)
+    leads_csv = d / "leads.csv"
+    rows = list(csv.DictReader(leads_csv.open())) if leads_csv.exists() else []
+    for r in rows:
+        if len(mails) >= room:
+            break
+        addr = (r.get("email") or "").lower()
+        if not addr or addr in contacted or addr in off:
+            continue
+        extra = lines.get(addr, {})
+        lead = {k: r.get(k, "") for k in ("company", "name", "email", "website", "role_inbox")}
+        lead["line"] = (extra.get("line") or "").strip()
+        c = steps[1]
+        body = fill(c["body"], lead).replace(sign, "").strip()
+        mail = {"to": addr, "step": 1, "subject": fill(c["subject"], lead), "lead": lead,
+                "line": lead["line"], "line_source": extra.get("source") or "",
+                "body": f"{body}\n\n{footer(sender)}"}
+        bad = problems(mail)
+        (held if bad else mails).append({**mail, "held_for": bad} if bad else mail)
+    frozen = json.dumps([{k: m[k] for k in ("to", "step", "subject", "body")} for m in mails], sort_keys=True)
+    bid = hashlib.sha256(frozen.encode()).hexdigest()[:10]
+    batch = {"id": bid, "made_at": op.stamp(), "client": a.client, "mails": mails, "held": held,
+             "inbox": a.inbox or sender.get("inbox") or ""}
+    if mails:
+        op.write_json(d / "batches" / f"{bid}.json", batch)
+    if a.json:
+        print(json.dumps(batch, indent=1))
+        return 0
+    print(f"Today's limit is {today_cap(a.client)} (a new inbox ramps slowly so Gmail keeps trusting it); "
+          f"{sent_today(a.client)} already went out today.")
+    if not mails:
+        print("Nothing to send today." + (f" {len(held)} held, below." if held else ""))
+    for n, m in enumerate(mails, 1):
+        print(f"\n--- {n}. To {m['to']} ({m['lead'].get('company')}), email {m['step']} of {len(steps)}")
+        print(f"Subject: {m['subject']}\n")
+        print(m["body"])
+    for m in held:
+        print(f"\nHeld, not in the batch: {m['to']}: {'; '.join(m['held_for'])}")
+    if mails:
+        print(f"\nBatch {bid}: {len(mails)} emails, exactly as above. Nothing has been sent. "
+              f"Say ok and this batch goes out from your Gmail, spaced a minute or so apart. "
+              f"The ok is good for 2 hours.")
+    return 0
+
+
+# ── send ─────────────────────────────────────────────────────────────────
+
+
+def gws(args: list[str], inbox: str = "") -> dict:
+    env = dict(os.environ)
+    if inbox:
+        env["GOOGLE_WORKSPACE_CLI_CONFIG_DIR"] = str(Path(os.path.expanduser(
+            os.environ.get("CHEWBACCA_EMAIL_HOME", "~/.chewbacca/email"))) / inbox)
+    p = subprocess.run([os.environ.get("CHEWBACCA_GWS_BIN", "gws")] + args, capture_output=True, text=True,
+                       timeout=90, env=env)
+    out = p.stdout or ""
+    if p.returncode != 0 or "{" not in out:
+        raise RuntimeError(((p.stderr or out).strip().splitlines() or ["gws failed"])[-1][:200])
+    return json.loads(out[out.index("{"):])
+
+
+def mime(m: dict, sender: dict) -> dict:
+    msg = email.message.EmailMessage()
+    msg["To"] = m["to"]
+    msg["Subject"] = m["subject"] or "(no subject)"
+    if sender.get("email"):
+        msg["From"] = email.utils.formataddr((sender["name"], sender["email"]))
+    if m.get("message_id"):
+        msg["In-Reply-To"] = m["message_id"]
+        msg["References"] = m["message_id"]
+    if sender.get("email"):
+        msg["List-Unsubscribe"] = f"<mailto:{sender['email']}?subject=stop>"
+    msg.set_content(m["body"])
+    body = {"raw": base64.urlsafe_b64encode(msg.as_bytes()).decode()}
+    if m.get("thread"):
+        body["threadId"] = m["thread"]
+    return body
+
+
+def cmd_send(a) -> int:
+    plan = plan_of(a.client)
+    d = cdir(a.client)
+    path = d / "batches" / f"{re.sub(r'[^0-9a-f]', '', a.batch)}.json"
+    batch = op.read_json(path, None)
+    if not batch:
+        raise Refused(f"There's no batch {a.batch}. Run `chewbacca gtme batch` and approve the id it prints.")
+    frozen = json.dumps([{k: m[k] for k in ("to", "step", "subject", "body")} for m in batch["mails"]],
+                        sort_keys=True)
+    if hashlib.sha256(frozen.encode()).hexdigest()[:10] != batch["id"]:
+        raise Refused("That batch changed after it was shown. Build it again so you approve what actually goes.")
+    if op.utc_now() - op.parse_time(batch["made_at"]) > BATCH_TTL:
+        raise Refused("That batch is over 2 hours old. Build a fresh one and approve that.")
+    if batch.get("sent_at"):
+        raise Refused(f"Batch {batch['id']} already went out at {batch['sent_at']}.")
+    if os.environ.get("CHEWBACCA_NO_SEND") and not a.dry_run:
+        raise Refused("Sending is turned off on this machine (CHEWBACCA_NO_SEND).")
+    sender = plan.get("sender") or {}
+    off = suppressed(a.client)
+    gap = GAP_SECONDS if a.gap is None else (a.gap, a.gap)
+    sent = 0
+    # A send killed halfway (a closed lid, a stopped job) leaves no sent_at, so
+    # the same id could run again. What sent.jsonl already holds never goes twice.
+    done = {(r["email"], r["step"]) for r in jsonl(d / "sent.jsonl")}
+    for n, m in enumerate(batch["mails"]):
+        if m["to"] in off:
+            print(f"Skipped {m['to']}: they asked not to be emailed after this batch was made.")
+            continue
+        if (m["to"], m["step"]) in done:
+            print(f"Skipped {m['to']}: email {m['step']} already went to them.")
+            continue
+        # Two batches built the same morning each saw room for the full cap.
+        if not a.dry_run and sent_today(a.client) >= today_cap(a.client):
+            print(f"Stopped: today's limit of {today_cap(a.client)} is reached. The rest wait for tomorrow's batch.")
+            break
+        if a.dry_run:
+            print(f"Would send email {m['step']} to {m['to']}: {m['subject']}")
+            continue
+        try:
+            res = gws(["gmail", "users", "messages", "send", "--params", json.dumps({"userId": "me"}),
+                       "--json", json.dumps(mime(m, sender))], batch.get("inbox") or "")
+        except (RuntimeError, OSError, subprocess.SubprocessError, ValueError) as err:
+            print(f"Stopped at {m['to']}: Gmail said {err}. {sent} went out before it; the rest did not.")
+            break
+        mid = ""
+        try:
+            meta = gws(["gmail", "users", "messages", "get", "--params", json.dumps(
+                {"userId": "me", "id": res.get("id"), "format": "metadata", "metadataHeaders": ["Message-ID"]})],
+                batch.get("inbox") or "")
+            mid = next((h["value"] for h in (meta.get("payload") or {}).get("headers", [])
+                        if h.get("name", "").lower() == "message-id"), "")
+        except (RuntimeError, OSError, subprocess.SubprocessError, ValueError):
+            pass
+        append(d / "sent.jsonl", {"email": m["to"], "step": m["step"], "subject": m["subject"].removeprefix("Re: "),
+                                  "lead": m["lead"], "gmail_id": res.get("id"),
+                                  "thread": res.get("threadId") or m.get("thread"),
+                                  "message_id": mid or m.get("message_id") or "", "batch": batch["id"],
+                                  "at": op.stamp()})
+        sent += 1
+        print(f"Sent email {m['step']} to {m['to']}.")
+        if n < len(batch["mails"]) - 1 and gap[1] > 0:
+            time.sleep(random.uniform(*gap))
+    if a.dry_run:
+        print("Dry run: nothing was sent.")
+        return 0
+    batch["sent_at"] = op.stamp()
+    op.write_json(path, batch)
+    print(f"{sent} of {len(batch['mails'])} sent from your Gmail.")
+    return 0
+
+
+# ── inbox: what came back ─────────────────────────────────────────────────
+
+
+def plain_text(payload: dict) -> str:
+    if (payload.get("mimeType") or "").startswith("text/plain") and (payload.get("body") or {}).get("data"):
+        return base64.urlsafe_b64decode(payload["body"]["data"] + "==").decode("utf-8", "replace")
+    for part in payload.get("parts") or []:
+        t = plain_text(part)
+        if t:
+            return t
+    return ""
+
+
+def cmd_inbox(a) -> int:
+    plan = plan_of(a.client)
+    d = cdir(a.client)
+    me = ((plan.get("sender") or {}).get("email") or "").lower()
+    seen = {r["gmail_id"] for r in jsonl(d / "replies.jsonl")}
+    threads = {}
+    for r in jsonl(d / "sent.jsonl"):
+        if r.get("thread"):
+            threads.setdefault(r["thread"], r)
+    needs, auto = [], 0
+    for tid, first in threads.items():
+        try:
+            th = gws(["gmail", "users", "threads", "get", "--params",
+                      json.dumps({"userId": "me", "id": tid, "format": "full"})], a.inbox or "")
+        except (RuntimeError, OSError, subprocess.SubprocessError, ValueError) as err:
+            print(f"Couldn't read the thread with {first['email']}: {err}")
+            continue
+        for msg in th.get("messages") or []:
+            heads = {h.get("name", "").lower(): h.get("value", "") for h in (msg.get("payload") or {}).get("headers", [])}
+            frm = email.utils.parseaddr(heads.get("from", ""))[1].lower()
+            if msg.get("id") in seen or not frm or frm == me or "SENT" in (msg.get("labelIds") or []):
+                continue
+            text = gtme_reply.clean_reply_text(plain_text(msg.get("payload") or {}) or msg.get("snippet") or "")
+            v = gtme_reply.reply_intent(text, first["email"], me, first["lead"].get("company"))
+            row = {"email": first["email"], "from": frm, "gmail_id": msg.get("id"), "kind": v["kind"],
+                   "label": v["label"], "next": v["nextStep"], "text": text[:2000], "at": op.stamp()}
+            append(d / "replies.jsonl", row)
+            if v["kind"] in ("unsubscribe", "bounce"):
+                suppress(a.client, first["email"], v["label"])
+                auto += 1
+            elif v["kind"] in gtme_reply.AUTO_HANDLED:
+                auto += 1
+            else:
+                needs.append(row)
+    if a.json:
+        print(json.dumps({"needs_you": needs, "handled": auto}, indent=1))
+        return 0
+    print(f"{auto} replies handled on their own (opt-outs and bounces are never emailed again; anyone who "
+          f"replied gets no more follow-ups).")
+    if not needs:
+        print("Nobody's waiting on you.")
+    for r in needs:
+        print(f"\n{r['label']}: {r['from']} ({r['email']})\n  \"{gtme_reply.readable_reply(r['text'], 400)}\"\n"
+              f"  Next: {r['next']}")
+    return 0
+
+
+def cmd_reply(a) -> int:
+    d = cdir(a.client)
+    row = next((r for r in reversed(jsonl(d / "replies.jsonl")) if r["from"] == a.to.lower()), None)
+    if not row:
+        raise Refused(f"No reply from {a.to} on file. Run `chewbacca gtme inbox` first.")
+    sys.path.insert(0, str(op.ROOT / "mac" / "lib"))
+    import gmail  # noqa: E402
+    res = gmail.draft(row["gmail_id"], a.inbox or None, row["from"], gtme_reply.strip_em_dashes(a.text))
+    if not res.get("ok"):
+        raise Refused(f"Couldn't save the draft: {res.get('error')}")
+    print(f"Saved as a draft in your Gmail, in the thread with {row['from']}. Nothing was sent; open Gmail to "
+          f"read it and press send.")
+    return 0
+
+
+def cmd_sender(a) -> int:
+    plan = plan_of(a.client)
+    s = plan.get("sender") or {}
+    for k in ("name", "address", "email", "inbox"):
+        v = getattr(a, k)
+        if v:
+            s[k] = v.strip()
+    plan["sender"] = s
+    op.write_json(cdir(a.client) / "plan.json", plan)
+    print(f"Saved. Every email signs as {s.get('name') or '[name missing]'}, "
+          f"{s.get('address') or '[mailing address missing]'}.")
+    return 0
+
+
+def cmd_today(a) -> int:
+    print("Replies first:")
+    cmd_inbox(a)
+    print("\nToday's batch:")
+    return cmd_batch(a)
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(prog="chewbacca gtme", description=__doc__.splitlines()[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    p = sub.add_parser("sender", help="the name and mailing address every email signs with")
+    p.add_argument("--client", required=True)
+    for k in ("name", "address", "email", "inbox"):
+        p.add_argument(f"--{k}")
+    p = sub.add_parser("find", help="each company's email and a fact, from its own website")
+    p.add_argument("--client", required=True)
+    p.add_argument("--limit", type=int, default=200)
+    for name, helptext in (("batch", "today's emails, frozen, for your ok"), ("today", "replies, then the batch")):
+        p = sub.add_parser(name, help=helptext)
+        p.add_argument("--client", required=True)
+        p.add_argument("--lines", help="JSON of personal first lines with their source links")
+        p.add_argument("--inbox", help="which connected Gmail (chewbacca email)")
+        p.add_argument("--weekend", action="store_true")
+        p.add_argument("--json", action="store_true")
+    p = sub.add_parser("send", help="send a batch you approved")
+    p.add_argument("--client", required=True)
+    p.add_argument("--batch", required=True)
+    p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--gap", type=float, help="seconds between emails (default 45 to 90, random)")
+    p = sub.add_parser("inbox", help="sort the replies")
+    p.add_argument("--client", required=True)
+    p.add_argument("--inbox")
+    p.add_argument("--json", action="store_true")
+    p = sub.add_parser("reply", help="save a reply as a Gmail draft, never send it")
+    p.add_argument("--client", required=True)
+    p.add_argument("--to", required=True)
+    p.add_argument("--text", required=True)
+    p.add_argument("--inbox")
+    a = ap.parse_args(argv)
+    try:
+        return {"sender": cmd_sender, "find": cmd_find, "batch": cmd_batch, "send": cmd_send,
+                "inbox": cmd_inbox, "reply": cmd_reply, "today": cmd_today}[a.cmd](a)
+    except Refused as err:
+        print(str(err), file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

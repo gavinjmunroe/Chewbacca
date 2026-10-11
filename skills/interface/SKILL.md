@@ -316,6 +316,17 @@ Read them before drafting any club or startup landing page.
   research folder before it ships. A name said on a call ("Church Connect or
   Churchly or whatever") is a research task, not copy (2026-10-10: "go look
   for what churches actually use").
+- Every page, not only Home (Firm Foundation, 2026-10-10: "The trust page is
+  so lame bro it's a wall of text, CHEWBS SHOULD NEVER MAKE A WALL OF TEXT",
+  "the free website page is overwhelming and 1 dimensional"). A promises page
+  is a few big lines on a band plus open items as chips; a form page shows a
+  sample of what the visitor gets back beside the form, and optional fields
+  start closed. Write it from the reader's seat (church staff who clicked an
+  email), never from ours.
+- A phone mock shows the real app it stands for: Safari with a URL pill on a
+  site, Mail compose with To and Subject, an inbox with other mail in it,
+  Messages with the contact header and input bar. A blue bar with the app's
+  name over grey text was "lazy ahh" (2026-10-10).
 - Interactive Playwright on clay.com trips the outbound send guard, which
   reads the word as a campaign. Screenshot it, or drive it from a
   standalone script.

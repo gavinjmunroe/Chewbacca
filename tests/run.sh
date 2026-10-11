@@ -209,6 +209,8 @@ if group "site-gate"; then
       check "bad page flags: $needle" grep -qF -- "$needle" "$TMP/sg.out"
     done
     exits  "clean page passes" 0 "$ROOT/bin/site-gate" check "$SG/good.html"
+    "$ROOT/bin/site-gate" check "$SG/cutoff.html" >"$TMP/sgc.out" 2>&1
+    check  "bad page flags: hard cutoff" grep -qF 'hard cutoff: "Bright photo"' "$TMP/sgc.out"
     exits  "a page marked @404 that 404s passes" 0 "$ROOT/bin/site-gate" check "$SG/missing.html@404"
     exits  "the same 404 unmarked fails" 1 "$ROOT/bin/site-gate" check "$SG/missing.html"
     kill "$SGPID" 2>/dev/null; wait "$SGPID" 2>/dev/null

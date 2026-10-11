@@ -178,6 +178,58 @@ def launch(pw):
     return pw.chromium.launch(args=GPU)
 
 
+
+# Caleb, 2026-10-10, on a book photo with a light wall behind it, masked into
+# an oval on a near-black section: "Fix chewb to NEVER have ugly hard
+# cutoffs!!!!!!" A picture whose own edge is bright on a dark ground draws a
+# hard line round itself. Measured on that page: the inner ring sat at 0.78
+# luminance, the ground at 0.04. A cover with its own dark edge (0.12) passes.
+CUTOFF_INNER = 0.5
+CUTOFF_GROUND = 0.18
+
+
+def hard_cutoffs(pg) -> list[str]:
+    from PIL import Image, ImageStat
+    boxes = pg.evaluate("""() => [...document.querySelectorAll('img, video, canvas')].map(e => {
+      const r = e.getBoundingClientRect(), c = getComputedStyle(e);
+      return {x: r.left + scrollX, y: r.top + scrollY, w: r.width, h: r.height,
+              hidden: c.visibility === 'hidden' || c.display === 'none' || +c.opacity < 0.2,
+              name: (e.getAttribute('alt') || e.getAttribute('src') || e.tagName).slice(0, 40)};
+    }).filter(b => b.w > 160 && b.h > 160 && !b.hidden)""")
+    found = []
+    for b in boxes[:40]:
+        pg.evaluate(f"scrollTo(0, {max(0, b['y'] - 40)})"); pg.wait_for_timeout(250)
+        top = pg.evaluate("scrollY")
+        vw, vh = pg.evaluate("[innerWidth, innerHeight]")
+        x0, y0 = max(0, b["x"] - 14), max(0, b["y"] - top - 14)
+        x1, y1 = min(vw, b["x"] + b["w"] + 14), min(vh, b["y"] - top + b["h"] + 14)
+        if x1 - x0 < 60 or y1 - y0 < 60:
+            continue
+        img = Image.open(io.BytesIO(pg.screenshot(clip={"x": x0, "y": y0, "width": x1 - x0, "height": y1 - y0}))).convert("L")
+        W, H = img.size
+        sx, sy = W / (x1 - x0), H / (y1 - y0)
+        ix0, iy0 = int((b["x"] - x0) * sx), int((b["y"] - top - y0) * sy)
+        ix1, iy1 = int(ix0 + b["w"] * sx), int(min(H, iy0 + b["h"] * sy))
+        band = max(3, int(6 * sx))
+        def mean(box):
+            l, t, r, d = [int(v) for v in box]
+            if r - l < 2 or d - t < 2:
+                return None
+            return ImageStat.Stat(img.crop((l, t, r, d))).mean[0] / 255
+        inner = [m for m in (mean((ix0 + band, iy0 + band, ix1 - band, iy0 + 2 * band)),
+                             mean((ix0 + band, iy1 - 2 * band, ix1 - band, iy1 - band)),
+                             mean((ix0 + band, iy0 + band, ix0 + 2 * band, iy1 - band)),
+                             mean((ix1 - 2 * band, iy0 + band, ix1 - band, iy1 - band))) if m is not None]
+        outer = [m for m in (mean((ix0, max(0, iy0 - 2 * band), ix1, iy0 - band)),
+                             mean((ix0, iy1 + band, ix1, min(H, iy1 + 2 * band))),
+                             mean((max(0, ix0 - 2 * band), iy0, ix0 - band, iy1)),
+                             mean((ix1 + band, iy0, min(W, ix1 + 2 * band), iy1))) if m is not None]
+        if inner and outer and max(inner) > CUTOFF_INNER and min(outer) < CUTOFF_GROUND:
+            found.append(f'hard cutoff: "{b["name"]}" has a bright edge ({max(inner):.2f}) on a dark ground ({min(outer):.2f}); '
+                         "cut the subject out, use an asset with its own dark edge, or feather it into the ground")
+    pg.evaluate("scrollTo(0,0)")
+    return found
+
 def check_page(pw, url, out):
     fails = []
     # A not-found page is meant to answer 404 (T Combinator's unknown-slug
@@ -209,6 +261,7 @@ def check_page(pw, url, out):
                 fails.append(f"390: horizontal scroll, page is {sw}px wider than the viewport")
         info = pg.evaluate(CONTROLS, MAX_CONTROLS)
         if w == 1440:
+            fails += hard_cutoffs(pg)
             fails += [f"dead control: {d}" for d in info["dead"]]
             origin = urlparse(url).netloc
             for link in info["links"]:

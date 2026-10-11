@@ -21,6 +21,14 @@ would open a book." One idea per beat, a block of 45 words at most, a section
 at 120 words of body copy at most. Long reading goes behind a link or inside
 an `<article>` page. `site-gate check` fails both limits.
 
+**No hard cutoffs.** Caleb, 2026-10-10, on a book mockup with a light wall
+behind it masked into an oval on a dark section: "Fix chewb to NEVER have ugly
+hard cutoffs!!!!!!" A picture whose own edge is bright on a dark ground draws a
+line round itself, and a radial mask only turns the box into an oval. Cut the
+subject out (Erik's cover was flattened from the mockup with a perspective
+warp), use an asset whose edge is already dark, or feather it into the ground.
+`site-gate check` fails a bright-edged image on a dark section.
+
 ## A site is four layers, and a screenshot shows one
 
 1. Layout, meaning positions, sizes and type, the only layer a screenshot judges.

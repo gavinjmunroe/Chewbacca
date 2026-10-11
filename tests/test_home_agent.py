@@ -425,10 +425,19 @@ def feed(tmp: Path) -> None:
                                        "finishes": False},
           rows[ZELLE])
     check("a row with nothing handed over carries no agent", "agent" not in rows["task:rem-caleb"])
-    old = {ZELLE: {"state": "yours", "at": NOW.isoformat(), "why": "A payment stays yours."}}
-    body = home_feed.build(g, NOW, [], agent=old)
-    check("an answer that is only his takes its place under the cap, never pinned past it",
-          ZELLE not in [r["id"] for r in body["todos"]], [r["id"] for r in body["todos"]])
+    rows = [{"id": f"a{i}", "title": f"class {i}", "day": "2026-10-11"} for i in range(7)] + \
+           [{"id": "p1", "title": "Do Reagan's stuff", "person": REAGAN},
+            {"id": "p2", "title": "Zelle him", "person": "person:caleb-n"},
+            {"id": "p3", "title": "Text Maggie", "person": "person:maggie"}]
+    shown, count = home_feed.crossed(rows, {}, NOW)
+    check("two of the five places go to to-dos for someone, in their place in the order",
+          [r["id"] for r in shown] == ["a0", "a1", "a2", "p1", "p2"] and count == 10, [r["id"] for r in shown])
+    shown, _ = home_feed.crossed(rows, {}, NOW, keep={"p3"})
+    check("a person row held for a draft counts toward the two",
+          [r["id"] for r in shown] == ["a0", "a1", "a2", "p1", "p3"], [r["id"] for r in shown])
+    held = home_feed.waiting({"a": {"state": "working"}, "b": {"state": "drafted"}, "c": {"state": "yours"},
+                              "d": {"state": "failed"}})
+    check("an answer that is only his takes its place under the cap, never pinned past it", held == {"a", "b"}, held)
     live = home_agent.annotate([{"id": REMINDER, "title": "x"}], {REMINDER: {"state": "working", "at": NOW.isoformat(),
                                                                              "pid": os.getpid()}}, NOW)
     check("a live run is drawn working", live[0]["agent"] == {"state": "working", "why": ""}, live)

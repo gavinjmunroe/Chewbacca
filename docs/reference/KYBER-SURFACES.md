@@ -207,9 +207,11 @@ then runs `people texts drafts send <n>`. A refusal from the people CLI ("Nothin
 was sent.") keeps the draft. A timeout or any other failure draws the row
 failed with "It may have gone out", and send is not offered again, because a
 second press could text them twice. Drop takes the draft out of the queue only
-under the same check. Nothing goes out without his press. A row with a run out
-or a draft waiting is shown even past the five-row cap; an answer that is only
-his takes its place in the list like any other row. A run whose process died,
+under the same check. Nothing goes out without his press. Two of the five
+places go to to-dos for someone first, wherever their dates sort, since an
+undated one otherwise never reaches the panel. A row with a run out or a draft
+waiting is shown even past the five-row cap; an answer that is only his takes
+its place in the list like any other row. A run whose process died,
 or that ran past eight minutes, draws as failed, with "retry" and "clear".
 
 Projects are the pinned list when there is one, in its order, each showing the

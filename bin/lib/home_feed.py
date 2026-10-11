@@ -73,6 +73,12 @@ DONE_KEEP_DAYS = 30
 # laptop-sized panel (review, 2026-10-11); the latest few are the ones a
 # misclick is among. Guessed.
 DONE_SHOWN = 3
+# Of the five open rows, how many a to-do for someone is sure of. On
+# 2026-10-11 the two people rows, "Do Reagan's stuff" and the Zelle, had no
+# date and sorted 8th and 9th of 9 behind seven dated ones, so the handle
+# press he asked for that day was never on the panel. Classwork gives up the
+# places, and it is also on the calendar as "6 due". Guessed, never measured.
+PEOPLE_SLOTS = 2
 # Where the person's own commands live when Kyber, launched with launchd's
 # bare PATH, runs a refresh: `mac` and `people` in ~/.local/bin, node for
 # `people` from Homebrew.
@@ -231,11 +237,7 @@ def build(graph, now: datetime, project_rows: list[dict], errors=None, written: 
     `done` is the crossed-off record (load_done), and `agent` the runs handed
     to the agent from the panel (home_agent.load)."""
     body = osgraph_walks.home(graph, now, most_todos=None)
-    # A run out or a draft waiting on his press is shown past the cap; an
-    # answer that only says "yours" or "failed" takes its place in the list
-    # like any other row, so old ones never pile up above the rest.
-    waiting = {k for k, v in (agent or {}).items() if v.get("state") in ("working", "drafted")}
-    body["todos"], body["todoCount"] = crossed(body["todos"], done or {}, now, keep=waiting)
+    body["todos"], body["todoCount"] = crossed(body["todos"], done or {}, now, keep=waiting(agent))
     if agent:
         import home_agent  # noqa: PLC0415  it imports this module
 
@@ -304,6 +306,13 @@ def _crossed_at(record: dict) -> datetime | None:
     return at if at.tzinfo else at.astimezone()
 
 
+def waiting(agent: dict | None) -> set[str]:
+    """The to-dos with a run out or a draft waiting on his press, which are
+    shown past the cap. An answer that only says "yours" or "failed" takes
+    its place in the list like any other row, so old ones never pile up."""
+    return {k for k, v in (agent or {}).items() if v.get("state") in ("working", "drafted")}
+
+
 def crossed(rows: list[dict], done: dict, now: datetime,
             most: int = osgraph_walks.HOME_TODOS, keep=()) -> tuple[list[dict], int]:
     """The to-dos with the crossed-off record applied: open rows first, up to
@@ -317,7 +326,8 @@ def crossed(rows: list[dict], done: dict, now: datetime,
     the same id with its next date). Only a panel-only row stays hidden by the
     record. The count is what is still open. A row in `keep` (one the agent
     is working on, or has a draft for) is shown whatever the cap, in its
-    place: a text waiting on his send must never be one of the rows cut."""
+    place: a text waiting on his send must never be one of the rows cut. Up
+    to PEOPLE_SLOTS of the rest go to to-dos for someone, also in place."""
     today = now.date()
 
     def crossed_today(record: dict) -> bool:
@@ -340,6 +350,11 @@ def crossed(rows: list[dict], done: dict, now: datetime,
             row = {**row, "detail": f"Still open in {record['failed']}"}
         struck.append({**row, "done": True, "reopen": bool(record.get("reopen", True))})
     kept = {r["id"] for r in open_rows if r["id"] in keep}
+    # Up to PEOPLE_SLOTS of the places go to to-dos for someone first, so the
+    # ones the agent can take are on the panel however their dates sort.
+    held = sum(1 for r in open_rows if r["id"] in kept and r.get("person"))
+    people = [r["id"] for r in open_rows if r.get("person") and r["id"] not in kept]
+    kept |= set(people[:max(0, min(PEOPLE_SLOTS, most) - held)])
     room = [r["id"] for r in open_rows if r["id"] not in kept][:max(0, most - len(kept))]
     shown = [r for r in open_rows if r["id"] in kept or r["id"] in room]
     return shown + struck[-DONE_SHOWN:], len(open_rows)

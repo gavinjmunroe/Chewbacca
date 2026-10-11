@@ -1328,6 +1328,19 @@ class Agents(Ide, History, Space, Provider):
         h = round(m / 60)
         return f"{h}h ago" if h < 24 else f"{round(h / 24)}d ago"
 
+    @staticmethod
+    def _own_code(repo: str, ctx: Context) -> bool:
+        """An inferred repo counts only inside the code root (~/code, or
+        KYBER_CODE_ROOT). The paths it came from are transcript text, and the
+        folder chosen is where git then runs (a repo's own config can run a
+        program, core.fsmonitor), so text alone never picks a folder outside
+        the repos he keeps there (security review, 2026-10-11)."""
+        try:
+            root = code_root(ctx).resolve()
+            return Path(repo).resolve().is_relative_to(root) and Path(repo).resolve() != root
+        except (OSError, RuntimeError):
+            return False
+
     def _place(self, row: dict, ctx: Context, log: "Log | None" = None) -> None:
         """Point a session whose own folder is not a project (a tab opened
         in the home folder, imported with that as its cwd) at the repo its
@@ -1343,7 +1356,7 @@ class Agents(Ide, History, Space, Provider):
             repo = session_tree.work_root(log.marks, Path(ctx.home)) or repo
             with self._lock:
                 self._repos[row["id"]] = repo
-        if repo and not any(hidden(ch) for ch in repo):
+        if repo and not any(hidden(ch) for ch in repo) and self._own_code(repo, ctx):
             row["repo"] = repo
             row["folder"] = clean(Path(repo).name, 40)
             row["cwd"] = clean(tilde(repo, Path(ctx.home)), 80)
@@ -1804,7 +1817,8 @@ class Agents(Ide, History, Space, Provider):
         branch = clean(changes.get("branch"), 60)
         if message and len(message) <= MESSAGE_CHARS:
             out[p("ship")] = [{"id": ship_id(branch, staged, message), "accent": True, "text": clean(
-                f"{plural(len(staged), 'staged file')} on {branch or 'this checkout'}, then pushed"
+                f"{plural(len(staged), 'staged file')} in {shown['folder'] or 'this folder'} on "
+                f"{branch or 'this checkout'}, then pushed"
                 " · a push can't be taken back here", 120)}]
         out[p("shipping")] = True
 

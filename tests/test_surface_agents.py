@@ -1277,6 +1277,17 @@ def real_repo(tmp: Path) -> None:
     row = next(r for r in data["rows"] if r["id"] == "s3")
     check("a session that only ran Bash is placed by the folders it cd'd into",
           row.get("repo") == str(other.resolve()), row.get("repo"))
+    stranger = tmp / "repo" / "elsewhere" / "proj"
+    (stranger / ".git").mkdir(parents=True)
+    e.add_session("s4", "idle", title="Pointed away", cwd=str(home))
+    for n in range(5):
+        e.event("s4", "tool_call", {"name": "Edit", "input": {"file_path": str(stranger / f"f{n}.py")}})
+    a.pick(ctx, a.fetch(ctx), {"row": "s4"})
+    data = a.fetch(ctx)
+    row = next(r for r in data["rows"] if r["id"] == "s4")
+    check("a repo outside the code root is never chosen from transcript text, whatever it edited",
+          not row.get("repo") and not any(p.get("cwd") == str(stranger.resolve()) for m, p, _ in e.calls),
+          row.get("repo"))
     check("placing a session wrote nothing", e.writes == [], e.writes)
 
 
@@ -1493,7 +1504,7 @@ def shipping(tmp: Path) -> None:
     check("but no Commit and push row until there is a message", model["/agents/ship"] == [], model["/agents/ship"])
     model, row = ship_values(a, data, ctx, "fix the rail glass")
     check("a typed message offers Commit and push, naming the files, the branch and that a push stays",
-          model["/agents/ship"][0]["text"] == "1 staged file on feat/rail, then pushed · a push can't be taken back here"
+          model["/agents/ship"][0]["text"] == "1 staged file in repo on feat/rail, then pushed · a push can't be taken back here"
           and row.startswith("ship:"), model["/agents/ship"])
     r = a.ship(ctx, data, {"row": row, "/agents/message": "a different message"})
     check("Commit with a message other than the one drawn is refused", not r.ok

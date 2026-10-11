@@ -42,9 +42,22 @@ def check(name, ok, got=None):
 T0 = datetime(2026, 10, 10, 18, 0, tzinfo=timezone.utc)
 # Rows exactly as room-capture --watch-mic prints them, signatures included.
 ZOOM = {"id": "us.zoom.xos", "name": "zoom.us", "pid": 10, "signed": True, "signing_id": "us.zoom.xos",
-        "team": "BJ4HAAB9B3"}
+        "team": "BJ4HAAB9B3", "app_id": "us.zoom.xos", "app_team": "BJ4HAAB9B3"}
 TEAMS = {"id": "com.microsoft.teams2", "name": "Microsoft Teams", "pid": 16, "signed": True,
-         "signing_id": "com.microsoft.teams2", "team": "UBF8T346G9"}
+         "signing_id": "com.microsoft.teams2.helper", "team": "UBF8T346G9", "app_id": "com.microsoft.teams2",
+         "app_team": "UBF8T346G9"}
+SLACK_HELPER = {"id": "com.tinyspeck.slackmacgap", "name": "Slack", "pid": 17, "signed": True,
+                "signing_id": "com.tinyspeck.slackmacgap.helper", "team": "BQR82RBBHL",
+                "app_id": "com.tinyspeck.slackmacgap", "app_team": "BQR82RBBHL"}
+# Fields that disagree, each a different lie about one process.
+MS_HELPER_IN_ZOOM_DIR = {**ZOOM, "signing_id": "com.microsoft.teams2.helper", "team": "UBF8T346G9",
+                         "app_team": "BJ4HAAB9B3"}
+ZOOM_SIGNED_IN_FAKE_TEAMS = {**ZOOM, "id": "com.microsoft.teams2", "app_id": "com.microsoft.teams2",
+                             "app_team": "UBF8T346G9"}
+ID_VS_APP_ID = {**ZOOM, "id": "com.microsoft.teams2"}
+APP_TEAM_OTHER = {**ZOOM, "app_team": "ABCDE12345"}
+UNKNOWN_ZOOM_PROCESS = {**ZOOM, "signing_id": "us.zoom.ZoomUninstaller"}
+NO_APP_FIELDS = {k: v for k, v in ZOOM.items() if k not in ("app_id", "app_team")}
 CHROME = {"id": "com.google.Chrome", "name": "Google Chrome", "pid": 11, "signed": True,
           "signing_id": "com.google.Chrome.helper", "team": "EQHXZ8M8AV"}
 FACETIME = {"id": "com.apple.FaceTime", "name": "FaceTime", "pid": 12, "signed": True,
@@ -129,7 +142,16 @@ def main() -> int:
     check("a garbage snapshot is no meeting", AP.meeting_in({"mic": "us.zoom.xos"}) is None
           and AP.meeting_in([]) is None)
     check("every allowed app has a measured 10-character Team ID",
-          all(AP.TEAM_ID.match(team) for _, team in AP.WORK_CALL_APPS.values()))
+          all(AP.TEAM_ID.match(team) for _, team, _ in AP.WORK_CALL_APPS.values()))
+    check("Slack's helper process, signed as Slack's helper inside Slack's bundle, is a huddle",
+          (AP.meeting_in(snap(SLACK_HELPER)) or {}).get("name") == "Slack")
+    for name, row in (("a Microsoft-signed helper reported inside zoom.us.app", MS_HELPER_IN_ZOOM_DIR),
+                      ("Zoom's signed binary inside a bundle signed as Teams", ZOOM_SIGNED_IN_FAKE_TEAMS),
+                      ("a display id that names another app than the signed bundle", ID_VS_APP_ID),
+                      ("a bundle signed by another team around Zoom's binary", APP_TEAM_OTHER),
+                      ("a Zoom-signed process that is not one that holds calls", UNKNOWN_ZOOM_PROCESS),
+                      ("a row from an older helper with no bundle signature fields", NO_APP_FIELDS)):
+        check(f"fields disagree: {name} never records", AP.meeting_in(snap(row)) is None)
 
     # when it starts and stops
     m = AP.meeting_in(snap(ZOOM))

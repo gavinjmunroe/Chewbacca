@@ -59,32 +59,44 @@ START_AFTER_S = 15.0
 # headphones. Guessed, never measured on a real call.
 STOP_AFTER_S = 20.0
 
-# Work call apps: (name, Team ID). The Team IDs were read with `codesign -dv`
-# from the copies installed on Caleb's Mac on 2026-10-10. Webex and the App
-# Store Slack were not installed, so their Team IDs are unmeasured and they
-# are left out: unknown means no recording.
+# Work call apps: bundle id -> (name, Team ID, the signing identifiers its
+# own processes carry). All read with `codesign -dv` from the copies on
+# Caleb's Mac on 2026-10-10: zoom.us.app's main binary is us.zoom.xos; Teams'
+# MSTeams is com.microsoft.teams2 and its WebView helper .helper; Slack's
+# main binary and every Slack Helper are slackmacgap and slackmacgap.helper.
+# Webex, classic Teams and the App Store Slack were not installed, so they are
+# unmeasured and left out: unknown means no recording.
 WORK_CALL_APPS = {
-    "us.zoom.xos": ("Zoom", "BJ4HAAB9B3"),
-    "com.microsoft.teams2": ("Microsoft Teams", "UBF8T346G9"),
-    "com.microsoft.teams": ("Microsoft Teams", "UBF8T346G9"),
-    "com.tinyspeck.slackmacgap": ("Slack", "BQR82RBBHL"),
+    "us.zoom.xos": ("Zoom", "BJ4HAAB9B3", frozenset({"us.zoom.xos"})),
+    "com.microsoft.teams2": ("Microsoft Teams", "UBF8T346G9",
+                             frozenset({"com.microsoft.teams2", "com.microsoft.teams2.helper"})),
+    "com.tinyspeck.slackmacgap": ("Slack", "BQR82RBBHL",
+                                  frozenset({"com.tinyspeck.slackmacgap", "com.tinyspeck.slackmacgap.helper"})),
 }
 TEAM_ID = re.compile(r"^[A-Z0-9]{10}$")
 
 
 def verified_call_app(app) -> tuple[str, str] | None:
     """(bundle id, name) when this mic holder is a work call app proven by its
-    code signature, else None. Every field must match exactly; a missing or
-    odd-typed field is a no."""
-    if not isinstance(app, dict):
+    code signature, else None. Every field comes from one Security-framework
+    lookup of one pid (MicUsers.swift), and every one must agree: the
+    process is validly signed, its Team ID is the vendor's, its signing
+    identifier is one that vendor's app uses, and the app bundle around it
+    is signed with that same identifier and Team ID. Any field missing,
+    mistyped or disagreeing is a no."""
+    if not isinstance(app, dict) or app.get("signed") is not True:
         return None
-    app_id, team = app.get("id"), app.get("team")
-    if not isinstance(app_id, str) or not isinstance(team, str) or app.get("signed") is not True:
+    fields = {k: app.get(k) for k in ("id", "app_id", "signing_id", "team", "app_team")}
+    if not all(isinstance(v, str) and v for v in fields.values()):
         return None
-    known = WORK_CALL_APPS.get(app_id)
-    if known is None or not TEAM_ID.match(team) or team != known[1]:
+    known = WORK_CALL_APPS.get(fields["app_id"])
+    if known is None:
         return None
-    return app_id, known[0]
+    name, team, signing_ids = known
+    if not (fields["id"] == fields["app_id"] and TEAM_ID.match(fields["team"]) and fields["team"] == team
+            and fields["app_team"] == team and fields["signing_id"] in signing_ids):
+        return None
+    return fields["app_id"], name
 
 
 def meeting_in(snapshot: dict) -> dict | None:

@@ -5,6 +5,7 @@
 //   room-capture --request          ask macOS for both permissions, then probe
 //   room-capture --mic-users        which apps hold the mic, one JSON line (MicUsers.swift)
 //   room-capture --watch-mic [--interval 2]   the same, a line on every change
+//   room-capture --signature PID    that process's signature fields, one lookup
 //
 // Why this exists: bin/room-listen hears only the mic, so on a call it records
 // one side. Anarlog (MIT, github.com/fastrepl/anarlog) hears both, but it is a
@@ -45,6 +46,7 @@ struct Options {
     var micUsers = false
     var watchMic = false
     var interval = 2.0
+    var signaturePid: Int32 = 0
 }
 
 func parseOptions() -> Options {
@@ -63,6 +65,7 @@ func parseOptions() -> Options {
         case "--mic-users": opts.micUsers = true
         case "--watch-mic": opts.watchMic = true
         case "--interval": opts.interval = Double(args.isEmpty ? "" : args.removeFirst()) ?? 2
+        case "--signature": opts.signaturePid = Int32(args.isEmpty ? "" : args.removeFirst()) ?? 0
         default:
             FileHandle.standardError.write("room-capture: unknown argument \(arg)\n".data(using: .utf8)!)
             exit(64)
@@ -456,6 +459,14 @@ if opts.request {
     AVCaptureDevice.requestAccess(for: .audio) { _ in asked.signal() }
     _ = asked.wait(timeout: .now() + 120)
     _ = CGRequestScreenCaptureAccess()
+}
+if opts.signaturePid > 0 {
+    // The same one-lookup read the mic watcher uses, for any pid: how its
+    // fields are checked from ground truth without a call on.
+    let sig = signature(of: opts.signaturePid)
+    emitJSON(["pid": Int(opts.signaturePid), "signed": sig.valid, "path": sig.path, "signing_id": sig.identifier,
+              "team": sig.team, "app_id": sig.appIdentifier, "app_team": sig.appTeam])
+    exit(0)
 }
 if opts.micUsers {
     emitJSON(micSnapshot(playing: true))

@@ -44,40 +44,52 @@ struct MicUser {
     var signature: Signature = Signature()
 }
 
-/// The running process's own code signature, as the kernel and Security
-/// framework see it: whether it is valid right now, its signing identifier,
-/// and its Team ID. A name, a path or a bundle's Info.plist can be made by
-/// anyone; a valid signature under a vendor's Team ID cannot. The policy in
-/// bin/lib/meeting_autopilot.py records only on this, never on a name.
+/// The running process's own code signature, every field from ONE lookup:
+/// the pid becomes a SecCode handle once, and validity, the executable's
+/// path, the signing identifier and the Team ID are all read from that
+/// handle. The app the process belongs to is then named by the outermost
+/// .app on that same path, read from that bundle's own signature (its
+/// signing identifier and Team ID), never from its Info.plist, which anyone
+/// can write. Nothing here reads a second source about the same process, so
+/// a check and a decision can never be about two different things
+/// (security review, 2026-10-10: authorization gate field mismatch).
 struct Signature {
     var valid = false
+    var path = ""
     var identifier = ""
     var team = ""
+    var appIdentifier = ""
+    var appTeam = ""
 }
 
-// A pid's signature never changes while it runs, so it is read once per
-// (pid, path). Keyed with the path so a reused pid is read again.
-private var signatureCache: [String: Signature] = [:]
+private func signingInfo(_ code: SecStaticCode) -> (identifier: String, team: String) {
+    var info: CFDictionary?
+    guard SecCodeCopySigningInformation(code, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
+          let dict = info as? [String: Any] else { return ("", "") }
+    return (dict[kSecCodeInfoIdentifier as String] as? String ?? "", dict[kSecCodeInfoTeamIdentifier as String] as? String ?? "")
+}
 
-func signature(of pid: Int32, path: String) -> Signature {
-    let key = "\(pid):\(path)"
-    if let hit = signatureCache[key] { return hit }
+func signature(of pid: Int32) -> Signature {
     var out = Signature()
     var code: SecCode?
     let attributes = [kSecGuestAttributePid: NSNumber(value: pid)] as CFDictionary
-    if SecCodeCopyGuestWithAttributes(nil, attributes, [], &code) == errSecSuccess, let code {
-        out.valid = SecCodeCheckValidity(code, [], nil) == errSecSuccess
-        var staticCode: SecStaticCode?
-        if SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode {
-            var info: CFDictionary?
-            if SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: kSecCSSigningInformation), &info)
-                == errSecSuccess, let dict = info as? [String: Any] {
-                out.identifier = dict[kSecCodeInfoIdentifier as String] as? String ?? ""
-                out.team = dict[kSecCodeInfoTeamIdentifier as String] as? String ?? ""
-            }
+    guard SecCodeCopyGuestWithAttributes(nil, attributes, [], &code) == errSecSuccess, let code else { return out }
+    out.valid = SecCodeCheckValidity(code, [], nil) == errSecSuccess
+    var staticCode: SecStaticCode?
+    guard SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode else {
+        out.valid = false
+        return out
+    }
+    var url: CFURL?
+    if SecCodeCopyPath(staticCode, [], &url) == errSecSuccess, let url { out.path = (url as URL).path }
+    (out.identifier, out.team) = signingInfo(staticCode)
+    if let app = outermostApp(out.path.hasSuffix("/") ? out.path : out.path + "/") {
+        var appCode: SecStaticCode?
+        if SecStaticCodeCreateWithPath(URL(fileURLWithPath: app) as CFURL, [], &appCode) == errSecSuccess,
+           let appCode {
+            (out.appIdentifier, out.appTeam) = signingInfo(appCode)
         }
     }
-    signatureCache[key] = out
     return out
 }
 
@@ -115,11 +127,12 @@ private func outermostApp(_ path: String) -> String? {
 }
 
 private func resolve(pid: Int32) -> MicUser {
-    var user = resolveName(pid: pid)
-    var buffer = [CChar](repeating: 0, count: 4096)
-    let path = proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0 ? String(cString: buffer) : ""
-    user.signature = signature(of: pid, path: path)
-    return user
+    let sig = signature(of: pid)
+    // The id the policy matches is the app's own signing identifier from
+    // the same lookup; the name is for people only.
+    let display = resolveName(pid: pid)
+    let id = sig.appIdentifier.isEmpty ? (sig.identifier.isEmpty ? display.id : sig.identifier) : sig.appIdentifier
+    return MicUser(pid: pid, id: id, name: display.name, signature: sig)
 }
 
 private func resolveName(pid: Int32) -> MicUser {
@@ -187,7 +200,8 @@ func rows(_ users: [MicUser]) -> [[String: Any]] {
     return ordered.compactMap { user -> [String: Any]? in
         guard seen.insert(user.id).inserted else { return nil }
         return ["id": user.id, "name": user.name, "pid": Int(user.pid), "signed": user.signature.valid,
-                "signing_id": user.signature.identifier, "team": user.signature.team]
+                "signing_id": user.signature.identifier, "team": user.signature.team,
+                "app_id": user.signature.appIdentifier, "app_team": user.signature.appTeam]
     }
 }
 

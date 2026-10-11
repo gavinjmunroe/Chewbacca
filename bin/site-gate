@@ -104,6 +104,23 @@ CONTROLS = r"""(max) => {
     const ratio = (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05);
     if (ratio < 1.5) dead.push(e.tagName.toLowerCase() + ' "' + txt.slice(0, 30) + '" text is invisible on its background (contrast ' + ratio.toFixed(2) + ')');
   }
+  // Walls of text. Caleb, 2026-10-10, on a homepage built from an about page
+  // and article excerpts: "Chewbacca should never make fat walls of text!
+  // Ever! ... IF ppl wanted to read a book they would open a book." A block
+  // over 45 words, or a section carrying more than 120 words of body copy,
+  // fails. Long-form reading lives inside <article>, which is exempt.
+  const wc = s => (s.trim().match(/\S+/g) || []).length;
+  const inProse = el => el.closest('article, nav, footer, header, form, details');
+  for (const el of document.querySelectorAll('p, li, blockquote')) {
+    if (!vis(el) || inProse(el) || el.querySelector('p, li')) continue;
+    const n = wc(el.innerText || '');
+    if (n > 45) dead.push('wall of text: a ' + n + '-word block "' + (el.innerText || '').trim().slice(0, 40) + '" (one idea per beat, 45 words at most; put long reading behind a link)');
+  }
+  for (const sec of document.querySelectorAll('section')) {
+    if (inProse(sec) || sec.closest('article')) continue;
+    const n = [...sec.querySelectorAll('p, li, blockquote')].filter(e => vis(e) && !e.closest('article') && !e.querySelector('p, li')).reduce((t, e) => t + wc(e.innerText || ''), 0);
+    if (n > 120) dead.push('wall of text: section "' + ((sec.getAttribute('aria-label') || sec.querySelector('h1,h2,h3')?.innerText || '').trim().slice(0, 30)) + '" carries ' + n + ' words of body copy (120 at most; tell it as beats, figures or a link)');
+  }
   // Heading-plus-line grids: four or more sibling cards, each a short label
   // over one short line. Caleb, 2026-10-04: "Header, subheader X6 screams SO
   // AI." Navs, footers, headers and forms are exempt.

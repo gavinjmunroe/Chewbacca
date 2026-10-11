@@ -15,6 +15,12 @@ api-anything, brand-grab, ux-pick or ux-gen, this file and site-gate),
 started from three hand-read pages and Caleb had to name the tools again.
 The `site-spec` skill has the step-zero list.
 
+**No walls of text, ever.** Caleb, 2026-10-10, on Erik Fish's draft: "Chewbacca
+should never make fat walls of text! Ever! ... IF ppl wanted to read a book they
+would open a book." One idea per beat, a block of 45 words at most, a section
+at 120 words of body copy at most. Long reading goes behind a link or inside
+an `<article>` page. `site-gate check` fails both limits.
+
 ## A site is four layers, and a screenshot shows one
 
 1. Layout, meaning positions, sizes and type, the only layer a screenshot judges.

@@ -204,7 +204,8 @@ if group "site-gate"; then
                   'boring section: "Poster zone": still image (inline)' \
                   'boring section: "Slab zone"' \
                   'jitter: span' \
-                  'seam: '; do
+                  'seam: ' \
+                  'wall of text: a 60-word block'; do
       check "bad page flags: $needle" grep -qF -- "$needle" "$TMP/sg.out"
     done
     exits  "clean page passes" 0 "$ROOT/bin/site-gate" check "$SG/good.html"

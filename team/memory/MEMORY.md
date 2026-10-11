@@ -253,3 +253,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_land_workflow_traps: checksums.py hashes the index (add first), never chain cleanup with ;, DESTRUCTIVE_OK=1 must lead, zsh file lists need arrays (10/10)
 - feedback_site_research_pass: Every site starts with the kit pass (api-anything pulls every page, brand-grab, ux-pick, crafts, STEAL, COPY); site-gate research refuses without it (10/10)
 - feedback_never_vercel: Never deploy or set up anything on Vercel; Railway hosts everything and vercel-guard refuses vercel commands (10/10)
+- feedback_no_walls_of_text: No wall of text on any site; 45 words per block, 120 per section, site-gate check fails it (10/10)

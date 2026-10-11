@@ -5,7 +5,7 @@
     meeting-autopilot start           the same, detached
     meeting-autopilot stop            end the loop (a recording it started is stopped too)
     meeting-autopilot status [--json] running, what it sees, what it decided last
-    meeting-autopilot off | on        never record on its own / record again
+    meeting-autopilot off | on        never record on its own / record (OFF until someone runs on)
 
 It watches `room-capture --watch-mic` (Anarlog's detector, ported to Swift),
 decides with bin/lib/meeting_autopilot.py, and drives `room-capture start`
@@ -92,7 +92,30 @@ def real_home() -> bool:
 
 
 def is_off() -> bool:
-    return (state_dir() / "off").exists() or AP.env_flag("CHEWBACCA_MEETING_AUTOPILOT")
+    """Off unless a person turned it on. A fresh install has neither flag and
+    records nothing: a background rebuild on 2026-10-10 had this recording
+    with no flag at all, while its security findings were still open
+    (team/memory/feedback_recording_off_until_reviews_pass.md)."""
+    folder = state_dir()
+    if (folder / "off").exists() or AP.env_flag("CHEWBACCA_MEETING_AUTOPILOT"):
+        return True
+    return not (folder / "on").exists()
+
+
+def carry_over() -> bool:
+    """A Mac that ran the loop before "on" existed was recording with no flag,
+    and on Caleb's Mac that was his answer ("Ofc star and stop on itself",
+    2026-10-10). Keep what it had: a state.json written by the old loop (no
+    "consent" key) and no flag either way becomes "on". A fresh install has no
+    state.json yet, so it stays off. Runs from `run` only; status never writes."""
+    folder = state_dir()
+    if (folder / "on").exists() or (folder / "off").exists():
+        return False
+    body = read_state()
+    if not body or "consent" in body:
+        return False
+    (folder / "on").write_text("carried over: this Mac recorded on its own before the on flag existed\n")
+    return True
 
 
 def write_state(body: dict) -> None:
@@ -188,7 +211,8 @@ class Loop:
     def save(self) -> None:
         mic = [{"id": a.get("id"), "name": a.get("name"), "verified": AP.verified_call_app(a) is not None}
                for a in self.last.get("mic") or [] if isinstance(a, dict)]
-        write_state({"pid": os.getpid(), "updated": now().isoformat(), "off": is_off(), **self.pilot.state(),
+        write_state({"pid": os.getpid(), "updated": now().isoformat(), "off": is_off(), "consent": 1,
+                     **self.pilot.state(),
                      "mic": mic, "screen": self.last.get("screen"),
                      "decided": self.decided})
 
@@ -209,6 +233,8 @@ def run(args) -> int:
         # Kyber respawns this whenever it exits, so a refusal is the normal
         # case and exits 0 (realm-engine's rule).
         return 0
+    if carry_over():
+        log("on: carried over from before the on flag existed")
     problem = "" if replay else build_helper()
     if problem:
         log(f"cannot watch: {problem}")
@@ -318,12 +344,14 @@ def stop(args) -> int:
 
 
 def toggle(args) -> int:
-    flag = state_dir() / "off"
+    folder = state_dir()
     if args.cmd == "off":
-        flag.write_text("Caleb turned meeting autopilot off\n")
+        (folder / "on").unlink(missing_ok=True)
+        (folder / "off").write_text("turned off by the person\n")
         print("Off: nothing records on its own. `meeting-autopilot on` turns it back on.")
     else:
-        flag.unlink(missing_ok=True)
+        (folder / "off").unlink(missing_ok=True)
+        (folder / "on").write_text(f"turned on by the person, {now().isoformat()}\n")
         print("On: a meeting starts the recording and its end stops it.")
     return 0
 

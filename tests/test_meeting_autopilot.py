@@ -216,12 +216,73 @@ def main() -> int:
     body = json.loads(done.stdout or "{}")
     check("status with no loop exits 3 and says not running", done.returncode == 3 and body.get("running") is False,
           (done.returncode, done.stdout, done.stderr))
+    folder = tmp / ".chewbacca" / "meeting-autopilot"
+    done = subprocess.run([sys.executable, str(ROOT / "bin" / "meeting-autopilot"), "status"],
+                          capture_output=True, text=True, env=env, timeout=30)
+    check("a fresh install is OFF: no flag means nothing records on its own",
+          "It is off." in done.stdout and not (folder / "on").exists(), done.stdout)
     subprocess.run([sys.executable, str(ROOT / "bin" / "meeting-autopilot"), "off"], capture_output=True, env=env)
     check("off writes its flag in a 0700 folder",
-          (tmp / ".chewbacca" / "meeting-autopilot" / "off").exists()
-          and oct((tmp / ".chewbacca" / "meeting-autopilot").stat().st_mode & 0o777) == "0o700")
+          (folder / "off").exists() and oct(folder.stat().st_mode & 0o777) == "0o700")
     subprocess.run([sys.executable, str(ROOT / "bin" / "meeting-autopilot"), "on"], capture_output=True, env=env)
-    check("on removes it", not (tmp / ".chewbacca" / "meeting-autopilot" / "off").exists())
+    check("on removes off and writes the person's on flag", not (folder / "off").exists() and (folder / "on").exists())
+    subprocess.run([sys.executable, str(ROOT / "bin" / "meeting-autopilot"), "off"], capture_output=True, env=env)
+    check("off after on removes the on flag", (folder / "off").exists() and not (folder / "on").exists())
+
+    # The loop itself, in a scratch HOME, with the capture stubbed so no mic
+    # can open: a fresh install hears a signed Zoom call for a minute and
+    # starts nothing; after `on` the same minute starts one recording.
+    def minute_of_zoom(home: Path) -> list:
+        saved = os.environ.get("HOME")
+        os.environ["HOME"] = str(home)
+        try:
+            mod = load_cli()
+            clock = [T0]
+            mod.now = lambda: clock[0]
+            loop = mod.Loop()
+            started = []
+            loop.capture = lambda: (bool(started), 0)
+            loop.is_ours = lambda pid: bool(started)
+            loop.start_capture = lambda trigger: started.append(trigger)
+            loop.stop_capture = lambda trigger: None
+            for t in range(0, 60, 2):
+                clock[0] = T0 + timedelta(seconds=t)
+                loop.look(AP.snapshot_of(json.dumps({"mic": [ZOOM]})))
+            return started
+        finally:
+            os.environ["HOME"] = saved or ""
+    fresh = Path(tempfile.mkdtemp())
+    check("fresh install: a minute of a signed Zoom call records nothing", minute_of_zoom(fresh) == [])
+    state = json.loads((fresh / ".chewbacca" / "meeting-autopilot" / "state.json").read_text())
+    check("fresh install: the state the meetings panel reads says off, with the consent marker",
+          state.get("off") is True and state.get("consent") == 1, state)
+    subprocess.run([sys.executable, str(ROOT / "bin" / "meeting-autopilot"), "on"], capture_output=True,
+                   env={**os.environ, "HOME": str(fresh)})
+    check("after on: the same call starts exactly one recording", len(minute_of_zoom(fresh)) == 1)
+
+    # Carry-over: a Mac whose old loop already recorded with no flag keeps
+    # recording; one that said off, or a fresh one, does not change.
+    cli = load_cli()
+    for label, files, body, want in (
+            ("old loop's state, no flag: carried over to on", {}, {"pid": 1, "off": False}, True),
+            ("old loop's state but off: stays off", {"off": "x"}, {"pid": 1, "off": True}, False),
+            ("new loop's state (consent marker), no flag: stays off", {}, {"pid": 1, "consent": 1}, False),
+            ("no state at all (fresh): stays off", {}, None, False)):
+        h = Path(tempfile.mkdtemp())
+        f = h / ".chewbacca" / "meeting-autopilot"
+        f.mkdir(parents=True)
+        for name, text in files.items():
+            (f / name).write_text(text)
+        if body is not None:
+            (f / "state.json").write_text(json.dumps(body))
+        saved = os.environ.get("HOME")
+        os.environ["HOME"] = str(h)
+        try:
+            cli.carry_over()
+            got = not cli.is_off()
+        finally:
+            os.environ["HOME"] = saved or ""
+        check(label, got is want, got)
 
     real = {**os.environ, "HOME": str(Path.home()), "MEETING_AUTOPILOT_WATCH_CMD": "echo {}"}
     import pwd

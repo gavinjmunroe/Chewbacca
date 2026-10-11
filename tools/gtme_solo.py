@@ -14,6 +14,7 @@ business has. This runs the rest on their own Mac, from their own Gmail:
     chewbacca gtme today  --client X        inbox, then the next batch
     chewbacca gtme autosend --client X --interested "..."   the yes-reply that goes out on its own
     chewbacca gtme share  --client X --dir PATH   keep the ledger in a shared repo both people pull
+    chewbacca gtme copy   --client X --file seq.json [--require-line]   your own sequence
 
 The person approves every batch. `batch` prints each email exactly as it will
 go out and an id that is a hash of that text; `send` refuses any id it didn't
@@ -843,6 +844,44 @@ def cmd_share(a) -> int:
         if line not in have.splitlines():
             attrs.write_text(have + ("" if not have or have.endswith("\n") else "\n") + line + "\n")
         print(f"It's inside the git repo {repo}, so every command pulls first and pushes what it wrote.")
+        rules = repo / "DECISIONS.json"
+        if not rules.exists():
+            op.write_json(rules, {"client": a.client, "aliases": [], "rulings": [],
+                                  "_about": "Standing outbound rulings, with who said each and when. "
+                                            "chewbacca gtme reads them before it recommends or writes anything."})
+            print(f"Started {rules.name} at the repo root for this team's standing rules.")
+    return 0
+
+
+def cmd_copy(a) -> int:
+    """Set the sequence from a JSON file: [{step, day, subject, body}, ...]."""
+    plan = plan_of(a.client)
+    seq = op.read_json(Path(a.file), None)
+    if not isinstance(seq, list) or not seq:
+        raise Refused("The file needs a list of steps: [{\"step\": 1, \"day\": 0, \"subject\": \"...\", \"body\": \"...\"}].")
+    bad, last_day = [], -1
+    for n, c in enumerate(seq, 1):
+        if not isinstance(c, dict) or c.get("step") != n or not isinstance(c.get("day"), int):
+            bad.append(f"step {n} needs step: {n} and a whole-number day")
+            continue
+        if c["day"] <= last_day:
+            bad.append(f"step {n} has to come after step {n - 1}")
+        last_day = c["day"]
+        body = str(c.get("body") or "")
+        if DASH.search(body + str(c.get("subject") or "")):
+            bad.append(f"step {n} has a long dash")
+        if len(body.split()) > MAX_WORDS:
+            bad.append(f"step {n} is {len(body.split())} words, over {MAX_WORDS}")
+        if n == 1 and not c.get("subject"):
+            bad.append("step 1 needs a subject")
+    if bad:
+        raise Refused("Not saved: " + "; ".join(bad) + ".")
+    plan["copy"] = [{k: c.get(k, "") for k in ("step", "day", "subject", "body")} for c in seq]
+    if a.require_line:
+        plan["require_line"] = True
+    op.write_json(cdir(a.client) / "plan.json", plan)
+    print(f"Saved a {len(seq)}-step sequence. `chewbacca gtme batch` shows it filled in for real leads before "
+          "anything goes.")
     return 0
 
 
@@ -985,6 +1024,10 @@ def main(argv=None) -> int:
     p.add_argument("--client", required=True)
     p.add_argument("--interested", help="a short ask for a time, no links or numbers")
     p.add_argument("--off", action="store_true")
+    p = sub.add_parser("copy", help="set the email sequence from a JSON file")
+    p.add_argument("--client", required=True)
+    p.add_argument("--file", required=True)
+    p.add_argument("--require-line", action="store_true", help="hold any first email without its personal line")
     p = sub.add_parser("share", help="keep this client's ledger in a shared folder, like a team repo")
     p.add_argument("--client", required=True)
     p.add_argument("--dir", required=True)
@@ -995,7 +1038,8 @@ def main(argv=None) -> int:
             sync_pull(a.client)
         code = {"sender": cmd_sender, "find": cmd_find, "batch": cmd_batch, "send": cmd_send,
                 "inbox": cmd_inbox, "reply": cmd_reply, "today": cmd_today, "package": cmd_package,
-                "costs": cmd_costs, "autosend": cmd_autosend, "share": cmd_share}[a.cmd](a)
+                "costs": cmd_costs, "autosend": cmd_autosend, "share": cmd_share,
+                "copy": cmd_copy}[a.cmd](a)
     except Refused as err:
         print(str(err), file=sys.stderr)
         return 2

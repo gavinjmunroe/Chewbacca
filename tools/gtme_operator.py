@@ -749,6 +749,17 @@ def client_repos() -> Path:
     return Path(os.environ.get("CHEWBACCA_CLIENT_REPOS") or Path.home() / "code" / "work")
 
 
+def own_decisions(client: str):
+    """DECISIONS.json at the root of the repo a client's ledger is shared in
+    (`gtme share`), so a team's rulings load without a copy in ~/code/work."""
+    d = client_dir(client)
+    for p in [d, *d.parents]:
+        if (p / ".git").exists():
+            f = p / "DECISIONS.json"
+            return f if f.exists() else None
+    return None
+
+
 def rulings_for(client: str) -> list[dict]:
     """Every active ruling for a client: its clients.json entry, then any
     client repo DECISIONS.json naming it (by client name or alias)."""
@@ -761,12 +772,15 @@ def rulings_for(client: str) -> list[dict]:
         files = sorted(client_repos().glob("*/DECISIONS.json"))
     except OSError:
         files = []
+    own = own_decisions(client)
+    if own and own.resolve() not in {f.resolve() for f in files}:
+        files.append(own)
     for path in files:
         d = read_json(path, {})
         if not isinstance(d, dict):
             continue
         names = [d.get("client") or ""] + [a for a in d.get("aliases") or [] if isinstance(a, str)]
-        if any(_same(n, client) for n in names):
+        if path == own or any(_same(n, client) for n in names):
             out += [dict(r, where=str(path)) for r in d.get("rulings") or [] if isinstance(r, dict)]
     seen, active = set(), []
     for r in out:
@@ -2190,7 +2204,8 @@ def cmd_why(a, t: Teacher) -> int:
 
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    if argv and argv[0] in ("sender", "find", "batch", "send", "inbox", "reply", "today", "package", "costs"):
+    if argv and argv[0] in ("sender", "find", "batch", "send", "inbox", "reply", "today", "package", "costs",
+                            "autosend", "share", "copy"):
         import gtme_solo
         return gtme_solo.main(argv)
     if not argv or argv[0].startswith("-") and argv[0] not in ("-h", "--help"):

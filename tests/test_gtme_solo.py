@@ -403,6 +403,32 @@ class Solo(unittest.TestCase):
         self.assertNotIn("README.md\n", log.split("init")[0])
         self.assertNotIn("unrelated.txt", log)
 
+    def test_a_shared_repo_carries_the_teams_rulings_with_no_copy_elsewhere(self):
+        repo = self.tmp / "team"
+        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+        self.assertEqual(self.run_cli("share", "--client", "Dana Co", "--dir", str(repo / "ops" / "dana")), 0)
+        rules = json.loads((repo / "DECISIONS.json").read_text())
+        rules["rulings"].append({"id": "local", "rule": "Austin bakeries only.", "who": "Dana", "date": "2026-10-11",
+                                 "source": "test", "status": "active"})
+        (repo / "DECISIONS.json").write_text(json.dumps(rules))
+        os.environ["CHEWBACCA_CLIENT_REPOS"] = str(self.tmp / "nowhere")
+        try:
+            self.assertIn("Austin bakeries only.", [r["rule"] for r in self.op.rulings_for("Dana Co")])
+        finally:
+            os.environ.pop("CHEWBACCA_CLIENT_REPOS", None)
+
+    def test_copy_saves_a_clean_sequence_and_refuses_a_broken_one(self):
+        seq = self.tmp / "seq.json"
+        seq.write_text(json.dumps([{"step": 1, "day": 0, "subject": "{{company}} hours", "body": "Hi {{first_name}}."},
+                                   {"step": 2, "day": 3, "subject": "", "body": "One more \u2014 note."}]))
+        self.assertEqual(self.run_cli("copy", "--client", "Dana Co", "--file", str(seq)), 2)
+        seq.write_text(json.dumps([{"step": 1, "day": 0, "subject": "{{company}} hours", "body": "Hi {{first_name}}."},
+                                   {"step": 2, "day": 3, "subject": "", "body": "One more note."}]))
+        self.assertEqual(self.run_cli("copy", "--client", "Dana Co", "--file", str(seq), "--require-line"), 0)
+        plan = json.loads((self.d / "plan.json").read_text())
+        self.assertEqual([c["day"] for c in plan["copy"]], [0, 3])
+        self.assertTrue(plan["require_line"])
+
     def test_gtme_front_door_routes_here(self):
         self.ready()
         p = subprocess.run([sys.executable, str(ROOT / "tools" / "gtme_operator.py"), "batch", "--client", "Dana Co"],

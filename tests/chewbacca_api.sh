@@ -207,6 +207,66 @@ SH
   else
     no "no identity-provider cookie file reached the engine"
   fi
+  # A classmate's Mac: USC lives in "Profile 1", and a personal "Profile 3"
+  # opened Outlook more recently, so it holds a newer Microsoft cookie and no
+  # USC session. The Microsoft cookies must not vote, or usc-reg imports the
+  # personal profile and never gets the WebReg cookie.
+  python3 - "$T/chrome2" <<'PY2'
+import hashlib, os, sqlite3, sys
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+key = hashlib.pbkdf2_hmac("sha1", b"fakekey", b"saltysalt", 1003, 16)
+def enc(v):
+    raw = v.encode(); pad = 16 - len(raw) % 16; raw += bytes([pad]) * pad
+    e = Cipher(algorithms.AES(key), modes.CBC(b" " * 16)).encryptor()
+    return b"v10" + e.update(raw) + e.finalize()
+for prof, rows in (("Profile 1", (("webreg.usc.edu", "wr", 100), (".login.microsoftonline.com", "ESTSAUTH", 100))),
+                   ("Profile 3", ((".login.microsoftonline.com", "ESTSAUTH", 900),))):
+    os.makedirs(f"{sys.argv[1]}/{prof}", exist_ok=True)
+    db = sqlite3.connect(f"{sys.argv[1]}/{prof}/Cookies")
+    db.execute("create table cookies (host_key, name, encrypted_value, path, is_secure, is_httponly, last_access_utc)")
+    for host, name, seen in rows:
+        db.execute("insert into cookies values (?,?,?,?,?,?,?)", (host, name, enc("fake-" + name), "/", 1, 1, seen))
+    db.commit()
+PY2
+  rm -f "$T"/kept.*
+  CHEWBACCA_CHROME_DIR="$T/chrome2" CHEWBACCA_CHROME_SAFE_KEY=fakekey FAKE_KEEP="$T/kept" \
+    bash "$ROOT/bin/chewbacca-api" login usc-reg >/dev/null 2>&1
+  grep -q fake-wr "$T/kept.usc-reg.json" 2>/dev/null ||
+    no "usc-reg imported the profile with the newest Microsoft cookie instead of the one signed in to USC"
+
+  # A lapsed session re-imports from Chrome once and retries, silently. WebReg
+  # answered a bare 302 on 2026-10-10 after the 12 hour import ran out.
+  cat > "$T/bin/api-anything" <<'SH'
+#!/bin/bash
+printf '%s\n' "$*" >> "$FAKE_LOG"
+case "$1 $2" in
+  "login usc-reg") touch "$FAKE_STATE"; echo '{"ok":true}' ;;
+  "call usc-reg"|"call alpha")
+    if [ -f "$FAKE_STATE" ]; then echo '{"ok":true,"data":[1]}'
+    else echo '{"ok":false,"class":"error","reason":"HTTP 302: "}'; echo "next: retry once" >&2; fi ;;
+  *) echo '{"ok":true}' ;;
+esac
+SH
+  chmod +x "$T/bin/api-anything"
+  : > "$T/calls"; rm -f "$T/state"
+  out="$(CHEWBACCA_CHROME_DIR="$T/chrome" CHEWBACCA_CHROME_SAFE_KEY=fakekey FAKE_STATE="$T/state" \
+    bash "$ROOT/bin/chewbacca-api" call usc-reg holds term=20271 2>/dev/null)"
+  printf '%s' "$out" | grep -q '"ok":true' || no "a lapsed usc-reg session was not re-imported and retried: $out"
+  grep -q '^login usc-reg --cookies' "$T/calls" || no "the retry did not re-import from Chrome"
+  # A site with no profile login is never re-imported: the failure passes through.
+  : > "$T/calls"; rm -f "$T/state"
+  out="$(FAKE_STATE="$T/state" bash "$ROOT/bin/chewbacca-api" call alpha getThing 2>/dev/null)"
+  printf '%s' "$out" | grep -q '"ok":false' || no "a non-profile site's failure was swallowed: $out"
+  grep -q '^login' "$T/calls" && no "a non-profile site triggered a Chrome re-import"
+  # No session in any profile: the failure passes through, and Keychain is never asked.
+  : > "$T/calls"; rm -f "$T/state"; mkdir -p "$T/nochrome"
+  printf '#!/bin/bash\ntouch "%s/keychain-asked"\necho fakekey\n' "$T" > "$T/bin/security"; chmod +x "$T/bin/security"
+  out="$(CHEWBACCA_CHROME_DIR="$T/nochrome" FAKE_STATE="$T/state" \
+    bash "$ROOT/bin/chewbacca-api" call usc-reg holds term=1 2>/dev/null)"
+  printf '%s' "$out" | grep -q '"ok":false' || no "with no Chrome session the original failure should pass through: $out"
+  [ -e "$T/keychain-asked" ] && no "Keychain was asked for a Chrome key with no session to decrypt"
+  rm -f "$T/bin/security"
+
   # restore the plain fake engine
   printf '#!/bin/bash\nprintf "%%s\\n" "$*" >> "$FAKE_LOG"\necho "{\\"ok\\":true}"\n' > "$T/bin/api-anything"
 fi

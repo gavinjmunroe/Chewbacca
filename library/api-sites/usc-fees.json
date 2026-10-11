@@ -1,7 +1,7 @@
 {
   "name": "usc-fees",
   "baseUrl": "https://atweb.usc.edu",
-  "description": "USC Registration and Fee Summary (atweb.usc.edu/registrationfeesummary), read only: the terms a student is registered for, and one term's charges, awards and credits, pending aid, net charges and units. Needs login from the Work Chrome profile: USC Shibboleth plus Microsoft Entra cookies.",
+  "description": "USC Registration and Fee Summary (atweb.usc.edu/registrationfeesummary), read only: the terms a student is registered for, and one term's charges, awards and credits, pending aid, net charges and units. Needs login from whichever Chrome profile is signed in to USC: USC Shibboleth plus Microsoft Entra cookies.",
   "operations": [
     {
       "name": "registeredTerms",

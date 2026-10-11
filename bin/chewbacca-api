@@ -7,7 +7,8 @@
 #   chewbacca api teach <site> <op> --trigger <url> --example k=v ...
 #                                      learn a new operation (api-anything add)
 #   chewbacca api login <site>         import a session from a signed-in browser
-#                                      (brightspace, handshake: from the Work Chrome profile)
+#                                      (brightspace, handshake, usc-reg, usc-fees: from
+#                                      whichever Chrome profile is signed in to USC)
 #   chewbacca api sync                 load the kit's taught sites into the engine
 #   chewbacca api install              build the engine, wire MCP into Claude and Codex
 #
@@ -219,7 +220,7 @@ sync_sites() {
 # cookies like that on every restart, so a plain profile import never holds
 # (2026-10-10: Brightspace bounced to USC SSO on every capture, Handshake
 # answered not_logged_in). For those, this reads the site's cookies straight
-# from the Work Chrome profile's cookie store (the decryption bin/brightspace
+# from the student's Chrome cookie store (the decryption bin/brightspace
 # uses), gives them a 12 hour expiry, imports them from a private temp file,
 # and deletes the file. One line per site: name, cookie host suffixes (comma
 # separated), and a cookie-name prefix ("-" for all of those hosts' cookies).
@@ -240,9 +241,11 @@ login_from_profile() {
   host="$(printf '%s' "$row" | awk '{print $2}')"
   prefix="$(printf '%s' "$row" | awk '{print $3}')"
   # Chrome's own Brightspace session lapses too (2026-10-10: a 403 hours
-  # after a good import). bin/brightspace renews it by reopening the site in
-  # the Work profile, so check it first and import what that leaves.
-  [ "$1" = brightspace ] && python3 "$ROOT/bin/brightspace" whoami >/dev/null 2>&1
+  # after a good import). bin/brightspace rereads Chrome's cookies until a
+  # live one turns up, so check it first and import what that leaves. Not on
+  # the silent re-import inside `call`: signed out for real, whoami opens the
+  # sign-in page, and a read nobody watched must never put a window up.
+  [ "$1" = brightspace ] && [ -z "${2:-}" ] && python3 "$ROOT/bin/brightspace" whoami >/dev/null 2>&1
   dir="$(mktemp -d)" || return 1
   chmod 700 "$dir"
   if ! python3 - "$host" "$prefix" "$dir/cookies.json" "${CHEWIE_CHROME_PROFILE:-}" <<'PY'
@@ -274,8 +277,16 @@ def read(db):
         return out
 
 # Any student, any Mac: with no profile named, use whichever Chrome profile
-# touched these hosts' cookies most recently. Caleb's USC login lives in
-# "Profile 1" and a classmate's will be somewhere else.
+# touched the site's own cookies most recently. One student's USC login lives
+# in "Profile 1" and a classmate's will be somewhere else.
+# Only the site's own hosts vote. The narrowed identity-provider hosts
+# (login.microsoftonline.com) are signed in from every profile that ever opened
+# Outlook or Teams, so letting them vote handed usc-reg to a personal profile
+# with a newer Microsoft cookie and no USC session at all.
+own = [h for h, hp in hosts if hp == prefix]
+def on_own(host_key):
+    k = host_key.lstrip(".")
+    return any(k == h or k.endswith("." + h) for h in own)
 if profile:
     rows = read(chrome / profile / "Cookies")
 else:
@@ -285,9 +296,13 @@ else:
             found = read(db)
         except Exception:
             continue
-        seen = max((r[6] for r in found), default=-1)
-        if found and seen > best:
+        seen = max((r[6] for r in found if on_own(r[0])), default=-1)
+        if seen > best:
             best, rows, profile = seen, found, db.parent.name
+# Before the keychain read: no session anywhere is a plain answer, never a
+# Keychain prompt for cookies that aren't there.
+if not any(on_own(r[0]) for r in rows):
+    sys.exit(f"no {hosts[0][0]} session in any Chrome profile; sign in there once in Chrome")
 secret = (os.environ.get("CHEWBACCA_CHROME_SAFE_KEY", "").encode()
           or subprocess.check_output(["security", "find-generic-password", "-w", "-s", "Chrome Safe Storage"]).strip())
 key = hashlib.pbkdf2_hmac("sha1", secret, b"saltysalt", 1003, 16)
@@ -376,7 +391,40 @@ case "$cmd" in
     sync_sites --quiet
     exec api-anything mcp "$@"
     ;;
-  sites|ops|call|logout|capture|inspect|verify|heal|export|add)
+  call)
+    need_engine || exit 1
+    sync_sites --quiet
+    # A profile-login site's imported session lasts 12 hours, and the engine
+    # then answers auth, a challenge, or a bare 302 (WebReg, 2026-10-10) and
+    # says to run `api-anything login`, which is not how these sessions get in.
+    # Re-import from Chrome once, silently, and retry: the same read a student
+    # would do by hand, so a session they hold in Chrome never looks signed out.
+    if [ -n "${1:-}" ] && [ -n "$(profile_login_row "$1")" ] && [ -z "${CHEWBACCA_API_NO_RELOGIN:-}" ]; then
+      errf="$(mktemp)"
+      out="$(api-anything call "$@" 2>"$errf")"; rc=$?
+      if printf '%s\n' "$out" | tail -1 | python3 -c '
+import json, re, sys
+try:
+    r = json.loads(sys.stdin.read())
+except ValueError:
+    sys.exit(1)
+why = str(r.get("reason") or "")
+lapsed = r.get("ok") is False and (
+    r.get("class") == "auth"
+    or re.search(r"HTTP (30[12]|40[13])\b", why)
+    or (r.get("class") == "blocked" and re.search(r"challeng|sign.?in|log.?in", why, re.I)))
+sys.exit(0 if lapsed else 1)' && login_from_profile "$1" quiet >/dev/null 2>&1; then
+        rm -f "$errf"
+        sync_sites --quiet
+        exec api-anything call "$@"
+      fi
+      printf '%s\n' "$out"
+      cat "$errf" >&2; rm -f "$errf"
+      exit "$rc"
+    fi
+    exec api-anything call "$@"
+    ;;
+  sites|ops|logout|capture|inspect|verify|heal|export|add)
     need_engine || exit 1
     sync_sites --quiet
     exec api-anything "$cmd" "$@"

@@ -29,13 +29,19 @@ esac
 SH
 chmod +x "$T/bin/api-anything"
 export PATH="$T/bin:$PATH" API_ANYTHING_HOME="$T/engine" CHEWBACCA_API_SITES="$T/kit" \
-  CHEWBACCA_USC_CONFIG="$T/usc.json" CHEWBACCA_ROOT="$ROOT"
+  CHEWBACCA_USC_CONFIG="$T/usc.json" CHEWBACCA_ROOT="$ROOT" CHEWBACCA_CHROME_DIR="$T/chrome"
+# An empty Chrome: the signed-out case below re-imports from Chrome before it
+# gives up, and must never read the real profiles on the Mac running this.
+mkdir -p "$T/chrome"
 
 out="$(bash "$ROOT/bin/chewbacca" usc 2>&1)"
 printf '%s' "$out" | grep -q "ACAD-324 *Mash Up" || no "due item missing or not labelled by course code: $out"
 printf '%s' "$out" | grep -q "OLD-101" && no "last term's course leaked into this week"
 printf '%s' "$out" | grep -q "Grill: Turkey Burger" || no "dining hall section missing"
 printf '%s' "$out" | grep -q "Trojan Talk (Doheny)" || no "events section missing"
+
+# No hall picked yet: the default is named as a default, never passed off as theirs.
+printf '%s' "$out" | grep -q "at university-village (pick yours: chewbacca usc --hall" || no "an unpicked hall did not say how to pick one: $out"
 
 # Signed out of Brightspace: one line saying what to do, the rest still shows.
 out="$(FAKE_SIGNED_OUT=1 bash "$ROOT/bin/chewbacca" usc 2>&1)"
@@ -45,7 +51,9 @@ printf '%s' "$out" | grep -q "Trojan Talk" || no "a Brightspace failure took the
 # The hall choice is remembered.
 bash "$ROOT/bin/chewbacca" usc --hall evk >/dev/null 2>&1
 grep -q '"evk"' "$T/usc.json" || no "--hall was not remembered"
-bash "$ROOT/bin/chewbacca" usc 2>&1 | grep -q " at evk" || no "the remembered hall was not used"
+picked="$(bash "$ROOT/bin/chewbacca" usc 2>&1)"
+printf '%s' "$picked" | grep -q " at evk" || no "the remembered hall was not used"
+printf '%s' "$picked" | grep -q "pick yours" && no "a picked hall still asked to be picked"
 
 # --json is data.
 bash "$ROOT/bin/chewbacca" usc --json 2>/dev/null | python3 -c 'import json,sys; d=json.load(sys.stdin); assert set(d) == {"due","food","events"}' \

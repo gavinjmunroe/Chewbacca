@@ -2,7 +2,7 @@
 
 USC Brightspace (D2L) read through its own Valence REST API with the student's signed-in session. These ops feed the coursework ledger: they list enrolled courses, every dropbox and its submission state, released grades, announcements, flat content items with due dates, and calendar due items across courses, so assignments that only exist in Brightspace show up even when no syllabus listed them. All ops are read-only GETs that return plain JSON at tier 1 (Node fetch with the imported cookie jar). No browser is needed once the session is imported.
 
-Log in from his USC Work profile: `chewbacca api login brightspace` (reads the d2l cookies from the Work Chrome profile, the same way `brightspace` does, and imports them for 12 hours)
+Log in with `chewbacca api login brightspace` (reads the d2l cookies from whichever Chrome profile used Brightspace last, the same way `brightspace` does, and imports them for 12 hours; `chewbacca api call` re-imports once by itself when that runs out)
 
 - myCourses() -> orgUnitId, code, name, start, end, active, canAccess, homeUrl
 - upcoming(orgUnitIds, start, end) -> title, courseCode, course, orgUnitId, start, due, type, eventType, url
@@ -14,7 +14,7 @@ Log in from his USC Work profile: `chewbacca api login brightspace` (reads the d
 
 Caveats observed on 2026-10-09:
 
-- The D2L login cookies (d2lSessionVal, d2lSecureSessionVal) are browser-session cookies with no expiry. A plain `login --profile` import stores them, but api-anything's own Chrome drops them on restart, so every capture bounced to the USC SSO page and direct API URLs returned 403. The working import was a cookie file holding only the four brightspace.usc.edu d2l cookies with a 12 hour expiry, loaded with `login --cookies` and deleted right after. Expect to redo that when the session lapses. Opening Brightspace in Chrome Profile 1 renews the underlying session.
+- The D2L login cookies (d2lSessionVal, d2lSecureSessionVal) are browser-session cookies with no expiry. A plain `login --profile` import stores them, but api-anything's own Chrome drops them on restart, so every capture bounced to the USC SSO page and direct API URLs returned 403. The working import was a cookie file holding only the four brightspace.usc.edu d2l cookies with a 12 hour expiry, loaded with `login --cookies` and deleted right after. `chewbacca api call` redoes that once by itself when the session lapses. Using Brightspace in Chrome, in whichever profile the student keeps it, renews the underlying session.
 - `login` reports `loggedIn: false` for this site even when the session works. Judge by a myCourses call, not by that flag.
 - orgUnitId is the numeric course offering id from myCourses. A lecture and its lab are separate org units (BISC 101 has two), so read both.
 - upcoming needs orgUnitIds as a comma-separated list. Without the list the cross-course calendar call errors. start and end are ISO UTC datetimes like 2026-10-01T00:00:00.000Z. due is the event's EndDateTime.

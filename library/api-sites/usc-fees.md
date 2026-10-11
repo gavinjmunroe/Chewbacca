@@ -2,7 +2,7 @@
 
 usc-fees reads USC's Registration and Fee Summary (atweb.usc.edu/registrationfeesummary) for the signed-in student. It lists the terms the student is registered for, and for one term it returns the charges, the awards and credits, pending aid, the totals, net charges, and academic and tuition units. Both ops are read only GETs on the app's own JSON API, the same calls the page makes, and they answer over plain HTTP (tier 1) once a session is imported.
 
-Log in with: `chewbacca api login usc-fees`, which imports from whichever Chrome profile is signed in to USC (his is "Profile 1", the Work profile), using cookies for atweb.usc.edu, shibboleth.usc.edu, login.usc.edu and the narrowed Entra set on login.microsoftonline.com.
+Log in with: `chewbacca api login usc-fees`, which imports from whichever Chrome profile is signed in to USC (chosen by the USC cookies alone, never the Microsoft ones), using cookies for atweb.usc.edu, shibboleth.usc.edu, login.usc.edu and the narrowed Entra set on login.microsoftonline.com.
 
 - registeredTerms() -> termCode, description, termBeginDate, termEndDate, isCurrentTerm
 - termSummary(term) -> termCode, term, totalCharges, totalAwardsAndCredits, totalPending, netCharges, academicUnits, tuitionUnits, charges[], awardsAndCredits[], pending[] (each line: description, longDescription, transactionType, financialTransactionCode, fee {symbol, feeAmount, formattedAmount})

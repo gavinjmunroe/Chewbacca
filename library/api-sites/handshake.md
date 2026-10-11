@@ -2,7 +2,7 @@
 
 USC's Handshake (connectSC) as read-only operations, for finding jobs, internships, employer events and career fairs without opening the site. Every op reads one of Handshake's own JSON routes under https://usc.joinhandshake.com/stu/ through the signed-in session, and every op answered at tier 1 (plain HTTP, about 0.3 to 1 s). Nothing here applies, RSVPs, saves, follows or messages.
 
-Log in from the Work profile: `chewbacca api login handshake --profile "Chrome/Profile 1"`
+Log in with `chewbacca api login handshake`, which imports the joinhandshake.com cookies from whichever Chrome profile used Handshake last (any student, any profile; `CHEWIE_CHROME_PROFILE` names one). After the 12 hour import runs out, `chewbacca api call` re-imports once by itself and retries.
 
 - searchJobs(query) -> id, title, employer, location, type, employment, deadline, posted
 - getJob(id) -> id, title, employer, type, location, workplace, deadline, applyStart, payType, payMinCents, payMaxCents, payPeriod, currency, applyType, applyUrl, applyInstructions, workAuthorization, description

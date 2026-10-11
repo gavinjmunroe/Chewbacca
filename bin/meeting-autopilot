@@ -110,13 +110,20 @@ class Loop:
     def __init__(self) -> None:
         self.pilot = AP.Autopilot()
         self.ours_pid = 0
+        self.ours_identity: tuple | None = None
         self.last: dict = {}
         self.decided: list[dict] = []
 
     def capture(self) -> tuple[bool, int]:
+        """(running, helper pid), from one read of the pid file: the pid the
+        check compares is the pid the stop acts on."""
         state = MC.capture_state(home())
-        pid = MC.read_pid(MC.capture_dir(home()) / "helper.pid") if state.get("running") else 0
-        return bool(state.get("running")), pid
+        return bool(state.get("running")), int(state.get("helper_pid") or 0) if state.get("running") else 0
+
+    def is_ours(self, pid: int) -> bool:
+        """Exactly the process this loop started: same pid, same executable
+        path, same start time. A name or a command line is never enough."""
+        return bool(pid) and pid == self.ours_pid and process_identity(pid) == self.ours_identity
 
     def start_capture(self, trigger: dict) -> None:
         log(f"start: {trigger.get('why')}")
@@ -125,6 +132,10 @@ class Loop:
                               text=True, timeout=START_TIMEOUT_S, stdin=subprocess.DEVNULL)
         running, pid = self.capture()
         self.ours_pid = pid if running else 0
+        self.ours_identity = process_identity(pid) if running else None
+        if self.ours_identity is None or self.ours_identity[0] != str(HELPER.resolve()):
+            # Whatever answered is not the helper this loop runs: not ours.
+            self.ours_pid, self.ours_identity = 0, None
         tail = (done.stdout or done.stderr or "").strip().splitlines()[-1:] or [""]
         self.note("start", trigger, ok=running, detail=tail[0][:200])
 
@@ -132,9 +143,14 @@ class Loop:
         log("stop: the meeting ended")
         # Detached: stop waits for the last chunk and the summary (minutes),
         # and the loop has to keep looking for the next call meanwhile.
-        subprocess.Popen([sys.executable, str(ROOM_CAPTURE), "stop", "--json"], stdin=subprocess.DEVNULL,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
-        self.ours_pid = 0
+        # --only-pid hands room-capture the pid this loop checked, so it stops
+        # that process or nothing, never whatever the pid file says by then.
+        pid = self.ours_pid
+        if self.is_ours(pid):
+            subprocess.Popen([sys.executable, str(ROOM_CAPTURE), "stop", "--json", "--only-pid", str(pid)],
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             start_new_session=True)
+        self.ours_pid, self.ours_identity = 0, None
         self.note("stop", {"why": f"{(trigger or {}).get('name') or 'the call'} let go of the mic"}, ok=True, detail="")
 
     def note(self, action: str, trigger: dict | None, ok: bool, detail: str) -> None:
@@ -145,7 +161,7 @@ class Loop:
         self.last = snapshot
         meeting = AP.meeting_in(snapshot)
         running, pid = self.capture()
-        ours = bool(self.ours_pid) and pid == self.ours_pid
+        ours = running and self.is_ours(pid)
         if is_off():
             meeting = None if not ours else meeting
         # The trigger is read before the step: a stop returns the pilot to
@@ -219,8 +235,7 @@ def run(args) -> int:
             fresh, lines[:] = list(lines), []
         for line in fresh:
             body = AP.snapshot_of(line)
-            if body is not None:
-                snapshot, last_line = body, time.time()
+            snapshot, last_line = body, time.time()
         if helper.poll() is not None or time.time() - last_line > SILENT_S:
             log("the mic watcher stopped; exiting so Kyber starts a fresh one")
             break
@@ -230,9 +245,30 @@ def run(args) -> int:
             except Exception as exc:  # noqa: BLE001  one bad look must not end the watch
                 log(f"look failed: {type(exc).__name__}: {exc}")
     end()
-    if loop.ours_pid and loop.capture()[0]:
+    if loop.is_ours(loop.capture()[1]):
         loop.stop_capture(loop.pilot.trigger)
     return 0
+
+
+def process_identity(pid: int) -> tuple[str, str] | None:
+    """(executable path, start time) of a live pid, read from the kernel by
+    ps, or None. Two reads of one process agree; a reused pid does not."""
+    if pid <= 0:
+        return None
+    try:
+        out = subprocess.run(["/bin/ps", "-o", "lstart=,comm=", "-p", str(pid)], capture_output=True, text=True,
+                             timeout=5).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    # lstart is a fixed 24-character date ("Sat Oct 10 22:28:28 2026").
+    if len(out) < 26:
+        return None
+    exe = out[25:].strip()
+    try:
+        exe = str(Path(exe).resolve())
+    except OSError:
+        return None
+    return exe, out[:24]
 
 
 def pid_running() -> int:

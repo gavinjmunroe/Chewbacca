@@ -2,7 +2,7 @@
 """Record a meeting on this Mac: your mic and the call's audio, transcribed here.
 
     room-capture start [--no-mic] [--json]    begin recording, in the background
-    room-capture stop [--wait SECONDS] [--json]
+    room-capture stop [--wait SECONDS] [--only-pid PID] [--json]
                                               stop; wait for the last lines and the summary
     room-capture status [--json]              recording or not, what was heard, the last meeting
 
@@ -227,6 +227,12 @@ def stop(args) -> int:
         say("Not recording." + (f" Closed {len(closed)} meeting(s) left open." if closed else ""), args.json,
             ok=True, running=False)
         return 0
+    if args.only_pid and state["helper_pid"] != args.only_pid:
+        # The caller checked one process; the pid file now names another (a
+        # capture started by hand since, or none). Stop nothing.
+        say(f"Not stopping: the capture running now is not pid {args.only_pid}.", args.json, ok=False,
+            running=state["running"])
+        return 1
     if state["running"]:
         try:
             os.kill(state["helper_pid"], signal.SIGTERM)
@@ -289,6 +295,7 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--json", action="store_true")
     t = sub.add_parser("stop")
     t.add_argument("--wait", type=float, default=STOP_WAIT_S, help="seconds to wait for the summary")
+    t.add_argument("--only-pid", type=int, default=0, help="stop only if the running helper is this pid")
     t.add_argument("--json", action="store_true")
     u = sub.add_parser("status")
     u.add_argument("--json", action="store_true")

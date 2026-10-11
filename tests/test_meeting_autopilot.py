@@ -18,9 +18,11 @@ import importlib.machinery
 import importlib.util
 import json
 import os
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -87,6 +89,20 @@ def drive(pilot, frames, running=None):
     return out
 
 
+def load_cli():
+    loader = importlib.machinery.SourceFileLoader("meeting_autopilot_cli", str(ROOT / "bin" / "meeting-autopilot"))
+    spec = importlib.util.spec_from_loader("meeting_autopilot_cli", loader)
+    module = importlib.util.module_from_spec(spec)
+    loader.exec_module(module)
+    return module
+
+
+def MC_capture_dir(home: Path) -> Path:  # noqa: N802
+    folder = home / ".chewbacca" / "room-capture"
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder
+
+
 def main() -> int:
     # what counts: only a signed work call app
     zoom = AP.meeting_in(snap(ZOOM, SIRI))
@@ -144,6 +160,28 @@ def main() -> int:
     check("a Stop press holds until that call ends, and the next call starts again",
           acts == [(16, "start"), (106, "start")], acts)
 
+    # one parse, read by the check and the action alike
+    dup = ('{"mic":[{"id":"us.zoom.xos","name":"zoom.us","pid":10,"signed":false,"team":"BJ4HAAB9B3",'
+           '"signed":true}]}')
+    check("crafted line: a duplicate 'signed' (false, then true) is unparseable, not the last value",
+          AP.snapshot_of(dup).get("unparseable") and AP.meeting_in(AP.snapshot_of(dup)) is None)
+    dup_id = '{"mic":[{"id":"evil.app","id":"us.zoom.xos","signed":true,"team":"BJ4HAAB9B3"}]}'
+    check("crafted line: a duplicate id is unparseable", AP.meeting_in(AP.snapshot_of(dup_id)) is None)
+    good = json.dumps({"mic": [ZOOM]})
+    check("the honest line the helper prints still parses to a meeting", AP.meeting_in(AP.snapshot_of(good)))
+    for bad in ('{"mic":[{"id":"us.zoom.xos","signed":true,"team":"BJ4HAAB9B3","pid":NaN}]}', "not json",
+                '[{"id":"us.zoom.xos"}]', '{"mic":"us.zoom.xos"}', '{"mic":["us.zoom.xos"]}', "{" * 5000):
+        check(f"unparseable means nobody on the mic: {bad[:40]!r}",
+              AP.snapshot_of(bad).get("mic") == [] and AP.meeting_in(AP.snapshot_of(bad)) is None)
+    pilot = AP.Autopilot()
+    for t in range(0, 30, 2):
+        pilot.step(AP.meeting_in(AP.snapshot_of(good)), capture_running=t > 16, ours=t > 16,
+                   now=T0 + timedelta(seconds=t))
+    acts = [pilot.step(AP.meeting_in(AP.snapshot_of("garbage")), True, True, T0 + timedelta(seconds=t))
+            for t in range(30, 60, 2)]
+    check("garbage lines mid-call count as the call gone: the stop comes on time, nothing keeps it alive",
+          "stop" in acts, acts)
+
     # the CLI
     tmp = Path(tempfile.mkdtemp())
     env = {**os.environ, "HOME": str(tmp)}
@@ -162,6 +200,41 @@ def main() -> int:
           and oct((tmp / ".chewbacca" / "meeting-autopilot").stat().st_mode & 0o777) == "0o700")
     subprocess.run([sys.executable, str(ROOT / "bin" / "meeting-autopilot"), "on"], capture_output=True, env=env)
     check("on removes it", not (tmp / ".chewbacca" / "meeting-autopilot" / "off").exists())
+
+    cli = load_cli()
+    me = os.getpid()
+    check("a process's identity is its executable and start time, read from the kernel",
+          cli.process_identity(me) and cli.process_identity(me)[0].endswith("Python") or
+          bool(cli.process_identity(me)), cli.process_identity(me))
+    check("a dead pid has no identity", cli.process_identity(2 ** 22 + 7) is None)
+    loop = cli.Loop()
+    loop.ours_pid, loop.ours_identity = me, ("/usr/bin/zoom", "Sat Oct 10 00:00:00 2026")
+    check("same pid, different executable or start time: not ours (a reused pid never passes)",
+          not loop.is_ours(me))
+    loop.ours_identity = cli.process_identity(me)
+    check("same pid, same executable, same start: ours", loop.is_ours(me))
+    # A stand-in capture someone started by hand: a process named room-capture.
+    cap = MC_capture_dir(tmp)
+    stand_in = tmp / "room-capture"
+    stand_in.write_text("#!/bin/sh\nsleep 30\n")
+    stand_in.chmod(0o755)
+    other = subprocess.Popen([str(stand_in), "30"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, start_new_session=True)
+    for _ in range(50):  # until exec has replaced the forked python's command line
+        if "room-capture" in subprocess.run(["/bin/ps", "-o", "command=", "-p", str(other.pid)],
+                                            capture_output=True, text=True).stdout:
+            break
+        time.sleep(0.1)
+    try:
+        (cap / "helper.pid").write_text(str(other.pid))
+        done = subprocess.run([sys.executable, str(ROOT / "bin" / "room-capture"), "stop", "--json", "--wait", "0",
+                               "--only-pid", str(other.pid + 1)], capture_output=True, text=True, env=env, timeout=30)
+        check("room-capture stop --only-pid refuses when the running capture is another pid, and leaves it running",
+              done.returncode == 1 and "Not stopping" in done.stdout and other.poll() is None,
+              (done.returncode, done.stdout, done.stderr))
+    finally:
+        os.killpg(other.pid, signal.SIGKILL)
+        other.wait(timeout=10)
 
     print("all passed" if not failed else f"{failed} failed")
     return 1 if failed else 0

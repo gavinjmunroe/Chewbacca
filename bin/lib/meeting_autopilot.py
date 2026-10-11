@@ -159,12 +159,40 @@ class Autopilot:
         return None
 
 
-def snapshot_of(line: str) -> dict | None:
+class Unparseable(ValueError):
+    pass
+
+
+def _strict_pairs(pairs):
+    seen = {}
+    for key, value in pairs:
+        if key in seen:
+            # Python keeps the last of two equal keys and other readers keep
+            # the first, so a line carrying both "signed": false and
+            # "signed": true would mean one thing to one reader and the
+            # opposite to another. One line, one meaning, or no meaning.
+            raise Unparseable(f"duplicate key {key!r}")
+        seen[key] = value
+    return seen
+
+
+def _no_constant(name):
+    raise Unparseable(f"non-JSON constant {name}")
+
+
+def snapshot_of(line: str) -> dict:
+    """The one parse of a --watch-mic line, which both the check and the
+    action read. Anything that is not exactly one JSON object with a list of
+    objects under "mic" reads as a snapshot with nobody on the mic: unknown
+    means no recording, never "keep what was there before"."""
     try:
-        body = json.loads(line)
-    except ValueError:
-        return None
-    return body if isinstance(body, dict) else None
+        body = json.loads(line, object_pairs_hook=_strict_pairs, parse_constant=_no_constant)
+    except (ValueError, RecursionError):
+        return {"mic": [], "unparseable": True}
+    if not isinstance(body, dict) or not isinstance(body.get("mic"), list) \
+            or not all(isinstance(row, dict) for row in body["mic"]):
+        return {"mic": [], "unparseable": True}
+    return body
 
 
 def env_flag(name: str, env: dict | None = None) -> bool:

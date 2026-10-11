@@ -1263,6 +1263,11 @@ def browser(tmp: Path) -> None:
           model["/agents/webUrl"] == url and "agents-web Web" in layout
           and model["/agents/webHead"] == "Browser · Rail · localhost:3000", (model["/agents/webUrl"],
                                                                           model["/agents/webHead"]))
+    e.browsers[bid]["title"] = "Browser"
+    a._browser = None
+    data, model = view(a, ctx)
+    check("an untitled pane names its host once", model["/agents/webHead"] == "Browser · localhost:3000",
+          model["/agents/webHead"])
     e.browsers[bid]["url"] = "javascript:alert(1)"
     a._browser = None
     data, model = view(a, ctx)

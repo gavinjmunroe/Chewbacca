@@ -1713,6 +1713,10 @@ class Agents(Provider):
             url = web_address(pane["url"])
             host = re.sub(r"^https?://", "", url, flags=re.I).split("/", 1)[0] if url else ""
             more = f" · {plural(pane['count'], 'pane')} in this space" if pane["count"] > 1 else ""
+            # A pane realm made with no title is called "Browser", which read
+            # "Browser · Browser · example.com" on the glass (2026-10-10).
+            if pane["title"].lower() in ("browser", "new tab"):
+                pane = dict(pane, title="")
             out[p("webUrl")] = url
             out[p("webHead")] = clean(f"Browser · {pane['title'] or host or 'a blank page'}"
                                       f"{' · ' + host if host and pane['title'] else ''}{more}", 100)

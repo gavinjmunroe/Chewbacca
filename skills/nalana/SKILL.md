@@ -90,3 +90,19 @@ friends'. They apply to any prop or mark modeled after a physical object.
 - **Logos render with no shadow.** "The logo shouldn't hv shadows"
   (2026-10-11). The reference he named is a single soft-lit rainbow arch with
   a sculpted texture and no cast shadow, set beside a flat wordmark.
+
+## Nalana's own modeler comes first
+
+"WE HV NALANA" (Caleb, 2026-10-11), after 29 hand-coded bpy versions of the TTS
+helmet still read as "a trash can that was cut out of". Nalana has its own AI
+modeler: one prompt plus his reference photo gave a real Corinthian in about
+two minutes. Hand-written bpy is for edits on top of that, never the first
+draft of an organic shape.
+
+How to drive it from a session: the bridge listens on 127.0.0.1:8765 and wants
+the bearer token in `nalana.bridge_server._token` (read it inside Blender via
+the MCP and write it to a 0600 scratch file, never print it). POST
+`/chat/send` with `{"text": ..., "images": [{"dataUrl": "data:image/png;base64,..."}]}`,
+then poll `/state` until `is_processing` and `is_thinking` are both false; the
+last `conversation` entry carries its own review score. It binds to the
+active object, so save the scene first.

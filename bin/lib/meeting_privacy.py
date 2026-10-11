@@ -120,7 +120,10 @@ def redact(text: str, label: str = PRIVATE_LABEL) -> str:
             if isinstance(v, list):
                 return [walk(x) for x in v]
             if isinstance(v, dict):
-                return {k: walk(x) for k, x in v.items()}
+                # A meeting title can be a key (rows grouped by meeting), and
+                # two hidden keys must not collapse into one.
+                return {(f"{label} {i + 1}" if is_private(k) else k): walk(x)
+                        for i, (k, x) in enumerate(v.items())}
             return v
         return json.dumps(walk(data), indent=1, ensure_ascii=False)
     out = []

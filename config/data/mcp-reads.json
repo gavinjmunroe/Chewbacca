@@ -551,7 +551,8 @@
       "tool": "hud-context",
       "argv": [],
       "about": "The frontmost app, window title and selection right now.",
-      "asks": "what am I looking at on screen front window"
+      "asks": "what am I looking at on screen front window",
+      "private": "meetings"
     },
     {
       "id": "mac.stores",
@@ -838,7 +839,8 @@
         "count": {
           "type": "number"
         }
-      }
+      },
+      "private": "meetings"
     },
     {
       "id": "voice.today",
@@ -846,7 +848,8 @@
       "argv": [
         "today"
       ],
-      "about": "Today's questions to the voice assistant."
+      "about": "Today's questions to the voice assistant.",
+      "private": "meetings"
     },
     {
       "id": "voice.search",
@@ -860,7 +863,8 @@
           "type": "string",
           "required": true
         }
-      }
+      },
+      "private": "meetings"
     },
     {
       "id": "history.search",
@@ -875,7 +879,8 @@
           "type": "string",
           "required": true
         }
-      }
+      },
+      "private": "meetings"
     },
     {
       "id": "glass.spaces",

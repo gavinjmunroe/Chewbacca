@@ -20,6 +20,8 @@ assert out[1] == "  Private" and out[2] == "  Private" and out[4] == "  Private"
 assert out[3] == "  12:00\tTeam sync", out
 j = json.loads(redact(json.dumps([{"title": "OB-GYN follow up", "at": "2026-10-12"}, {"title": "Amber standup"}])))
 assert j == [{"title": "Private", "at": "2026-10-12"}, {"title": "Amber standup"}], j
+k = json.loads(redact(json.dumps({"Therapy 3pm": ["notes"], "Psychiatric intake": [], "Amber standup": []})))
+assert set(k) == {"Private 1", "Private 2", "Amber standup"}, k
 PY
 
 # 2. Every registry entry that can print a meeting is marked for redaction:
@@ -27,7 +29,10 @@ PY
 #    made from meeting action items), and mac-db's store picker.
 python3 - "$ROOT/config/data/mcp-reads.json" <<'PY' || fail "a meeting-shaped read is not marked private"
 import json, sys
-MEETING_TOOLS = {"meeting-autopilot", "room-capture", "granola-import", "work-ledger", "gtme-lookup"}
+# The voice log, agent transcripts and the front window title echo calendar
+# and meeting titles back (automated review, 2026-10-11).
+MEETING_TOOLS = {"meeting-autopilot", "room-capture", "granola-import", "work-ledger", "gtme-lookup",
+                 "superassistant", "agent-history", "hud-context"}
 for e in json.load(open(sys.argv[1]))["reads"]:
     argv = e.get("argv", [])
     shaped = (e["tool"] in MEETING_TOOLS or "calendar" in argv or "meetings" in argv

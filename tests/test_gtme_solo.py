@@ -135,6 +135,17 @@ class Solo(unittest.TestCase):
         self.assertEqual(gtme_solo.decode_body(gzip.compress(page.encode()), "gzip", "utf-8"), page)
         self.assertEqual(gtme_solo.decode_body(page.encode(), "", "utf-8"), page)
 
+    def test_a_gzip_bomb_stops_at_the_page_limit(self):
+        import gzip
+        bomb = gzip.compress(b"a" * (gtme_solo.PAGE_CHARS * 20))
+        self.assertLess(len(bomb), gtme_solo.FETCH_BYTES)
+        self.assertEqual(len(gtme_solo.decode_body(bomb, "gzip", "utf-8")), gtme_solo.PAGE_CHARS)
+
+    def test_the_connect_uses_the_address_that_was_vetted(self):
+        for host in ("127.0.0.1", "10.1.2.3", "169.254.169.254", "::1", "localhost"):
+            with self.assertRaises(OSError):
+                gtme_solo.vetted_address(host, 443)
+
     # batch
 
     def test_no_mailing_address_means_no_batch(self):

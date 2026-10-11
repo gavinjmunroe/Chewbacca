@@ -32,6 +32,7 @@ import email.message
 import email.utils
 import hashlib
 import html
+import http.client
 import ipaddress
 import json
 import os
@@ -66,6 +67,9 @@ BATCH_TTL = timedelta(hours=2)
 GAP_SECONDS = (45, 90)
 FETCH_TIMEOUT = 8
 FETCH_BYTES = 400_000
+# What a page may grow to once decompressed. A gzip bomb turns 400 KB into
+# gigabytes; a real homepage was 52 KB unpacked (python.org, 2026-10-11).
+PAGE_CHARS = 2_000_000
 PAGES = ("", "/contact", "/contact-us", "/about")
 MAX_WORDS = 125
 ROLE = re.compile(r"^(info|contact|hello|hi|office|admin|sales|team|support|help|mail|enquiries|inquiries|"
@@ -144,6 +148,43 @@ def public_host(host: str) -> bool:
     return bool(infos)
 
 
+def vetted_address(host: str, port: int) -> tuple:
+    """Resolve once, refuse any non-public answer, and hand back the exact
+    address to connect to. Connecting by name would resolve a second time,
+    and a name can answer public for the check and private for the connect
+    (DNS rebinding). A check on the socket's peer instead broke every fetch
+    inside Claude Code's sandbox, which relays all traffic through 127.0.0.1
+    (2026-10-11)."""
+    infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    for info in infos:
+        if not ipaddress.ip_address(info[4][0].split("%")[0]).is_global:
+            raise OSError(f"{host} resolves to a private address")
+    if not infos:
+        raise OSError(f"{host} doesn't resolve")
+    return infos[0][4][:2]
+
+
+class _PinnedHTTPConnection(http.client.HTTPConnection):
+    def connect(self):
+        self.sock = socket.create_connection(vetted_address(self.host, self.port), self.timeout)
+
+
+class _PinnedHTTPSConnection(http.client.HTTPSConnection):
+    def connect(self):
+        sock = socket.create_connection(vetted_address(self.host, self.port), self.timeout)
+        self.sock = self._context.wrap_socket(sock, server_hostname=self.host)
+
+
+class _PinnedHTTP(urllib.request.HTTPHandler):
+    def http_open(self, req):
+        return self.do_open(_PinnedHTTPConnection, req)
+
+
+class _PinnedHTTPS(urllib.request.HTTPSHandler):
+    def https_open(self, req):
+        return self.do_open(_PinnedHTTPSConnection, req, context=self._context)
+
+
 class _Guarded(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         host = urllib.parse.urlsplit(newurl).hostname or ""
@@ -163,7 +204,9 @@ def fetch(url: str) -> str:
         return ""
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Macintosh) chewbacca-gtme"})
     try:
-        with urllib.request.build_opener(_Guarded).open(req, timeout=FETCH_TIMEOUT) as r:
+        # No proxy: through one, the peer checked would be the proxy, not the site.
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _PinnedHTTP, _PinnedHTTPS, _Guarded)
+        with opener.open(req, timeout=FETCH_TIMEOUT) as r:
             if "html" not in (r.headers.get("Content-Type") or "html"):
                 return ""
             return decode_body(r.read(FETCH_BYTES), r.headers.get("Content-Encoding") or "",
@@ -177,13 +220,13 @@ def decode_body(raw: bytes, encoding: str, charset: str) -> str:
     page read as binary noise: no title, no email. Some servers compress
     whether or not they were asked, so the bytes decide, not the request."""
     if "gzip" in encoding.lower() or raw[:2] == b"\x1f\x8b":
-        raw = zlib.decompressobj(16 + zlib.MAX_WBITS).decompress(raw)
+        raw = zlib.decompressobj(16 + zlib.MAX_WBITS).decompress(raw, PAGE_CHARS)
     elif "deflate" in encoding.lower():
         try:
-            raw = zlib.decompress(raw)
+            raw = zlib.decompressobj().decompress(raw, PAGE_CHARS)
         except zlib.error:
-            raw = zlib.decompress(raw, -zlib.MAX_WBITS)
-    return raw.decode(charset, "replace")
+            raw = zlib.decompressobj(-zlib.MAX_WBITS).decompress(raw, PAGE_CHARS)
+    return raw[:PAGE_CHARS].decode(charset, "replace")
 
 
 def emails_on(page: str, domain: str) -> list[str]:

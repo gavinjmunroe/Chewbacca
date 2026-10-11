@@ -120,6 +120,15 @@ chatdb-guard refuses both the `text`-column query and raw thread reads, and on
 2026-10-10 four calls into that wall got "What's taking so long?" from Caleb
 before any draft reached him.
 
+A link message can come back from `people texts` with its words missing. On
+2026-10-10 Erik's "Check out the language of this when you can:
+Www.ChristCosmic.org" showed as a bare follow-up, "Click on the PDF", with
+nothing before it, so the PDF he meant looked lost. When a thread points at a
+link or a file that isn't in the lines, decode that message's
+`attributedBody` once with `RAW_MESSAGES_OK=1` (the URL sits in plain text
+inside it) before telling Caleb it's missing. Then download the file to
+~/Downloads.
+
 When a teammate sends a screenshot and asks "what are these for?", the likely
 subject is something an agent of ours posted where they can see it, not the
 last thing he asked them. Before guessing, read the bot's recent posts in every

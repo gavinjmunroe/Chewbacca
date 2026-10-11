@@ -131,6 +131,7 @@ struct AgentTilesView: View {
             LazyVGrid(columns: Self.columns, alignment: .leading, spacing: 8) {
                 ForEach(tiles) { tile in
                     TileView(tile: tile, onOpen: onOpen)
+                        .rowAnchor(tile.id)
                         .transition(RowKeys.transition(reduced: reduceMotion))
                 }
             }

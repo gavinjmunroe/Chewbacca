@@ -247,7 +247,8 @@ public enum Op: Sendable, Equatable {
     /// Open or switch to a named surface. Everything after this targets it.
     case surface(
         id: String, region: Region?, width: Double?,
-        urgency: Urgency?, chrome: Chrome?, life: Double?, near: Near?)
+        urgency: Urgency?, chrome: Chrome?, life: Double?, near: Near?,
+        from: String? = nil)
     /// Close a surface and take it off the screen.
     case close(id: String)
     /// `glance <surface>`: a click anywhere off that card takes it down and

@@ -213,7 +213,11 @@ public struct OverlayView: View {
                     // moves the layout itself, which is what was wanted.
                     .position(centre)
                     .transition(SurfaceEntrance.transition(
-                        region: surface.region, summon: summon, reduced: reduceMotion))
+                        region: surface.region, summon: summon,
+                        startScale: surface.summonedWidth.map {
+                            SurfaceEntrance.startScale(rowWidth: $0, cardWidth: surface.width)
+                        },
+                        reduced: reduceMotion))
                     .zIndex(Double(surface.depth))
     }
 }
@@ -238,6 +242,9 @@ nonisolated struct SurfaceEntrance: ViewModifier, Animatable {
     /// One on the way in. Less on the way out, so an exit is quieter than
     /// the entrance it mirrors.
     var reach: Double = 1
+    /// How small it starts when it grows from a row (`from=`): the row's
+    /// width over its own. Nil uses `summonShrink`, sized for the hyper bar.
+    var startScale: Double?
     /// Reduce Motion: opacity only, nothing travels or scales.
     var reduced = false
 
@@ -263,7 +270,7 @@ nonisolated struct SurfaceEntrance: ViewModifier, Animatable {
         if let summon {
             return Pose(
                 opacity: progress, blur: 6 * rest,
-                scale: 1 - Self.summonShrink * rest * reach,
+                scale: 1 - (1 - (startScale ?? (1 - Self.summonShrink))) * rest * reach,
                 offset: CGSize(
                     width: summon.width * rest * reach,
                     height: summon.height * rest * reach))
@@ -292,6 +299,14 @@ nonisolated struct SurfaceEntrance: ViewModifier, Animatable {
     /// on 2026-10-04.
     static let summonShrink = 0.55
 
+    /// A card grown from a row starts the row's width, never smaller than a
+    /// fifth of itself (a 40-point chip under a 440-point card would start
+    /// as a dot) and never larger than itself.
+    static func startScale(rowWidth: CGFloat, cardWidth: CGFloat) -> Double {
+        guard cardWidth > 0 else { return 1 }
+        return min(1, max(0.2, Double(rowWidth / cardWidth)))
+    }
+
     /// The entrance rides the overlay's own `Motion.smooth` spring, and the
     /// exit is shorter and quieter: 160 ms, accelerating away, and only a
     /// third of the way back to where it came from. Material puts desktop
@@ -304,10 +319,13 @@ nonisolated struct SurfaceEntrance: ViewModifier, Animatable {
     /// sharp: the attached spring and the overlay's revision spring fought
     /// over the same insertion. Without it the same card settled in three
     /// frames. The removal has nothing to fight and keeps its own.
-    static func transition(region: Region, summon: CGSize?, reduced: Bool) -> AnyTransition {
+    static func transition(
+        region: Region, summon: CGSize?, startScale: Double? = nil, reduced: Bool
+    ) -> AnyTransition {
         func at(_ progress: Double, reach: Double) -> SurfaceEntrance {
             SurfaceEntrance(
-                progress: progress, from: region, summon: summon, reach: reach, reduced: reduced)
+                progress: progress, from: region, summon: summon, reach: reach,
+                startScale: startScale, reduced: reduced)
         }
         let leave: Animation = reduced ? .easeOut(duration: 0.1) : depart
         return .asymmetric(

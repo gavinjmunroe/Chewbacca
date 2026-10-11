@@ -44,6 +44,13 @@ public struct SurfaceView: View {
         // animation finishes, and an ease restarts from zero velocity on each
         // one, which reads as stutter. A spring bends toward the new value.
         .animation(Motion.smooth(reduced: Motion.systemReduced), value: store.revision)
+        // Rows and the cards they open measure in this one space, so a card
+        // knows where its row is while the surface itself moves.
+        // The light that carries a row into its card, over everything in the
+        // surface so no child's slot can clip it (ContainerTransform.swift).
+        .overlay(alignment: .topLeading) { MorphLayer(surface: store.surfaceID ?? "") }
+        .coordinateSpace(name: RowAnchors.space)
+        .environment(\.hudSurfaceID, store.surfaceID ?? "")
     }
 
     /// `ancestors` is the path from the root, not everything already drawn.
@@ -186,6 +193,18 @@ public struct SurfaceView: View {
         }
 
         let gap = CGFloat(p["gap"]?.doubleValue ?? 2) * 4
+
+        // `from=@/pointer`: a card opened from a row. Drawn only while the
+        // pointer names a row, growing out of that row and shrinking back
+        // into it (ContainerTransform.swift).
+        if element.props["from"] != nil {
+            return AnyView(
+                CardSlot(surface: store.surfaceID ?? "", row: p["from"]?.display ?? "", card: element.id) {
+                    VStack(alignment: .leading, spacing: gap) {
+                        children(of: element, ancestors: ancestors)
+                    }
+                })
+        }
 
         // A grid, because a dashboard is not a column.
         //
@@ -826,6 +845,7 @@ struct ListView: View {
                         RowActionButton(action: rowAction, row: row.row)
                     }
                 }
+                .rowAnchor(row.row)
                 .transition(RowKeys.transition(reduced: reduceMotion))
             }
         }

@@ -166,6 +166,73 @@ reference only). The renderer enforces these; a sender should know them.
     title and reopening with no empty frame. Same lesson for transitions: a
     card's insertion must not carry its own animation on top of the overlay's
     spring, which held a new card blurred for about 600 ms before it snapped.
+11. **A card opens out of the row that asked for it, and closes back into
+    it** (Material's container transform). Read from
+    `MaterialContainerTransform.java` on 2026-10-11: one container
+    interpolates from the source's bounds to its own; the content fades in
+    over the first 25% of the way out and fades out between 60% and 90% of
+    the way back, so it stays readable for most of the close. What travels
+    on the glass is light, not a grey box (Caleb, 2026-10-11: "The future of
+    UX does not look like macos"): a lit outline in the accent lifts off the
+    row, stretches into the card's place and goes out as it lands, the
+    card's content arrives under it, and the open card keeps one lit line on
+    its leading edge instead of a panel. The light is drawn by a layer over
+    the whole surface: moving the card itself out of its own slot drew
+    nothing above the slot in a 60 fps recording, though the log showed
+    every frame of the flight. Open is a 0.42 s no-bounce spring, close
+    0.30 s; Material uses 500 ms and 400 ms on a phone (`long2`, `medium4`),
+    Apple asks for brevity in frequent motion and Emil Kowalski's teardown
+    puts UI motion under 300 ms, so the HUD sits between (guessed from those,
+    not measured on the glass). SwiftUI's `matchedGeometryEffect` is the same
+    idea and says so: it interpolates two frames "to make it appear that
+    there is a single view moving", and only links geometry, never rendering,
+    which is why the fades are explicit thresholds here. The protocol, with
+    a row id from the List, Events or Tiles that drew it:
+    `c card Stack from=@/<pointer>` is a card in the same surface, drawn only
+    while the pointer names a row id; `@ <surface> from=<surface>/<row id>`
+    opens a separate surface out of that row. A different row id is a
+    different card: the old one goes back into its row while the new one
+    grows out of its own. A card that appears with its surface (inside
+    0.45 s of the first row reporting) does not also grow, since that would
+    be two motions for one cause. A flight's start must be drawn one frame
+    before it springs: set in the same pass, three recordings showed the
+    card simply appearing. Source: `ContainerTransform.swift`.
+12. **Values roll in place; nothing around them moves.** Lemma's counter,
+    read from their shipped chunk on 2026-10-11, gives every digit its own
+    reel of 11 cells, its own duration (900 ms times sqrt(1.5) to the power
+    of its distance from the last digit), its own 160 ms stagger and its own
+    blur, so the digits settle at different moments and it reads as a
+    mechanism. On the glass: counts use SwiftUI's numeric text transition,
+    a state word and its symbol crossfade, a tile's edge colour eases to
+    the new state's hue, and the tile itself does not move unless its
+    order changed.
+13. **Match by identity, never by index.** The T Combinator site
+    (`components/field/formations.ts`) morphs one set of 6,245 points
+    through every shape by matching points to targets in left-to-right
+    order, so each morph sweeps as one motion instead of criss-crossing.
+    A HUD list is the same problem: rows and tiles are keyed by `id`, so a
+    re-sort slides each row to its new place and only a new row enters.
+14. **Far is a dissolve, near is a travel.** The same site's `Glide.tsx`
+    glides up to 2.5 screens (600 ms plus 90 ms a screen, ease-in-out cubic)
+    and dissolves anything further: 260 ms out, the move under the veil,
+    650 ms settling in. Measured there on 2026-10-05, a 1.6 s glide across
+    14.7 screens moved 1.85 screens in one frame, a strobe. Anything that
+    would cross most of the display fades instead of streaking.
+15. **The edges of the screen are the periphery.** visionOS's motion
+    guidance: avoid motion at the edges of the field of view, and when a
+    large object must move, raise its translucency or lower its contrast so
+    it does not read as the world moving. Kyber's surfaces live in the
+    corners, so they never animate while idle (rule 6) and a moving card's
+    content is faded during the move (rule 11).
+16. **Lemma's numbers, for reference.** The spring and tokens read from
+    uselemma.ai's chunks on 2026-10-11, the press, lift and crossfade from
+    the replica's measurements of their live site (`~/code/work/lemma-replica`,
+    docs/spec/states.md and docs/waves/W3-panels.md): one follow spring of stiffness 170, damping 40 (damping
+    ratio about 1.5, no overshoot); UI tokens 80, 150 and 200 ms on
+    `cubic-bezier(0.4, 0, 0.2, 1)`; a press scales to 0.96; a card lifts
+    6 px over 450 ms on `cubic-bezier(.33, 0, .15, 1)`; its four demo panels
+    crossfade over 500 ms ease-out. On their landing page the motion carries
+    the argument; on the glass it only ever confirms a state change.
 
 **A corner that fills up folds, it does not pile up.** Surfaces in one region
 stack away from their edge (down from the top, up from the bottom, outward

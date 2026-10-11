@@ -1331,84 +1331,93 @@ class Agents(Provider):
                               action=f"{ACTION_PREFIX}pick"))
             order.append("tiles")
         if plan.get("pinned"):
-            parts += [comp(c("head"), "Heading", text=Bind(p("head")), level=2),
-                      comp(c("meta"), "Text", value=Bind(p("meta")), tone="muted"),
-                      comp(c("transcript"), "Transcript", items=Bind(p("transcript")))]
-            order += ["head", "meta", "transcript"]
+            # The open agent is one card that grows out of its tile and
+            # shrinks back into it (hud ContainerTransform.swift): a Stack
+            # whose `from` names the tile it opened from.
+            card_parts: list[str] = []
+            card_order: list[str] = []
+            card_parts += [comp(c("head"), "Heading", text=Bind(p("head")), level=2),
+                           comp(c("meta"), "Text", value=Bind(p("meta")), tone="muted"),
+                           comp(c("transcript"), "Transcript", items=Bind(p("transcript")))]
+            card_order += ["head", "meta", "transcript"]
             if plan.get("ask"):
-                parts.append(comp(c("ask"), "Text", value=Bind(p("ask"))))
-                order.append("ask")
-            parts += [comp(c("allow"), "Events", caption="", items=Bind(p("allow")),
+                card_parts.append(comp(c("ask"), "Text", value=Bind(p("ask"))))
+                card_order.append("ask")
+            card_parts += [comp(c("allow"), "Events", caption="", items=Bind(p("allow")),
                            action=f"{ACTION_PREFIX}allow", actionLabel="Allow once"),
-                      comp(c("deny"), "Events", caption="", items=Bind(p("deny")), action=f"{ACTION_PREFIX}deny",
-                           actionLabel="Deny"),
-                      comp(c("draft"), "Field", label="Reply", placeholder=Bind(p("placeholder")),
-                           value=Bind(p("draft"))),
-                      comp(c("send"), "Events", caption="", items=Bind(p("send")), action=f"{ACTION_PREFIX}send",
-                           actionLabel="Send"),
-                      comp(c("models"), "Chips", options=Bind(p("models")), value=Bind(p("modelValue")),
-                           action=f"{ACTION_PREFIX}model", dots=False),
-                      comp(c("efforts"), "Chips", options=Bind(p("efforts")), value=Bind(p("effortValue")),
-                           action=f"{ACTION_PREFIX}effort", dots=False),
-                      comp(c("modes"), "Chips", options=Bind(p("modes")), value=Bind(p("modeValue")),
-                           action=f"{ACTION_PREFIX}modepick", dots=False),
-                      comp(c("mode"), "Events", caption="", items=Bind(p("mode")), action=f"{ACTION_PREFIX}mode",
-                           actionLabel="Switch"),
-                      comp(c("interrupt"), "Events", caption="", items=Bind(p("interrupt")),
-                           action=f"{ACTION_PREFIX}interrupt", actionLabel="Stop"),
-                      comp(c("fork"), "Events", caption="", items=Bind(p("fork")), action=f"{ACTION_PREFIX}fork",
-                           actionLabel="Fork")]
-            order += ["allow", "deny", "draft", "send", "models", "efforts", "modes", "mode", "interrupt", "fork"]
+                           comp(c("deny"), "Events", caption="", items=Bind(p("deny")), action=f"{ACTION_PREFIX}deny",
+                                actionLabel="Deny"),
+                           comp(c("draft"), "Field", label="Reply", placeholder=Bind(p("placeholder")),
+                                value=Bind(p("draft"))),
+                           comp(c("send"), "Events", caption="", items=Bind(p("send")), action=f"{ACTION_PREFIX}send",
+                                actionLabel="Send"),
+                           comp(c("models"), "Chips", options=Bind(p("models")), value=Bind(p("modelValue")),
+                                action=f"{ACTION_PREFIX}model", dots=False),
+                           comp(c("efforts"), "Chips", options=Bind(p("efforts")), value=Bind(p("effortValue")),
+                                action=f"{ACTION_PREFIX}effort", dots=False),
+                           comp(c("modes"), "Chips", options=Bind(p("modes")), value=Bind(p("modeValue")),
+                                action=f"{ACTION_PREFIX}modepick", dots=False),
+                           comp(c("mode"), "Events", caption="", items=Bind(p("mode")), action=f"{ACTION_PREFIX}mode",
+                                actionLabel="Switch"),
+                           comp(c("interrupt"), "Events", caption="", items=Bind(p("interrupt")),
+                                action=f"{ACTION_PREFIX}interrupt", actionLabel="Stop"),
+                           comp(c("fork"), "Events", caption="", items=Bind(p("fork")), action=f"{ACTION_PREFIX}fork",
+                                actionLabel="Fork")]
+            card_order += ["allow", "deny", "draft", "send", "models", "efforts", "modes", "mode", "interrupt", "fork"]
             if plan.get("changed"):
-                parts.append(comp(c("changed"), "Events", caption=Bind(p("changedCap")), items=Bind(p("changed")),
-                                  action=f"{ACTION_PREFIX}file", actionLabel="Diff"))
-                order.append("changed")
+                card_parts.append(comp(c("changed"), "Events", caption=Bind(p("changedCap")), items=Bind(p("changed")),
+                                       action=f"{ACTION_PREFIX}file", actionLabel="Diff"))
+                card_order.append("changed")
             if plan.get("patch"):
-                parts.append(comp(c("patch"), "Diff", text=Bind(p("patch")), path=Bind(p("patchPath"))))
-                order.append("patch")
+                card_parts.append(comp(c("patch"), "Diff", text=Bind(p("patch")), path=Bind(p("patchPath"))))
+                card_order.append("patch")
             if plan.get("git"):
-                parts += [comp(c("stage"), "Events", caption="", items=Bind(p("stage")),
-                               action=f"{ACTION_PREFIX}stage", actionLabel="Stage"),
-                          comp(c("unstage"), "Events", caption="", items=Bind(p("unstage")),
-                               action=f"{ACTION_PREFIX}unstage", actionLabel="Unstage")]
-                order += ["stage", "unstage"]
+                card_parts += [comp(c("stage"), "Events", caption="", items=Bind(p("stage")),
+                                    action=f"{ACTION_PREFIX}stage", actionLabel="Stage"),
+                               comp(c("unstage"), "Events", caption="", items=Bind(p("unstage")),
+                                    action=f"{ACTION_PREFIX}unstage", actionLabel="Unstage")]
+                card_order += ["stage", "unstage"]
             if plan.get("ship"):
-                parts += [comp(c("message"), "Field", label="Commit message",
-                               placeholder="What these changes do", value=Bind(p("message"))),
-                          comp(c("ship"), "Events", caption="", items=Bind(p("ship")),
-                               action=f"{ACTION_PREFIX}ship", actionLabel="Commit and push")]
-                order += ["message", "ship"]
+                card_parts += [comp(c("message"), "Field", label="Commit message",
+                                    placeholder="What these changes do", value=Bind(p("message"))),
+                               comp(c("ship"), "Events", caption="", items=Bind(p("ship")),
+                                    action=f"{ACTION_PREFIX}ship", actionLabel="Commit and push")]
+                card_order += ["message", "ship"]
             if plan.get("shipped"):
-                parts.append(comp(c("shipped"), "Text", value=Bind(p("shipped")), tone="muted"))
-                order.append("shipped")
+                card_parts.append(comp(c("shipped"), "Text", value=Bind(p("shipped")), tone="muted"))
+                card_order.append("shipped")
             if plan.get("upstream"):
-                parts.append(comp(c("upstream"), "Events", caption="", items=Bind(p("upstream")),
-                                  action=f"{ACTION_PREFIX}upstream", actionLabel="Push"))
-                order.append("upstream")
+                card_parts.append(comp(c("upstream"), "Events", caption="", items=Bind(p("upstream")),
+                                       action=f"{ACTION_PREFIX}upstream", actionLabel="Push"))
+                card_order.append("upstream")
             if plan.get("terminal"):
-                parts += [comp(c("termhead"), "Text", value=Bind(p("termHead")), tone="muted"),
-                          comp(c("terminal"), "Diff", text=Bind(p("terminal")), plain=True),
-                          comp(c("command"), "Field", label="Terminal", placeholder=Bind(p("commandHint")),
-                               value=Bind(p("command"))),
-                          comp(c("run"), "Events", caption="", items=Bind(p("run")), action=f"{ACTION_PREFIX}run",
-                               actionLabel="Run"),
-                          comp(c("ctrlc"), "Events", caption="", items=Bind(p("ctrlc")),
-                               action=f"{ACTION_PREFIX}ctrlc", actionLabel="Ctrl-C")]
-                order += ["termhead", "terminal", "command", "run", "ctrlc"]
+                card_parts += [comp(c("termhead"), "Text", value=Bind(p("termHead")), tone="muted"),
+                               comp(c("terminal"), "Diff", text=Bind(p("terminal")), plain=True),
+                               comp(c("command"), "Field", label="Terminal", placeholder=Bind(p("commandHint")),
+                                    value=Bind(p("command"))),
+                               comp(c("run"), "Events", caption="", items=Bind(p("run")), action=f"{ACTION_PREFIX}run",
+                                    actionLabel="Run"),
+                               comp(c("ctrlc"), "Events", caption="", items=Bind(p("ctrlc")),
+                                    action=f"{ACTION_PREFIX}ctrlc", actionLabel="Ctrl-C")]
+                card_order += ["termhead", "terminal", "command", "run", "ctrlc"]
             if plan.get("web"):
-                parts += [comp(c("webhead"), "Text", value=Bind(p("webHead")), tone="muted"),
-                          comp(c("web"), "Web", url=Bind(p("webUrl")))]
-                order += ["webhead", "web"]
+                card_parts += [comp(c("webhead"), "Text", value=Bind(p("webHead")), tone="muted"),
+                               comp(c("web"), "Web", url=Bind(p("webUrl")))]
+                card_order += ["webhead", "web"]
             if plan.get("address"):
-                parts += [comp(c("address"), "Field", label="Address", placeholder="https://",
-                               value=Bind(p("address"))),
-                          comp(c("go"), "Events", caption="", items=Bind(p("go")), action=f"{ACTION_PREFIX}go",
-                               actionLabel="Go")]
-                order += ["address", "go"]
+                card_parts += [comp(c("address"), "Field", label="Address", placeholder="https://",
+                                    value=Bind(p("address"))),
+                               comp(c("go"), "Events", caption="", items=Bind(p("go")), action=f"{ACTION_PREFIX}go",
+                                    actionLabel="Go")]
+                card_order += ["address", "go"]
             if plan.get("termopen"):
-                parts.append(comp(c("termopen"), "Events", caption="", items=Bind(p("termopen")),
-                                  action=f"{ACTION_PREFIX}termopen", actionLabel="Open"))
-                order.append("termopen")
+                card_parts.append(comp(c("termopen"), "Events", caption="", items=Bind(p("termopen")),
+                                       action=f"{ACTION_PREFIX}termopen", actionLabel="Open"))
+                card_order.append("termopen")
+            parts.append(comp(c("card"), "Stack", gap=3, **{"from": Bind(p("pinnedRow"))}))
+            parts += card_parts
+            parts.append(f"> {c('card')} " + " ".join(c(i) for i in card_order))
+            order.append("card")
         if plan.get("start"):
             parts += [comp(c("kinds"), "Chips", options=Bind(p("kinds")), value=Bind(p("agent")),
                            action=f"{ACTION_PREFIX}agent"),
@@ -1438,7 +1447,7 @@ class Agents(Provider):
                 p("termopen"): [], p("termOn"): False,
                 p("models"): [], p("modelValue"): "", p("efforts"): [], p("effortValue"): "", p("modes"): [],
                 p("mode"): [], p("webHead"): "", p("webUrl"): "", p("go"): [], p("addressOn"): False,
-                p("placeholder"): "Typed here, sent only by Send"}
+                p("placeholder"): "Typed here, sent only by Send", p("pinnedRow"): ""}
 
     def model(self, data, error, values, ctx) -> dict:
         out = self._model(data, error, values, ctx)
@@ -1556,6 +1565,9 @@ class Agents(Provider):
         if shown is None:
             return out
         pending = data.get("pending") or {}
+        # The tile the card grows out of: the card is drawn only while this
+        # names a row, and a missing tile only costs the morph, not the card.
+        out[p("pinnedRow")] = shown["id"]
         out[p("head")] = short_title(shown["title"], 60)
         mode = (MODE_WORDS.get(shown["mode"], shown["mode"]) if shown["kind"] in ASKS_FIRST
                 else "decides when it asks")

@@ -60,6 +60,15 @@ NOW_MS = 1_790_000_000_000
 failed = 0
 
 
+
+def drawn_order(a) -> str:
+    """The root's children in drawing order, with the card's own children
+    standing where the card is (the card is a `from=` Stack since 2026-10-11)."""
+    lines = a.layout()
+    root = lines[-2]
+    card = next((ln for ln in lines if ln.startswith("> agents-card ")), "")
+    return root.replace(" agents-card", " " + card.removeprefix("> agents-card ")) if card else root
+
 def check(name, ok, got=None):
     global failed
     print(("ok   " if ok else "FAIL ") + name + ("" if ok else f"  got {got!r}"))
@@ -477,8 +486,8 @@ def listing_and_pin(tmp: Path) -> None:
           and model["/agents/interrupt"][0]["id"] == "s-idle"
           and next(t for t in model["/agents/tiles"] if t["id"] == "s-idle")["selected"], a.pinned)
     check("and the open agent's conversation is drawn under the tiles",
-          "agents-transcript" in a.layout()[-2] and a.layout()[-2].index("agents-tiles")
-          < a.layout()[-2].index("agents-transcript"), a.layout()[-2])
+          "agents-transcript" in drawn_order(a) and drawn_order(a).index("agents-tiles")
+          < drawn_order(a).index("agents-transcript"), drawn_order(a))
     e.sessions["s-idle"]["status"] = "idle"
     data, model = view(a, ctx)
     check("Send's row is the pinned session and says it can't be unsent",
@@ -945,7 +954,9 @@ def agent_card(tmp: Path) -> None:
           and model["/agents/changed"][0]["time"] == "modified · +3 -1"
           and model["/agents/changedCap"] == "Changed, 2 files on main"
           and all(not w for m, _, w in e.calls if m == "workspace.diff"), model["/agents/changed"])
-    order = a.layout()[-2]
+    order = drawn_order(a)
+    check("the card grows out of the tile it opened from", model["/agents/pinnedRow"] == "s1"
+          and 'agents-card Stack gap=3 from=@/agents/pinnedRow' in " ".join(a.layout()), model["/agents/pinnedRow"])
     check("the card is conversation, reply, then changes, all under the tiles",
           order.index("agents-tiles") < order.index("agents-transcript") < order.index("agents-draft")
           < order.index("agents-changed"), order)
@@ -1099,7 +1110,7 @@ def terminal(tmp: Path) -> None:
     layout = " ".join(a.layout())
     check("the terminal draws inside the card, as plain text, after the rest of the card",
           model["/agents/termOn"] and "agents-terminal Diff" in layout and "plain=true" in layout
-          and a.layout()[-2].index("agents-transcript") < a.layout()[-2].index("agents-terminal"), layout)
+          and drawn_order(a).index("agents-transcript") < drawn_order(a).index("agents-terminal"), layout)
     check("escapes are dropped and the prompt reads as text", model["/agents/terminal"] == "joel@mac chewbacca %",
           model["/agents/terminal"])
     check("it says where the shell is and that it's idle", model["/agents/termHead"] ==

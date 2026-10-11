@@ -10,7 +10,7 @@ struct NearTests {
     @Test("near and side parse")
     func parses() throws {
         let op = try LineParser.parse(#"@ clay-note near=100,200,80,30 side=left chrome=window w=300"#)
-        guard case let .surface(id, _, width, _, chrome, _, near) = op else {
+        guard case let .surface(id, _, width, _, chrome, _, near, _) = op else {
             Issue.record("not a surface: \(op)")
             return
         }
@@ -23,7 +23,7 @@ struct NearTests {
     @Test("side defaults to right")
     func defaultSide() throws {
         let op = try LineParser.parse("@ n near=1,2,3,4")
-        guard case let .surface(_, _, _, _, _, _, near) = op else {
+        guard case let .surface(_, _, _, _, _, _, near, _) = op else {
             Issue.record("not a surface: \(op)")
             return
         }
@@ -33,7 +33,7 @@ struct NearTests {
     @Test("a bad near is ignored, not a crash", arguments: ["1,2,3", "a,b,c,d", "1,2,0,4", "1,2,3,-4"])
     func badNear(raw: String) throws {
         let op = try LineParser.parse("@ n near=\(raw)")
-        guard case let .surface(_, _, _, _, _, _, near) = op else {
+        guard case let .surface(_, _, _, _, _, _, near, _) = op else {
             Issue.record("not a surface: \(op)")
             return
         }

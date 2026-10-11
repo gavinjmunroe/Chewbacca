@@ -212,6 +212,7 @@ public enum LineParser {
             var life: Double?
             var target: CGRect?
             var side = Near.Side.right
+            var from: String?
             for token in tokens.dropFirst(2) {
                 guard let (key, raw) = splitPair(token) else { continue }
                 let value = raw.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
@@ -222,11 +223,14 @@ public enum LineParser {
                 if key == "urgency" { urgency = Urgency(rawValue: value) }
                 if key == "chrome" { chrome = Chrome(rawValue: value) }
                 if key == "life" { life = Double(value) }
+                // `from=<surface>/<row id>`: the row this surface opens out
+                // of, so it grows from it (ContainerTransform.swift).
+                if key == "from", value.contains("/") { from = value }
             }
             return .surface(
                 id: tokens[1], region: region, width: width,
                 urgency: urgency, chrome: chrome, life: life,
-                near: target.map { Near(target: $0, side: side) })
+                near: target.map { Near(target: $0, side: side) }, from: from)
 
         case "glance":
             // `glance name`: a click off that card closes it, like its X.

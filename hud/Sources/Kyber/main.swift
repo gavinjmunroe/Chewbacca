@@ -266,7 +266,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         model.describe(frontWindow: front)
                     }
                     model.apply(op)
-                    if case .surface(let id, _, _, _, _, _, _) = op {
+                    if case .surface(let id, _, _, _, _, _, _, _) = op {
                         model.attribute(id, owner: event.owner)
                     }
                     updateInteractive()

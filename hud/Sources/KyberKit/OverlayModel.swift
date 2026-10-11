@@ -34,6 +34,9 @@ public struct OverlaySurface: Identifiable, Equatable {
     /// out of the thing that asked for it says what caused it; one that slides
     /// in from a corner only says where it lives.
     public var summonedFrom: CGPoint?
+    /// The width of the row it was opened from (`from=`), so the card starts
+    /// that wide instead of at the hyper bar's fixed shrink.
+    public var summonedWidth: CGFloat?
     /// Folded to its title because its region ran out of room. See
     /// `OverlayModel.plan`.
     public var compact = false
@@ -84,7 +87,8 @@ public struct OverlaySurface: Identifiable, Equatable {
     public static func == (a: OverlaySurface, b: OverlaySurface) -> Bool {
         a.id == b.id && a.region == b.region && a.slot == b.slot
             && a.width == b.width && a.drag == b.drag && a.urgency == b.urgency && a.chrome == b.chrome && a.expires == b.expires
-            && a.compact == b.compact && a.summonedFrom == b.summonedFrom && a.instance == b.instance
+            && a.compact == b.compact && a.summonedFrom == b.summonedFrom
+            && a.summonedWidth == b.summonedWidth && a.instance == b.instance
             && a.near == b.near && a.owner == b.owner
     }
 }
@@ -244,11 +248,12 @@ public final class OverlayModel {
 
     public func apply(_ op: Op) {
         switch op {
-        case .surface(let id, let region, let width, let urgency, let chrome, let life, let near):
+        case .surface(let id, let region, let width, let urgency, let chrome, let life, let near, let from):
             current = id
             open(
                 id, region: region, width: width.map { CGFloat($0) },
-                urgency: urgency, chrome: chrome, life: life, near: near)
+                urgency: urgency, chrome: chrome, life: life, near: near,
+                from: from.flatMap { RowAnchors.shared.screen(of: $0) })
 
         case .presence(let state, let amplitude):
             setPresence(state, amplitude: amplitude)
@@ -1042,6 +1047,7 @@ public final class OverlayModel {
 
     public func close(_ id: String) {
         if id == FilesGlass.id { files = nil }
+        RowAnchors.shared.forget(surface: id)
         // Whatever closes it, a draft nobody saved is kept on disk.
         for surface in surfaces where surface.id == id { surface.store.rescueUnsaved() }
         glances.remove(id)
@@ -1124,7 +1130,8 @@ public final class OverlayModel {
     @discardableResult
     private func open(
         _ id: String, region: Region?, width: CGFloat?,
-        urgency: Urgency?, chrome: Chrome?, life: Double? = nil, near: Near? = nil
+        urgency: Urgency?, chrome: Chrome?, life: Double? = nil, near: Near? = nil,
+        from: CGRect? = nil
     ) -> OverlaySurface {
         if let index = surfaces.firstIndex(where: { $0.id == id }) {
             // Moving or resizing an open surface mid-stream is a normal ask.
@@ -1146,6 +1153,9 @@ public final class OverlayModel {
             return existing
         }
 
+        // A row of the last surface of this name, reported while it was
+        // still leaving, must not make the new one look old.
+        RowAnchors.shared.forget(surface: id)
         let store = SurfaceStore()
         store.onEvent = { [weak self] event in
             if id == FilesGlass.id, self?.filesPressed(event) == true { return }
@@ -1178,6 +1188,12 @@ public final class OverlayModel {
         nextInstance += 1
         surface.instance = nextInstance
         surface.summonedFrom = summonOrigin
+        // Opened from a row on another card: it grows out of that row, which
+        // is a better answer to "what caused this" than the hyper bar.
+        if let from {
+            surface.summonedFrom = CGPoint(x: from.midX, y: from.midY)
+            surface.summonedWidth = from.width
+        }
         store.surfaceID = id
         surfaces.append(surface)
         if surface.expires != nil { startSweep() }

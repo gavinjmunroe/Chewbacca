@@ -42,7 +42,7 @@ struct ClayStatesTests {
             if line.hasPrefix("@ ") {
                 if let current { drawn.append(Drawn(id: current.id, width: current.width,
                                                     chrome: current.chrome, lines: current.lines)) }
-                guard case let .surface(id, _, width, _, chrome, _, _) = try LineParser.parse(line) else {
+                guard case let .surface(id, _, width, _, chrome, _, _, _) = try LineParser.parse(line) else {
                     Issue.record("not a surface: \(line)")
                     continue
                 }

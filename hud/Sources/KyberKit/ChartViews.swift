@@ -370,6 +370,7 @@ struct EventsView: View {
                     }
                 }
                 .frame(minHeight: rowAction == nil ? nil : HitTarget.minimum)
+                .rowAnchor(event.row)
                 .transition(RowKeys.transition(reduced: reduceMotion))
             }
         }

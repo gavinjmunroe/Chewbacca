@@ -358,8 +358,8 @@ class Meetings(Provider):
     # 2026-10-10: "its just a wall of text"; surface_lint holds the line).
 
     def layout(self) -> list[str]:
-        ids = ["s", "purpose", "state", "capture", "note", "counts", "setup", "list", "head", "meta",
-               "summary", "decisions", "items", "whyBtn", "why", "txBtn", "transcript", "next", "status"]
+        ids = ["s", "purpose", "state", "capture", "note", "counts", "setup", "list", "detail", "status"]
+        detail = ["head", "meta", "summary", "decisions", "items", "whyBtn", "why", "txBtn", "transcript", "next"]
         return [
             comp(self.cid("s"), "Screen", title=self.title),
             comp(self.cid("purpose"), "Text", value=PURPOSE, tone="muted"),
@@ -374,6 +374,9 @@ class Meetings(Provider):
             comp(self.cid("setup"), "List", items=Bind(self.p("setup"))),
             comp(self.cid("list"), "Events", items=Bind(self.p("rows")), action=f"{ACTION_PREFIX}open",
                  actionLabel="Open"),
+            # The open meeting is one card that grows out of its row and goes
+            # back into it when another row opens (hud ContainerTransform.swift).
+            comp(self.cid("detail"), "Stack", gap=3, **{"from": Bind(self.p("shownRow"))}),
             comp(self.cid("head"), "Heading", text=Bind(self.p("head")), level=3),
             comp(self.cid("meta"), "Text", value=Bind(self.p("meta")), tone="muted"),
             comp(self.cid("summary"), "List", items=Bind(self.p("summary"))),
@@ -386,6 +389,7 @@ class Meetings(Provider):
             comp(self.cid("transcript"), "Transcript", items=Bind(self.p("transcript"))),
             comp(self.cid("next"), "Button", label=Bind(self.p("nextLabel")), action=f"{ACTION_PREFIX}next"),
             comp(self.cid("status"), "Text", value=Bind(self.p("status")), tone="muted"),
+            f"> {self.cid('detail')} {' '.join(self.cid(i) for i in detail)}",
             f"> {' '.join(self.cid(i) for i in ids)}",
             f"r {self.cid('s')}",
         ]
@@ -394,7 +398,7 @@ class Meetings(Provider):
         return {self.p("status"): ""}
 
     def blank(self) -> dict:
-        return {self.p("state"): "", self.p("setup"): [], self.p("rows"): [],
+        return {self.p("state"): "", self.p("setup"): [], self.p("rows"): [], self.p("shownRow"): "",
                 self.p("week"): "", self.p("owed"): "", self.p("head"): "", self.p("meta"): "",
                 self.p("summary"): [], self.p("decisions"): [], self.p("itemsCaption"): "", self.p("items"): [],
                 self.p("itemsWhy"): [], self.p("whyLabel"): "", self.p("transcript"): [], self.p("txLabel"): "",
@@ -450,6 +454,7 @@ class Meetings(Provider):
         r = self.shown(data)
         if r is None:
             return out
+        out[self.p("shownRow")] = r["id"]
         when_text = r["start"].strftime("%a %b %-d") if r["start"] else ""
         who = [w for w in r["who"] if not w.endswith("(unverified)")] or r["who"]
         out[self.p("head")] = clip(r["title"], 60)

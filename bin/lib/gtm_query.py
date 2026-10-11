@@ -392,7 +392,7 @@ def lead(db, who: str) -> dict:
         for r in rows:
             p = json.loads(r["props"])
             reps.append({"time": p.get("time"), "campaign": p.get("campaign_name"), "subject": p.get("subject"),
-                         "snippet": p.get("snippet"), "answered": p.get("answered"), "forwarded": p.get("forwarded"),
+                         "snippet": p.get("snippet"), "text": p.get("text") or "", "answered": p.get("answered"), "forwarded": p.get("forwarded"),
                          "screen_flag": p.get("screen_flag"), "class": (v.get(r["id"]) or {}).get("class"),
                          "classified_by": (v.get(r["id"]) or {}).get("all", []),
                          "thread_sent_times": p.get("thread_sent_times") or []})
@@ -454,7 +454,7 @@ def replies(db, client_name: str | None = None, unanswered: bool = False, includ
         out.append({"time": r.get("time"), "email": r.get("lead_email"), "campaign": names.get(r["campaign"]) or
                     r.get("campaign_name"), "class": cls, "classified_by": verdict.get("by"),
                     "answered": r.get("answered"), "forwarded": r.get("forwarded"), "snippet": r.get("snippet"),
-                    "screen_flag": r.get("screen_flag"), "workspace_id": r.get("workspace_id"),
+                    "text": r.get("text") or "", "screen_flag": r.get("screen_flag"), "workspace_id": r.get("workspace_id"),
                     "campaign_id": r.get("campaign_id"), "lead_id": r.get("lead_id"),
                     "lead_map_id": r.get("lead_map_id"), "stats_id": r.get("stats_id"),
                     "message_id": r.get("message_id")})

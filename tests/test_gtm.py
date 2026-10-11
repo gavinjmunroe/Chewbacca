@@ -849,7 +849,7 @@ def test_bounce_notices_and_removal_asks(tmp: Path):
         one("takeoff@one.example", "u3", {"email_body": "Please take me off your list."}),
         one("stop@one.example", "u4", {"email_body": "Not a fit for us. Stop emailing me."}),
         one("dnc@one.example", "u5", {"email_body": "Do not contact me again"}),
-        one("keen@one.example", "k1", {"email_body": long_yes}),
+        one("keen@one.example", "k1", {"email_body": "<div><div>" + long_yes + "</div></div>"}),
         thread("changed@one.example", seed, [
             sent, {"type": "REPLY", "time": "2026-10-06T09:00:00Z", "email_body": "Unsubscribe"},
             {"type": "REPLY", "time": "2026-10-07T09:00:00Z", "email_body": "Actually, wait. Send me the deck."}], "o1"),
@@ -871,6 +871,11 @@ def test_bounce_notices_and_removal_asks(tmp: Path):
     ok(waiting["changed@one.example"]["class"] is None, "a person's later reply overrides the removal rule")
     ok(waiting["quiet@one.example"]["class"] is None and "deck" in waiting["quiet@one.example"]["snippet"],
        "a bounce notice after the lead's reply never stands in for it")
+    # 2026-10-11: snippets were the raw HTML body's first 280 characters, so
+    # 73 of 87 real replies read as <div> soup cut mid-sentence. Both fields
+    # are the lead's own words now, and `text` carries the whole reply.
+    keen = waiting["keen@one.example"]
+    ok("<" not in keen["snippet"] and keen["text"].endswith("send the deck.") and len(keen["text"]) > gi.SNIPPET, keen)
     every = {r["email"]: r for r in gq.replies(db, "Acme Capital", unanswered=True, include_all=True)["replies"]}
     for e in ("dsn", "blocked", "daemon", "outlook"):
         ok(every[f"{e}@one.example"]["class"] == "bounce" and every[f"{e}@one.example"]["classified_by"] == gi.RULE_BY,

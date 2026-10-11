@@ -112,6 +112,9 @@ RECORD_BATCH = 100
 WORKERS = 4
 MAX_TRIES = 6
 SNIPPET = 280
+# Own words only. The longest of 87 real Zeutara replies cleaned to under
+# 1,500 characters (2026-10-11); 2,000 keeps all of them whole.
+REPLY_TEXT = 2000
 # C0 controls (ESC starts a terminal escape), DEL, the C1 block (U+009B is a
 # one-character CSI that terminals honour in UTF-8 mode, so a reply body could
 # still repaint the screen after ESC was stripped: security review 2026-10-09),
@@ -227,6 +230,13 @@ def slug(text: str) -> str:
 def clip(text, limit: int) -> str:
     text = CONTROL.sub(" ", str(text or ""))
     text = " ".join(text.split())
+    return text if len(text) <= limit else text[:limit - 1] + "…"
+
+
+def reply_text(text, limit: int = REPLY_TEXT) -> str:
+    """A reply body for reading and drafting: control characters gone, line
+    breaks kept, clipped."""
+    text = CONTROL.sub(" ", str(text or "")).strip()
     return text if len(text) <= limit else text[:limit - 1] + "…"
 
 
@@ -1158,6 +1168,11 @@ def build_inbox(replies: list, workspace_id: str, graph: Graph, ids: Identities,
             later = [m for m in history if str(m.get("time") or "") > when]
             before = [m for m in history if m.get("type") == "SENT" and str(m.get("time") or "") <= when]
             text = msg.get("email_body") or ""
+            # The reply in the lead's own words, quoted thread and HTML gone.
+            # The snippet used to be the raw body's first 280 characters, and
+            # on 2026-10-11 73 of 87 Zeutara snippets were mostly <div> tags
+            # cut mid-sentence, so anything reading them was guessing.
+            words = _gtme_reply().clean_reply_text(text[:AUTO_CLASS_LIMIT])
             flag = screen_fn(text)
             report["flagged"] += bool(flag) and flag != UNSCREENED
             report["unscreened"] += flag == UNSCREENED
@@ -1181,7 +1196,7 @@ def build_inbox(replies: list, workspace_id: str, graph: Graph, ids: Identities,
                 "message_id": reply_id(msg.get("message_id")),
                 "stats_id": reply_id(msg.get("stats_id")) or (reply_id(before[-1].get("stats_id")) if before else ""),
                 "lead_status": clip(item.get("lead_status"), 40), "subject": clip(msg.get("subject"), 160),
-                "snippet": clip(text, SNIPPET), "screen_flag": flag,
+                "snippet": clip(words or text, SNIPPET), "text": reply_text(words), "screen_flag": flag,
                 "answered": any(m.get("type") == "SENT" for m in later),
                 "forwarded": any(m.get("type") == "FORWARD" for m in later),
                 "latest": n == last,

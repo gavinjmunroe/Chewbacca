@@ -299,8 +299,12 @@ SIGN_OFF = js_regex(
     r"^(--\s*$|(kind |best |warm )?regards|best,?$|cheers|sincerely|mit freundlichen|freundliche gr"
     r"|cordialement|this e-?mail (has been|and any|is (intended|confidential|for the)|may)"
     r"|confidential|disclaimer|sent (from|via) )", "i")
+# "please take us off your distribution list!" came out "unclear" on
+# 2026-10-11, so an opt-out could have been emailed again: "us" and the list
+# words count too.
 UNSUBSCRIBE = js_regex(
-    r"\b(unsubscribe|remove me|take me off|stop emailing|do not contact|don'?t contact)\b", "i")
+    r"\b(unsubscribe|remove (me|us)|take (me|us) off|stop emailing|do not contact|don'?t contact"
+    r"|off (your|the) (distribution|mailing|e-?mail) list)\b", "i")
 # A removal ask that names someone else: "Remove Daniel" was the whole reply
 # from a partner at one firm (2026-10-10), and it came out "unclear". Only a
 # reply that OPENS with remove, or asks to remove someone from a list, counts,
@@ -323,7 +327,10 @@ NEW_ADDRESS = js_regex(
 OUT_OF_OFFICE = js_regex(
     "(out of (the )?office|traveling|travelling|on (leave|vacation|holiday)"
     "|limited access to e-?mail|checking e-?mails? infrequently|je suis absent|abwesend"
-    "|nicht im haus|wieder im b(\u00fc|u)ro|automatic reply|auto-?reply|out today|slow to respond)", "i")
+    "|nicht im haus|wieder im b(\u00fc|u)ro|automatic reply|auto-?reply|out today|slow to respond"
+    # "Hey! ... This is an automated message. I get a high volume of messages"
+    # read as "unclear" on 2026-10-11.
+    "|this is an automated (message|response|reply))", "i")
 LENDER = js_regex(r"\b(lender|lending|debt financing|venture debt|credit facility)\b", "i")
 MOVED_ON = js_regex(
     r"(i'?ve left|i have left|no longer (with|at|monitor|active)|nicht mehr aktiv|has retired from"
@@ -343,8 +350,10 @@ DECK = js_regex(
 LATER = js_regex(
     r"(back (on|in|after)|in (\d+|a few|two|three|four) weeks|circle back|reach out when"
     r"|after the holidays|next quarter|ball (is )?in my court)", "i")
+# A bare "no" (the whole reply, no punctuation) and "It would be a conflict of
+# interest since we have our own" both came out "unclear" on 2026-10-11.
 PASS = js_regex(
-    r"(^\s*no\b[,.!]|(doesn'?t|isn'?t|not)\b[^.]{0,20}\bfit\b|retired from (making )?(new )?invest"
+    r"(^\s*no\b([,.!]|\s*$)|\bno interest\b|conflict of interest|(doesn'?t|isn'?t|not)\b[^.]{0,20}\bfit\b|retired from (making )?(new )?invest"
     r"|retired from investing|^\s*no thank|no thank you|not (an )?area of (focus|interest)|pass on"
     r"|outside (of )?our (investment\s*)?(scope|focus|thesis|mandate)"
     r"|don'?t do (consumer|b2c|crypto|hardware|pre-?seed|seed|safes)|bow out|is tough for us"

@@ -74,6 +74,24 @@ class ReplyIntentRealReplies(unittest.TestCase):
         self.assertLess(time.monotonic() - start, 0.2)
         self.assertLess(len(intent["nextStep"]), 300)
 
+    def test_misses_from_the_2026_10_11_inbox_run(self):
+        # Each came out "unclear" over 87 real Zeutara replies; reworded here.
+        cases = {
+            "no": "pass",
+            "No thanks": "pass",
+            "Sorry, no interest. please take us off your distribution list!": "unsubscribe",
+            "Please remove us from your list": "unsubscribe",
+            "It would be a conflict of interest since we have our own fund in the space": "pass",
+            "Hey! Thanks for reaching out. This is an automated message. I get a high volume of "
+            "messages and may not be able to reply.": "later",
+        }
+        for body, kind in cases.items():
+            with self.subTest(body):
+                self.assertEqual(reply.reply_intent(body)["kind"], kind)
+
+    def test_no_inside_a_sentence_is_not_a_pass(self):
+        self.assertNotEqual(reply.reply_intent("No problem, send the deck over")["kind"], "pass")
+
     def test_nothing_matching_falls_through_to_a_read(self):
         self.assertEqual(reply.reply_intent("Cool.")["kind"], "unclear")
 

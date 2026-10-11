@@ -15,7 +15,7 @@ import SwiftUI
 /// sees why the row ranked. `kind` is `file` (a name; `where` is its folder),
 /// `line` (a line of code, drawn mono; `where` is its path and line), a
 /// history row (`checkpoint`, `ship`, `pr`), or a space row (`review`, `run`,
-/// `schedule`, `mcp`, `memory`), each with its own glyph.
+/// `schedule`, `mcp`, `memory`), a `branch`, each with its own glyph.
 /// `selected` is the row whose file is open below, drawn with one lit line
 /// on its leading edge (hud/CLAUDE.md, "Past the window" 11).
 ///
@@ -48,6 +48,7 @@ struct HitRow: Identifiable, Equatable {
         case "schedule": return "calendar.badge.clock"
         case "mcp": return "point.3.connected.trianglepath.dotted"
         case "memory": return "brain"
+        case "branch": return "arrow.triangle.branch"
         default: return "doc.text"
         }
     }

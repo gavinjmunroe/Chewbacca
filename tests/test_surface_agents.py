@@ -1451,6 +1451,88 @@ def replace_across(tmp: Path) -> None:
     check("replacing made no engine write", e.writes == [], e.writes)
 
 
+def branches(tmp: Path) -> None:
+    """Branches on the card: a switch is offered only with what happens to
+    the changed files said first, a dirty tree never gets a plain switch,
+    putting changes away has an Undo that brings exactly them back, a new
+    branch carries the changes, and a press over a checkout that moved
+    refuses."""
+    import subprocess  # noqa: PLC0415
+
+    def git(*args):
+        return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True).stdout.strip()
+
+    repo = git_repo(tmp / "branch" / "repo", {"a.py": "a = 1\n"})
+    git("branch", "feature")
+    e = FakeEngine()
+    e.add_session("s1", "idle", cwd=str(repo))
+    a, ctx = world(tmp / "branch", e)
+    data, model = view(a, ctx, open="s1")
+    names = [r["segments"][0]["text"] for r in model["/agents/branches"]]
+    check("the card lists the local branches, the current one marked",
+          sorted(names) == ["feature", "main"] and model["/agents/branchCap"] == "Branches · on main"
+          and next(r for r in model["/agents/branches"] if r["segments"][0]["text"] == "main")["where"]
+          == "checked out here", model["/agents/branches"])
+    check("nothing switches before a branch is pressed", model["/agents/switch"] == [])
+    r = a.pick_branch(ctx, data, {"row": "b:nope"})
+    check("a branch not in the list can't be picked", not r.ok)
+    a.pick_branch(ctx, data, {"row": "b:feature"})
+    model = a.model(data, None, {}, ctx)
+    sw = model["/agents/switch"]
+    check("a clean tree offers one Switch that says nothing is left behind",
+          len(sw) == 1 and sw[0]["id"].startswith("clean:") and "nothing is left behind" in sw[0]["text"], sw)
+    (repo / "a.py").write_text("a = 2\n")
+    (repo / "new.py").write_text("n = 1\n")
+    a.read_branches(next(r for r in data["rows"] if r["id"] == "s1"), force=True)
+    r = a.switch(ctx, data, {"row": sw[0]["id"]})
+    check("a clean Switch drawn before files changed refuses", not r.ok and git("branch", "--show-current") == "main", r)
+    model = a.model(data, None, {}, ctx)
+    sw = model["/agents/switch"]
+    check("a dirty tree offers bring-along and put-away, each naming the files, never a plain switch",
+          [x["id"].split(":")[0] for x in sw] == ["carry", "stash"] and "bring 2 changed files along" in sw[0]["text"]
+          and "Put 2 changed files away first" in sw[1]["text"] and "Undo brings them back" in sw[1]["text"], sw)
+    forged = "clean:" + sw[0]["id"].split(":", 1)[1]
+    r = a.switch(ctx, data, {"row": forged})
+    check("a forged clean switch over a dirty tree refuses", not r.ok and git("branch", "--show-current") == "main", r)
+    e.sessions["s1"]["status"] = "running"
+    r = a.switch(ctx, data, {"row": sw[1]["id"]})
+    check("nothing switches while the agent works", not r.ok and git("branch", "--show-current") == "main", r)
+    e.sessions["s1"]["status"] = "idle"
+    r = a.switch(ctx, data, {"row": sw[1]["id"]})
+    check("put away first: the changes are stashed and the branch switched",
+          r.ok and git("branch", "--show-current") == "feature" and (repo / "a.py").read_text() == "a = 1\n"
+          and not (repo / "new.py").exists() and "kyber: before switching to feature" in git("stash", "list"), r)
+    model = a.model(data, None, {}, ctx)
+    undo = model["/agents/branchUndo"]
+    check("an Undo row says it brings those files back", undo and "Brings back the 2 files" in undo[0]["text"], undo)
+    git("stash", "push", "-m", "someone else's")  # nothing to stash: a no-op, the list is unchanged
+    r = a.branch_undo(ctx, data, {"row": undo[0]["id"]})
+    check("Undo applies exactly that stash and drops it", r.ok and (repo / "a.py").read_text() == "a = 2\n"
+          and (repo / "new.py").read_text() == "n = 1\n" and "kyber:" not in git("stash", "list"), r)
+    data = a.fetch(ctx)
+    a.read_branches(next(r for r in data["rows"] if r["id"] == "s1"), force=True)
+    a.pick_branch(ctx, data, {"row": "b:main"})
+    model = a.model(data, None, {}, ctx)
+    carry = next(x for x in model["/agents/switch"] if x["id"].startswith("carry:"))
+    r = a.switch(ctx, data, {"row": carry["id"]})
+    check("bring along switches with the changed files in place (git's own switch)",
+          r.ok and git("branch", "--show-current") == "main" and (repo / "a.py").read_text() == "a = 2\n", r)
+    model = a.model(data, None, {"/agents/branchName": "-bad name"}, ctx)
+    check("a name git refuses offers nothing", model["/agents/branchNew"] == []
+          and "can't be a new branch" in model["/agents/branchNote"], model["/agents/branchNote"])
+    values = {"/agents/branchName": "fix/rail"}
+    model = a.model(data, None, values, ctx)
+    new = model["/agents/branchNew"]
+    check("a new branch's row says where it comes from and that the changes come along",
+          new and new[0]["text"] == "Make fix/rail from main and switch to it · 2 changed files come along", new)
+    r = a.new_branch(ctx, data, {"row": new[0]["id"], "/agents/branchName": "other"})
+    check("a Make whose typed name moved refuses", not r.ok and git("branch", "--show-current") == "main", r)
+    r = a.new_branch(ctx, data, {"row": new[0]["id"], **values})
+    check("Make creates the branch and switches to it, changes kept",
+          r.ok and git("branch", "--show-current") == "fix/rail" and (repo / "a.py").read_text() == "a = 2\n", r)
+    check("branches made no engine write", e.writes == [], e.writes)
+
+
 def mention_picker(tmp: Path) -> None:
     """The @ list under the reply: realm's own list for the session's files,
     a pick puts @[name] in the text, and Send carries only the files whose
@@ -2253,6 +2335,7 @@ def main() -> int:
         finder(tmp)
         file_tabs(tmp)
         replace_across(tmp)
+        branches(tmp)
         mention_picker(tmp)
         real_repo(tmp)
         history(tmp)

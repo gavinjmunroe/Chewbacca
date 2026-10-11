@@ -90,6 +90,12 @@ def main() -> int:
         head, hunks = ide_git.file_hunks(ide_git.Git(str(tmp / "pwn")), "f.txt")
         ide_git.stage_hunk(ide_git.Git(str(tmp / "pwn")), head, hunks[0])
         check("a repo's own filter and textconv never run", not mark.exists() and hunks)
+        # A repo-local merge driver: the checkout git (attrs on) refuses to run at all.
+        subprocess.run(["git", "-C", str(tmp / "pwn"), "config", "merge.evil.driver", f"touch {mark}"], check=True)
+        code, _, why = ide_git.Git(str(tmp / "pwn"), attrs=True).text("status")
+        check("a repo naming its own merge driver gets no checkout git", code != 0 and not mark.exists(), why)
+        code, _, _ = ide_git.Git(str(tmp / "pwn")).text("status")
+        check("its reads still work with attributes off", code == 0)
         # Backups past the kept count are dropped, oldest first.
         f = tmp / "k.txt"
         f.write_bytes(b"k")

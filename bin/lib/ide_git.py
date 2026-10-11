@@ -65,7 +65,10 @@ def run_bytes(argv: list, data: bytes | None = None, cwd: str | None = None,
               timeout: float = GIT_TIMEOUT) -> tuple[int, bytes, str]:
     try:
         done = subprocess.run(argv, input=data, capture_output=True, timeout=timeout, cwd=cwd,
-                              env={**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_OPTIONAL_LOCKS": "0"})
+                              env={**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_OPTIONAL_LOCKS": "0",
+                                   # A partial clone's missing blob is never fetched (git 2.45+): a
+                                   # fetch runs the remote's transport the repo's config names.
+                                   "GIT_NO_LAZY_FETCH": "1"})
     except subprocess.TimeoutExpired:
         return 124, b"", f"{argv[0]} took longer than {timeout:.0f}s"
     except OSError as err:
@@ -76,10 +79,21 @@ def run_bytes(argv: list, data: bytes | None = None, cwd: str | None = None,
 class Git:
     """git in one checkout with the switches above. `run` is a seam."""
 
-    def __init__(self, root: str, run=run_bytes) -> None:
+    def __init__(self, root: str, run=run_bytes, attrs: bool = False) -> None:
         self.root = str(Path(root).resolve())
         self.run = run
         self._guard: list[str] | None = None
+        # A checkout (git switch) needs the repo's own eol and text
+        # attributes to write files right; every other call reads none. It
+        # also drops --literal-pathspecs, which names no path in a switch or
+        # a stash, and with which `git stash push --include-untracked` (git
+        # 2.50.1) saved the edits but left the untracked files in place, so
+        # the switch carried them (found 2026-10-11, tests/test_surface_agents.py).
+        # Submodules never recurse: a checkout that recursed would run git in
+        # repos the press never named (security review, 2026-10-11).
+        self.base = [x for x in GIT if not x.startswith("--attr-source") and x != "--literal-pathspecs"] \
+            + ["-c", "submodule.recurse=false"] if attrs else GIT
+        self.attrs = attrs
 
     def guard(self) -> list[str] | None:
         """filter_guard's switches (code.py), read once per Git."""
@@ -91,7 +105,15 @@ class Git:
             names: set[str] = set()
             for scope, entry in zip(tokens[0::2], tokens[1::2]):
                 key = entry.split("\n", 1)[0]
-                if scope in TRUSTED_SCOPES or not key.lower().startswith("filter."):
+                low = key.lower()
+                if scope not in TRUSTED_SCOPES and self.attrs and low.startswith("merge.") \
+                        and low.endswith(".driver"):
+                    # With the repo's attributes on, a stash apply would run
+                    # a merge driver the repo names; a -c line can't make one
+                    # safe, so this checkout gets no switch (security review,
+                    # 2026-10-11).
+                    return None
+                if scope in TRUSTED_SCOPES or not low.startswith("filter."):
                     continue
                 rest = key[len("filter."):]
                 if "." not in rest:
@@ -111,7 +133,7 @@ class Git:
         guard = self.guard()
         if guard is None:
             return 1, b"", "couldn't read the repo's git config"
-        return self.run(GIT + guard + ["-C", self.root, *args], data)
+        return self.run(self.base + guard + ["-C", self.root, *args], data)
 
     def text(self, *args: str) -> tuple[int, str, str]:
         code, out, err = self(*args)

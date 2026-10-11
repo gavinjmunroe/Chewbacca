@@ -102,6 +102,7 @@ import realm_client
 import session_tree
 
 from . import ACTION_PREFIX, Bind, Context, Provider, Result, SurfaceError, ago, clock, comp, note_for
+from .agent_branch import Branches
 from .agent_history import History
 from .agent_hunks import Hunks
 from .agent_ide import Ide
@@ -313,7 +314,8 @@ STATE_ORDER = {"waiting_permission": 0, "error": 1, "running": 2, "idle": 3, "en
 BUSY = ("running", "waiting_permission")
 # The pointers holding a row a press can write through.
 VERBS = ("send", "allow", "deny", "interrupt", "fork", "new", "stage", "unstage", "ship", "upstream", "run", "ctrlc",
-         "restore", "pr", "hunks", "hunkUndo", "replaceGo", "replaceUndo",
+         "restore", "pr", "hunks", "hunkUndo", "replaceGo", "replaceUndo", "switch",
+         "branchNew", "branchUndo",
          "termopen", "mode", "go")
 MODE_WORDS = {"default": "asks before each tool", "acceptEdits": "edits without asking",
               "bypassPermissions": "never asks (full access)", "plan": "plans only"}
@@ -896,7 +898,7 @@ class Log:
         return any(seq > after and sent == text for seq, sent in self.sent)
 
 
-class Agents(Ide, Replace, Hunks, History, Space, Provider):
+class Agents(Ide, Replace, Hunks, Branches, History, Space, Provider):
     name = "agents"
     title = "AGENTS"
     region = "center"
@@ -981,6 +983,7 @@ class Agents(Ide, Replace, Hunks, History, Space, Provider):
         self._ide_init()
         self._hunks_init()
         self._replace_init()
+        self._branch_init()
         self._history_init()
         self._space_init()
 
@@ -1042,6 +1045,7 @@ class Agents(Ide, Replace, Hunks, History, Space, Provider):
                     self._place(row, ctx, log)
                     checkpoint = self.newest_checkpoint(conn, row)
                     self.read_changes(conn, row)
+                    self.read_branches(row)
                     self.read_terminal(conn, row)
                     self.read_browser(conn, row)
                     self.read_history(conn, row, DIFF_EVERY)
@@ -1539,6 +1543,9 @@ class Agents(Ide, Replace, Hunks, History, Space, Provider):
                 card_parts.append(comp(c("upstream"), "Events", caption="", items=Bind(p("upstream")),
                                        action=f"{ACTION_PREFIX}upstream", actionLabel="Push"))
                 card_order.append("upstream")
+            branch_parts, branch_order = self.branch_parts(plan)
+            card_parts += branch_parts
+            card_order += branch_order
             history_parts, history_order = self.history_parts(plan)
             card_parts += history_parts
             card_order += history_order
@@ -1587,7 +1594,7 @@ class Agents(Ide, Replace, Hunks, History, Space, Provider):
 
     def initial(self) -> dict:
         return {self.p("draft"): "", self.p("task"): "", self.p("agent"): "", self.p("message"): "",
-                self.p("command"): "", self.p("address"): "", self.p("find"): "", self.p("replaceWith"): "",
+                self.p("command"): "", self.p("address"): "", self.p("find"): "", self.p("replaceWith"): "", self.p("branchName"): "",
                 self.p("status"): "", self.p("level"): "info"}
 
     def blank(self) -> dict:
@@ -1602,7 +1609,7 @@ class Agents(Ide, Replace, Hunks, History, Space, Provider):
                 p("termopen"): [], p("termOn"): False,
                 p("models"): [], p("modelValue"): "", p("efforts"): [], p("effortValue"): "", p("modes"): [],
                 p("mode"): [], p("webHead"): "", p("webUrl"): "", p("go"): [], p("addressOn"): False,
-                p("placeholder"): "Typed here, sent only by Send", p("pinnedRow"): "", **self.find_blank(), **self.hunks_blank(), **self.replace_blank(),
+                p("placeholder"): "Typed here, sent only by Send", p("pinnedRow"): "", **self.find_blank(), **self.hunks_blank(), **self.replace_blank(), **self.branch_blank(),
                 **self.history_blank(), **self.space_blank()}
 
     def model(self, data, error, values, ctx) -> dict:
@@ -1630,7 +1637,7 @@ class Agents(Ide, Replace, Hunks, History, Space, Provider):
                         shipped=bool(out.get(p("shipped"))), upstream=bool(out.get(p("upstream"))),
                         terminal=bool(out.get(p("termOn"))), termopen=bool(out.get(p("termopen"))),
                         web=bool(out.get(p("webUrl"))), address=bool(out.get(p("addressOn"))),
-                        ask=bool(out.get(p("ask"))), start=bool(out.get(p("kinds"))), **self.find_plan(out), **self.hunks_plan(out), **self.replace_plan(out),
+                        ask=bool(out.get(p("ask"))), start=bool(out.get(p("kinds"))), **self.find_plan(out), **self.hunks_plan(out), **self.replace_plan(out), **self.branch_plan(out),
                         **self.history_plan(out), **self.space_plan(out))
         with self._lock:
             self._plan = plan
@@ -1747,6 +1754,7 @@ class Agents(Ide, Replace, Hunks, History, Space, Provider):
             out[p("patch")], out[p("patchPath")] = patch[2], clean(patch[1], 120)
         self.hunks_model(shown, patch, out)
         self.git_model(shown, files, changes, patch, data.get("shipped"), values, out)
+        self.branch_model(shown, values, out)
         self.history_model(shown, changes, float(data.get("now") or time.time()) * 1000, values, out)
         self.space_model(shown, changes, float(data.get("now") or time.time()) * 1000, out)
         self.terminal_model(shown, data.get("terminal"), values, out)

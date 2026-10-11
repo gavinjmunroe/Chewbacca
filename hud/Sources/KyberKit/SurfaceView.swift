@@ -167,6 +167,7 @@ public struct SurfaceView: View {
                     path: path,
                     editable: p["editable"] == .bool(true),
                     page: Int(p["page"]?.doubleValue ?? 1),
+                    line: Int(p["line"]?.doubleValue ?? 0),
                     onSave: { [store] body, expecting, force in
                         store.saveFile(path: path, contents: body, expecting: expecting, force: force)
                     },
@@ -705,6 +706,14 @@ public struct SurfaceView: View {
 
         case "Web":
             return AnyView(WebPaneView(url: p["url"]?.display ?? ""))
+
+        case "Hits":
+            let action = p["action"]?.stringValue
+            return AnyView(
+                HitsView(
+                    caption: p["caption"]?.display ?? "",
+                    rows: HitRow.parse(p["items"]?.arrayValue ?? []),
+                    onOpen: action.map { name in { [store] id in store.fireRow(name, row: id) } }))
 
         case "Tree":
             let action = p["action"]?.stringValue

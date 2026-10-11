@@ -90,7 +90,7 @@ public enum KeyboardFocus {
     static let controls: Set<String> = ["Button", "Checkbox", "Select", "Field"]
     /// The types that carry a button per row when they have `action=`.
     static let rowed: [String: String] = ["List": "items", "Table": "rows", "Events": "items",
-                                          "Tiles": "items", "Chips": "options"]
+                                          "Tiles": "items", "Chips": "options", "Hits": "items"]
 
     /// Every target on one surface, in tree order, then its close.
     @MainActor

@@ -462,6 +462,68 @@ engine keeps only the pane's address. Only http and https load, every
 navigation inside the page is held to that, and the page gets a fresh
 non-persistent data store, so it sees no cookie or login from anything else.
 
+```
+c f Hits caption=@/findFilesCap items=@/findFiles action=ks-open
+d /findFiles [{"id":"f1:0","kind":"file","where":"bin/lib/surfaces","segments":[{"text":"agents","match":true},{"text":".py","match":false}]}]
+```
+
+**Hits** is search results that show why each row is there (HitsView.swift):
+realm's ⌘P and ⌘⇧F rows on the glass. `segments` is the engine's own
+`SearchSnippet`, and the matched runs are lit in Realm's blue at a heavier
+weight, so the reason a row ranked is visible without reading it. `kind`
+picks the glyph: `file`, `line` (code, mono, `where` is path and line),
+`checkpoint`, `ship`, `pr`, `review`, `run`, `schedule`, `mcp`, `memory`.
+The row is the press (no "Open" beside it) and `selected` gives the open
+one a lit line on its leading edge. An empty list draws nothing, caption
+included. The agent card uses it for Find, the `@` picker, History and
+"This space" (bin/lib/surfaces/agent_ide.py, agent_history.py,
+agent_space.py). surface_lint counts Hits as opened-on-purpose text.
+
+`File` takes `line=` (1-based): the editor opens with that line selected
+and in view. Re-pointing a bound `path=` swaps the whole editor, so a
+draft, its baseline and its version stamp belong to one file only.
+
+### Carlton's language on the glass
+
+Caleb, 2026-10-11: "Not just functionality of carlton's thing, but his UIUX
+is pretty sick bro". Realm has no LICENSE, so its design was read
+(`theme/tokens.css`, `design.md` at 59afd9e4) and re-written in Swift as
+`Realm` in RealmTokens.swift. What carried over:
+
+- Type ladder, nothing under 11: 11 tiny, 12 caption, 13 small, 14 body, 15
+  reading, 16, then titles 18, 20, 24, 28. Tracking per rung (-0.2 at 11 and
+  13, -0.1 at 14 and 16, -1.5% on titles). Weights 450 to 500 for labels,
+  560 titles, 600 strong.
+- Radii 2 (ticks), 6 (chips), 8 (controls), 12 (cards, rows), 16 (sheets),
+  nested concentric: outer equals inner plus the padding.
+- Colour ladder page, canvas, surface, inset, hover, then ink, ink-2, ink-3,
+  accent, accent-ink. On his window ink-3 is sRGB 0.42 and measures under
+  3:1 on the glass's worst ground, so the glass keeps his roles with the
+  HUD's measured values (ink, dim, faint). His accent-ink measured 3.9:1
+  there and his accent 2.6:1; both are lifted toward white (`accentInk`
+  4.6:1 for text, `accent` 3.2:1 for an edge). Blue, never the HUD cyan,
+  which means "working".
+- Edges are quiet: a hover is a light overlay (`hoverFill`), a selection is
+  one lit edge, and no row wears a ring.
+- Motion ladder: hover 180 ms on the way out only (it arrives at once),
+  press 120, pop 140, fade 150, swap 160, enter 180, size 200, rise 220,
+  slow 240, travel 320. `--ease-out-strong` for travel, `--ease-fade` for
+  opacity only.
+- Pane grammar: what a pane shows keeps its controls with it; a press on a
+  row selects, and the one verb that row can take appears under the list
+  naming what it changes; a destructive verb says its cost first (a restore
+  says how many files and commits it rewrites and that an undo point is
+  saved).
+
+**Offscreen renders of tall panels.** ImageRenderer draws an AppKit
+ScrollView as nothing, so before 2026-10-11 any HUD_LINES_FILE review of a
+panel taller than its cap came back as an empty card, and the coverage
+check passed on the glass alone. Offscreen (`hudOffscreen`) the card now
+draws its plain layout clipped at the cap, top first, and
+`SnapshotTests.tallPanelRenders` diffs a card with words against the same
+card without them. An NSViewRepresentable (the File editor, a Web pane)
+still draws empty offscreen; check those live.
+
 ## Files
 
 ```

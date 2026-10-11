@@ -370,6 +370,7 @@ struct SurfaceCard: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.hudKeyboardFocus) private var keyboardFocus
+    @Environment(\.hudOffscreen) private var offscreen
     @State private var hovering = false
     @State private var lit = false
     /// Where the card is on the screen, top-left origin, for measuring the
@@ -409,6 +410,17 @@ struct SurfaceCard: View {
         // takes the plain layout when it fits and swaps in a scrolling one when
         // it does not, so a short panel is still sized to its content.
         VStack(alignment: .leading, spacing: 8) {
+        if offscreen {
+            // ImageRenderer draws an AppKit-backed ScrollView as nothing, so
+            // every panel taller than its cap rendered as an empty card in
+            // HUD_LINES_FILE reviews (found 2026-10-11: the agents card and
+            // the meetings panel both came back blank). Offscreen, the plain
+            // layout is drawn and the frame below clips it at the same cap,
+            // which is what the top of the scroller shows on the glass.
+            SurfaceView(store: surface.store, pendingTitle: LoadingView.title(fromID: surface.id))
+                .frame(maxHeight: surface.maxHeight, alignment: .top)
+                .clipped()
+        } else {
         ViewThatFits(in: .vertical) {
             SurfaceView(store: surface.store, pendingTitle: LoadingView.title(fromID: surface.id))
             ScrollView(.vertical, showsIndicators: false) {
@@ -426,6 +438,7 @@ struct SurfaceCard: View {
                         .frame(height: 22)
                 }
             }
+        }
         }
             // Who drew it, when a connection claimed the name (bd_2026-Code-9rl).
             // Nothing for an unclaimed surface: an empty line would say

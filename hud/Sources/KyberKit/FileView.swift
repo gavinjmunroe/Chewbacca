@@ -19,6 +19,9 @@ struct FileView: View {
     let path: String
     let editable: Bool
     let page: Int
+    /// The line to show and select when a text file opens (1-based; 0 for
+    /// none): a search hit opens its file at the line that matched.
+    var line: Int = 0
     /// Called with the new contents when the person saves a text file, the
     /// version the editor last saw on disk, and whether they chose to
     /// overwrite a file that changed since. Answers what happened.
@@ -80,7 +83,11 @@ struct FileView: View {
 
     @ViewBuilder
     private var content: some View {
-        switch loaded ?? .loading {
+        // What was read for an earlier path is never shown under a new one.
+        // A bound `path=@/x` re-points this same view: before this, the
+        // editor kept the first file's draft and its save went to the second
+        // file's path (found 2026-10-11, building the agent card's finder).
+        switch (loadedFrom == path ? loaded : nil) ?? .loading {
         case .loading:
             Color.clear.frame(height: 1)
 
@@ -108,10 +115,13 @@ struct FileView: View {
 
         case .text(let body, let stamp):
             TextPane(
-                text: body, stamp: stamp, path: url.path, editable: editable,
+                text: body, stamp: stamp, path: url.path, editable: editable, line: line,
                 language: Syntax.language(forPath: url.path)
                     ?? Syntax.language(forShebang: String(body.prefix(200).split(separator: "\n").first ?? "")),
                 onSave: onSave, onDirty: onDirty)
+            // One editor per file: its draft, baseline and stamp are that
+            // file's and nobody else's.
+            .id(loadedFrom)
 
         case .opaque(let type):
             Text(type)
@@ -180,6 +190,7 @@ private struct TextPane: View {
     let stamp: FileSafety.Stamp
     let path: String
     let editable: Bool
+    var line: Int = 0
     let language: Syntax.Language?
     let onSave: (String, FileSafety.Stamp?, Bool) -> FileSafety.Outcome
     let onDirty: (String?) -> Void
@@ -223,7 +234,7 @@ private struct TextPane: View {
                             ("Reload", reload),
                         ])
                 }
-                CodeEditor(text: $draft, language: language)
+                CodeEditor(text: $draft, language: language, line: line)
                     .background(.black.opacity(0.28), in: RoundedRectangle(cornerRadius: 8))
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .frame(height: 300)
@@ -332,6 +343,10 @@ private struct TextPane: View {
 struct CodeEditor: NSViewRepresentable {
     @Binding var text: String
     let language: Syntax.Language?
+    /// 1-based line to bring into view and select, 0 for none. Applied when
+    /// the editor is made and again only when it changes, so typing never
+    /// jumps the caret back to it.
+    var line: Int = 0
 
     static let font = NSFont.monospacedSystemFont(ofSize: 11.5, weight: .regular)
 
@@ -364,19 +379,51 @@ struct CodeEditor: NSViewRepresentable {
         view.delegate = context.coordinator
         view.string = text
         if let storage = view.textStorage { Syntax.paint(storage, language, font: Self.font) }
+        context.coordinator.shownLine = line
+        if line > 0 {
+            // After layout, or scrolling has no geometry to scroll to.
+            Task { @MainActor in Self.reveal(line, in: view) }
+        }
         return scroll
+    }
+
+    /// The character range of a 1-based line, or nil past the end.
+    static func range(ofLine line: Int, in text: String) -> NSRange? {
+        guard line > 0 else { return nil }
+        let ns = text as NSString
+        var start = 0
+        for _ in 1..<line {
+            let next = ns.range(of: "\n", range: NSRange(location: start, length: ns.length - start))
+            guard next.location != NSNotFound else { return nil }
+            start = next.location + 1
+        }
+        let end = ns.range(of: "\n", range: NSRange(location: start, length: ns.length - start))
+        return NSRange(location: start, length: (end.location == NSNotFound ? ns.length : end.location) - start)
+    }
+
+    static func reveal(_ line: Int, in view: NSTextView) {
+        guard let range = range(ofLine: line, in: view.string) else { return }
+        view.setSelectedRange(range)
+        view.scrollRangeToVisible(range)
     }
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         context.coordinator.parent = self
-        guard let view = scroll.documentView as? NSTextView, view.string != text else { return }
-        view.string = text
-        if let storage = view.textStorage { Syntax.paint(storage, language, font: Self.font) }
+        guard let view = scroll.documentView as? NSTextView else { return }
+        if view.string != text {
+            view.string = text
+            if let storage = view.textStorage { Syntax.paint(storage, language, font: Self.font) }
+        }
+        if line != context.coordinator.shownLine {
+            context.coordinator.shownLine = line
+            Self.reveal(line, in: view)
+        }
     }
 
     @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: CodeEditor
+        var shownLine = 0
 
         init(_ parent: CodeEditor) { self.parent = parent }
 

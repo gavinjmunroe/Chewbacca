@@ -189,6 +189,35 @@ struct SnapshotTests {
         }
     }
 
+    /// The instrument's own test: a panel taller than its cap must render
+    /// its words offscreen, not an empty card. Before 2026-10-11 the tall
+    /// version was a ScrollView, which ImageRenderer draws as nothing, and
+    /// every HUD_LINES_FILE review of a long panel was a blank card that
+    /// still passed the coverage check on the glass alone.
+    @Test("a panel taller than its cap still renders its content offscreen")
+    func tallPanelRenders() {
+        let rows = (0..<80).map { #"c t\#($0) Text value="row \#($0) of a long panel""# }
+        let tall = store([#"c s Screen title="TALL""#, "r s", "> s " + (0..<80).map { "t\($0)" }.joined(separator: " ")]
+                         + rows)
+        // The same rows with a space for their words: the same height and
+        // the same glass, so only the ink differs.
+        let blanks = (0..<80).map { #"c t\#($0) Text value=" ""# }
+        let empty = store([#"c s Screen title="TALL""#, "r s", "> s " + (0..<80).map { "t\($0)" }.joined(separator: " ")]
+                          + blanks)
+        func draw(_ store: SurfaceStore) -> NSBitmapImageRep? {
+            render(card(store, .card, 400).frame(width: 480, height: 900)
+                .environment(\.colorScheme, .dark).environment(\.hudOffscreen, true))
+        }
+        guard let words = draw(tall), let none = draw(empty) else {
+            Issue.record("the cards did not render")
+            return
+        }
+        // The rows' words have to change pixels against the same card drawn
+        // with no words in it. Blank, the two images were identical.
+        let changed = difference(words, none)
+        #expect(changed > 0.01, "the words changed only \(changed) of the card")
+    }
+
     @Test("a card draws, on both grounds", arguments: Ground.allCases)
     func cardDraws(ground: Ground) {
         let drawn = coverage(

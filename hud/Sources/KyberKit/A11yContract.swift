@@ -78,6 +78,8 @@ enum A11yContract {
         // Agents (AgentTiles.swift): each tile and chip names itself.
         "Tiles": Entry(role: .own, name: []),
         "Chips": Entry(role: .own, name: []),
+        // Search results (HitsView.swift): each row names itself.
+        "Hits": Entry(role: .own, name: []),
         // A live page (WebPane.swift), named by its host.
         "Web": Entry(role: .own, name: []),
     ]

@@ -28,6 +28,7 @@ the model call fails. No model is called here. Stdlib only, nothing is sent.
 import argparse
 import csv
 import json
+import os
 import re
 import sys
 from datetime import datetime, timedelta, timezone
@@ -446,6 +447,55 @@ def _rows(path):
     return list(csv.DictReader(text.splitlines()))
 
 
+# Signal strength, 1 to 10, with HOLD under 6: references/bma/scoring.md
+# section 4, which was prose only until 2026-10-11 (the togari-gtm-os map,
+# row 5), so nothing stopped an email going out on "they are in digital health".
+SIGNAL_HOLD = 6
+
+
+def score_signal(sig: dict, today) -> tuple[int, str]:
+    """One signal's score and why. A signal with no source or no date counts
+    for nothing: the rubric's tiers are about timing, and an unsourced claim
+    is not a signal."""
+    from datetime import date
+    if not str(sig.get("source") or "").strip():
+        return 0, "no source"
+    scope = str(sig.get("scope") or "").lower()
+    when = sig.get("date")
+    try:
+        age = (today - date.fromisoformat(str(when)[:10])).days if when else None
+    except ValueError:
+        age = None
+    if scope == "company" and age is not None and age <= 30:
+        return 9, f"company-specific, {age} days old"
+    if scope == "company" and age is not None and age <= 60:
+        return 8, f"company-specific, {age} days old"
+    if scope == "industry" and sig.get("company_match") and age is not None and age <= 60:
+        return 7, f"industry signal that matches the company, {age} days old"
+    if scope in ("company", "industry", "category"):
+        return 5, "relevant, but no timing trigger in the last 60 days"
+    if scope == "tangential":
+        return 3, "tangential, weak timing"
+    return 1, "no real signal"
+
+
+def signal_strength(signals: list, today=None) -> dict:
+    from datetime import date
+    if today is None:
+        pinned = os.environ.get("GTME_TODAY")
+        today = date.fromisoformat(pinned) if pinned else date.today()
+    scored = sorted(({**s, "score": sc, "why": why} for s in signals for sc, why in [score_signal(s, today)]),
+                    key=lambda s: -s["score"])
+    top = [s for s in scored if s["score"] > 0][:3]
+    best = top[0]["score"] if top else 1
+    # Two strong, sourced signals at once make the "why now" stronger than either.
+    if sum(1 for s in top if s["score"] >= 8) >= 2:
+        best = min(10, best + 1)
+    return {"score": best, "hold": best < SIGNAL_HOLD, "top": top,
+            "next": "Hold: find a company-specific signal from the last 30 days (funding, an executive hire, a "
+                    "launch, a filing) before writing" if best < SIGNAL_HOLD else "Write it, leading with the top signal"}
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="gtme-score", description=__doc__.split("\n\n")[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
@@ -470,9 +520,22 @@ def main(argv=None):
     t.add_argument("file", help="JSON: fit_score, has_primary_contact, company, criteria; - reads stdin")
     q = sub.add_parser("quality", help="how complete each contact is (0 to 100) and which still need an email or phone")
     q.add_argument("file", help="CSV or JSON of contacts; - reads stdin")
-    for p in (a, l, c, t, q):
+    s = sub.add_parser("signal", help="why-now strength 1 to 10 for one account, HOLD under 6")
+    s.add_argument("file", help="JSON list of signals: what, date, scope (company|industry|category|tangential), "
+                                "company_match, source; - reads stdin")
+    for p in (a, l, c, t, q, s):
         p.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
+
+    if args.cmd == "signal":
+        text = sys.stdin.read() if args.file == "-" else open(args.file).read()
+        data = json.loads(text)
+        out = signal_strength(data if isinstance(data, list) else data.get("signals") or [])
+        line = (f"{out['score']}/10" + (" HOLD" if out["hold"] else "") + "\n" +
+                "\n".join(f"  {x['score']} {x.get('what', '')} ({x['why']}) {x.get('source')}" for x in out["top"]) +
+                f"\n{out['next']}")
+        print(json.dumps(out) if args.json else line)
+        return 0
 
     if args.cmd == "affiliation":
         out = calculate_affiliation(args.email, args.company, args.target or args.company, args.website)

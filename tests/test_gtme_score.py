@@ -162,9 +162,27 @@ def test_cli():
     ok(p.returncode == 0 and p.stdout.startswith("100/100"), f"lead prints the score: {p.stdout}")
 
 
+def test_signal():
+    from datetime import date
+    today = date(2026, 10, 11)
+    fresh = {"what": "Medicare billing expansion announced", "date": "2026-09-01", "scope": "company",
+             "source": "https://example.com/release"}
+    hire = {"what": "New CRO", "date": "2026-10-01", "scope": "company", "source": "https://example.com/hire"}
+    vague = {"what": "They are in digital health", "scope": "category", "source": "https://example.com/about"}
+    unsourced = {"what": "Raised a round", "date": "2026-10-05", "scope": "company"}
+    out = s.signal_strength([fresh], today)
+    ok(out["score"] == 8 and not out["hold"], out)
+    ok(s.signal_strength([hire, fresh], today)["score"] == 10, "two strong sourced signals beat either one")
+    out = s.signal_strength([vague], today)
+    ok(out["score"] == 5 and out["hold"], "category relevance with no timing holds")
+    out = s.signal_strength([unsourced], today)
+    ok(out["hold"] and out["top"] == [], "an unsourced signal counts for nothing")
+    ok(s.signal_strength([], today)["score"] == 1)
+
+
 def main():
     for fn in (test_lead_and_work_email, test_affiliation, test_contact_rubric, test_resolve_primary, test_tier,
-               test_quality, test_cli):
+               test_quality, test_signal, test_cli):
         fn()
     print(f"gtme-score: {CHECKS} checks passed")
 

@@ -86,7 +86,9 @@ and ranking which existing contact at an account should make the ask.
 signal has to answer "why now, and not any other week".
 
 **When Chewbacca applies it:** before writing any cold email. The score gates
-copy generation.
+copy generation. `gtme-score signal FILE` runs this table on a JSON list of
+sourced, dated signals and says HOLD under 6; a signal with no source counts
+for nothing.
 
 | Score   | What it takes                                               | Example                             |
 | ------- | ----------------------------------------------------------- | ----------------------------------- |

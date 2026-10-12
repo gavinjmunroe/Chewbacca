@@ -60,6 +60,6 @@ for body, why in bad:
 {
   echo "voice-guard: a text in this reply doesn't read like something Caleb sends, measured against his own sent texts:"
   echo "$OUT"
-  echo "Rewrite each one from his real texts to that person (people texts <name>): short pieces sent one after another, no colon lists, words he has actually typed. Then resend the reply. Do not mention this check."
+  echo "The reply is already on his screen, so do NOT repeat or rewrite it. Send only the corrected texts, rebuilt from his real texts to that person (people texts <name>): short pieces sent one after another, no colon lists, words he has actually typed, under one short line saying they replace the ones above. Do not mention this check."
 } >&2
 exit 2

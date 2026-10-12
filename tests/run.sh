@@ -962,8 +962,10 @@ if group "installer"; then
 
   # A Stop refusal re-sends a reply that is already on screen. For a layout
   # flag that re-send is word for word, so it has to feed forward instead.
-  check  "slop-guard feeds format flags forward, refuses content flags" \
+  check  "slop-guard feeds every flag forward, never duplicates a reply" \
     bash "$ROOT/tests/slop_guard_format.sh"
+  check  "no Stop hook asks for the reply to be rewritten or resent" \
+    bash "$ROOT/tests/stop_hooks_never_rewrite.sh"
 
   # An automatic pull is only acceptable if it cannot eat uncommitted work.
   check  "kit-autopull refuses dirty, branched and diverged checkouts" \

@@ -31,7 +31,15 @@ GUARD="${TMPDIR:-/tmp}/slop-guard-$PROMPT_ID"
 
 # The two flags a rewrite is worth a duplicate for. See the comment in the
 # prose-check block below for why nothing else refuses.
-HARD_RE='^(em-dash|banned-word)$'
+# Nothing refuses any more, hard bans included. A Stop hook runs after the
+# reply is on Caleb's screen, so every refusal here put a second copy under
+# the first: on 2026-10-11 three replies in a row went out twice over a file
+# name, and he wrote "You're repeating yourself the same message? ... you
+# often do this". A duplicate costs him more than one em dash or one word
+# does. Every flag now goes to the pending file, and voice-remind.sh puts it
+# in front of the next reply before it's written. tests/stop_hooks_never_rewrite.sh
+# refuses any Stop hook that asks for the reply to be rewritten or resent.
+HARD_RE='^$'
 STATE="${CHEWBACCA_HOME:-$HOME/.chewbacca}"
 
 queue_flags() {  # $1 = detail, $2 = labels

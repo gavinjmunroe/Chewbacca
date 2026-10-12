@@ -137,9 +137,10 @@ LIST=$(printf '%s\n' "$BROKEN" | tail -n +2)
   printf '%s\n' "$LIST" | sed 's/^/  /'
   echo
   echo "The editor resolves a relative link against the session root, $ROOT,"
-  echo "not against the directory the shell is in now. Rewrite each one relative"
-  echo "to that root (or as an absolute path) to a file that exists, and check it"
-  echo "before sending. 2026-10-11: Caleb clicked a render link written relative"
-  echo "to ~/Downloads and got \"Couldn't open that file\"."
+  echo "not against the directory the shell is in now. The reply is already on"
+  echo "his screen, so do NOT repeat or rewrite it: send one short line with only"
+  echo "the fixed links, relative to that root (or absolute) and checked to exist."
+  echo "2026-10-11: Caleb clicked a render link written relative to ~/Downloads"
+  echo "and got \"Couldn't open that file\"."
 } >&2
 exit 2

@@ -32,7 +32,7 @@ c128940f83b0f34530c1f075d998b869c96b43058052195c9ab3ba560053a935  .claude/hooks/
 a92b7a8dd9ea4240e8bdc64c33034228c7ae1593c6a18ef4696b9870f838c4b2  .claude/hooks/launch-guard.sh
 89a5d9080af85b7c12e9dcfc6ee6134f46fe75931f033bb123e289c0b84c6137  .claude/hooks/lesson-guard.sh
 92079d67676e053640dd265a16735b7457cfa15b8e9189dd1ef01d9d89403745  .claude/hooks/lib.sh
-6213d6f570fdc48fd864b117c4f65252bbb7ad7d34a4d73deab361b42fb29d91  .claude/hooks/link-guard.sh
+6ef9452e65da3a40b84794e23d7f4e206cfff7ac2c0dde11b882e556ac846da9  .claude/hooks/link-guard.sh
 26bdb22466effb106b8584f2579665ce6cea5aa9978576d9c46759cf4fc41c52  .claude/hooks/list-guard.sh
 2c6e209915fdd1a376729bf8b747798b04b7f52b9610cc780f02fad477c03f82  .claude/hooks/load-guard.sh
 5251cbb237c1a969244cf56df9626425c391692798cbf6bc0259210f4e46d5b9  .claude/hooks/machine-budget.sh
@@ -52,7 +52,7 @@ cc50c2a07f59b11f165690ad20f5103c45f3150f6faa47bec4663f3027666e71  .claude/hooks/
 91af3f7e22ed498e8a9116e5910c433cc54e3548c3bed477fd18ad23c5b10603  .claude/hooks/skill-gate.sh
 a176571c1fc0376648f87d4e84c994142242275bf1fbbd53c0358609a3375137  .claude/hooks/skill-route-shadow.sh
 bf92bb486d869372255f8350f7feb8e39fcd1fa9510d75be5aa54e9d1022a726  .claude/hooks/skill-route.sh
-eb8e8f5b01b200afd455808647e7c339ecb0b29506ecdde2fc2664747ba13342  .claude/hooks/slop-guard.sh
+799041308a6cf3aa473ca9bb068557aa20d54ad39d9cfc1aa61b480b72af426e  .claude/hooks/slop-guard.sh
 0aeb3e7c5d08db6e967001ddd1fc845791f500c5186c3616f9f99d49367c2695  .claude/hooks/stale-read-guard.sh
 6a02b63a1166d249ab763f5cfad1c996f96e0c9773a5ff39d290ffb1692d2c74  .claude/hooks/statusline.sh
 98df0d1ca79cd7597b482ce66f5619f9bbf2ac41897be0d9c0751b24e27a4af2  .claude/hooks/stop-check.sh
@@ -67,7 +67,7 @@ f892df995c4d12be40168af03d8fa9885b7a8713e5f5243ed3ebf783a83c60e5  .claude/hooks/
 3369382daf04ba6aaa49e65680d51279f1ac826cfc04a82a5affe41d8443be4b  .claude/hooks/ux-guard.sh
 d0d4189d09093e98e89a8f4832f5292a6a8b5acad3d413ce7a35daedcbe62658  .claude/hooks/vercel-guard.sh
 d49d56136e63af40233f5ebc00def54a91ece887dbdd848040409b98274874f2  .claude/hooks/vibe-guard.sh
-3f56fa753027ba9797945a3f600079b90fb27da8493993a5e1ab92fb6067490d  .claude/hooks/voice-guard.sh
+0215c7122d134acfee5d86ada6e4e72b68793ff2271163e8b54d91a8f41c41a8  .claude/hooks/voice-guard.sh
 3afe78e28a3262de7ebc2367f1f27e7c5790ac12da69c3034b961a04c108e76a  .claude/hooks/voice-remind.sh
 8336ba5be66a541ad71a0e5090fa138f86d4eddf657d95dfb7a37f6f8d5967f9  .claude/hooks/wait-loop-guard.sh
 82d711233a6cac8da6ed19b2c04565e3cec1c79edc00415eddcf40d6e139888a  .claude/hooks/work-ledger-context.sh

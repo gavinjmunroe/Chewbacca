@@ -62,12 +62,15 @@ else
   echo "FAIL  prose-check flagged code or a path: $paths_out"; fail=1
 fi
 
+# 2026-10-11: a refusal after the reply is on screen only adds a second copy
+# ("You're repeating yourself the same message?"). Hard bans queue too now.
+rm -f "$CHEWBACCA_HOME/voice-flags.pending"
 EM=$(printf 'Prayer. Amen.\n\nThis is wrong \xe2\x80\x94 very wrong.')
 code=$(run "$EM" p2)
-if [ "$code" = 2 ]; then
-  echo "ok    an em dash still refuses"
+if [ "$code" = 0 ] && grep -q em-dash "$CHEWBACCA_HOME/voice-flags.pending" 2>/dev/null; then
+  echo "ok    an em dash queues for the next reply instead of duplicating this one"
 else
-  echo "FAIL  em dash exited $code, expected 2"; fail=1
+  echo "FAIL  em dash exited $code, expected 0 and a pending em-dash flag"; fail=1
 fi
 # The exact reply refused on 2026-09-29 and re-sent as a reworded duplicate.
 rm -f "$CHEWBACCA_HOME/voice-flags.pending"
@@ -79,11 +82,12 @@ else
   echo "FAIL  style flags exited $code, expected 0 and a pending file"; fail=1
 fi
 
+rm -f "$CHEWBACCA_HOME/voice-flags.pending"
 code=$(run $'Prayer. Amen.\n\nLet us delve into the syllabus.' p4)
-if [ "$code" = 2 ]; then
-  echo "ok    a banned word still refuses"
+if [ "$code" = 0 ] && grep -q banned-word "$CHEWBACCA_HOME/voice-flags.pending" 2>/dev/null; then
+  echo "ok    a banned word queues for the next reply instead of duplicating this one"
 else
-  echo "FAIL  banned word exited $code, expected 2"; fail=1
+  echo "FAIL  banned word exited $code, expected 0 and a pending banned-word flag"; fail=1
 fi
 # 2026-10-06: "Skipped the suggested gtm-engineering skill bc..." got
 # "Never tell me what skills ur using or not using". It queues for next turn.

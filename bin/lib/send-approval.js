@@ -93,7 +93,8 @@ const POLICY_PY = path.join(__dirname, "..", "..", "tools", "send_policy.py");
 // { decision: "allow" | "deny" | "unavailable", rules: [{ id, reason }] }.
 // "unavailable" only when the policy can't be asked at all (no module, or no
 // binary built); the caller's inline checks then stand alone. Anything else
-// that goes wrong is a deny.
+// that goes wrong is a deny with no rule named and refuses unset, which the
+// caller reads as no answer (send_policy.refuses).
 function policy(facts) {
   if (!fs.existsSync(POLICY_PY))
     return { decision: "unavailable", rules: [], errors: [`${POLICY_PY} is missing`] };

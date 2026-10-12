@@ -453,9 +453,17 @@ def _policy_refusal(channel, env):
         sys.path.insert(0, here)
     try:
         import send_policy
-        return send_policy.why_not(send_policy.ask_raw("text", send_policy.text_context(channel, env=env)))
-    except Exception as e:  # a policy module that won't load is a clean no, never a crash
-        return "The send policy couldn't be asked (%s). Nothing was sent." % e
+        answer = send_policy.ask_raw("text", send_policy.text_context(channel, env=env))
+    except Exception as e:  # a module that won't load is no answer, logged, never a crash
+        _log("policy-error", channel, "", reason=str(e)[:200])
+        return None
+    # Only a named rule refuses. A reader that broke is no answer, and the
+    # sink's inline checks stand: agents send by default (Caleb, 2026-10-12).
+    if not send_policy.refuses(answer):
+        if answer.get("decision") == "deny":
+            _log("policy-error", channel, "", reason="; ".join(answer.get("errors") or [])[:200])
+        return None
+    return send_policy.why_not(answer)
 
 
 def take(channel, to, text, subject="", show=None, tty=None, env=None, chain=False, exe=exe_path):

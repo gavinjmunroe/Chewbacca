@@ -209,6 +209,16 @@ def ask(action, facts, env=None):
     return {"decision": "deny", "rules": [], "errors": ["unknown action %r" % action]}
 
 
+def refuses(answer):
+    """True only when a named rule forbids the send. A no that names no rule
+    means the reader broke (a crash, a timeout, a fact of the wrong type), and
+    a sink treats that like a missing binary: its own inline checks stand.
+    Caleb, 2026-10-12 9:54am, on a gate in front of agent sends: "Wait wtf of
+    course it should be able to send texts or emails???" The answer itself
+    still says no, so `could` reports a broken policy honestly."""
+    return answer.get("decision") == "deny" and bool(answer.get("rules"))
+
+
 def why_not(answer):
     """One line for a refusal, or None for a yes or an unavailable policy."""
     if answer.get("decision") != "deny":
@@ -282,6 +292,7 @@ def main(argv=None):
             got = ask(req.get("action"), req.get("facts") or {})
         except Exception as e:  # bad facts: a no, with the reason
             got = {"decision": "deny", "rules": [], "errors": ["bad facts: %s" % e]}
+        got["refuses"] = refuses(got)
         print(json.dumps(got))
         return {"allow": 0, "deny": 3}.get(got["decision"], 4)
 

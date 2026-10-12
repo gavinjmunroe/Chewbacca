@@ -234,7 +234,13 @@ class Take(unittest.TestCase):
         self.env.stop()
         shutil.rmtree(self.tmp, ignore_errors=True)
 
+    def press_mode(self):
+        # The press is opt-in since e2632c20; these two tests are about tokens.
+        os.makedirs(os.path.join(self.tmp, "a"), exist_ok=True)
+        Path(self.tmp, "a", "mode").write_text("press\n")
+
     def test_no_send_refuses_a_minted_token_and_keeps_it(self):
+        self.press_mode()
         sa.mint("imessage", "+15550100", "hi", "kit_confirm")
         with self.assertRaises(sa.NoApproval) as e:
             sa.take("imessage", "+15550100", "hi", env={"CHEWBACCA_NO_SEND": "1"}, chain=None)
@@ -242,14 +248,25 @@ class Take(unittest.TestCase):
         self.assertEqual(len(sa.status()["tokens"]), 1)
         self.assertEqual(sa.take("imessage", "+15550100", "hi", env={}, chain=None), "kit_confirm")
 
-    def test_unloadable_policy_is_a_clean_no(self):
-        with mock.patch.object(sa, "_policy_refusal", wraps=sa._policy_refusal), \
-                mock.patch.dict(sys.modules, {"send_policy": None}):
-            with self.assertRaises(sa.NoApproval) as e:
-                sa.take("imessage", "+15550100", "hi", env={}, chain=None)
-        self.assertIn("couldn't be asked", str(e.exception))
+    def test_unloadable_policy_never_stops_a_send(self):
+        # Agents send by default (Caleb, 2026-10-12 9:54am): a policy module
+        # that won't import is no answer, logged, and take() goes on.
+        with mock.patch.dict(sys.modules, {"send_policy": None}):
+            self.assertEqual(sa.take("imessage", "+15550100", "hi", env={}, chain=None), "agent")
+        self.assertIn("policy-error", Path(self.tmp, "a", "log.jsonl").read_text())
+
+    def test_a_broken_reader_never_stops_a_send_but_a_named_rule_does(self):
+        broken = Path(self.tmp, "broken")
+        broken.write_text("#!/bin/sh\ncat >/dev/null\nexit 101\n")
+        broken.chmod(0o755)
+        with mock.patch.dict(os.environ, {"CHEWBACCA_SENDPOLICY": str(broken)}):
+            self.assertEqual(sa.take("imessage", "+15550100", "hi", env={}, chain=None), "agent")
+            self.assertFalse(sp.refuses(sp.ask("text", {"channel": "imessage"})))
+        with self.assertRaises(sa.NoApproval):
+            sa.take("imessage", "+15550100", "hi", env={"CHEWBACCA_NO_SEND": "1"}, chain=None)
 
     def test_no_binary_takes_as_before(self):
+        self.press_mode()
         sa.mint("imessage", "+15550100", "hi", "kit_confirm")
         with mock.patch.dict(os.environ, {"CHEWBACCA_SENDPOLICY": "/nonexistent/chewbacca-sendpolicy"}):
             self.assertEqual(sa.take("imessage", "+15550100", "hi", env={"CHEWBACCA_NO_SEND": "1"}, chain=None),

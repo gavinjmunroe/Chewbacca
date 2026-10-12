@@ -949,6 +949,128 @@ def test_engine_cli():
     fake.close()
 
 
+def test_engine_hands_over_on_kit_move():
+    """2026-10-11: kyber-surfaces kept running a pruned kit snapshot until it
+    died (9528874d). realm-engine run lives from login to logout the same way,
+    so it hands over too: once `current` moves and the engine itself says no
+    turn is running, it stops its server and execs the new snapshot's run,
+    keeping the pid launchd watches."""
+    import importlib.machinery
+    import shutil
+    mod = importlib.machinery.SourceFileLoader("realm_engine_mod", str(ROOT / "bin" / "realm-engine")).load_module()
+    check("an unmoved kit never hands over", not mod.handover_due(False, False))
+    check("a moved kit waits while a turn runs", not mod.handover_due(True, True))
+    check("a moved kit waits while the engine can't say", not mod.handover_due(True, None))
+    check("a moved kit with every session idle hands over", mod.handover_due(True, False))
+    real = mod.realm_client.call
+    try:
+        for listed, want in (([{"status": "idle"}, {"status": "ended"}], False),
+                             ([{"status": "idle"}, {"status": "running"}], True),
+                             ([{"status": "waiting_permission"}], True), ({}, None)):
+            mod.realm_client.call = lambda *a, _l=listed, **k: _l
+            check(f"turns_running reads {listed!r} as {want}", mod.turns_running(Path("/tmp")) is want)
+
+        def down(*a, **k):
+            raise mod.realm_client.RealmUnavailable("no engine")
+        mod.realm_client.call = down
+        check("an engine that doesn't answer is not idle", mod.turns_running(Path("/tmp")) is None)
+    finally:
+        mod.realm_client.call = real
+    check("outside a kit snapshot there is nothing to hand over to", mod.successor() is None)
+
+    # End to end: two snapshots, the engine on A, `current` moved to B. The
+    # fake node serves realm's wire itself (so it owns its port) and answers
+    # sessions.listAll from a file the test flips.
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        base, home, realm_dir = d / "kit", d / "home", d / "realm"
+        for sha in ("aaaa", "bbbb"):
+            snap = base / "snapshots" / sha
+            (snap / "bin" / "lib").mkdir(parents=True)
+            shutil.copy(ROOT / "bin" / "realm-engine", snap / "bin" / "realm-engine")
+            for lib in ("realm_client.py", "kit_snapshot.py"):
+                shutil.copy(ROOT / "bin" / "lib" / lib, snap / "bin" / "lib" / lib)
+            (snap / "config" / "data" / "realm").mkdir(parents=True)
+            shutil.copy(ROOT / "config" / "data" / "realm" / "origin-guard.mjs", snap / "config" / "data" / "realm")
+        (base / "current").symlink_to(base / "snapshots" / "aaaa")
+        main_js = realm_dir / "apps" / "server" / "dist" / "main.js"
+        main_js.parent.mkdir(parents=True)
+        main_js.write_text("// fake\n")
+        sessions = d / "sessions.json"
+        sessions.write_text(json.dumps([{"status": "running"}]))
+        node = d / "node"
+        node.write_text(
+            f"#!{sys.executable}\n"
+            "import json, os, signal, sys, time\n"
+            f"sys.path.insert(0, {str(ROOT / 'tests')!r})\n"
+            "sys.dont_write_bytecode = True\n"
+            "from test_realm_client import Fake\n"
+            "signal.signal(signal.SIGTERM, lambda *a: sys.exit(0))\n"
+            "def script(peer):\n"
+            "    peer.handshake()\n"
+            "    while True:\n"
+            "        req = peer.read_request()\n"
+            "        if req['method'] == 'system.info':\n"
+            "            peer.reply(req, {'realmHome': os.environ['REALM_HOME'], 'version': 'test'})\n"
+            "        else:\n"
+            f"            peer.reply(req, json.load(open({str(sessions)!r})))\n"
+            "f = Fake(script)\n"
+            "print(json.dumps({'type': 'ready', 'port': f.port}), flush=True)\n"
+            "time.sleep(120)\n")
+        node.chmod(0o755)
+        env = dict(os.environ, CHEWBACCA_REALM_DIR=str(realm_dir), CHEWBACCA_REALM_HOME=str(home),
+                   CHEWBACCA_NODE=str(node), PYTHONDONTWRITEBYTECODE="1", CHEWBACCA_REALM_HANDOVER_S="0.5")
+        log = d / "run.log"
+        with open(log, "w") as out:
+            run = subprocess.Popen([sys.executable, str(base / "current" / "bin" / "realm-engine"), "run"],
+                                   env=env, stdout=out, stderr=out)
+        try:
+            ef = home / "engine.json"
+
+            def engine_pid(wait=10.0):
+                end = time.monotonic() + wait
+                while time.monotonic() < end:
+                    try:
+                        return json.loads(ef.read_text())["pid"]
+                    except (OSError, ValueError, KeyError):
+                        time.sleep(0.1)
+                return None
+            first = engine_pid()
+            check("run starts a server from snapshot A", first is not None, log.read_text())
+            (base / "current").unlink()
+            (base / "current").symlink_to(base / "snapshots" / "bbbb")
+            time.sleep(2.5)
+            check("a turn in flight holds the handover off",
+                  run.poll() is None and engine_pid(1) == first and "handing over" not in log.read_text(),
+                  log.read_text())
+            sessions.write_text(json.dumps([{"status": "idle"}, {"status": "ended"}]))
+            end = time.monotonic() + 15
+            second = None
+            while time.monotonic() < end:
+                p = engine_pid(0.2)
+                if p and p != first:
+                    second = p
+                    break
+                time.sleep(0.2)
+            text = log.read_text()
+            check("once idle, it hands over and B starts a new server",
+                  second is not None and "handing over to " + str((base / "snapshots" / "bbbb" / "bin" / "realm-engine").resolve()) in text, text)
+            check("the old server was stopped", first and not rc.pid_alive(first), first)
+            check("the pid launchd watches is still alive, now running B", run.poll() is None)
+            ps = subprocess.run(["ps", "-o", "command=", "-p", str(run.pid)], capture_output=True, text=True).stdout
+            check("and it re-entered through `current`, which pins B at its start",
+                  "kit/current/bin/realm-engine run" in ps and (base / "current").resolve().name == "bbbb", ps)
+        finally:
+            run.terminate()
+            try:
+                run.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                run.kill()
+            p = engine_pid(0.2) if (home / "engine.json").exists() else None
+            if p and rc.pid_alive(p):
+                os.kill(p, 9)
+
+
 def main():
     test_basic_call()
     test_errors()
@@ -962,6 +1084,7 @@ def main():
     test_read_methods_are_reads()
     test_daemon_token()
     test_engine_cli()
+    test_engine_hands_over_on_kit_move()
     test_security_review_fixes()
     print(f"\n{'FAILED ' + str(failed) if failed else 'all passed'}")
     return 1 if failed else 0

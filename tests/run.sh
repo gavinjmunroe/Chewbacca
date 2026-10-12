@@ -1744,6 +1744,8 @@ if group "hud"; then
     python3 "$ROOT/tests/test_kyber_sessions.py"
   check  "the agent engine client proves the server is ours, gates writes and exec, and flags a write that may have run" \
     python3 "$ROOT/tests/test_realm_client.py"
+  check  "a daemon launched through the kit's current link sees the kit move, so its handover fires" \
+    python3 "$ROOT/tests/test_kit_snapshot.py"
   check  "Realm's own interface: built from Carlton's renderer, piped to the engine only from its own origin and token" \
     python3 "$ROOT/tests/test_realm_ui.py"
   check  "Realm's glass layer rides on Carlton's renderer untouched, and the talk key fills only the agent that has the glass" \

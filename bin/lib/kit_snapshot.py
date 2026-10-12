@@ -17,16 +17,44 @@ Stdlib only, Python 3.9: the hooks and the tests run on /usr/bin/python3.
 """
 from __future__ import annotations
 
+import os
+import sys
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional
+
+# Each script's resolution, taken once. A daemon is launched as
+# ~/.chewbacca/kit/current/bin/<tool> (ps on 2026-10-11 showed kyber-surfaces
+# running as exactly that), so resolving its __file__ again at check time
+# follows `current` to the NEW snapshot and moved() said False forever: the
+# 9528874d handover could never fire. The running program's own script is
+# pinned the moment this module loads, which is its start, since every
+# caller imports it at the top.
+_PINNED: Dict[str, Path] = {}
+
+
+def pin(script: Path) -> Path:
+    """`script` resolved the first time it was asked about, never again.
+    Keyed by the absolute path: a tool started by hand as `bin/hud-listen`
+    has that relative argv[0] but an absolute __file__ (reviewer, 3.9.6)."""
+    key = os.path.abspath(str(script))
+    if key not in _PINNED:
+        _PINNED[key] = Path(script).resolve()
+    return _PINNED[key]
+
+
+if sys.argv and sys.argv[0]:
+    try:
+        pin(Path(sys.argv[0]))
+    except (OSError, RuntimeError):
+        pass
 
 
 def snapshot_of(script: Path) -> Optional[Path]:
     """The snapshot directory `script` runs from, or None when it is not in
     one (a checkout or a worktree, which has no `current` to fall behind)."""
     try:
-        code = Path(script).resolve().parent.parent
-    except OSError:
+        code = pin(script).parent.parent
+    except (OSError, RuntimeError):
         return None
     if code.parent.name != "snapshots":
         return None

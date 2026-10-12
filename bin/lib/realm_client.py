@@ -92,6 +92,9 @@ READ_METHODS = frozenset({
     # A browser pane's row: its address and title. Realm's server keeps only
     # that; the page itself lives in the desktop app (rpc.ts, Plan 11 W1).
     "browsers.get",
+    # Every session across spaces, read by realm-engine's kit handover to
+    # see whether any turn is in flight (rpc.ts at 59afd9e4, line 1827).
+    "sessions.listAll",
 })
 # Reads that run a process. agents.probe and cli.status take force:true and
 # spawn every agent CLI; the workspace three run git in whatever cwd the

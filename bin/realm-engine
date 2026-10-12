@@ -3,7 +3,9 @@
 
     realm-engine build [--force]    clone realm if missing, filtered pnpm install + build
     realm-engine start              spawn the server detached, write engine.json (0600)
-    realm-engine run                the same in the foreground (what launchd runs)
+    realm-engine run                the same in the foreground (what launchd runs); when
+                                    the kit moves on, it hands over to the current
+                                    snapshot once no agent turn is running
     realm-engine stop               SIGTERM the engine named in engine.json
     realm-engine status [--json]    running, pid, port, built, reachable
     realm-engine plist              print the launchd plist filled for this Mac
@@ -46,6 +48,7 @@ from pathlib import Path
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "bin" / "lib"))
+import kit_snapshot  # noqa: E402
 import realm_client  # noqa: E402
 
 REPO_URL = "https://github.com/31Carlton7/realm.git"
@@ -261,6 +264,70 @@ def _read_json(path: Path) -> dict:
     return data if isinstance(data, dict) else {}
 
 
+# handover
+
+# How often `run` looks for a kit update. The same number kyber-surfaces uses
+# (HANDOVER_CHECK_S, 9528874d): a move is noticed within 15 s. Guessed, never
+# measured; a check is one stat of `current` and, only after a move, one
+# sessions.listAll. CHEWBACCA_REALM_HANDOVER_S overrides it for the test.
+HANDOVER_CHECK_S = float(os.environ.get("CHEWBACCA_REALM_HANDOVER_S") or 15.0)
+# Session statuses that mean a turn is in flight (SessionStatusSchema in
+# realm's packages/contracts/src/entities.ts at 59afd9e4). Stopping the
+# server under either would kill the agent mid-edit or drop a permission
+# question Caleb has not answered yet.
+BUSY = frozenset({"running", "waiting_permission"})
+
+
+def turns_running(h: Path) -> bool | None:
+    """True when any session has a turn in flight, None when the engine can't
+    say. Nobody answering is never read as idle: a handover waits for a yes."""
+    try:
+        listed = realm_client.call("sessions.listAll", {"profileId": None}, timeout=5, home=h)
+    except realm_client.RealmError:
+        return None
+    if not isinstance(listed, list):
+        return None
+    return any(isinstance(s, dict) and s.get("status") in BUSY for s in listed)
+
+
+def handover_due(moved: bool, busy: bool | None) -> bool:
+    """The kit moved under this engine and the engine said no turn is running."""
+    return moved and busy is False
+
+
+def successor() -> Path | None:
+    """The current snapshot's realm-engine, or None outside a kit snapshot."""
+    code = kit_snapshot.snapshot_of(Path(__file__))
+    return None if code is None else code.parent.parent / "current" / "bin" / "realm-engine"
+
+
+# Set by run()'s signal handler. A SIGTERM from launchd (logout, or
+# `launchctl bootout`) that lands mid-handover is a stop, so the successor
+# is never exec'd over it (reviewer, 2026-10-11).
+STOPPING = False
+
+
+def hand_over(proc: subprocess.Popen, nxt: Path) -> None:
+    """Stop this snapshot's server, then become the current snapshot's `run`.
+
+    exec keeps the pid, so launchd still owns the job (KeepAlive would leave a
+    clean exit down until the next login). On 2026-10-11 kyber-surfaces ran a
+    pruned snapshot's code until it died and the agents icon opened a retired
+    card; a realm-engine started at login had the same shape, running the
+    bridge and origin guard of whatever snapshot was current at 9am."""
+    print(f"realm-engine: the kit moved; handing over to {nxt.resolve()}", file=sys.stderr, flush=True)
+    proc.send_signal(signal.SIGTERM)
+    try:
+        proc.wait(timeout=STOP_GRACE_S)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+    clear_engine(proc.pid)
+    if STOPPING:
+        sys.exit(0)
+    os.execv(sys.executable, [sys.executable, str(nxt), "run"])
+
+
 # start / run / stop
 
 def spawn(detach: bool) -> tuple[subprocess.Popen, dict] | int:
@@ -355,13 +422,29 @@ def run() -> int:
     proc, data = got
 
     def forward(signum: int, _frame: object) -> None:
-        proc.send_signal(signum)
+        global STOPPING
+        STOPPING = True
+        if proc.poll() is None:
+            proc.send_signal(signum)
 
     signal.signal(signal.SIGTERM, forward)
     signal.signal(signal.SIGINT, forward)
     print(json.dumps(data), flush=True)
+    nxt = successor()
+    next_check = time.monotonic() + HANDOVER_CHECK_S
     try:
-        code = proc.wait()
+        while True:
+            try:
+                code = proc.wait(timeout=1.0)
+                break
+            except subprocess.TimeoutExpired:
+                pass
+            if nxt is None or time.monotonic() < next_check:
+                continue
+            next_check = time.monotonic() + HANDOVER_CHECK_S
+            moved = kit_snapshot.moved(Path(__file__))
+            if moved and nxt.exists() and not STOPPING and handover_due(moved, turns_running(home())):
+                hand_over(proc, nxt)
     finally:
         clear_engine(proc.pid)
     return code

@@ -557,9 +557,14 @@ fn redirects_harmless(n: Node, src: &[u8]) -> bool {
                     ops.join("")
                 };
                 let dest = r.child_by_field_name("destination").and_then(|d| literal(d, src));
-                let harmless = op.starts_with('<') || matches!(dest.as_deref(), Some("/dev/null"))
+                let fd = r.child_by_field_name("descriptor").map(|d| text(d, src).to_string());
+                let stdin = fd.as_deref().map_or(true, |d| d == "0");
+                // Reading into stdin is harmless; `1<>f` opens f for writing
+                // and `1<&3` points stdout somewhere else, so neither counts.
+                let harmless = (op == "<" || op == "<&") && stdin
+                    || matches!(dest.as_deref(), Some("/dev/null")) && !op.contains('<')
                     // Only stdout, stderr or a close: `exec 3>run.sh` then `>&3` writes a file.
-                    || op.contains('&') && matches!(dest.as_deref(), Some("1" | "2" | "-"));
+                    || (op == ">&" || op == "&>" || op == ">>&") && matches!(dest.as_deref(), Some("1" | "2" | "-"));
                 if !harmless {
                     return false;
                 }
@@ -627,8 +632,23 @@ fn mask_spans(n: Node, src: &[u8], prof: Profile, spans: &mut Vec<(usize, usize)
                         data = false;
                     }
                     if base == "git" {
-                        // git commit -m "<message>": the message is data.
-                        data = args.iter().any(|a| literal(*a, src).as_deref() == Some("commit"));
+                        // git commit -m "<message>": the message is data, but
+                        // only when commit really is the verb and no -c is
+                        // there to define an alias or a pager that could run
+                        // it (`git -c alias.x='!sh -c "$1"' x -m '...'`).
+                        let lits: Vec<Option<String>> = args.iter().map(|a| literal(*a, src)).collect();
+                        let mut i = 0;
+                        let mut clean = true;
+                        while i < lits.len() {
+                            match lits[i].as_deref() {
+                                Some("-C") => i += 2,
+                                Some("--no-pager" | "--no-optional-locks" | "-P" | "--no-replace-objects") => i += 1,
+                                Some(x) if x.starts_with("--git-dir=") || x.starts_with("--work-tree=") => i += 1,
+                                Some(x) if x.starts_with('-') => { clean = false; break; }
+                                _ => break,
+                            }
+                        }
+                        data = clean && lits.get(i).map_or(false, |v| v.as_deref() == Some("commit"));
                         only_message = true;
                     }
                     if data && output_stays(n, src) {
@@ -726,6 +746,13 @@ fn run_mask(code: &str, prof: Profile) -> i32 {
     // runs, and a function can be called echo: `echo(){ eval "$*"; }`. A
     // mask can't follow any of them, so the raw command is read.
     let src = code.as_bytes();
+    // zsh reads these as code where bash's grammar sees a word: `=(cmd)`
+    // runs cmd, `~[x]` calls a function, and glob qualifiers `(e:..:)` and
+    // `(+fn)` run code per file. Most already fail the bash parse; this
+    // catches any that don't.
+    if ["=(", "~[", "(e:", "(e{", "(e'", "(+", "(*e", "(^e"].iter().any(|t| code.contains(t)) {
+        return 3;
+    }
     if has_command(tree.root_node(), src, &["exec", "coproc", "trap", "hash", "enable", "unalias", "functions", "autoload"])
         || has_kind(tree.root_node(), "coproc") || has_kind(tree.root_node(), "function_definition") {
         return 3;

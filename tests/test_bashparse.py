@@ -65,6 +65,13 @@ def mask(cmd, profile):
     return r.returncode, r.stdout
 
 
+def kept(cmd, profile, word='reset'):
+    """The word survives the mask, or the parser gave up (exit 3) and the guard
+    reads the raw command."""
+    rc, out = mask(cmd, profile)
+    return rc == 3 or word in out
+
+
 def guard(name, cmd, parser, cwd=None, **env):
     payload = {'tool_name': 'Bash', 'session_id': '11111111-1111-1111-1111-111111111111',
                'cwd': cwd or str(Path.home()), 'tool_input': {'command': cmd}}
@@ -118,6 +125,19 @@ class Mask(unittest.TestCase):
         self.assertNotIn('reset', out)
         self.assertIn('a.py', out)
         self.assertIn('reset', mask('git reset --hard', 'data')[1])
+        self.assertNotIn('reset', mask('git -C x commit -m "reset --hard"', 'data')[1])
+        # A -c can define an alias that runs its arguments; an unknown verb
+        # with commit later isn't a commit.
+        for cmd in ("git -c alias.x='!sh -c \"$1\"' x -m 'git reset --hard' commit",
+                    "git log -m 'reset --hard' commit"):
+            self.assertTrue(kept(cmd, 'data'), cmd)
+
+    def test_redirects_that_write(self):
+        for cmd in ('echo "git reset --hard" 1<>run.sh', 'echo "git reset --hard" 1<&3',
+                    'echo "git reset --hard" >&3', 'echo "git reset --hard" &>run.sh'):
+            self.assertTrue(kept(cmd, 'data'), cmd)
+        for cmd in ('echo "git reset --hard" 2>&1', 'echo "git reset --hard" >/dev/null', 'echo "git reset --hard" <in.txt'):
+            self.assertNotIn('reset', mask(cmd, 'data')[1], cmd)
 
     def test_rg_pre_runs_a_program(self):
         self.assertIn('ffmpeg', mask('rg --pre ffmpeg x', 'load')[1])
@@ -130,7 +150,8 @@ class Mask(unittest.TestCase):
         self.assertEqual(mask('echo "open', 'data')[0], 3)
         # zsh runs a glob qualifier's e:...: as code; bash's grammar can't
         # read one, so the raw command is judged.
-        for cmd in ("echo *(e:'git reset --hard':)", 'echo *(e{git reset --hard})', 'ls *(+fn)'):
+        for cmd in ("echo *(e:'git reset --hard':)", 'echo *(e{git reset --hard})', 'ls *(+fn)',
+                    "echo =(git reset --hard)", "echo ~[x] 'git reset --hard'"):
             self.assertEqual(mask(cmd, 'data')[0], 3, cmd)
 
     def test_zsh_profiles(self):

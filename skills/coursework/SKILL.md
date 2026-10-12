@@ -50,6 +50,16 @@ the syllabus from the slides folder for meetings, grading and dates.
 It works on a stranger's Mac as is: Chrome plus a Brightspace sign-in. No api
 engine, no `pip install`, no profile to name.
 
+## When a course shows no files
+
+A zero file count means the pull looked in one place. ACAD 185 keeps every
+deck behind an announcement that links a Google Sheet (2026-10-11: "if you
+actually read brightspace you'd see a masterspreadsheet with all the slides on
+it"). Read the course announcements (`/le/1.67/<ou>/news/`) and homepage links,
+follow Google Docs, Sheets and Slides links, and export them (`/export/pdf`,
+`/export?format=xlsx`) into `~/coursework/slides/<CODE>/` before telling the
+student anything is missing.
+
 ## Lecture slides for one course
 
 "Pull the slides for <class>" means:

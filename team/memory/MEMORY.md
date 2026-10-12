@@ -143,6 +143,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 
 ## Lessons
 
+- feedback_read_all_of_brightspace: course material can hide behind announcement links (ACAD 185 master spreadsheet links every deck); read news + homepage links and export Google files before saying "0 files" (10/11)
 - feedback_usc_signin_uses_school_profile: chewb signs students into USC itself in the usc.edu Chrome profile, waits for SSO, BLOCKED only on a real password/Duo; Default profile hit SSO Login Failed (10/11)
 - feedback_practice_tool_is_a_session: study/practice tools are a one-thing-at-a-time session around the real object, never tabs over cards; interface-first.sh refuses a UI page before the interface skill (10/11)
 - feedback_never_read_course_ai_policies: never look up, store, quote or gate on a course AI policy; the student's call, and it turned USC students away (10/11); tests/no_ai_policy_gate.sh enforces

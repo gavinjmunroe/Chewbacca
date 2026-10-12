@@ -245,6 +245,31 @@ class TakeTests(Sandbox):
                 sa.take("email", "a@b.co", "x", env={"CHEWBACCA_SEND_CODE": got[0][0]}, chain=AGENT_CHAIN)
         self.assertIn("Too many wrong send codes", str(e.exception))
 
+    def test_a_guess_racing_another_is_refused_unhashed(self):
+        # One miss left in the hour, two codes pending, and a second guess
+        # lands while the first is mid-hash. Only one of them may be judged.
+        got, show = self.shown()
+        for text in ("x", "y"):
+            with self.assertRaises(sa.NoApproval):
+                sa.take("email", "a@b.co", text, show=show, chain=AGENT_CHAIN)
+        wrong = "000000" if "000000" not in (got[0][0], got[1][0]) else "999999"
+        for _ in range(sa.MAX_MISSES_PER_HOUR - 1):
+            sa._miss("email")
+        real_hash, raced = sa._code_hash, []
+
+        def hash_while_racing(code, salt):
+            if not raced:
+                raced.append("racing")
+                try:
+                    sa._check_code("email", "a@b.co", "y", "", wrong)
+                except sa.NoApproval as e:
+                    raced.append(str(e))
+            return real_hash(code, salt)
+        with mock.patch.object(sa, "_code_hash", side_effect=hash_while_racing):
+            with self.assertRaises(sa.NoApproval):
+                sa._check_code("email", "a@b.co", "x", "", wrong)
+        self.assertIn("Too many wrong send codes", raced[1])
+
     def test_a_right_code_takes_back_its_reserved_miss(self):
         got, show = self.shown()
         with self.assertRaises(sa.NoApproval):

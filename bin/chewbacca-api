@@ -11,6 +11,8 @@
 #                                      whichever Chrome profile is signed in to USC)
 #   chewbacca api sync                 load the kit's taught sites into the engine
 #   chewbacca api grow                 sites browsed with no op yet, most visited first
+#   chewbacca api renew [site]         re-import Chrome sessions, never a window
+#   chewbacca api keepalive            renew every 15 min in the background item
 #   chewbacca api install              build the engine, wire MCP into Claude and Codex
 #
 # The engine is goodnight000/api-anything (MIT). It watches a site's own page
@@ -410,9 +412,48 @@ case "$cmd" in
   mcp)
     # Agents reach the engine through this, never `api-anything mcp` directly,
     # so the kit's specs are re-checked each time a server starts.
+    # Through the proxy, so a lapsed Chrome-imported session renews itself
+    # and no agent can put a sign-in window on screen.
     need_engine || exit 1
     sync_sites --quiet
+    if have node && [ -f "$ROOT/bin/lib/api_mcp_proxy.mjs" ]; then
+      CHEWBACCA_RENEWABLE_SITES="$(printf '%s\n' "$PROFILE_LOGIN_SITES" | awk '{print $1}' | tr '\n' ' ')" \
+        exec node "$ROOT/bin/lib/api_mcp_proxy.mjs" bash "$ROOT/bin/chewbacca-api" renew -- api-anything mcp "$@"
+    fi
     exec api-anything mcp "$@"
+    ;;
+  renew)
+    # Re-import Chrome sessions for the sites that sign in through Chrome's
+    # cookie file, never opening anything. No site named: every such site
+    # that has a session now. The keepalive service runs this every 15 min.
+    need_engine || exit 1
+    sites="$*"
+    if [ -z "$sites" ]; then
+      sites="$(printf '%s\n' "$PROFILE_LOGIN_SITES" | awk '{print $1}' | while read -r s; do
+        [ -f "$ENGINE_HOME/sessions/$s.json" ] && echo "$s"; done | tr '\n' ' ')"
+    fi
+    rc=0
+    for s in $sites; do
+      [ -n "$(profile_login_row "$s")" ] || { say "$s: not a Chrome-session site" >&2; rc=1; continue; }
+      # Brightspace: a whoami with Chrome's own cookies also keeps that
+      # server session from idling out, so he never has to open the site to
+      # wake it. It never opens a window, signed out or not.
+      [ "$s" = brightspace ] && python3 "$ROOT/bin/brightspace" whoami >/dev/null 2>&1
+      if login_from_profile "$s" quiet >/dev/null 2>&1; then say "$s renewed"; else say "$s: signed out in Chrome" >&2; rc=1; fi
+    done
+    sync_sites --quiet
+    exit "$rc"
+    ;;
+  keepalive)
+    # Guessed, never measured: USC's D2L idle timeout. Tonight's 403 came
+    # after hours with no Brightspace tab, and 15 min is well inside any
+    # idle window D2L ships with while costing one GET per site.
+    python3 - "$ROOT" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1] + "/bin/lib")
+import daemon_register
+print(daemon_register.register("site-sessions", ["/bin/bash", sys.argv[1] + "/bin/chewbacca-api", "renew"], every=900))
+PY
     ;;
   call)
     need_engine || exit 1

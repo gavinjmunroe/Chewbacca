@@ -201,6 +201,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_never_read_only: Chewbacca tools read AND write; make writes safe w a snapshot + restore, never by refusing them (10/10)
 - feedback_one_api_per_reminder: Reminders write + undo through one API; EventKit ids need x-apple-reminder:// in AppleScript; mixing left an undone reminder done (10/11)
 - feedback_nothing_takes_the_screen: agents never pull a window or tab to the front; focus-guard refuses a bare open or browser activate ("flashbang tab", 10/11)
+- feedback_sites_renew_never_open: no read ever opens a site or login window; MCP proxy renews lapsed Chrome sessions, 15 min keepalive, signed out = BLOCKED ("STOP FLASH BANGING ME", 10/11)
 - feedback_other_tab_means_background_agent: "do it in a diff tab" = background Agent here; opening a VS Code tab blew up his screen and never started (10/10)
 - feedback_never_rm_rf_worktrees: Never rm -rf the shared .worktrees dir in medha repos; it holds other tabs' worktrees
 - feedback_no_artifacts_ship_repos: Never publish Claude Artifacts for Caleb; every deliverable ships as a git repo...

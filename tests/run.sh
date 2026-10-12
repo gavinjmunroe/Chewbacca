@@ -832,6 +832,11 @@ if group "installer"; then
   check  "chewbacca api syncs taught sites without clobbering a healed spec" \
     bash "$ROOT/tests/chewbacca_api.sh" "$ROOT"
 
+  # 2026-10-11: an MCP read of Brightspace answered 403 and said to open a
+  # sign-in window, which landed on Caleb mid-quiz ("STOP FLASH BANGING ME").
+  check  "api MCP renews a lapsed Chrome session once and never opens a login window" \
+    bash "$ROOT/tests/api_mcp_proxy.sh" "$ROOT"
+
   # 2026-10-10: Caleb, "Chewb needs to change the life of EVERY USC STUDENT".
   # The day view has to work from a classmate's Mac with no edits, and one
   # signed-out site must not take the other sections down.

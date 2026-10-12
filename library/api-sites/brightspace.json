@@ -473,6 +473,137 @@
       "minTier": 1,
       "learnedLoggedIn": false,
       "learnedAt": "2026-10-09T17:56:34.585Z"
+    },
+    {
+      "name": "quizzes",
+      "description": "Quizzes in one course: id, name, opens, due, time limit, attempts allowed. Questions are not readable before an attempt (403); grades op says whether it was graded.",
+      "request": {
+        "method": "GET",
+        "url": "https://brightspace.usc.edu/d2l/api/le/1.75/%7BorgUnitId%7D/quizzes/",
+        "headers": {
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "accept-language": "en-US,en;q=0.9",
+          "priority": "u=0, i",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-site": "none",
+          "sec-fetch-user": "?1",
+          "upgrade-insecure-requests": "1",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "orgUnitId",
+          "at": [
+            "path:4"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://brightspace.usc.edu/d2l/api/le/1.75/{orgUnitId}/quizzes/"
+      },
+      "match": {
+        "method": "GET",
+        "host": "brightspace.usc.edu",
+        "path": "/d2l/api/le/1.75/*/quizzes/"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json; charset=UTF-8",
+        "extract": "Objects[*]",
+        "pick": [
+          "quizId=QuizId",
+          "name=Name",
+          "start=StartDate",
+          "due=DueDate",
+          "end=EndDate",
+          "active=IsActive",
+          "gradeItemId=GradeItemId",
+          "minutes=SubmissionTimeLimit.TimeLimitValue",
+          "timed=SubmissionTimeLimit.IsEnforced",
+          "attempts=AttemptsAllowed.NumberOfAttemptsAllowed",
+          "unlimited=AttemptsAllowed.IsUnlimited"
+        ]
+      },
+      "params": [
+        {
+          "name": "orgUnitId",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-11T04:50:00.000Z"
+    },
+    {
+      "name": "discussions",
+      "description": "Discussion forums in one course: id, name, description, start and end dates.",
+      "request": {
+        "method": "GET",
+        "url": "https://brightspace.usc.edu/d2l/api/le/1.75/%7BorgUnitId%7D/discussions/forums/",
+        "headers": {
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "accept-language": "en-US,en;q=0.9",
+          "priority": "u=0, i",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-site": "none",
+          "sec-fetch-user": "?1",
+          "upgrade-insecure-requests": "1",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "orgUnitId",
+          "at": [
+            "path:4"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://brightspace.usc.edu/d2l/api/le/1.75/{orgUnitId}/discussions/forums/"
+      },
+      "match": {
+        "method": "GET",
+        "host": "brightspace.usc.edu",
+        "path": "/d2l/api/le/1.75/*/discussions/forums/"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json; charset=UTF-8",
+        "extract": "[*]",
+        "pick": [
+          "forumId=ForumId",
+          "name=Name",
+          "description=Description.Text",
+          "start=StartDate",
+          "end=EndDate",
+          "locked=IsLocked"
+        ]
+      },
+      "params": [
+        {
+          "name": "orgUnitId",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-11T04:50:00.000Z"
     }
   ]
 }

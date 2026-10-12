@@ -24,3 +24,9 @@ Caveats observed on 2026-10-09:
 - upcoming and content are paged by a Next field. Only the first page is returned. Every course checked fit on one page.
 - Folders without a due date return due as null. Some courses return an empty list for announcements or content, which is ok with [].
 - The export carries no example values, because the ids are tied to one student's enrollments, so `verify` needs ids from myCourses first.
+
+Added 2026-10-11:
+
+- quizzes(orgUnitId) -> quizId, name, start, due, end, active, gradeItemId, minutes, timed, attempts, unlimited. Students can list quizzes. The questions endpoint 403s until an attempt is open, so no tool can read a quiz's questions before the student starts it. Whether it was taken shows up as a released grade: match gradeItemId against the grades op. `brightspace due` lists quizzes beside dropboxes with that grade.
+- discussions(orgUnitId) -> forumId, name, description, start, end, locked. An empty list means the course has no forums.
+- Through MCP, a lapsed session renews itself from Chrome and the call is resent once (bin/lib/api_mcp_proxy.mjs). `chewbacca api keepalive` renews every 15 minutes in the background item, so nobody opens Brightspace to keep Chewbacca signed in. No path opens a window: signed out for real is a BLOCKED line, and the student signs in in their own Chrome.

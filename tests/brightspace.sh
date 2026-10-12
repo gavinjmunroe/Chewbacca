@@ -75,6 +75,28 @@ echo "$out" | grep -q "^MATH 125" || fail "course not named from the section Nam
 echo "$out" | grep "Lab 4 Post-Lab" | grep -q "NOT IN LEDGER" && fail "BISC 101 should match ledger code BISC 101Lxg: $out"
 echo "$out" | grep "Problem Set 3" | grep -q "NOT IN LEDGER" || fail "another student's course not read: $out"
 echo "$out" | grep -q "GESM" && fail "old-term course listed: $out"
+# Quizzes count too: BISC weekly Quiz #5 closes Mon 9am with no late attempt,
+# and on 2026-10-11 `due` read only dropboxes, so it never showed. A quiz is
+# listed with its released grade, or NO GRADE YET.
+python3 - "$T/fixture3.json" "$DUE" <<'PY'
+import json, sys
+path, due = sys.argv[1], sys.argv[2]
+fx = json.load(open(path.replace("fixture3", "fixture")))
+fx["/le/1.75/302776/quizzes/"] = {"Objects": [
+    {"QuizId": 5, "Name": "Quiz #5", "DueDate": due, "IsActive": True, "GradeItemId": 50},
+    {"QuizId": 4, "Name": "Quiz# 4", "DueDate": due, "IsActive": True, "GradeItemId": 40},
+    {"QuizId": 3, "Name": "Old draft", "DueDate": due, "IsActive": False, "GradeItemId": 30}], "Next": None}
+fx["/le/1.75/302776/grades/values/myGradeValues/"] = [{"GradeObjectIdentifier": "40", "DisplayedGrade": "100 %"}]
+json.dump(fx, open(path, "w"))
+PY
+out=$(BRIGHTSPACE_FIXTURE="$T/fixture3.json" COURSEWORK_DIR="$T" python3 "$ROOT/bin/brightspace" due --days 3)
+echo "$out" | grep "Quiz #5" | grep -q "NO GRADE YET" || fail "open quiz not listed: $out"
+echo "$out" | grep "Quiz# 4" | grep -q "100 %" || fail "quiz grade not read: $out"
+echo "$out" | grep -q "Old draft" && fail "inactive quiz listed: $out"
+
+# Never a window, signed out or not: the read that used to open Chrome ran
+# inside keepalives and MCP calls nobody was watching.
+grep -n '"open"' "$ROOT/bin/brightspace" && fail "bin/brightspace opens something"
 # The cookie key opens every Chrome cookie, so it never goes into argv, where
 # ps shows it to every process (security review, 2026-10-10: openssl -K <hex>).
 for f in bin/brightspace bin/chewbacca-api; do

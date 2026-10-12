@@ -277,10 +277,12 @@ class Client:
         stale = stale_cookie_message()
         if stale:
             sys.exit(stale)
-        # Signed out for real: now it needs his hands, so take him to the page.
-        subprocess.run(["open", "-g", "-na", "Google Chrome", "--args",
-                        f"--profile-directory={PROFILE}", HOST + "/d2l/home"], check=False)
-        sys.exit("BLOCKED: Brightspace is signed out in Chrome %s. It's open there, sign in once." % PROFILE)
+        # Signed out for real. Still no window: this runs inside reads nobody
+        # is watching (the 15 minute keepalive, an MCP call, `api login`), and
+        # on 2026-10-11 the window this used to open landed mid-quiz with
+        # "STOP FLASH BANGING ME". The agent says BLOCKED and he signs in
+        # once, in his own Chrome, when he chooses to.
+        sys.exit("BLOCKED: Brightspace is signed out in Chrome %s. Sign in there once and every read works again." % PROFILE)
 
 
 def stale_cookie_message():
@@ -400,6 +402,54 @@ def ledger_items_for(course, names):
     return []
 
 
+def optional(client, path):
+    """A read a course may forbid (403), or a test fixture may not carry."""
+    try:
+        return client.get(path)
+    except (Forbidden, KeyError):
+        return None
+
+
+def quiz_rows(client, course, ou, lo, hi, names):
+    """Quizzes in the window, with the grade if one is released.
+
+    Dropboxes were the only thing `due` read, so BISC weekly Quiz #5 (closes
+    Mon 9am, no late attempts) was invisible here on 2026-10-11 and an agent
+    went hunting for it by hand. Students may list quizzes; the questions
+    themselves 403 until an attempt is open, so this lists, never answers.
+    """
+    page = optional(client, f"/le/1.75/{ou}/quizzes/")
+    if not page:
+        return []
+    quizzes = list(page.get("Objects", []))
+    while page.get("Next") and client.fixture is None:
+        page = optional(client, page["Next"].split("/d2l/api", 1)[-1]) or {}
+        quizzes += page.get("Objects", [])
+    grades = {g.get("GradeObjectIdentifier"): g for g in
+              (optional(client, f"/le/1.75/{ou}/grades/values/myGradeValues/") or [])}
+    rows = []
+    for q in quizzes:
+        due = q.get("DueDate") or q.get("EndDate")
+        if not due or not q.get("IsActive", True):
+            continue
+        when = dt.datetime.fromisoformat(due.replace("Z", "+00:00"))
+        if not lo <= when <= hi:
+            continue
+        g = grades.get(str(q.get("GradeItemId")))
+        limit = (q.get("SubmissionTimeLimit") or {})
+        attempts = (q.get("AttemptsAllowed") or {})
+        rows.append({
+            "course": course, "name": q["Name"].strip(), "due": due, "ou": ou,
+            "id": q["QuizId"], "kind": "quiz", "submitted": None,
+            "grade": g.get("DisplayedGrade") if g else None,
+            "minutes": limit.get("TimeLimitValue") if limit.get("IsEnforced") else None,
+            "attempts": None if attempts.get("IsUnlimited") else attempts.get("NumberOfAttemptsAllowed"),
+            "url": f"{HOST}/d2l/lms/quizzing/user/quiz_summary.d2l?ou={ou}&qi={q['QuizId']}",
+            "in_ledger": in_ledger(q["Name"], ledger_items_for(course, names)),
+        })
+    return rows
+
+
 def cmd_due(client, days, ledger_dir, as_json):
     now = dt.datetime.now(dt.timezone.utc)
     lo, hi = now - dt.timedelta(days=days), now + dt.timedelta(days=days)
@@ -424,13 +474,17 @@ def cmd_due(client, days, ledger_dir, as_json):
                     "id": folder["Id"], "submitted": submitted,
                     "in_ledger": in_ledger(folder["Name"], ledger_items_for(course, names)),
                 })
+            rows += quiz_rows(client, course, ou, lo, hi, names)
     rows.sort(key=lambda r: r["due"])
     if as_json:
         print(json.dumps(rows, indent=1))
     else:
         for r in rows:
             local = dt.datetime.fromisoformat(r["due"].replace("Z", "+00:00")).astimezone()
-            flags = {True: "submitted", False: "NOT SUBMITTED", None: "UNKNOWN (403, check in browser)"}[r["submitted"]]
+            if r.get("kind") == "quiz":
+                flags = r["grade"] or "NO GRADE YET"
+            else:
+                flags = {True: "submitted", False: "NOT SUBMITTED", None: "UNKNOWN (403)"}[r["submitted"]]
             if not r["in_ledger"]:
                 flags += "  NOT IN LEDGER"
             print(f"{r['course']:<12} {r['name'][:42]:<42} {local:%a %b %d %H:%M}  {flags}")

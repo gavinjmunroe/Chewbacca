@@ -129,6 +129,11 @@ def setup():
         else:
             ok = False
             print(f"{site}: no session yet. Sign in at https://{host} in Chrome once, then run this again.")
+    # Renewed every 15 min from then on, so the student never opens a USC
+    # site just to keep Chewbacca signed in.
+    r = subprocess.run(API + ["keepalive"], capture_output=True, text=True)
+    print("sessions: " + ((r.stdout.strip().splitlines() or ["kept alive in the background"])[-1]
+                          if r.returncode == 0 else "keepalive not registered: " + r.stderr.strip()[-200:]))
     return 0 if ok else 1
 
 

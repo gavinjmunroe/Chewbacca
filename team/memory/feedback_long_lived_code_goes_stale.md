@@ -25,3 +25,5 @@ snapshot and hands over to the current code (57cd4ba0, bin/lib/kit_snapshot.py).
 To audit: `ps -eo pid,etime,command | grep kit/snapshots/` and anything not on
 `readlink ~/.chewbacca/kit/current` is stale. Related:
 [[feedback_one_background_item]], [[project_kit_runtime]].
+
+**2026-10-11, 8:11 to 8:18pm, twice more.** The agents icon opened the retired card because kyber-surfaces was still on pruned snapshot 902977c0 (retire_stale only runs when something calls `start`); it now hands over on its own once the glass is quiet (9528874d). Then realm-engine, up since 10/10 21:15 on pruned 48071084, stopped answering; restarted by hand, its own handover is ledger task realm-engine-handover-2026-10-11. A one-time check at start is not ownership: every long-lived process needs a loop that notices the kit moved.

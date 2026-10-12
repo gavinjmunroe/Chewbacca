@@ -983,6 +983,49 @@ def sync_push(client: str, what: str) -> None:
     print("Committed the ledger but couldn't push it; the next command tries again.")
 
 
+def week_numbers(client: str, days: int = 7) -> dict:
+    """The week's sends, replies and holds, counted from the ledger itself."""
+    d = cdir(client)
+    since = op.utc_now() - timedelta(days=days)
+    recent = lambda rows: [r for r in rows if r.get("at") and op.parse_time(r["at"]) >= since]  # noqa: E731
+    sent = recent(jsonl(d / "sent.jsonl"))
+    replies = recent(jsonl(d / "replies.jsonl"))
+    checks = recent(jsonl(d / "jev.jsonl"))
+    kinds: dict[str, int] = {}
+    for r in replies:
+        kinds[r.get("label") or r.get("kind") or "other"] = kinds.get(r.get("label") or r.get("kind") or "other", 0) + 1
+    firsts = [r for r in sent if r.get("step") == 1]
+    return {"first": len(firsts), "followups": sum(1 for r in sent if isinstance(r.get("step"), int) and r["step"] > 1),
+            "auto": sum(1 for r in sent if r.get("step") == "auto-reply"),
+            "accounts": len({(r.get("email") or "").rsplit("@", 1)[-1] for r in firsts}),
+            "replies": len(replies), "kinds": kinds,
+            "people": sorted({r.get("from") or "" for r in replies if r.get("kind") in ("interested", "question")}),
+            "held": sum(1 for r in checks if r.get("held")), "checked": len(checks),
+            "suppressed": len(suppressed(client))}
+
+
+def cmd_week(a) -> int:
+    """This week's numbers as a markdown file in ~/Downloads, for Friday."""
+    n = week_numbers(a.client)
+    day = op.utc_now().date().isoformat()
+    rate = f"{n['replies'] / n['first']:.0%}" if n["first"] else "no sends yet"
+    lines = [f"# {a.client}, the week ending {day}", "",
+             f"- First emails sent: {n['first']}, to {n['accounts']} organizations",
+             f"- Follow-ups sent: {n['followups']}", f"- Replies: {n['replies']} ({rate} of first emails)"]
+    lines += [f"  - {k}: {v}" for k, v in sorted(n["kinds"].items(), key=lambda kv: -kv[1])]
+    lines += [f"- Answered on their own with the booking reply: {n['auto']}",
+              f"- Held by the checks before sending: {n['held']} of {n['checked']}",
+              f"- Never emailing again: {n['suppressed']}"]
+    if n["people"]:
+        lines += ["", "## Interested or asked something", ""] + [f"- {p}" for p in n["people"]]
+    out = Path(a.out or Path.home() / "Downloads") / f"{a.client} week {day}.md"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text("\n".join(lines) + "\n")
+    print("\n".join(lines))
+    print(f"\nSaved: {out}")
+    return 0
+
+
 def cmd_reply(a) -> int:
     d = cdir(a.client)
     row = next((r for r in reversed(jsonl(d / "replies.jsonl")) if r["from"] == a.to.lower()), None)
@@ -1072,6 +1115,9 @@ def main(argv=None) -> int:
     p.add_argument("--interested", help="a short ask for a time, no links or numbers")
     p.add_argument("--link", help="your own booking page (Calendly, Cal.com), sent under the answer")
     p.add_argument("--off", action="store_true")
+    p = sub.add_parser("week", help="this week's sends, replies and holds as markdown in ~/Downloads")
+    p.add_argument("--client", required=True)
+    p.add_argument("--out")
     p = sub.add_parser("copy", help="set the email sequence from a JSON file")
     p.add_argument("--client", required=True)
     p.add_argument("--file", required=True)
@@ -1080,14 +1126,14 @@ def main(argv=None) -> int:
     p.add_argument("--client", required=True)
     p.add_argument("--dir", required=True)
     a = ap.parse_args(argv)
-    shared = a.cmd not in ("share", "package", "costs")
+    shared = a.cmd not in ("share", "package", "costs", "week")
     try:
         if shared:
             sync_pull(a.client)
         code = {"sender": cmd_sender, "find": cmd_find, "batch": cmd_batch, "send": cmd_send,
                 "inbox": cmd_inbox, "reply": cmd_reply, "today": cmd_today, "package": cmd_package,
                 "costs": cmd_costs, "autosend": cmd_autosend, "share": cmd_share,
-                "copy": cmd_copy}[a.cmd](a)
+                "copy": cmd_copy, "week": cmd_week}[a.cmd](a)
     except Refused as err:
         print(str(err), file=sys.stderr)
         return 2

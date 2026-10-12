@@ -480,6 +480,20 @@ class Solo(unittest.TestCase):
         self.assertEqual([c["day"] for c in plan["copy"]], [0, 3])
         self.assertTrue(plan["require_line"])
 
+    def test_week_counts_sends_replies_and_holds_from_the_ledger(self):
+        self.ready()
+        b = self.batch()
+        self.run_cli("send", "--client", "Dana Co", "--batch", b["id"], "--gap", "0")
+        sent = self.sent_threads()
+        self.threads.write_text(json.dumps({
+            sent["maria@crumbcorner.test"]: [["maria@crumbcorner.test", "Please remove me from your list."]]}))
+        self.run_cli("inbox", "--client", "Dana Co", "--json")
+        self.assertEqual(self.run_cli("week", "--client", "Dana Co", "--out", str(self.tmp)), 0)
+        md = next(self.tmp.glob("Dana Co week *.md")).read_text()
+        self.assertIn("First emails sent: 2, to 2 organizations", md)
+        self.assertIn("Replies: 1 (50% of first emails)", md)
+        self.assertIn("Never emailing again: 1", md)
+
     def test_gtme_front_door_routes_here(self):
         self.ready()
         p = subprocess.run([sys.executable, str(ROOT / "tools" / "gtme_operator.py"), "batch", "--client", "Dana Co"],

@@ -1,4 +1,7 @@
 #!/bin/bash
+# hookd skips this guard for a Bash call that names none of these words,
+# each one its first check requires. Proven by tools/hookd_replay.py.
+# gate: run.sh closeout doctor blender init create cargo rails startproject
 # Timing, logging, a watchdog and an output cap. See lib.sh.
 # shellcheck source=/dev/null
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" 2>/dev/null || true

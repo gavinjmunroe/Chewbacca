@@ -1275,6 +1275,22 @@ if [ "$(uname)" = "Darwin" ] && [ -z "${CHEWBACCA_SUITE:-}" ] && [ -n "$PC_DIR" 
   git -C "$PC_DIR" config core.untrackedCache true
 fi
 
+# hookd decides in under a millisecond whether a gated guard needs to run at
+# all (crates/hookd). It has no dependencies, so it builds offline in ~10 s
+# (2026-10-11, M-series, release). No cargo means no hookd, and every guard
+# then runs directly, exactly as before.
+if [ -z "${CHEWBACCA_SUITE:-}" ] && command -v cargo >/dev/null 2>&1 && [ -f "$SCRIPT_DIR/crates/hookd/Cargo.toml" ]; then
+  if CARGO_TARGET_DIR="$HOME/.chewbacca/build/hookd" cargo build --quiet --release \
+       --manifest-path "$SCRIPT_DIR/crates/hookd/Cargo.toml" 2>/dev/null; then
+    mkdir -p "$HOME/.local/bin"
+    install -m 755 "$HOME/.chewbacca/build/hookd/release/hookd" "$HOME/.local/bin/hookd.new" &&
+      mv -f "$HOME/.local/bin/hookd.new" "$HOME/.local/bin/hookd"
+    log "hookd built to ~/.local/bin/hookd"
+  else
+    warn "hookd did not build; guards run directly, as before."
+  fi
+fi
+
 # Merge drivers for SHA256SUMS.txt and the README counts block. On 2026-10-09
 # about ten tabs pushed main and nearly every merge stopped on those two
 # generated files. .gitattributes names the drivers; git config holds the
@@ -1430,6 +1446,27 @@ settings["alwaysThinkingEnabled"] = True
 h = settings.setdefault("hooks", {})
 
 
+def gated(command):
+    """Route a guard that declares `# gate:` words through hookd.
+
+    On 2026-10-11 twenty guards ran before every Bash call at ~70 ms of CPU
+    each, most exiting 0 because the command had nothing to do with them.
+    hookd decides that in under a millisecond (crates/hookd). Without the
+    binary the shell runs the guard directly, so a guard never stops guarding
+    because hookd is missing. The command still ends in the script path, so
+    _register's basename dedupe and D1_SKIP_HOOKS keep matching it."""
+    try:
+        with open(command, errors="replace") as f:
+            head = f.read(8192)
+    except OSError:
+        return command
+    if "\n# gate:" not in head:
+        return command
+    script = shlex.quote(command)
+    return ('H="$HOME/.local/bin/hookd"; [ -x "$H" ] && exec "$H" gate ' + script
+            + '; exec ' + script)
+
+
 def _register(event, command, timeout=None, matcher=None, status=None):
     """Register one hook for `event`, replacing any earlier copy of it.
 
@@ -1454,7 +1491,7 @@ def _register(event, command, timeout=None, matcher=None, status=None):
         if not any(os.path.basename(str(hook.get("command", ""))) == name
                    for hook in e.get("hooks", []))
     ]
-    hook = {"type": "command", "command": command}
+    hook = {"type": "command", "command": gated(command)}
     if timeout is not None:
         hook["timeout"] = timeout
     if status is not None:

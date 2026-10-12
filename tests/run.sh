@@ -983,6 +983,8 @@ if group "installer"; then
   # 2026-10-10: PATH tools ran from the dirty shared checkout, hours behind main.
   check  "PATH tools run from a clean origin/main runtime, swapped atomically" \
     bash "$ROOT/tests/kit_runtime.sh" "$ROOT"
+  check  "a snapshot a live process runs from is never pruned, even when lsof fails" \
+    /usr/bin/python3 "$ROOT/tests/test_kit_prune_in_use.py"
 
   # Eight skills sat uninstalled on 2026-10-09 because no tab ran setup after
   # adding them. Git hooks now link them; this proves the linker is safe.
@@ -1049,6 +1051,8 @@ if group "installer"; then
     /usr/bin/python3 "$ROOT/tests/test_font_guard.py"
   check  "every outward send path is listed and keeps its gate" \
     /usr/bin/python3 "$ROOT/tests/test_send_paths.py"
+  check  "hookd skips a guard only when the guard could not act, and falls back without the binary" \
+    /usr/bin/python3 "$ROOT/tests/test_hookd.py"
 
   check  "committed checksums describe the committed tree" \
     python3 "$ROOT/tools/committed_checksums.py"

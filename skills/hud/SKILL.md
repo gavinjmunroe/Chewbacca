@@ -692,6 +692,64 @@ swaps on one 200 ms crossfade, the headline on one 140 ms swap, the beat line
 moves its light in 240 ms. The tile still grows into the story in 320 ms.
 Nothing moves at rest except the lit beat's dot.
 
+## The agents IDE, held the way Daniel would hold it
+
+Daniel Thomas on Chewbacca, 2026-10-11: "oddly similar to rust's design
+philosophy", and "how does it mitigate context rot especially related to the
+sheer number of tasks". Caleb the same night: "Make this how daniel thomas
+would". Five rules for the agents IDE on the glass (bin/lib/realm_ui/glass),
+each held by a test that failed on the code before it:
+
+1. **Invalid states can't be drawn.** An agent turn is one typed value
+   (turn.mjs): asked, reading, changing, proved, needs-you, done, failed, with
+   every allowed move listed in `NEXT`. Each phase carries exactly what it
+   draws, so a changing turn with no file, a review with no hunk (no Keep with
+   nothing behind it) and Done while realm or the tab says running can't be
+   built. Callers go through `match()`, which wants an arm for every phase; no
+   `switch` on a phase, no default branch.
+2. **One owner per region.** The table below. The layer is a CSS grid whose
+   named areas are its regions, and the story is a grid inside one of them,
+   so the layout can't put two on one spot. Headless WebKit checks the drawn
+   rectangles too: no two drawn regions overlap in any frame of a turn.
+3. **Errors are values.** Every failure is a named fault (`FAULTS`): what
+   happened, what the system said, and the one thing to do, with Retry where a
+   retry can help. Engine calls settle within `ENGINE_ANSWER_MS` or become a
+   timed-out fault, so nothing spins forever. An engine that is down reads
+   "Realm's engine isn't answering", never "No agents yet".
+4. **No context rot.** Only the current turn is held whole. Beats it has passed
+   fold to one line each, turns before it to one line each, and only the newest
+   five of either are kept, with a count of the rest. Tiles cap at nine with a
+   count. Twenty agents with two hundred turns rest in the same view as nine
+   with six (tests/test_realm_turn.mjs).
+5. **Zero cost at rest.** Nothing animates and nothing polls faster than it
+   must when every agent is at rest. The measured numbers sit next to each
+   constant in GlassLayer.tsx.
+
+### One owner per region
+
+<!-- regions:begin -->
+| Region    | Owner                 | Grid area        | Modes              | Draws |
+| --------- | --------------------- | ---------------- | ------------------ | ----- |
+| notice    | Notice                | notice (layer)   | tiles, story, work | a fault no one agent owns (engine down, the talk key lost), with its one fix |
+| field     | TileField             | main (layer)     | tiles              | the agent tiles, one line each, and a count of the rest |
+| story     | Story                 | main (layer)     | story              | one agent's turn told by the screen, in the five regions below |
+| ask       | Story                 | ask (story)      | story              | what he asked, which agent, how long ago |
+| tell      | Story                 | tell (story)     | story              | the one headline, the beat line from the typed turn, what proved it |
+| call      | Story                 | call (story)     | story              | the one decision waiting on him, or the fault that stopped the story, with its press |
+| figure    | Story                 | figure (story)   | story              | one object for the beat: the turn's file, command or tests, the request, the hunks |
+| doors     | Story                 | doors (story)    | story              | Transcript and Reply, his full workspace one press away |
+| stage     | Stage                 | main (layer)     | work               | the focused agent's current beat as one card, the beats before it one line each |
+| workspace | Carlton's app (#root) | -                | work               | his conversation, composer and panes, untouched |
+| light     | Light                 | -                | tiles, story, work | the morph outline between a tile and the story, for 320 ms |
+<!-- regions:end -->
+
+A new region is a row here, a row in regions.mjs, a `data-region` on exactly
+one element its owner draws, and a `grid-area` in glass.css that no other
+region of the same grid and mode uses. One component may own several regions
+(the story owns five); a region never has two owners. tests/test_realm_regions.mjs refuses any one without the
+others. The light is the only region with no area: it is drawn for the 320 ms
+of a morph, over everything, and then it is gone.
+
 ## Rules
 
 **Everything on the glass is instant.** A surface paints its last known state

@@ -24,11 +24,19 @@
 // The beats come from beats.mjs, which reads his engine's session events.
 // Type, colour and motion are his tokens; nothing moves at rest except the
 // lit beat's dot while the agent works.
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { AGENT_META } from "@realm/contracts";
 import { rpc } from "../src/rpc/client";
 import {
   CommandView,
+  FaultBody,
   FileView,
   Review,
   TestsView,
@@ -46,6 +54,8 @@ import {
   tell,
   SETTLE_HOLD_MS,
 } from "./beats.mjs";
+import { isRunning, match, settle as within } from "./turn.mjs";
+import type { Agent, Fault } from "./turn.mjs";
 
 type Stored = {
   seq: number;
@@ -72,11 +82,10 @@ type StoryShape = {
   stage: {
     running: boolean;
     settledAt: number;
-    file: Parameters<typeof FileView>[0]["call"] | null;
-    command: Parameters<typeof CommandView>[0]["call"] | null;
-    tests: Parameters<typeof TestsView>[0]["call"] | null;
-    changes: { root: string; checkpointId?: string; afterTree?: string; files: ChangedFile[] } | null;
   };
+  // The turn as one typed value: the beat, the figure and the review are
+  // read from it (turn.mjs).
+  agent: Agent;
 };
 type Call = {
   kind: string;
@@ -107,6 +116,12 @@ const KEPT = new Set<string>();
 // page, the same window Stage reads, up to 10 pages (4,000 events). Guessed.
 const HISTORY_PAGE = 400;
 const HISTORY_PAGES = 10;
+// How long the whole history read may take before it is the engine-down
+// fault with a Retry, never a story that silently reads as quiet. Measured
+// 2026-10-11 at load 16: one 400-event page from the live engine took at
+// most 4.8 ms, so ten pages are well under a second; 5 s matches
+// GlassLayer.tsx's ENGINE_ANSWER_MS.
+const HISTORY_ANSWER_MS = 5_000;
 
 /** The events of the newest turn: pages back until the turn's ask is in
  *  hand, so a turn longer than one page still knows what was asked and what
@@ -132,6 +147,8 @@ export function Story({
   onTranscript: (reply: boolean) => void;
 }) {
   const [story, setStory] = useState(emptyStory);
+  const [loadFault, setLoadFault] = useState<Fault | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [wantsInView, setWantsInView] = useState(false);
   const figureRef = useRef<HTMLDivElement | null>(null);
@@ -181,9 +198,14 @@ export function Story({
       setStory(s);
       setLoaded(true);
     };
-    turnEvents(session.id, session.lastEventSeq ?? 0)
-      .then(settle)
-      .catch(() => settle([]));
+    setLoadFault(null);
+    void within(turnEvents(session.id, session.lastEventSeq ?? 0), "engine-down", HISTORY_ANSWER_MS).then((r) => {
+      if (r.ok) return settle(r.value);
+      // Live events still tell the turn from here; the fault says the
+      // history before them couldn't be read.
+      if (alive) setLoadFault(r.fault);
+      settle([]);
+    });
     const off = rpc().on("session.event", (ev) => {
       const stored = ev as unknown as Stored;
       if (stored.sessionId !== session.id) return;
@@ -200,12 +222,13 @@ export function Story({
       alive = false;
       off();
     };
-  }, [session.id]);
+  }, [session.id, attempt]);
 
   const st = story as unknown as StoryShape;
   // A turn is named by its checkpoint and the tree it left; a diff without
   // a checkpoint can't be told from the next one, so its Keep is never kept.
-  const changes = st.stage.changes;
+  const turn = st.agent.turn;
+  const changes = st.agent.changes;
   const keptKey =
     changes?.checkpointId && changes.afterTree
       ? `${session.id}:${changes.checkpointId}:${changes.afterTree}`
@@ -289,12 +312,13 @@ export function Story({
   return (
     <section
       className="story"
+      data-region="story"
       data-beat={b}
-      data-working={st.stage.running || undefined}
+      data-working={(turn && isRunning(turn)) || undefined}
       data-loading={!loaded || undefined}
       aria-label={`${session.title}: ${line}`}
     >
-      <header className="story-ask">
+      <header className="story-ask" data-region="ask">
         <span className="story-label">{st.asked ? "You asked" : "Ready"}</span>
         <p className="story-asked">{st.asked || session.title || "Untitled"}</p>
         <span className="story-meta">
@@ -303,7 +327,7 @@ export function Story({
         </span>
       </header>
 
-      <div className="story-tell">
+      <div className="story-tell" data-region="tell">
         <h1 className="story-headline" key={line} aria-live="polite">
           {loaded ? line : session.title || "Untitled"}
         </h1>
@@ -331,12 +355,19 @@ export function Story({
         )}
       </div>
 
-      {call && (
+      {(loadFault || call) && (
         <div
           className="story-call"
-          data-kind={call.kind}
-          key={`${call.kind}:${call.requestId ?? ""}`}
+          data-region="call"
+          data-kind={loadFault ? "fault" : call?.kind}
+          key={loadFault ? "fault" : `${call?.kind}:${call?.requestId ?? ""}`}
         >
+          {loadFault ? (
+            <p className="glass-fault">
+              <FaultBody fault={loadFault} onRetry={() => setAttempt((n) => n + 1)} />
+            </p>
+          ) : call ? (
+          <>
           <p className="story-call-line">{call.line}</p>
           <div className="story-call-verbs">
             {call.verbs.map((v) => (
@@ -359,11 +390,19 @@ export function Story({
               </button>
             ))}
           </div>
+          </>
+          ) : null}
         </div>
       )}
 
       {fig !== "none" && (
-        <div className="story-figure" key={fig} data-figure={fig} ref={figureRef}>
+        <div
+          className="story-figure"
+          data-region="figure"
+          key={fig}
+          data-figure={fig}
+          ref={figureRef}
+        >
           {fig === "reads" && (
             <FileList
               label="Opened"
@@ -372,40 +411,40 @@ export function Story({
               litLast
             />
           )}
-          {fig === "file" && st.stage.file && (
-            <FileView
-              key={`f:${st.stage.file.path}`}
-              call={st.stage.file}
-              cwd={session.cwd}
-            />
-          )}
-          {fig === "command" && st.stage.command && (
-            <CommandView call={st.stage.command} />
-          )}
-          {fig === "tests" && st.stage.tests && (
-            <TestsView call={st.stage.tests} />
-          )}
+          {(fig === "file" || fig === "command" || fig === "tests") &&
+            turn &&
+            match<ReactNode>(turn, {
+              asked: () => null,
+              reading: (t) => (t.command ? <CommandView call={t.command} /> : null),
+              changing: (t) => (
+                <FileView key={`f:${t.file.path}`} call={t.file} cwd={session.cwd} />
+              ),
+              proved: (t) => <TestsView call={t.tests} />,
+              "needs-you": () => null,
+              done: () => null,
+              failed: () => null,
+            })}
           {fig === "permission" && st.permission && (
             <Wants view={st.permission.view} tool={st.permission.toolName} />
           )}
-          {fig === "review" && st.stage.changes && (
-            <Review changes={st.stage.changes} onEmpty={setReviewEmpty} />
+          {fig === "review" && changes && (
+            <Review changes={changes} onEmpty={setReviewEmpty} />
           )}
           {fig === "changed" && (
             <FileList
               label="Changed"
               files={
-                st.stage.changes?.files?.length
-                  ? st.stage.changes.files
+                changes?.files?.length
+                  ? changes.files
                   : st.edited.map((path) => ({ path }))
               }
-              cwd={st.stage.changes?.root ?? session.cwd}
+              cwd={changes?.root ?? session.cwd}
             />
           )}
         </div>
       )}
 
-      <nav className="story-doors" aria-label="The transcript">
+      <nav className="story-doors" data-region="doors" aria-label="The transcript">
         <button
           type="button"
           className="glass-word"

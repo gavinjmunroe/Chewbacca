@@ -15,6 +15,12 @@
 //   voice    the HUD talk key fills the focused agent's reply, opens his
 //            palette or names a file with @; sending is always a press
 //
+// What it draws comes from one value per agent, turn.mjs's typed turn (asked,
+// reading, changing, proved, needs-you, done, failed), never from loose
+// flags; every failure is a named fault with the one thing to do; and the
+// resting view is the same size at twenty agents as at three (Daniel Thomas's
+// review, 2026-10-11: "oddly similar to rust's design philosophy").
+//
 // Template: a workspace surface on the HUD, the content as itself (the agent,
 // its file, its terminal, its diff). Stance: Carlton's quiet instrument. Type,
 // spacing, colour and motion are his tokens (theme/tokens.css) and his ladder
@@ -38,19 +44,29 @@ import { rpc } from "../src/rpc/client";
 import type { AppState } from "../src/state/store";
 import { Spinner } from "../src/components/Spinner";
 import { Story } from "./Story";
+import { editRange, excerpt, voiceIntent } from "./model.mjs";
 import {
-  editRange,
-  emptyStage,
-  excerpt,
-  nowLine,
-  reduce,
-  tileOrder,
-  tileState,
-  tileTime,
-  visible,
-  voiceIntent,
-  COMMAND_LINGER_MS,
-} from "./model.mjs";
+  atRest,
+  emptyAgent,
+  pace,
+  fault,
+  focusView,
+  match,
+  restingView,
+  reviewOf,
+  settle,
+  step,
+} from "./turn.mjs";
+import type {
+  Agent,
+  CommandBeat,
+  Fault,
+  FileBeat,
+  Resting,
+  Result,
+  TestsBeat,
+  Turn,
+} from "./turn.mjs";
 
 export type Session = {
   id: string;
@@ -69,7 +85,13 @@ type Stored = {
   sessionId: string;
   event: { type: string; ts?: number; payload?: Record<string, unknown> };
 };
-type Truth = { state: "running" | "done" | "stopped"; lastAt: number | null };
+type Truth = {
+  state: "running" | "done" | "stopped" | "unreadable";
+  lastAt: number | null;
+  detail?: string;
+};
+// Turn, Agent, Fault and friends are turn.mjs's, typed in turn.d.mts, so a
+// match() with a phase missing is a compile error here.
 type Rect = { left: number; top: number; width: number; height: number };
 // tiles: every agent. story: one agent's turn told by the screen. work: his
 // full workspace, the transcript, one press from the story.
@@ -88,10 +110,6 @@ type Hunk = {
   }[];
 };
 
-// The most tiles drawn at once. Nine is a 3 x 3 field that fits the realm
-// surface's 1180 points with his card padding; past that a session is a row
-// in his sidebar, one press into the workspace. Guessed, never measured.
-const MAX_TILES = 9;
 // His `--dur-move` (320) for a thing travelling across the pane, and
 // `--dur-slow` (240) for the shorter way back: exits are shorter (design.md).
 const GROW_MS = 320;
@@ -99,14 +117,36 @@ const SHRINK_MS = 240;
 // The page tells the server it still has the glass this often, so hud-listen
 // can trust a report no older than FOCUS_FRESH_MS (45 s) in glass_routes.mjs.
 const FOCUS_BEAT_MS = 20_000;
+// The fewest milliseconds between two focus reports. Measured 2026-10-11,
+// headless WebKit, seventeen fake agents taking turns: the tiles reordered on
+// every turn and the old page posted /glass/focus 340 times a minute (170 in
+// 30 s). hud-listen reads the report when he presses the talk key, and a
+// press within a second of a reorder is rare; guessed, never measured with him.
+const FOCUS_MIN_GAP_MS = 1_000;
 // How often the tiles ask what their tabs are really doing (/glass/tabs),
-// while the tiles are shown. A turn flips Working to Done within this long.
-// Each ask stats and tails nine transcripts, a few ms. Guessed, not measured
-// against his eye.
+// while the tiles are shown and some tile is working or waiting on him: a
+// turn flips Working to Done within this long. Each ask stats and tails the
+// transcripts, 49 ms for twelve cold (realm-tiles-truth-report.md). Guessed
+// against his eye, never measured with him.
 const TRUTH_BEAT_MS = 5_000;
+// The same ask with every tile at rest. Measured 2026-10-11 on a scratch
+// engine with three settled agents, headless WebKit, 60 s idle: at 5 s the
+// page made 12 /glass/tabs asks a minute that all answered "nothing changed".
+// A tab that starts a turn at rest was started by him in its own window, so
+// he already knows; 30 s matches the session list's own refresh (below).
+const TRUTH_REST_MS = 30_000;
+// The session list is refetched this often while shown, for a session made
+// outside this page that no event has named yet. Guessed; realm pushes every
+// status change for sessions it knows, so this is only the fallback.
+const SESSIONS_BEAT_MS = 30_000;
+// How long an engine call may take before it is a timed-out fault on the
+// glass with a Retry, never a silent blank. Measured 2026-10-11 at load 16:
+// sessions.listAll on the live engine (17 sessions) p50 0.9 ms, max 18 ms;
+// sessions.events (400) max 4.8 ms. 5 s is over 250 times the worst seen, and
+// half server.mjs's ENGINE_HANDSHAKE_MS (10 s) for an engine still migrating.
+const ENGINE_ANSWER_MS = 5_000;
 const OVERLAY =
   '[role="dialog"],[role="alertdialog"],[role="menu"],[role="listbox"],[aria-modal="true"]';
-const FAILED_LINE = /FAIL|not ok|Error|\bfailed\b/;
 
 const glassToken = () =>
   String(
@@ -218,8 +258,17 @@ export function GlassLayer({ store }: { store: StoreApi<AppState> }) {
   const [focus, setFocus] = useState<string | null>(null);
   const [picked, setPicked] = useState(0);
   const [sessions, setSessions] = useState<Record<string, Session>>({});
-  const [last, setLast] = useState<Record<string, Stored>>({});
+  // One typed agent per session (turn.mjs), stepped from realm's events.
+  // Each holds its current turn and a few one-line folds, never history.
+  const [agents, setAgents] = useState<Record<string, Agent>>({});
   const [truths, setTruths] = useState<Record<string, Truth | null>>({});
+  const [truthAsked, setTruthAsked] = useState(false);
+  // A failure that belongs to no one agent: the engine, the talk key.
+  const [engineFault, setEngineFault] = useState<Fault | null>(null);
+  const [voiceFault, setVoiceFault] = useState<Fault | null>(null);
+  // Whether the session list has ever come back. Until it has, an empty
+  // field means "not known yet", never "No agents yet".
+  const [listed, setListed] = useState(false);
   const [light, setLight] = useState<{
     rect: Rect;
     to: Rect | null;
@@ -242,17 +291,39 @@ export function GlassLayer({ store }: { store: StoreApi<AppState> }) {
   );
 
   // Sessions, from his engine's contract. Refetched on boot, on a status
-  // change for a session it has not seen, and every 30 s while shown.
+  // change for a session it has not seen, and every SESSIONS_BEAT_MS while
+  // shown. A failure is the engine-down fault on the glass, not "No agents".
   const load = useCallback(() => {
-    rpc()
-      .call("sessions.listAll", { profileId: null })
-      .then((list) => {
-        const next: Record<string, Session> = {};
-        for (const s of list as unknown as Session[]) next[s.id] = s;
-        setSessions(next);
-      })
-      .catch(() => {});
+    void (
+      settle(
+        rpc().call("sessions.listAll", { profileId: null }),
+        "engine-down",
+        ENGINE_ANSWER_MS,
+      )
+    ).then((r) => {
+      if (!r.ok) {
+        setEngineFault(r.fault);
+        return;
+      }
+      const next: Record<string, Session> = {};
+      for (const s of r.value as Session[]) next[s.id] = s;
+      setSessions(next);
+      setListed(true);
+      setEngineFault(null);
+    });
   }, []);
+  // His store boots only once the engine answers. A page that hasn't
+  // booted by ENGINE_ANSWER_MS is the engine being down, said so; before this
+  // the glass read "No agents yet" with the engine stopped (2026-10-11,
+  // headless WebKit, scratch engine stopped).
+  useEffect(() => {
+    if (booted) return;
+    const t = window.setTimeout(
+      () => setEngineFault(fault("engine-down", "the page never reached the engine")),
+      ENGINE_ANSWER_MS,
+    );
+    return () => window.clearTimeout(t);
+  }, [booted]);
   useEffect(() => {
     if (!booted) return;
     load();
@@ -270,7 +341,11 @@ export function GlassLayer({ store }: { store: StoreApi<AppState> }) {
     });
     const offEvent = rpc().on("session.event", (ev) => {
       const stored = ev as unknown as Stored;
-      setLast((prev) => ({ ...prev, [stored.sessionId]: stored }));
+      setAgents((prev) => {
+        const was = prev[stored.sessionId] ?? (emptyAgent());
+        const now = step(was, stored);
+        return now === prev[stored.sessionId] ? prev : { ...prev, [stored.sessionId]: now };
+      });
     });
     return () => {
       offStatus();
@@ -279,7 +354,7 @@ export function GlassLayer({ store }: { store: StoreApi<AppState> }) {
   }, [booted, load]);
   useEffect(() => {
     if (!booted || !shown) return;
-    const t = window.setInterval(load, 30_000);
+    const t = window.setInterval(load, SESSIONS_BEAT_MS);
     return () => window.clearInterval(t);
   }, [booted, shown, load]);
 
@@ -306,33 +381,67 @@ export function GlassLayer({ store }: { store: StoreApi<AppState> }) {
         .join(","),
     [sessions],
   );
+  // Whether any tile is working or waiting on him decides how often to ask
+  // (TRUTH_BEAT_MS, else TRUTH_REST_MS). Computed from the last answer.
+  const resting = useMemo(
+    () =>
+      restingView(Object.values(sessions), agents, truths, truthAsked),
+    [sessions, agents, truths, truthAsked],
+  );
+  const busy = !atRest(resting);
+  // Read through refs so a tile changing tone never restarts the ask: on
+  // 2026-10-11, with seventeen agents taking turns, depending on it directly
+  // made 679 asks a minute (headless WebKit, scratch engine).
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
   useEffect(() => {
     if (!booted || !shown || mode !== "tiles" || !providerIds) return;
     let live = true;
+    let timer = 0;
+    const ids = providerIds.split(",");
+    const again = () => {
+      if (live) timer = window.setTimeout(ask, busyRef.current ? TRUTH_BEAT_MS : TRUTH_REST_MS);
+    };
     const ask = () =>
-      glassFetch(`/glass/tabs?ids=${encodeURIComponent(providerIds)}`)
-        .then((r) => (r.ok ? r.json() : null))
-        .then((body) => {
-          if (live && body?.tabs) setTruths(body.tabs as Record<string, Truth | null>);
-        })
-        .catch(() => {});
+      void (
+        settle(
+          glassFetch(`/glass/tabs?ids=${encodeURIComponent(providerIds)}`).then(
+            async (r) => {
+              if (!r.ok) throw new Error(`HTTP ${r.status}`);
+              return (await r.json()) as { tabs?: Record<string, Truth | null> };
+            },
+          ),
+          "tab-unreadable",
+          ENGINE_ANSWER_MS,
+        )
+      ).then((r) => {
+        if (!live) return;
+        setTruthAsked(true);
+        again();
+        if (r.ok && r.value.tabs) {
+          // An id the server didn't answer for (not a Claude Code id: a
+          // Codex session, realm's own fake) has no transcript here, so
+          // realm's status speaks for it. Left out, its tile never drew:
+          // twenty fake agents read "No agents yet" (2026-10-11).
+          setTruths({ ...Object.fromEntries(ids.map((id) => [id, null])), ...r.value.tabs });
+          return;
+        }
+        // The ask itself failed: every imported tile is unknown, said so.
+        const detail = r.ok ? "no tabs in the answer" : r.fault.detail;
+        setTruths(
+          Object.fromEntries(
+            ids.map((id) => [id, { state: "unreadable", lastAt: null, detail }]),
+          ),
+        );
+      });
     ask();
-    const t = window.setInterval(ask, TRUTH_BEAT_MS);
     return () => {
       live = false;
-      window.clearInterval(t);
+      window.clearTimeout(timer);
     };
   }, [booted, shown, mode, providerIds]);
 
-  const tiles = useMemo(
-    () =>
-      tileOrder(
-        Object.values(sessions),
-        truths as Record<string, Truth>,
-        MAX_TILES,
-      ) as Session[],
-    [sessions, truths],
-  );
+  const tiles = resting.tiles;
 
   // His palette, his sidebar or a click in his panes can move focus to
   // another session while the workspace is up; the stage follows it.
@@ -349,7 +458,10 @@ export function GlassLayer({ store }: { store: StoreApi<AppState> }) {
   // Tell the server who has the glass, for hud-listen's voice path.
   const target = mode === "tiles" ? (tiles[picked]?.id ?? null) : focus;
   const targetTitle = (target && sessions[target]?.title) || "";
+  const focusPace = useMemo(() => pace(FOCUS_MIN_GAP_MS), []);
+  useEffect(() => () => focusPace.cancel(), [focusPace]);
   useEffect(() => {
+    // A refused report means the talk key can't reach this page: said so.
     const report = () =>
       glassFetch("/glass/focus", {
         method: "POST",
@@ -359,12 +471,16 @@ export function GlassLayer({ store }: { store: StoreApi<AppState> }) {
           sessionId: target,
           title: targetTitle,
         }),
-      }).catch(() => {});
-    void report();
+      }).then(
+        (r) =>
+          setVoiceFault(r.ok ? null : (fault("voice-dropped", `HTTP ${r.status}`))),
+        (e) => setVoiceFault(fault("voice-dropped", String(e?.message ?? e))),
+      );
+    focusPace.push(() => void report());
     if (!shown) return;
-    const t = window.setInterval(report, FOCUS_BEAT_MS);
+    const t = window.setInterval(() => focusPace.push(() => void report()), FOCUS_BEAT_MS);
     return () => window.clearInterval(t);
-  }, [shown, mode, target, targetTitle]);
+  }, [shown, mode, target, targetTitle, focusPace]);
 
   const workRect = (): Rect => ({
     left: 0,
@@ -386,10 +502,17 @@ export function GlassLayer({ store }: { store: StoreApi<AppState> }) {
       const s = sessions[id];
       if (!s || morphing.current) return;
       setFocus(id);
-      void store
-        .getState()
-        .revealSession(id, s.spaceId)
-        .catch(() => false);
+      void (
+        settle(
+          store.getState().revealSession(id, s.spaceId),
+          "engine-down",
+          ENGINE_ANSWER_MS,
+        )
+      ).then((r) => {
+        if (!r.ok) setEngineFault(r.fault);
+        else if (r.value === false)
+          setEngineFault(fault("engine-down", "it couldn't open that session"));
+      });
       const from = rectOf(tileRefs.current.get(id)) ?? {
         left: window.innerWidth / 2 - 130,
         top: window.innerHeight / 2 - 70,
@@ -526,7 +649,8 @@ export function GlassLayer({ store }: { store: StoreApi<AppState> }) {
             signal: ctrl.signal,
           });
           const reader = res.body?.getReader();
-          if (!reader) throw new Error("no stream");
+          if (!res.ok || !reader) throw new Error(`HTTP ${res.status}`);
+          setVoiceFault(null);
           const dec = new TextDecoder();
           let buf = "";
           for (;;) {
@@ -544,12 +668,17 @@ export function GlassLayer({ store }: { store: StoreApi<AppState> }) {
                     new CustomEvent("realm-glass-voice", { detail: msg.text }),
                   );
               } catch {
-                /* a partial line from a dropped stream */
+                // Expected: the last line of a dropped stream arrives cut.
               }
             }
           }
-        } catch {
-          /* the server restarted, or this page is going away */
+        } catch (e) {
+          // The server restarted, or this page is going away. Said on the
+          // glass until the next connect clears it.
+          if (!stop)
+            setVoiceFault(
+              fault("voice-dropped", String((e as Error)?.message ?? e)),
+            );
         }
         if (!stop) await new Promise((r) => setTimeout(r, 2000));
       }
@@ -607,14 +736,36 @@ export function GlassLayer({ store }: { store: StoreApi<AppState> }) {
     setMode("work");
     if (reply) fillWhenThere(".composer-input", "", true);
   }, []);
+  // The engine outranks the talk key: with no engine nothing else works.
+  const notice = engineFault ?? voiceFault;
+  // In the workspace the notice sits in the column beside his app, so his
+  // app makes room for it as it does for the stage.
+  useEffect(() => {
+    const root = document.documentElement;
+    if (notice) root.setAttribute("data-glass-notice", "");
+    else root.removeAttribute("data-glass-notice");
+  }, [notice]);
+  const seed = useCallback(
+    (id: string, agent: Agent) =>
+      setAgents((prev) => (prev[id]?.turn ? prev : { ...prev, [id]: agent })),
+    [],
+  );
   return createPortal(
     <div className="glass-layer" data-mode={mode}>
+      {notice && (
+        <Notice
+          fault={notice}
+          onRetry={
+            notice !== engineFault ? undefined : booted ? load : () => window.location.reload()
+          }
+        />
+      )}
       {(mode === "tiles" || leaving) && (
         <TileField
           leaving={mode !== "tiles"}
-          tiles={tiles}
-          truths={truths}
-          last={last}
+          resting={resting}
+          sessions={sessions}
+          known={listed && !engineFault}
           picked={picked}
           tileRefs={tileRefs.current}
           onPick={setPicked}
@@ -628,7 +779,9 @@ export function GlassLayer({ store }: { store: StoreApi<AppState> }) {
           onTranscript={openTranscript}
         />
       )}
-      {mode === "work" && focused && <Stage session={focused} />}
+      {mode === "work" && focused && (
+        <Stage session={focused} agent={agents[focused.id]} onSeed={seed} />
+      )}
       {light && <Light light={light} />}
     </div>,
     document.body,
@@ -693,21 +846,50 @@ function Light({
       : "0ms",
     opacity: light.out ? 0 : 1,
   };
-  return <div className="glass-light" style={style} aria-hidden="true" />;
+  return (
+    <div className="glass-light" data-region="light" style={style} aria-hidden="true" />
+  );
+}
+
+/** The one fault that belongs to no single agent (the engine, the talk key):
+ *  what happened, what the system said, and the one thing to do. Owns the
+ *  notice region, the strip along the top; nothing else draws there. */
+function Notice({ fault, onRetry }: { fault: Fault; onRetry?: () => void }) {
+  return (
+    <div className="glass-notice" data-region="notice" role="alert">
+      <FaultBody fault={fault} onRetry={fault.retry ? onRetry : undefined} />
+    </div>
+  );
+}
+
+export function FaultBody({ fault, onRetry }: { fault: Fault; onRetry?: () => void }) {
+  return (
+    <>
+      <span className="glass-fault-what">{fault.what}</span>
+      {fault.detail && <span className="glass-fault-detail">{fault.detail}</span>}
+      <span className="glass-fault-fix">{fault.fix}</span>
+      {onRetry && (
+        <button type="button" className="glass-word" onClick={onRetry}>
+          Retry
+        </button>
+      )}
+    </>
+  );
 }
 
 function TileField(props: {
   leaving: boolean;
-  tiles: Session[];
-  truths: Record<string, Truth | null>;
-  last: Record<string, Stored>;
+  resting: Resting;
+  sessions: Record<string, Session>;
+  known: boolean;
   picked: number;
   tileRefs: Map<string, HTMLElement>;
   onPick: (i: number) => void;
   onGrow: (id: string) => void;
 }) {
-  const { leaving, tiles, truths, last, picked, tileRefs, onPick, onGrow } =
+  const { leaving, resting, sessions, known, picked, tileRefs, onPick, onGrow } =
     props;
+  const tiles = resting.tiles;
   // A press on the empty glass takes the surface down, as a click off it
   // does; Escape is the keyboard's way to the same place.
   const onGround = (e: { target: unknown; currentTarget: unknown }) => {
@@ -716,213 +898,200 @@ function TileField(props: {
   return (
     <div
       className="glass-field"
+      data-region="field"
       data-leaving={leaving || undefined}
       onMouseDown={onGround}
     >
       {!tiles.length ? (
-        <p className="glass-quiet">No agents yet. Command K starts one.</p>
+        // Until the list has come back there is nothing true to say here;
+        // with the engine down the notice says why.
+        known && !Object.keys(sessions).length ? (
+          <p className="glass-quiet">No agents yet. Command K starts one.</p>
+        ) : null
       ) : (
         <div className="glass-tiles" role="list" aria-label="Agents">
-          {tiles.map((s, i) => {
-            const truth = s.providerSessionId
-              ? (truths[s.providerSessionId] ?? undefined)
-              : undefined;
-            const st = tileState(s, false, truth);
-            const now = nowLine(last[s.id]);
-            const meta = AGENT_META[s.agentKind as keyof typeof AGENT_META];
+          {tiles.map((tile, i) => {
+            const s = sessions[tile.id];
+            const meta = AGENT_META[s?.agentKind as keyof typeof AGENT_META];
             return (
               <button
-                key={s.id}
+                key={tile.id}
                 role="listitem"
                 type="button"
                 className="glass-tile"
-                data-tone={st.tone}
+                data-tone={tile.tone}
                 data-picked={i === picked || undefined}
                 ref={(el) => {
-                  if (el) tileRefs.set(s.id, el);
-                  else tileRefs.delete(s.id);
+                  if (el) tileRefs.set(tile.id, el);
+                  else tileRefs.delete(tile.id);
                 }}
                 onMouseEnter={() => onPick(i)}
                 onFocus={() => onPick(i)}
-                onClick={() => onGrow(s.id)}
-                aria-label={`${s.title}, ${st.word}`}
+                onClick={() => onGrow(tile.id)}
+                aria-label={`${tile.title}, ${tile.word}`}
               >
                 <span className="glass-tile-head">
                   <Icon name={meta?.icon ?? "sparkles"} size={16} colored />
                   <span className="glass-tile-state">
-                    {st.tone === "running" ? (
+                    {tile.tone === "running" ? (
                       <Spinner size={11} />
                     ) : (
                       <span className="glass-dot" />
                     )}
-                    {st.word}
+                    {tile.word}
                   </span>
-                  <span className="glass-tile-age">{age(tileTime(s, truth))}</span>
+                  <span className="glass-tile-age">
+                    {age(tile.turn.at || s?.updatedAt)}
+                  </span>
                 </span>
-                <span className="glass-tile-title">
-                  {s.title || "Untitled"}
-                </span>
-                {now && <span className="glass-tile-now">{now}</span>}
+                <span className="glass-tile-title">{tile.title}</span>
+                {tile.line && tile.line !== tile.title && (
+                  <span className="glass-tile-now">{tile.line}</span>
+                )}
                 <span className="glass-tile-meta">
-                  {meta?.label ?? s.agentKind} · {base(s.cwd)}
+                  {meta?.label ?? s?.agentKind} · {base(s?.cwd ?? "")}
                 </span>
               </button>
             );
           })}
         </div>
       )}
+      {resting.moreAgents > 0 && (
+        <p className="glass-more">
+          {resting.moreAgents} more{" "}
+          {resting.moreAgents === 1 ? "agent" : "agents"} in the sidebar
+          {resting.moreWaiting > 0 && `, ${resting.moreWaiting} waiting on you`}
+        </p>
+      )}
     </div>
   );
 }
 
-type FileCall = {
+type Changes = {
+  root: string;
+  files: { path: string; additions?: number | null; deletions?: number | null }[];
+};
+type Hunked = {
   path: string;
-  kind: string;
-  done: boolean;
-  error: boolean;
-  edits?: { before: string; after: string }[];
-  text?: string;
-};
-type CommandCall = {
-  command: string;
-  label: string;
-  done: boolean;
-  error: boolean;
-  output: string;
-  endedAt?: number;
-};
-type TestsCall = {
-  command: string;
-  done: boolean;
-  error: boolean;
-  output: string;
-  counts?: { passed: number; failed: number } | null;
-};
-type Changes = { root: string; files: { path: string }[] };
-type StageShape = {
-  running: boolean;
-  file: FileCall | null;
-  command: CommandCall | null;
-  tests: TestsCall | null;
-  changes: Changes | null;
+  hunks: Hunk[];
+  kept: Set<number>;
+  staged: boolean;
+  fault: Fault | null;
 };
 
-/** The column beside the conversation. Each part is on screen only while
- *  the agent is doing that thing; with nothing on it, it is not drawn. */
-function Stage({ session }: { session: Session }) {
-  const [stage, setStage] = useState(emptyStage);
-  // A settled turn whose diff is already gone from disk (kept, committed or
-  // put back) has no review to show, and the column must not hold its room.
-  const [reviewEmpty, setReviewEmpty] = useState(true);
-  const [, setTick] = useState(0);
-  const lastSeq = useRef(0);
+/** The column beside the conversation. It draws from the agent's typed turn
+ *  only, one card for the beat it is on, the beats before it one line each;
+ *  with nothing on it, it is not drawn. Owns the stage region. */
+function Stage({
+  session,
+  agent,
+  onSeed,
+}: {
+  session: Session;
+  agent: Agent | undefined;
+  onSeed: (id: string, agent: Agent) => void;
+}) {
+  const [history, setHistory] = useState<Fault | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
-  // The newest turn of this session, then live events.
+  // The newest turn of this session from history, when no live event has
+  // built one yet. Live events step the same agent in GlassLayer.
+  const hasTurn = Boolean(agent?.turn);
   useEffect(() => {
+    if (hasTurn) return;
     let alive = true;
-    // Live events that land before the history answers wait here and are
-    // replayed after it, so the history's answer can't drop them.
-    let ready = false;
-    const buffer: Stored[] = [];
-    setStage(emptyStage());
-    lastSeq.current = 0;
-    rpc()
-      .call("sessions.events", {
-        id: session.id,
-        afterSeq: Math.max(0, (session.lastEventSeq ?? 0) - 400),
-        limit: 400,
-      })
-      .then((events) => {
-        if (!alive) return;
-        const list = events as unknown as Stored[];
-        let start = 0;
-        for (let i = list.length - 1; i >= 0; i--) {
-          if (list[i]?.event.type === "user_message") {
-            start = i;
-            break;
-          }
-        }
-        let s = emptyStage();
-        for (const ev of list.slice(start)) s = reduce(s, ev);
-        lastSeq.current = list.at(-1)?.seq ?? 0;
-        // A settled turn read from history shows its review, never a command
-        // that finished long ago.
-        if (!s.running) s = { ...s, command: null, file: null, tests: null };
-        for (const stored of buffer.sort((a, b) => a.seq - b.seq)) {
-          if (stored.seq <= lastSeq.current) continue;
-          lastSeq.current = stored.seq;
-          s = reduce(s, stored);
-        }
-        buffer.length = 0;
-        ready = true;
-        setStage(s);
-      })
-      .catch(() => {
-        ready = true;
-        let s = emptyStage();
-        for (const stored of buffer.sort((a, b) => a.seq - b.seq)) s = reduce(s, stored);
-        buffer.length = 0;
-        if (alive) setStage(s);
-      });
-    const off = rpc().on("session.event", (ev) => {
-      const stored = ev as unknown as Stored;
-      if (stored.sessionId !== session.id) return;
-      if (!ready) {
-        buffer.push(stored);
+    void (
+      settle(
+        rpc().call("sessions.events", {
+          id: session.id,
+          afterSeq: Math.max(0, (session.lastEventSeq ?? 0) - 400),
+          limit: 400,
+        }),
+        "engine-down",
+        ENGINE_ANSWER_MS,
+      )
+    ).then((r) => {
+      if (!alive) return;
+      if (!r.ok) {
+        setHistory(r.fault);
         return;
       }
-      if (stored.seq <= lastSeq.current) return;
-      lastSeq.current = stored.seq;
-      setStage((s: unknown) => reduce(s, stored));
+      setHistory(null);
+      let a = emptyAgent();
+      for (const ev of r.value as Stored[]) a = step(a, ev);
+      if (a.turn) onSeed(session.id, a);
     });
     return () => {
       alive = false;
-      off();
     };
-  }, [session.id]);
+  }, [session.id, session.lastEventSeq, hasTurn, attempt, onSeed]);
 
-  const st = stage as unknown as StageShape;
-  // A finished command folds away after COMMAND_LINGER_MS: one re-render then.
-  const ended = st.command?.done ? (st.command.endedAt ?? 0) : 0;
-  useEffect(() => {
-    if (!ended) return;
-    const left = COMMAND_LINGER_MS - (Date.now() - ended);
-    if (left <= 0) return;
-    const t = window.setTimeout(() => setTick((n) => n + 1), left + 20);
-    return () => window.clearTimeout(t);
-  }, [ended]);
-
-  // The review is drawn only once its hunks have loaded and there are some:
-  // until then, and when they are all gone, it takes no room.
-  useEffect(() => setReviewEmpty(true), [st.changes]);
-  const raw = visible(stage, Date.now()) as string[];
-  const parts = raw.filter((p) => !(p === "review" && reviewEmpty));
+  const view = focusView(agent);
+  const turn = view.turn;
+  const card: ReactNode =
+    history && !turn ? (
+      <Card kind="fault">
+        <FaultBody fault={history} onRetry={() => setAttempt((n) => n + 1)} />
+      </Card>
+    ) : !turn ? null : (
+      match<ReactNode>(turn, {
+        asked: () => null,
+        reading: (t) =>
+          t.command ? <CommandView call={t.command} /> : null,
+        changing: (t) => (
+          <FileView key={`f:${t.file.path}`} call={t.file} cwd={session.cwd} />
+        ),
+        proved: (t) => (
+          <TestsView call={t.tests} />
+        ),
+        "needs-you": (t) => (
+          <Card kind="needs">
+            <header className="glass-card-head">
+              <span className="glass-verb">Needs you</span>
+              <span className="glass-path">{t.question}</span>
+            </header>
+          </Card>
+        ),
+        done: (t) => (
+          <>
+            {t.tests && <TestsView call={t.tests} />}
+            {agent?.changes && agent.changes.files.length > 0 && (
+              <Review
+                key={agent.changes.root + agent.changes.files.map((f) => f.path).join()}
+                changes={agent.changes}
+              />
+            )}
+          </>
+        ),
+        failed: (t) => (
+          <Card kind="fault">
+            <FaultBody fault={t.fault} />
+          </Card>
+        ),
+      })
+    );
+  const trail = turn ? view.trail : [];
+  const drawn = Boolean(card) || trail.length > 0;
   useEffect(() => {
     const root = document.documentElement;
-    if (parts.length) root.setAttribute("data-glass-stage", "");
+    if (drawn) root.setAttribute("data-glass-stage", "");
     else root.removeAttribute("data-glass-stage");
-  }, [parts.length]);
-  useEffect(
-    () => () => document.documentElement.removeAttribute("data-glass-stage"),
-    [],
-  );
-  if (!raw.length) return null;
+  }, [drawn]);
+  useEffect(() => () => document.documentElement.removeAttribute("data-glass-stage"), []);
+  if (!drawn) return null;
   return (
-    <aside
-      className="glass-stage"
-      aria-label="What the agent is doing"
-      hidden={!parts.length}
-    >
-      {parts.includes("file") && st.file && (
-        <FileView key={`f:${st.file.path}`} call={st.file} cwd={session.cwd} />
+    <aside className="glass-stage" data-region="stage" aria-label="What the agent is doing">
+      {trail.length > 0 && (
+        <ol className="glass-trail" aria-label="Earlier in this turn">
+          {view.trailEarlier > 0 && (
+            <li className="glass-trail-more">{view.trailEarlier} earlier</li>
+          )}
+          {[...trail].reverse().map((line, i) => (
+            <li key={i}>{line}</li>
+          ))}
+        </ol>
       )}
-      {parts.includes("command") && st.command && (
-        <CommandView call={st.command} />
-      )}
-      {parts.includes("tests") && st.tests && <TestsView call={st.tests} />}
-      {raw.includes("review") && st.changes && (
-        <Review changes={st.changes} onEmpty={setReviewEmpty} />
-      )}
+      {card}
     </aside>
   );
 }
@@ -935,27 +1104,40 @@ function Card({ kind, children }: { kind: string; children: ReactNode }) {
   );
 }
 
-export function FileView({ call, cwd }: { call: FileCall; cwd: string }) {
+export function FileView({ call, cwd }: { call: FileBeat; cwd: string }) {
   const abs = joinPath(cwd, call.path);
   const [text, setText] = useState<string | null>(
     call.kind === "write" ? (call.text ?? "") : null,
   );
+  const [broke, setBroke] = useState<Fault | null>(null);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     if (call.kind === "write") {
       setText(call.text ?? "");
       return;
     }
     let alive = true;
-    glassFetch(`/glass/file?path=${encodeURIComponent(abs)}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => {
-        if (alive && j) setText(String(j.text ?? ""));
-      })
-      .catch(() => {});
+    void (
+      settle(
+        glassFetch(`/glass/file?path=${encodeURIComponent(abs)}`).then(async (r) => {
+          const body = (await r.json().catch(() => ({}))) /* Expected: an error body may not be JSON; the status still says what failed. */ as { text?: string; error?: string };
+          if (!r.ok) throw new Error(body.error ?? `HTTP ${r.status}`);
+          return String(body.text ?? "");
+        }),
+        "file-unreadable",
+        ENGINE_ANSWER_MS,
+      )
+    ).then((r) => {
+      if (!alive) return;
+      if (r.ok) {
+        setText(r.value);
+        setBroke(null);
+      } else setBroke(r.fault);
+    });
     return () => {
       alive = false;
     };
-  }, [abs, call.done, call.kind, call.text]);
+  }, [abs, call.done, call.kind, call.text, attempt]);
   const found =
     text === null || call.kind === "write"
       ? null
@@ -990,6 +1172,11 @@ export function FileView({ call, cwd }: { call: FileCall; cwd: string }) {
           {base(abs)}
         </span>
       </header>
+      {broke && (
+        <p className="glass-fault">
+          <FaultBody fault={broke} onRetry={() => setAttempt((n) => n + 1)} />
+        </p>
+      )}
       {view && (
         <pre
           className="glass-code"
@@ -1015,11 +1202,7 @@ export function FileView({ call, cwd }: { call: FileCall; cwd: string }) {
   );
 }
 
-export function CommandView({ call }: { call: CommandCall }) {
-  const tail = call.output
-    .split("\n")
-    .filter((l) => l.trim())
-    .slice(-10);
+export function CommandView({ call }: { call: CommandBeat }) {
   return (
     <Card kind="command">
       <header className="glass-card-head">
@@ -1031,7 +1214,7 @@ export function CommandView({ call }: { call: CommandCall }) {
       </header>
       <pre className="glass-code glass-term">
         <span className="glass-line glass-prompt">$ {call.command}</span>
-        {tail.map((l, i) => (
+        {call.tail.map((l, i) => (
           <span key={i} className="glass-line">
             {l}
           </span>
@@ -1041,12 +1224,8 @@ export function CommandView({ call }: { call: CommandCall }) {
   );
 }
 
-export function TestsView({ call }: { call: TestsCall }) {
+export function TestsView({ call }: { call: TestsBeat }) {
   const c = call.counts;
-  const failedLines = call.output
-    .split("\n")
-    .filter((l) => FAILED_LINE.test(l))
-    .slice(0, 6);
   return (
     <Card kind="tests">
       <header className="glass-card-head">
@@ -1071,7 +1250,7 @@ export function TestsView({ call }: { call: TestsCall }) {
       <pre className="glass-code glass-term">
         <span className="glass-line glass-prompt">$ {call.command}</span>
         {call.done &&
-          failedLines.map((l, i) => (
+          (call.failing ?? []).map((l, i) => (
             <span key={i} className="glass-line" data-tone="bad">
               {l}
             </span>
@@ -1081,18 +1260,27 @@ export function TestsView({ call }: { call: TestsCall }) {
   );
 }
 
-type FileHunks = {
-  path: string;
-  hunks: Hunk[];
-  state: Record<number, "kept">;
-  staged: boolean;
-  note: string;
-};
+const fetchHunks = (root: string, path: string) =>
+  (
+    settle(
+      rpc().call("workspace.fileDiff", { cwd: root, path, staged: false }),
+      "diff-unreadable",
+      ENGINE_ANSWER_MS,
+    )
+  ).then((r) =>
+    r.ok
+      ? ({ ok: true, value: (r.value as { hunks: Hunk[] }).hunks ?? [] } as Result<Hunk[]>)
+      : (r as Result<Hunk[]>),
+  );
 
 /** The settled turn's diff as hunks. Keep leaves a hunk on disk as the agent
  *  wrote it; Reject puts it back (realm-ui's /glass/reject, `git apply -R`
  *  of exactly that hunk). Each button says what it changes before the press,
- *  and a file whose hunks are all kept offers Stage, which is git add. */
+ *  and a file whose hunks are all kept offers Stage, which is git add.
+ *  The Keep and Reject buttons hang only on hunks turn.mjs's reviewOf kept,
+ *  so a button with no hunk behind it can't be drawn. A diff that couldn't
+ *  be read is a fault with Retry, never an empty card, and never reported
+ *  empty to the story: a failed read must not skip his call. */
 // The most files whose diffs the review reads at once. Twelve keeps one
 // turn's review to a few screens of hunks; guessed, never measured.
 const REVIEW_FILES = 12;
@@ -1102,116 +1290,116 @@ export function Review({
   onEmpty,
 }: {
   changes: Changes;
-  onEmpty: (empty: boolean) => void;
+  onEmpty?: (empty: boolean) => void;
 }) {
-  const [files, setFiles] = useState<FileHunks[]>([]);
-  // Files whose diff couldn't be read, or that sit past the ones read here.
-  // Their changes may still be on disk, so the review is never reported
-  // empty while any are left: a failed read must not skip his call.
-  const [unread, setUnread] = useState(0);
-  const fetchOne = useCallback(
-    (path: string): Promise<Hunk[] | null> =>
-      rpc()
-        .call("workspace.fileDiff", { cwd: changes.root, path, staged: false })
-        .then((d) => (d as unknown as { hunks: Hunk[] }).hunks)
-        .catch(() => null),
-    [changes.root],
-  );
+  const [files, setFiles] = useState<Hunked[] | null>(null);
+  const [broke, setBroke] = useState<Fault | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  // Files past the ones read here. Their changes may still be on disk, so
+  // the review is never reported empty while any are left.
+  const past = Math.max(0, changes.files.length - REVIEW_FILES);
   useEffect(() => {
     let alive = true;
-    Promise.all(
-      changes.files.slice(0, REVIEW_FILES).map(async (f) => ({
-        path: f.path,
-        hunks: await fetchOne(f.path),
-        state: {},
-        staged: false,
-        note: "",
-      })),
-    )
-      .then((list) => {
-        if (!alive) return;
-        const failed = list.filter((f) => f.hunks === null).length;
-        const left = failed + Math.max(0, changes.files.length - REVIEW_FILES);
-        const shown = list.filter((f): f is FileHunks => Boolean(f.hunks?.length));
-        setFiles(shown);
-        setUnread(left);
-        onEmpty(shown.length === 0 && left === 0);
-      })
-      .catch(() => {});
+    void Promise.all(
+      changes.files
+        .slice(0, REVIEW_FILES)
+        .map(async (f) => ({ path: f.path, r: await fetchHunks(changes.root, f.path) })),
+    ).then((list) => {
+      if (!alive) return;
+      const bad = list.find((x) => !x.r.ok);
+      if (bad && !bad.r.ok) {
+        setBroke(bad.r.fault);
+        onEmpty?.(false);
+        return;
+      }
+      setBroke(null);
+      const review = reviewOf(
+        changes.root,
+        list.map((x) => ({ path: x.path, hunks: x.r.ok ? x.r.value : [] })),
+      );
+      setFiles(
+        (review?.files ?? []).map((f) => ({ ...f, kept: new Set<number>(), staged: false, fault: null })),
+      );
+    });
     return () => {
       alive = false;
     };
-  }, [changes, fetchOne]);
-  const update = (path: string, fn: (f: FileHunks) => FileHunks) =>
-    setFiles((all) => all.map((f) => (f.path === path ? fn(f) : f)));
+  }, [changes, attempt]);
+  const update = (path: string, fn: (f: Hunked) => Hunked) =>
+    setFiles((all) => (all ?? []).map((f) => (f.path === path ? fn(f) : f)));
   const keep = (path: string, i: number) =>
-    update(path, (f) => ({ ...f, state: { ...f.state, [i]: "kept" } }));
+    update(path, (f) => ({ ...f, kept: new Set(f.kept).add(i) }));
   const reject = async (path: string, hunk: Hunk) => {
-    const res = await glassFetch("/glass/reject", {
-      method: "POST",
-      body: JSON.stringify({ cwd: changes.root, path, hunk }),
-    }).catch(() => null);
-    const body = (res ? await res.json().catch(() => ({})) : {}) as {
-      error?: string;
-    };
-    if (!res || !res.ok) {
-      update(path, (f) => ({
-        ...f,
-        note: body.error ?? "That didn't go back.",
-      }));
+    const res = (await settle(
+      glassFetch("/glass/reject", {
+        method: "POST",
+        body: JSON.stringify({ cwd: changes.root, path, hunk }),
+      }).then(async (r) => {
+        const body = (await r.json().catch(() => ({}))) /* Expected: an error body may not be JSON; the status still says what failed. */ as { error?: string };
+        if (!r.ok) throw new Error(body.error ?? `HTTP ${r.status}`);
+        return true;
+      }),
+      "git-refused",
+      ENGINE_ANSWER_MS,
+    )) as Result<boolean>;
+    if (!res.ok) {
+      update(path, (f) => ({ ...f, fault: res.fault }));
       return;
     }
-    const read = await fetchOne(path);
-    if (read === null) {
-      update(path, (f) => ({ ...f, note: "Put back. The diff couldn't be read again; the transcript has it." }));
+    const again = await fetchHunks(changes.root, path);
+    if (!again.ok) {
+      update(path, (f) => ({ ...f, fault: again.fault }));
       return;
     }
-    const hunks = read;
+    const left = (reviewOf(changes.root, [{ path, hunks: again.value }]) as {
+      files: { hunks: Hunk[] }[];
+    } | null)?.files[0]?.hunks ?? [];
     update(path, (f) => {
       // The hunks left keep their Keep by content, since their indexes moved.
-      const kept = new Set(
-        Object.keys(f.state).map((k) =>
-          JSON.stringify(f.hunks[Number(k)]?.lines),
-        ),
-      );
-      const state: FileHunks["state"] = {};
-      hunks.forEach((h, j) => {
-        if (kept.has(JSON.stringify(h.lines))) state[j] = "kept";
+      const keptLines = new Set([...f.kept].map((k) => JSON.stringify(f.hunks[k]?.lines)));
+      const kept = new Set<number>();
+      left.forEach((h, j) => {
+        if (keptLines.has(JSON.stringify(h.lines))) kept.add(j);
       });
-      return {
-        ...f,
-        hunks,
-        state,
-        note: hunks.length ? "" : "Put back as it was.",
-      };
+      return { ...f, hunks: left, kept, fault: null };
     });
   };
   const stage = async (path: string) => {
-    const ok = await rpc()
-      .call("workspace.stage", { cwd: changes.root, paths: [path] })
-      .then(() => true)
-      .catch(() => false);
-    update(path, (f) =>
-      ok ? { ...f, staged: true } : { ...f, note: "That didn't stage." },
-    );
+    const r = (await settle(
+      rpc().call("workspace.stage", { cwd: changes.root, paths: [path] }),
+      "git-refused",
+      ENGINE_ANSWER_MS,
+    )) as Result<unknown>;
+    update(path, (f) => (r.ok ? { ...f, staged: true, fault: null } : { ...f, fault: r.fault }));
   };
-  if (!files.length && !unread) return null;
+  // Every hunk put back, and nothing past the ones read: no decision left.
+  const empty = files !== null && !broke && past === 0 && files.every((f) => !f.hunks.length && !f.fault);
+  useEffect(() => {
+    if (files !== null && !broke) onEmpty?.(empty);
+  }, [empty, files, broke, onEmpty]);
+  if (broke)
+    return (
+      <Card kind="fault">
+        <FaultBody fault={broke} onRetry={() => setAttempt((n) => n + 1)} />
+      </Card>
+    );
+  const shown = (files ?? []).filter((f) => f.hunks.length || f.fault);
+  if (!shown.length && !past) return null;
   return (
     <Card kind="review">
-      {unread > 0 && (
+      {past > 0 && (
         <p className="glass-note">
-          {unread} {unread === 1 ? "file's" : "files'"} changes couldn't be shown here. The transcript has them.
+          {past} more {past === 1 ? "file's" : "files'"} changes aren't shown here. The transcript has them.
         </p>
       )}
       <header className="glass-card-head">
         <span className="glass-verb">Changes</span>
         <span className="glass-path">
-          {files.length} {files.length === 1 ? "file" : "files"}
+          {shown.length} {shown.length === 1 ? "file" : "files"}
         </span>
       </header>
-      {files.map((f) => {
-        const decided =
-          f.hunks.length > 0 && f.hunks.every((_, i) => f.state[i]);
+      {shown.map((f) => {
+        const decided = f.hunks.length > 0 && f.hunks.every((_, i) => f.kept.has(i));
         const dir = f.path.split("/").slice(0, -1).join("/");
         return (
           <div className="glass-file" key={f.path}>
@@ -1232,11 +1420,16 @@ export function Review({
               )}
               {f.staged && <span className="glass-note">Staged</span>}
             </div>
-            {f.note && <p className="glass-note">{f.note}</p>}
+            {f.fault && (
+              <p className="glass-fault">
+                <FaultBody fault={f.fault} />
+              </p>
+            )}
+            {!f.hunks.length && !f.fault && <p className="glass-note">Put back as it was.</p>}
             {f.hunks.map((h, i) => {
               const adds = h.lines.filter((l) => l.kind === "add").length;
               const dels = h.lines.filter((l) => l.kind === "del").length;
-              const kept = f.state[i] === "kept";
+              const kept = f.kept.has(i);
               return (
                 <div
                   className="glass-hunk"
@@ -1251,20 +1444,10 @@ export function Review({
                     <>
                       <pre className="glass-code">
                         {h.lines.slice(0, 40).map((l, j) => (
-                          <span
-                            key={j}
-                            className="glass-line"
-                            data-diff={l.kind}
-                          >
-                            <span className="glass-ln">
-                              {l.newLine ?? l.oldLine ?? ""}
-                            </span>
+                          <span key={j} className="glass-line" data-diff={l.kind}>
+                            <span className="glass-ln">{l.newLine ?? l.oldLine ?? ""}</span>
                             <span className="glass-sign">
-                              {l.kind === "add"
-                                ? "+"
-                                : l.kind === "del"
-                                  ? "-"
-                                  : " "}
+                              {l.kind === "add" ? "+" : l.kind === "del" ? "-" : " "}
                             </span>
                             {l.text || " "}
                           </span>

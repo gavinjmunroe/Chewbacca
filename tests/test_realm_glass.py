@@ -44,7 +44,7 @@ def realm_status(repo: Path) -> str:
 class LayerFiles(unittest.TestCase):
     def test_layer_is_ours_and_credits_him(self):
         names = sorted(p.name for p in LAYER.iterdir())
-        self.assertEqual(names, ["GlassLayer.tsx", "Story.tsx", "beats.mjs", "glass.css", "install.tsx", "main.tsx", "model.mjs"])
+        self.assertEqual(names, ["GlassLayer.tsx", "Story.tsx", "beats.mjs", "glass.css", "install.tsx", "main.tsx", "model.mjs", "regions.mjs", "turn.d.mts", "turn.mjs"])
         for p in LAYER.iterdir():
             self.assertIn("Carlton Aikins", p.read_text(), p.name)
 
@@ -55,7 +55,7 @@ class LayerFiles(unittest.TestCase):
 
     def test_a_layer_change_rebuilds(self):
         texts = realm_ui.layer_texts()
-        self.assertEqual(len(texts), 7)
+        self.assertEqual(len(texts), 10)
         self.assertTrue(any(t.startswith("GlassLayer.tsx\n") for t in texts))
 
     def test_vite_points_the_entry_at_ours_and_refuses_a_missing_seam(self):

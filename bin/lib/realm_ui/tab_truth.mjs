@@ -112,9 +112,13 @@ function touched(file) {
     for (const name of readdirSync(sub)) {
       try {
         at = Math.max(at, statSync(join(sub, name)).mtimeMs);
-      } catch {}
+      } catch {
+        // Expected: a subagent file removed between readdir and stat.
+      }
     }
-  } catch {}
+  } catch {
+    // Expected: most transcripts have no subagents folder.
+  }
   return at;
 }
 
@@ -130,7 +134,9 @@ export function transcriptFinder(projects, { now = Date.now } = {}) {
     let dirs = [];
     try {
       dirs = readdirSync(projects);
-    } catch {}
+    } catch {
+      // Expected: a Mac with no Claude Code projects yet has nothing to find.
+    }
     for (const dir of dirs) {
       const file = join(projects, dir, `${id}.jsonl`);
       if (existsSync(file)) {
@@ -143,7 +149,11 @@ export function transcriptFinder(projects, { now = Date.now } = {}) {
   };
 }
 
-/** The truth for one session id, or null when no transcript is found. */
+/** The truth for one session id; null when it has no transcript here (a
+ *  Codex session, say), and `{ state: "unreadable", detail }` when it has one
+ *  that couldn't be read. The two are different answers: the first lets
+ *  realm's own status speak, the second is a fault the tile names, never a
+ *  quiet Done (Daniel pass, 2026-10-11: errors are values). */
 export function tabTruth(id, find, { now = Date.now() } = {}) {
   if (!ID.test(String(id))) return null;
   const file = find(id);
@@ -154,8 +164,8 @@ export function tabTruth(id, find, { now = Date.now() } = {}) {
     if (truth.lastAt === null)
       truth = turnFrom(tail(file, TAIL_BYTES_MAX), { touchedAt, now });
     return truth;
-  } catch {
-    return null;
+  } catch (e) {
+    return { state: "unreadable", lastAt: null, detail: String(e?.code ?? e?.message ?? e) };
   }
 }
 

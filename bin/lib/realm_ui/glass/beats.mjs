@@ -10,6 +10,7 @@
 // The regions that draw this are Story.tsx; the spec is skills/hud/SKILL.md,
 // "An agent turn told by the screen".
 import { classify, emptyStage, reduce } from "./model.mjs";
+import { emptyAgent, match, step } from "./turn.mjs";
 
 export const BEATS = [
   "asked",
@@ -122,13 +123,25 @@ export function emptyStory() {
     lastEditAt: 0,
     checks: [],
     started: false,
+    // The turn as one typed value (turn.mjs). The beat and the figure are
+    // read from it, so neither can say a thing the turn isn't doing
+    // (Daniel pass, 2026-10-11).
+    agent: emptyAgent(),
   };
 }
 
 const withPending = (story, pending) => ({ ...story, pending, permission: pending[0] ?? null });
 
-/** One event into the story. Same object back when nothing changed. */
+/** One event into the story, and into its typed turn. Same object back when
+ *  nothing changed. */
 export function tell(story, stored) {
+  const next = tellStory(story, stored);
+  const agent = step(story.agent ?? emptyAgent(), stored);
+  if (next === story && agent === story.agent) return story;
+  return { ...next, agent };
+}
+
+function tellStory(story, stored) {
   const ev = stored?.event;
   if (!ev) return story;
   const stage = reduce(story.stage, stored);
@@ -227,32 +240,40 @@ export function tell(story, stored) {
   }
 }
 
-/** Which beat the turn is on. `kept` is true once the person kept the diff;
- *  `settledFor` is how long ago the turn was seen to settle, in ms. */
+/** Which beat the turn is on, read from the typed turn (turn.mjs) through
+ *  match(), one arm per phase: a beat the turn isn't on can't be drawn.
+ *  `kept` is true once the person kept the diff; `settledFor` is how long
+ *  ago the turn was seen to settle, in ms. */
 export function beat(story, { kept = false, settledFor = Infinity } = {}) {
-  const st = story.stage;
+  // A request still open is his call, whatever else the turn says: realm can
+  // hold several at once and the story answers the oldest.
   if (story.permission) return "call";
+  const agent = story.agent ?? emptyAgent();
+  const turn = agent.turn;
   // A session nobody has asked anything yet has no turn to tell. Saying
   // Done with every beat read would be a story that never happened.
-  if (!story.asked && !st.running && !story.said && !story.failure) return "quiet";
-  if (story.asked && !story.started && !st.running && !story.failure) return "asked";
-  if (st.status === "error" || (story.failure && !st.running)) return "failed";
-  if (st.running) {
-    if (st.status === "waiting_permission") return "call";
-    if (story.lastKind === "prove") return "proving";
-    if (story.lastKind === "change") return "changing";
-    if (story.lastKind === "read") return "reading";
-    return "asked";
-  }
-  if (!kept && st.changes?.files?.length) return "call";
-  // Realm measures the diff with git after the turn settles
-  // (apps/server/src/sessions/service.ts, turn_changes), so a turn that edited
-  // files is briefly settled with no diff yet. Holding its last beat until the
-  // diff lands keeps the line from saying Done and then jumping to Your call.
-  if (story.edited.length && !st.changes && settledFor < SETTLE_HOLD_MS) {
-    return story.lastKind === "prove" ? "proving" : "changing";
-  }
-  return "done";
+  if (!turn) return "quiet";
+  const settled = () => {
+    if (!kept && agent.changes?.files?.length) return "call";
+    // Realm measures the diff with git after the turn settles
+    // (apps/server/src/sessions/service.ts, turn_changes), so a turn that
+    // edited files is briefly settled with no diff yet. Holding its last beat
+    // until the diff lands keeps the line from saying Done and then jumping
+    // to Your call.
+    if (story.edited.length && !agent.changes && settledFor < SETTLE_HOLD_MS)
+      return story.lastKind === "prove" ? "proving" : "changing";
+    return "done";
+  };
+  return match(turn, {
+    asked: () => "asked",
+    // A shell command is a check on the work, told as proving.
+    reading: (t) => (t.command ? "proving" : "reading"),
+    changing: () => "changing",
+    proved: () => "proving",
+    "needs-you": () => "call",
+    done: settled,
+    failed: () => "failed",
+  });
 }
 
 /** The first sentence of an answer, without its Markdown, for a headline. */
@@ -422,25 +443,27 @@ export function decision(story, { kept = false } = {}) {
   return null;
 }
 
-/** Which object the figure shows. One at a time, like Lemma's panels. */
+/** Which object the figure shows. One at a time, like Lemma's panels. The
+ *  file, the command and the tests are the typed turn's own, so "file" is
+ *  only ever said while the turn holds a file to show. */
 export function figure(story, b = beat(story)) {
-  const st = story.stage;
   if (b === "call" && story.permission)
     return story.permission.question ? "none" : "permission";
   if (b === "call") return "review";
-  if (b === "reading") return story.reads.length ? "reads" : "none";
-  if (b === "changing") return st.file ? "file" : "none";
-  if (b === "proving")
-    return st.tests && (!st.command || st.tests.at >= st.command.at)
-      ? "tests"
-      : st.command
-        ? "command"
-        : "none";
-  if (b === "done" || b === "failed")
-    return st.changes?.files?.length || story.edited.length
-      ? "changed"
-      : "none";
-  return "none";
+  const agent = story.agent ?? emptyAgent();
+  const turn = agent.turn;
+  if (!turn) return "none";
+  const changed = () =>
+    agent.changes?.files?.length || story.edited.length ? "changed" : "none";
+  return match(turn, {
+    asked: () => "none",
+    reading: (t) => (t.command ? "command" : story.reads.length ? "reads" : "none"),
+    changing: () => "file",
+    proved: () => "tests",
+    "needs-you": () => "none",
+    done: changed,
+    failed: changed,
+  });
 }
 
 /** The beat line's state per word: read, lit or ahead. */

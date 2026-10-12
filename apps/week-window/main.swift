@@ -7,18 +7,42 @@
 // starts that server when it is not already running.
 
 import Cocoa
+import CryptoKit
 import WebKit
 
-let base = ProcessInfo.processInfo.environment["CHEWBACCA_HUD_URL"] ?? "http://localhost:7474"
+// Only the port can be changed, and only to a real one. A free-form URL here
+// would let whatever launched this app point a window at any page.
+let hudPort: Int = {
+    if let raw = ProcessInfo.processInfo.environment["CHEWBACCA_HUD_PORT"], let n = Int(raw), (1024...65535).contains(n) {
+        return n
+    }
+    return 7474
+}()
+let base = "http://localhost:\(hudPort)"
 let selfTest = CommandLine.arguments.contains("--selftest")
+
+// The secret `chewbacca open` keeps in a file only this user can read. The
+// server answers a challenge with an HMAC of it, which is how this app knows
+// the thing on the port is the dashboard and not just something that got there
+// first.
+func hudToken() -> String? {
+    let file = ProcessInfo.processInfo.environment["CHEWBACCA_HUD_TOKEN_FILE"]
+        ?? (NSHomeDirectory() + "/.chewbacca/hud.token")
+    guard let raw = try? String(contentsOfFile: file, encoding: .utf8) else { return nil }
+    let token = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    return token.isEmpty ? nil : token
+}
+
+func hex(_ bytes: [UInt8]) -> String { bytes.map { String(format: "%02x", $0) }.joined() }
 
 final class Delegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     var window: NSWindow!
     var web: WKWebView!
-    var retries = 0
+    var tries = 0
+    var maxTries: Int { selfTest ? 6 : 30 }
 
     func applicationDidFinishLaunching(_ note: Notification) {
-        if !serverUp() { startServer() }
+        if !verifiedServer() { startServer() }
         let frame = NSRect(x: 0, y: 0, width: 1120, height: 780)
         window = NSWindow(
             contentRect: frame,
@@ -63,30 +87,65 @@ final class Delegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         web?.evaluateJavaScript("typeof load === 'function' && load()", completionHandler: nil)
     }
 
+    // The page is only loaded once the server has proved who it is. Until then
+    // this keeps asking, starting it if needed, and gives up with a message
+    // rather than loading whatever answered.
     func load() {
-        web.load(URLRequest(url: URL(string: base + "/week?native=1")!))
+        DispatchQueue.global().async {
+            let ok = self.verifiedServer()
+            DispatchQueue.main.async {
+                if ok, let url = URL(string: base + "/week?native=1") {
+                    self.tries = 0
+                    self.web.load(URLRequest(url: url))
+                } else if self.tries < self.maxTries {
+                    self.tries += 1
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { self.load() }
+                } else {
+                    self.web.loadHTMLString(
+                        "<body style='font:14px -apple-system;padding:40px;color:gray'>Port \(hudPort) is not answering as Chewbacca. "
+                        + "Run <code>chewbacca open</code>, or set CHEWBACCA_HUD_PORT to a free port.</body>", baseURL: nil)
+                    if selfTest { print("server not verified"); exit(2) }
+                }
+            }
+        }
+    }
+
+    // Stay on the dashboard. Anything else the page tries to navigate to is
+    // refused rather than rendered inside this window.
+    func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
+                 decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        guard let url = action.request.url else { return decisionHandler(.cancel) }
+        let local = url.scheme == "http" && url.host == "localhost" && url.port == hudPort
+        decisionHandler(local || url.absoluteString == "about:blank" ? .allow : .cancel)
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        guard retries < 30 else { return }
-        retries += 1
+        guard tries < maxTries else { return }
+        tries += 1
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { self.load() }
     }
 
-    func serverUp() -> Bool {
-        var up = false
+    func verifiedServer() -> Bool {
+        guard let token = hudToken() else { return false }
+        let nonce = hex((0..<16).map { _ in UInt8.random(in: 0...255) })
+        var verified = false
         let wait = DispatchSemaphore(value: 0)
-        var request = URLRequest(url: URL(string: base + "/healthz?n=00000000")!)
+        var request = URLRequest(url: URL(string: base + "/healthz?n=" + nonce)!)
         request.timeoutInterval = 1.5
-        URLSession.shared.dataTask(with: request) { _, response, _ in
-            up = (response as? HTTPURLResponse)?.statusCode == 200
-            wait.signal()
+        URLSession.shared.dataTask(with: request) { data, response, _ in
+            defer { wait.signal() }
+            guard (response as? HTTPURLResponse)?.statusCode == 200, let data = data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let proof = json["proof"] as? String else { return }
+            let mac = HMAC<SHA256>.authenticationCode(for: Data(nonce.utf8), using: SymmetricKey(data: Data(token.utf8)))
+            verified = proof == hex(Array(mac))
         }.resume()
         _ = wait.wait(timeout: .now() + 2)
-        return up
+        return verified
     }
 
     func startServer() {
+        if ProcessInfo.processInfo.environment["CHEWBACCA_WEEK_NO_SPAWN"] != nil { return }
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/bin/zsh")
         task.arguments = ["-lc", "chewbacca open --no-open"]

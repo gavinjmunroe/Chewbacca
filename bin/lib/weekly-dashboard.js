@@ -33,11 +33,29 @@ const readJson = (file, fallback) => {
 const expand = (p) => (p && p.startsWith("~") ? path.join(HOME, p.slice(1)) : p);
 // A server started by an app or a login item gets launchd's bare PATH, which
 // has neither the kit's tools nor Homebrew; the assignments card then read
-// "nothing due" because it could not find `coursework`.
-const TOOL_PATH = [path.join(HOME, ".local", "bin"), "/opt/homebrew/bin", "/usr/local/bin", process.env.PATH || "/usr/bin:/bin"].join(":");
+// "nothing due" because it could not find `coursework`. System tools are run by
+// absolute path so nothing in a user-writable folder can stand in for them, and
+// the kit's own folders go after the system ones, only for its own scripts.
+const SYSTEM_TOOLS = { git: "/usr/bin/git", osascript: "/usr/bin/osascript", launchctl: "/bin/launchctl" };
+const KIT_DIRS = [path.join(HOME, ".local", "bin"), "/opt/homebrew/bin", "/usr/local/bin"];
+const SAFE_PATH = [process.env.PATH || "/usr/bin:/bin", ...KIT_DIRS].join(":");
+function toolPath(cmd) {
+  if (SYSTEM_TOOLS[cmd]) return SYSTEM_TOOLS[cmd];
+  for (const dir of KIT_DIRS) {
+    const candidate = path.join(dir, cmd);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return cmd;
+}
 const run = (cmd, args, opts = {}) => {
   try {
-    return execFileSync(cmd, args, { encoding: "utf8", timeout: 20000, stdio: ["ignore", "pipe", "ignore"], env: { ...process.env, PATH: TOOL_PATH }, ...opts }).trim();
+    return execFileSync(toolPath(cmd), args, {
+      encoding: "utf8",
+      timeout: 20000,
+      stdio: ["ignore", "pipe", "ignore"],
+      ...opts,
+      env: { ...process.env, PATH: SAFE_PATH },
+    }).trim();
   } catch {
     return "";
   }

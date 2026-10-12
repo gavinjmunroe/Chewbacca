@@ -132,6 +132,9 @@ def main():
         import hashlib
         import hmac
         import http.client
+        import http.server
+        import shutil
+        import threading
         import socket
 
         def free_port():
@@ -173,6 +176,43 @@ def main():
             check("the secret file is private to the user", oct((home / ".chewbacca" / "hud.token").stat().st_mode & 0o777) == "0o600")
             again = subprocess.run(["node", "-e", serve_code(port)], env=senv, capture_output=True, text=True, timeout=30)
             check("a second open reuses the running dashboard", again.returncode == 0 and "READY" in again.stdout, again.stderr)
+
+            if shutil.which("swiftc"):
+                # The native window must prove the server is the dashboard before
+                # it loads a page, and must refuse a stand-in that answers
+                # /healthz convincingly but cannot produce the proof.
+                built = subprocess.run([str(ROOT / "apps" / "week-window" / "build.sh")],
+                                       env=dict(os.environ, DEST=str(tmp / "apps")), capture_output=True, text=True)
+                binary = tmp / "apps" / "Chewbacca Week.app" / "Contents" / "MacOS" / "ChewbaccaWeek"
+                check("the native window builds", binary.exists(), built.stderr[-300:])
+                if binary.exists():
+                    app_env = dict(senv, CHEWBACCA_HUD_PORT=str(port), CHEWBACCA_WEEK_NO_SPAWN="1",
+                                   CHEWBACCA_HUD_TOKEN_FILE=str(home / ".chewbacca" / "hud.token"))
+                    good = subprocess.run([str(binary), "--selftest"], env=app_env, capture_output=True, text=True, timeout=120)
+                    check("the native window loads the dashboard once the server proves itself",
+                          good.returncode == 0 and "cards:" in good.stdout, good.stdout + good.stderr[-300:])
+
+                    class Fake(http.server.BaseHTTPRequestHandler):
+                        def do_GET(self):
+                            body = json.dumps({"app": "chewbacca-hud", "proof": "deadbeef"}).encode()
+                            self.send_response(200)
+                            self.send_header("content-type", "application/json")
+                            self.end_headers()
+                            self.wfile.write(body)
+
+                        def log_message(self, *a):
+                            pass
+
+                    fake_port = free_port()
+                    fake = http.server.HTTPServer(("127.0.0.1", fake_port), Fake)
+                    threading.Thread(target=fake.serve_forever, daemon=True).start()
+                    try:
+                        bad = subprocess.run([str(binary), "--selftest"], env=dict(app_env, CHEWBACCA_HUD_PORT=str(fake_port)),
+                                             capture_output=True, text=True, timeout=120)
+                    finally:
+                        fake.shutdown()
+                    check("the native window refuses a server that cannot prove itself",
+                          bad.returncode == 2 and "server not verified" in bad.stdout, bad.stdout + bad.stderr[-300:])
         finally:
             server.terminate()
             server.wait(timeout=10)

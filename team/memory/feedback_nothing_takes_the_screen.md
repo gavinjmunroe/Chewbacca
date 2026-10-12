@@ -19,3 +19,11 @@ handed, -g or not. focus-guard now refuses `open -n` on a browser, and the USC
 sign-in adds a background tab to a window he already has open via AppleScript,
 restores that window's tab, and closes its own once signed in. Measured: the
 frontmost app was Code before and after.
+
+**2026-10-11, later the same night: the bridge itself.** Every `chewie web` call
+started its own Chrome, a windowed copy of the profile, and that window took the
+screen; the inbox read drove it on every run ("ANOTHER CLAY FLASHBANG"). No
+command a guard could match was involved. The launch now runs `--headless=new`
+unless CHEWIE_WEB_VISIBLE=1 (322cb8ae, tests/web_headless.sh), a windowed bridge
+Chrome left running is replaced, and the inbox read uses the API with the
+browser behind `--browser` (86587a58). See [[feedback_fix_the_class_at_the_source]].

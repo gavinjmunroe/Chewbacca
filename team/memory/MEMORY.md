@@ -280,6 +280,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_ported_logic_fix_both_copies: reply classification lives in togari-platform reply-intent.ts and tools/gtme_reply.py; fix both the same hour, same test
 - feedback_bma_amber_push_to_main: BMA and Amber repos (togari-platform too) push straight to main, never a PR (Karthik via Caleb, 10/11); tests are the review
 - feedback_build_for_everyone: everything built into Chewbacca works for any user; per-user values from their config, never literals; tests/portable_code.sh refuses them (10/11)
+- feedback_fix_the_class_at_the_source: 3 repeats on 10/11 each walked past a lesson that covered one surface (Slack DM, the bridge's own Chrome, draft-only replies); fix where all paths meet, with a test
 - feedback_too_many_tabs_one_goal: 13 tabs on "make chewb perfect" made it worse (load 33, push races); about four lanes, one tab each
 - feedback_land_workflow_traps: checksums.py hashes the index (add first), never chain cleanup with ;, DESTRUCTIVE_OK=1 must lead, zsh file lists need arrays (10/10)
 - feedback_site_research_pass: Every site starts with the kit pass (api-anything pulls every page, brand-grab, ux-pick, crafts, STEAL, COPY); site-gate research refuses without it (10/10)

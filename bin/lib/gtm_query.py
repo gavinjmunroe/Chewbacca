@@ -299,7 +299,18 @@ def booking_signals(db, client_id: str) -> dict:
         evidence[ev] = evidence.get(ev, 0) + 1
     return {"confirmed": len(confirmed), "proposed_only": len(proposed - set(confirmed)),
             "confirmed_by": evidence,
-            "source": "clay inbox threads: calendar invite or accept, scheduler confirmation, or a stated time"}
+            "source": "clay threads and connected inboxes: calendar invite or accept, scheduler confirmation, "
+                      "or a stated time"}
+
+
+def booked_people(db, client_id: str) -> set[str]:
+    """People with a confirmed booking credited to this client, from the
+    Clay threads or a connected inbox."""
+    return {r["dst"] for r in db.execute(
+        "SELECT e.dst FROM nodes n JOIN edges e ON e.src = n.id AND e.verb = 'SIGNAL_ON' "
+        "WHERE n.type = 'Signal' AND json_extract(n.props, '$.kind') = 'booking_signal' "
+        "AND json_extract(n.props, '$.client_id') = ? AND json_extract(n.props, '$.status') = 'confirmed' "
+        "AND json_extract(n.props, '$.credited')", (client_id,))}
 
 
 def funnel_numbers(db, cams: list[dict], client_id: str | None = None) -> dict:
@@ -321,6 +332,9 @@ def funnel_numbers(db, cams: list[dict], client_id: str | None = None) -> dict:
         if r["person"] and verdict.get("class") == "positive":
             pos_by.setdefault(r["person"], verdict["by"])
     meets = {m["meeting"] for m in meetings_in(db, ids)}
+    on_calendar = {r["dst"] for m in meets for r in db.execute(
+        "SELECT dst FROM edges WHERE verb = 'MEETING_WITH' AND src = ?", (m,))}
+    in_mail = booked_people(db, client_id) if client_id else set()
     analytics = {k: sum((c.get("analytics") or {}).get(k) or 0 for c in cams)
                  for k in ("leads", "sent", "replies", "repliesExcludingOoo", "bounces")}
     as_of = [c.get("analytics_as_of") for c in cams if c.get("analytics_as_of")]
@@ -334,8 +348,13 @@ def funnel_numbers(db, cams: list[dict], client_id: str | None = None) -> dict:
         "people_positive": {"n": len(pos_by), "of": len(replied),
                             "by": {b: sum(1 for x in pos_by.values() if x == b) for b in set(pos_by.values())},
                             "source": "strongest reply verdict: person > model > clay category"},
-        "meetings": {"n": len(meets), "of": emailed,
-                     "source": "calendar events (Google and Mac, deduped) with a lead's address"},
+        # 2026-10-11: "meetings 0" read the calendar only, and Zeutara's calls
+        # are set in mail the calendar never sees. A meeting is a person with a
+        # calendar event OR a confirmed booking in their mail (an invite, an
+        # accept, a scheduler confirmation, a time both sides agreed).
+        "meetings": {"n": len(on_calendar | in_mail) if on_calendar or in_mail else len(meets), "of": emailed,
+                     "calendar": len(meets), "mail_only": len(in_mail - on_calendar),
+                     "source": "people with a calendar event, or a confirmed booking in their mail"},
         "booking_signals": booking_signals(db, client_id) if client_id else {},
     }
 

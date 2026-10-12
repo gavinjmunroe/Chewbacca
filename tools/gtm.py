@@ -38,7 +38,7 @@ def csv_cell(value: str) -> str:
     """Quote a cell a spreadsheet would run as a formula (OWASP CSV injection)."""
     return "'" + value if value.startswith(FORMULA_STARTS) else value
 
-SOURCES = ("clay", "inbox", "calendar")
+SOURCES = ("clay", "inbox", "mailbox", "calendar")
 
 
 def pct(n, d) -> str:
@@ -79,11 +79,9 @@ def funnel_lines(f: dict) -> list[str]:
         f"  replied                  {rep:>6}   {rep}/{em} emailed = {pct(rep, em)}, clay inbox threads "
         f"(clay analytics counts {c['replies']} replies, {c['repliesExcludingOoo']} excluding OOO)",
         f"  positive                 {pos['n']:>6}   {pos['n']}/{rep} replied = {pct(pos['n'], rep)}, decided by: {by}",
-        f"  meetings (calendar)      {f['meetings']['n']:>6}   {f['meetings']['n']}/{em} emailed = "
-        f"{pct(f['meetings']['n'], em)}, Google + Mac calendar events with a lead's address, on this "
-        "Mac's calendars only: a call the client booked on their own calendar is not counted",
-        f"  booking signals (inbox)  {bs.get('confirmed', 0):>6}   confirmed, by distinct lead ({how}); "
-        "clay inbox threads, never added to meetings",
+        f"  meetings                 {f['meetings']['n']:>6}   {f['meetings']['n']}/{em} emailed = "
+        f"{pct(f['meetings']['n'], em)}: {f['meetings'].get('calendar', 0)} on a calendar, "
+        f"{f['meetings'].get('mail_only', 0)} more booked in the mail ({how})",
         f"    proposed only          {bs.get('proposed_only', 0):>6}   a time was proposed and nothing confirmed it; "
         "not a booking",
         f"  bounces                  {c['bounces']:>6}   clay analytics",
@@ -100,9 +98,8 @@ def show_clients(d: dict) -> list[str]:
         if f:
             out.append(f"  emails sent {sent} (clay analytics), people emailed {f['people_emailed']['n']}, "
                        f"replied {f['people_replied']['n']}, positive {f['people_positive']['n']}, "
-                       f"meetings {f['meetings']['n']} (calendar), booking signals "
-                       f"{(f.get('booking_signals') or {}).get('confirmed', 0)} confirmed / "
-                       f"{(f.get('booking_signals') or {}).get('proposed_only', 0)} proposed (inbox)")
+                       f"meetings {f['meetings']['n']} (calendar or booked in the mail), "
+                       f"{(f.get('booking_signals') or {}).get('proposed_only', 0)} more with a time proposed")
     if not d["clients"]:
         out.append("No clients in the graph yet.")
     return out + ["Synced:"] + sync_lines(d["sync"])
@@ -238,7 +235,7 @@ def main(argv=None) -> int:
     p = sub.add_parser("funnel", help="sent, replied, positive, meetings, with denominators")
     p.add_argument("--client", required=True)
     p = sub.add_parser("sync", help="read Clay, the inbox and the calendar into the graph (read only)")
-    p.add_argument("--source", action="append", choices=SOURCES, help="repeatable; default all three")
+    p.add_argument("--source", action="append", choices=SOURCES, help="repeatable; default all of them")
     p.add_argument("--background", action="store_true", help="run detached and log to ~/.chewbacca/gtm/sync.log")
     for sp in sub.choices.values():
         sp.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help="print JSON")

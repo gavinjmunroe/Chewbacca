@@ -319,7 +319,7 @@ def test_cli(db_path: Path):
                          timeout=60)
     body = json.loads(out.stdout)
     ok(out.returncode == 3 and body["ok"] is False, (out.returncode, out.stdout))
-    ok([s["kind"] for s in body["sources"]] == ["clay", "inbox", "calendar"], body)
+    ok([s["kind"] for s in body["sources"]] == ["clay", "inbox", "mailbox", "calendar"], body)
     ok(all(s["status"] == "failed" and s["note"] and not s["ok"] for s in body["sources"]), body)
 
 
@@ -792,13 +792,16 @@ def test_booking_signals_from_threads(tmp: Path):
     f = gq.funnel(db, "Acme Capital")["funnel"]
     bs = f["booking_signals"]
     ok(bs["confirmed"] == 3 and bs["proposed_only"] == 1, bs)
-    ok(f["meetings"]["n"] == 0, "booking signals are never added to calendar meetings")
+    # 2026-10-11, Caleb: "can't we know # of meetings from the emails?" A
+    # confirmed booking in the thread is a meeting; a proposed time is not.
+    ok(f["meetings"]["n"] == 3 and f["meetings"]["mail_only"] == 3 and f["meetings"]["calendar"] == 0,
+       f["meetings"])
     ok(gq.funnel(db, "Borealis")["funnel"]["booking_signals"]["confirmed"] == 0,
        "the invite in Acme's inbox is not Borealis's either")
     db.close()
     out = run_cli(tmp / "book.sqlite", "funnel", "--client", "Acme Capital")
     ok(out.returncode == 0, out.stderr)
-    for want in ("meetings (calendar)", "booking signals (inbox)", "proposed only", "never added to meetings",
+    for want in ("meetings                      3", "3 more booked in the mail", "proposed only",
                  "gtm-calendar:google", "gtm-inbox:111"):
         ok(want in out.stdout, (want, out.stdout))
 
@@ -1037,6 +1040,64 @@ def _timed(fn) -> float:
     return (time.perf_counter() - start) * 1000
 
 
+def gmail_msg(mid: str, frm: str, to: str, subject: str, body: str, date: str, ics: bool = False) -> dict:
+    import base64
+    enc = lambda s: base64.urlsafe_b64encode(s.encode()).decode()  # noqa: E731
+    parts = [{"mimeType": "text/plain", "body": {"data": enc(body)}}]
+    if ics:
+        parts.append({"mimeType": "text/calendar", "filename": "invite.ics", "body": {"data": enc("BEGIN:VCALENDAR")}})
+    return {"id": mid, "payload": {"mimeType": "multipart/mixed", "parts": parts, "headers": [
+        {"name": "From", "value": frm}, {"name": "To", "value": to}, {"name": "Subject", "value": subject},
+        {"name": "Date", "value": date}, {"name": "Message-ID", "value": f"<{mid}@mail.example>"}]}}
+
+
+def test_meetings_from_the_mail(tmp: Path):
+    """2026-10-11: 77 of Zeutara's 81 Clay threads ended at the investor's
+    reply, and "meetings 0" read only a calendar. The conversation after a
+    reply lives in the client's own mailbox; a booking there is a meeting."""
+    graph = osgraph.Graph(tmp / "mail.sqlite")
+    (tmp / "mp").mkdir(exist_ok=True)
+    ids = osgraph.Identities(people_store(tmp / "mp"))
+    gi.sync(graph, ["clay"], CFG, ids, cli(world_a()))
+    gi.sync(graph, ["inbox"], CFG, ids, cli(world_a()), inbox_fn=lambda ws: INBOX if ws == "111" else [])
+    asked = []
+
+    def reader(lead):
+        asked.append(lead)
+        if lead == "a@fund.example":
+            return [("pat@client.example", gmail_msg("m1", "pat@client.example", lead, "Deck attached",
+                                                     "Here is the deck.", "Wed, 07 Oct 2026 10:00:00 -0700")),
+                    ("pat@client.example", gmail_msg("m2", "pat@client.example", lead, "Invitation: Intro call",
+                                                     "Intro call, Thursday Oct 15 at 2pm", "Thu, 08 Oct 2026 09:00:00 -0700",
+                                                     ics=True))]
+        if lead == "shared@vc.example":
+            return [("pat@client.example", gmail_msg("m3", lead, "pat@client.example", "Re: Widget",
+                                                     "Does Tuesday at 2pm work for a call?",
+                                                     "Thu, 08 Oct 2026 11:00:00 -0700"))]
+        return []
+
+    res = gi.sync(graph, ["mailbox"], CFG, ids, mailbox_reader=reader)
+    ok(res[0]["ok"] and res[0]["booking_confirmed"] == 1 and res[0]["booking_proposed"] == 1, res)
+    ok(sorted(asked) == ["a@fund.example", "ghost@gone.example", "shared@vc.example"],
+       "only people who replied are looked up, each by their own exact address")
+    graph.db.close()
+    db = gq.connect(tmp / "mail.sqlite")
+    f = gq.funnel(db, "Acme Capital")["funnel"]
+    ok(f["meetings"]["n"] == 1 and f["meetings"]["mail_only"] == 1 and f["meetings"]["calendar"] == 0, f["meetings"])
+    ok(f["booking_signals"]["proposed_only"] == 1, "a proposed time is never a meeting")
+    db.close()
+
+    # Nothing connected: FAILED with the fix, and the last snapshot stays.
+    graph = osgraph.Graph(tmp / "mail.sqlite")
+    res = gi.sync(graph, ["mailbox"], CFG, ids, mailbox_reader=lambda lead: [])
+    ok(not res[0]["ok"] and "chewbacca email add" in res[0]["note"], res)
+    ok(len([n for n in graph.nodes("Signal") if (n["props"] or {}).get("workspace_id") == "mailbox"]) == 2,
+       "a failed mailbox read keeps the bookings it found last time")
+    graph.db.close()
+    import gtm_mailbox
+    ok(not gtm_mailbox.ADDRESS.match("a@b.example OR in:anywhere"), "a crafted address never reaches a Gmail search")
+
+
 def main():
     with tempfile.TemporaryDirectory() as d:
         os.environ["KYBER_OS_GRAPH_NO_TM"] = "1"
@@ -1054,6 +1115,7 @@ def main():
         test_google_calendar_union(Path(d))
         test_gws_is_read_only()
         test_booking_signals_from_threads(Path(d))
+        test_meetings_from_the_mail(Path(d))
         test_bounce_notices_and_removal_asks(Path(d))
         test_replies_carry_the_ids_clay_reply_needs(Path(d))
         speed = test_speed(Path(d))

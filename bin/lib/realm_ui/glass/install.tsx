@@ -14,6 +14,7 @@ import { createElement, type ReactNode } from "react";
 import { StoreContext } from "../src/state/store";
 import { GlassLayer } from "./GlassLayer";
 import { FolderPick } from "./FolderPick";
+import "./attach";
 
 type ProviderProps = {
   value: Parameters<typeof GlassLayer>[0]["store"] | null;

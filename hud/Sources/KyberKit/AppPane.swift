@@ -129,6 +129,14 @@ struct AppPaneView: View {
 final class GlassWebView: WKWebView {
     override var needsPanelToBecomeKey: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    /// A file dragged onto the page: its paths go to the page first, since
+    /// the File WebKit hands it carries none (RealmBridges.dropScript).
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let paths = RealmBridges.droppedPaths(sender.draggingPasteboard)
+        if !paths.isEmpty { evaluateJavaScript(RealmBridges.dropScript(paths), completionHandler: nil) }
+        return super.performDragOperation(sender)
+    }
 }
 
 /// The one Realm page Kyber keeps for its whole life.
@@ -176,11 +184,15 @@ final class AppPaneHost {
         if let old = webView {
             old.removeFromSuperview()
             old.configuration.userContentController.removeScriptMessageHandler(forName: AppPaneGuard.channel)
+            old.configuration.userContentController.removeScriptMessageHandler(
+                forName: RealmBridges.askChannel, contentWorld: .page)
         }
         let guardian = AppPaneGuard(app: url)
         let config = WKWebViewConfiguration()
         config.websiteDataStore = WKWebsiteDataStore(forIdentifier: AppPane.storeID)
         config.userContentController.add(guardian, name: AppPaneGuard.channel)
+        config.userContentController.addScriptMessageHandler(
+            guardian, contentWorld: .page, name: RealmBridges.askChannel)
         if let token {
             // Before any of the page's scripts, in the top frame only, which
             // the navigation guard keeps on the app's own origin.
@@ -210,6 +222,7 @@ final class AppPaneHost {
                 stateFile: URL = AppPaneView.stateFile) {
         let view = self.view(for: url, stateFile: stateFile)
         guardian?.onDismiss = onDismiss
+        guardian?.shown = true
         if view.superview !== box {
             view.frame = box.bounds
             box.addSubview(view)
@@ -234,6 +247,7 @@ final class AppPaneHost {
         Self.tellShown(view, false)
         view.removeFromSuperview()
         guardian?.onDismiss = nil
+        guardian?.shown = false
     }
 
     /// Load the page before anyone asks, so the first open only attaches it.
@@ -296,6 +310,9 @@ final class AppPaneGuard: NSObject, WKNavigationDelegate, WKUIDelegate, WKScript
     static let channel = "realmGlass"
     let app: URL
     var onDismiss: (@MainActor @Sendable () -> Void)?
+    /// Whether a surface shows the page now. A notification while it does is
+    /// already on the glass, in the agent's tile.
+    var shown = false
     /// The page can't be shown as it is: its load failed or its process died.
     /// The next open loads it again instead of showing a dead page.
     private(set) var broken = false
@@ -336,9 +353,15 @@ final class AppPaneGuard: NSObject, WKNavigationDelegate, WKUIDelegate, WKScript
         onDismiss?()
     }
 
-    /// In the background: nothing on the glass takes the screen.
+    /// A link out: a Web pane on the glass when Kyber has given the bridges
+    /// its glass, else the browser in the background. Nothing takes the
+    /// screen either way.
     private static func openOutside(_ target: URL?) {
         guard let target = AppPaneView.outside(target) else { return }
+        if let draw = RealmGlassLines.draw, let lines = RealmBridges.webLines(target) {
+            draw(lines)
+            return
+        }
         let config = NSWorkspace.OpenConfiguration()
         config.activates = false
         NSWorkspace.shared.open(target, configuration: config)
@@ -348,7 +371,12 @@ final class AppPaneGuard: NSObject, WKNavigationDelegate, WKUIDelegate, WKScript
 /// Kyber's launch hook: load Realm's page in the background so the first
 /// "show my agents" only has to put it on the glass.
 public enum RealmAppWarmup {
-    @MainActor public static func start() { AppPaneHost.shared.warmWhenReady() }
+    /// `draw` puts lines on the glass the way a sender's would: links from
+    /// the page open there as a Web pane, and its notifications as needs-you.
+    @MainActor public static func start(draw: (([String]) -> Void)? = nil) {
+        RealmGlassLines.draw = draw
+        AppPaneHost.shared.warmWhenReady()
+    }
 }
 
 /// The surface's own close, for a part inside it that can end it (the app

@@ -10,6 +10,7 @@
 //   GET  /glass/tabs     what each tile's Claude Code tab is really doing (tab_truth.mjs)
 //   GET  /glass/folders  checkouts a new agent can start in, or one typed path checked (folders.mjs)
 //   POST /glass/reject   put one hunk back, on a press: `git apply -R` of exactly that hunk
+//   POST /glass/describe files he picked or dropped, described for his composer (describeFiles)
 //
 // Every route needs the pipe's own token in `X-Glass-Token` (the one in the
 // 0600 server.json, which the HUD hands the page and hud-listen reads), and
@@ -18,7 +19,7 @@
 import { readFileSync, statSync, realpathSync } from "node:fs";
 import { execFileSync, spawnSync } from "node:child_process";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join, normalize, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, normalize, sep } from "node:path";
 import { timingSafeEqual } from "node:crypto";
 import { idsFrom, tabTruth, transcriptFinder } from "./tab_truth.mjs";
 import { checkFolder, listFolders } from "./folders.mjs";
@@ -179,6 +180,33 @@ const json = (res, status, body) =>
     })
     .end(JSON.stringify(body));
 
+// The most files one attach or drop describes. His composer takes a handful;
+// guessed, never measured: a select-all in a big folder stops here.
+export const MAX_DESCRIBE = 64;
+
+/** Files he picked in the open panel or dropped on the page, described the
+ *  way Realm's main process does (apps/desktop/src/main/attachments.ts,
+ *  describeFiles): a folder is a folder with size 0, a file its size, and a
+ *  path that is gone, outside his home, or a key file is left out. The mime
+ *  comes from his own table on the page (glass/attach.ts). */
+export function describeFiles(paths, { home = homedir() } = {}) {
+  if (!Array.isArray(paths)) return [];
+  const out = [];
+  for (const p of paths.slice(0, MAX_DESCRIBE)) {
+    const real = underHome(p, home);
+    if (!real || secretPath(real)) continue;
+    let st;
+    try {
+      st = statSync(real);
+    } catch {
+      continue;
+    }
+    if (st.isDirectory()) out.push({ path: real, name: basename(real), size: 0, dir: true });
+    else if (st.isFile()) out.push({ path: real, name: basename(real), size: st.size, dir: false });
+  }
+  return out;
+}
+
 /** Answer a /glass/ request. Returns false when the path is not ours. */
 export function handleGlass(
   req,
@@ -296,6 +324,9 @@ export function handleGlass(
           sessionId: f.sessionId,
           mode: f.mode,
         });
+      }
+      if (path === "/glass/describe") {
+        return json(res, 200, { files: describeFiles(body.paths, { home }) });
       }
       if (path === "/glass/reject") {
         try {

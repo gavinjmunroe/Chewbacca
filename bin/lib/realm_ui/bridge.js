@@ -11,7 +11,10 @@
 // and answers every IPC-only member the way Realm's own renderer already
 // treats a missing bridge (its env.d.ts marks most of them optional "like
 // every bridge: jsdom has none"): nothing picked, nothing listed, no native
-// menu (folders excepted: see pickFolder). Nothing here can open a file dialog, read the clipboard, touch the
+// menu. The exceptions are answered on the glass: folders (pickFolder), and
+// files, drops and notifications through Kyber (hud/Sources/KyberKit/
+// RealmBridges.swift), which opens the open panel itself, so the page still
+// never does. Nothing here can open a file dialog, read the clipboard, touch the
 // keychain or drive a browser view, because a page this server serves must
 // not be able to.
 //
@@ -36,6 +39,23 @@
   const absent = (members) =>
     Object.fromEntries(members.map((key) => [key,
       /^on[A-Z]/.test(key) ? () => unsubscribe : /^list|s$/.test(key) ? empty : none]));
+
+  // Kyber's native half, when the page is on the glass: it answers the open
+  // panel and takes notifications. Absent in a plain browser or a test.
+  const handlers = window.webkit && window.webkit.messageHandlers;
+  const native = handlers && handlers.realmGlassAsk;
+  const describe = (paths) => {
+    const d = window.__realmGlassDescribe;
+    return typeof d === "function" && Array.isArray(paths) && paths.length ? d(paths) : Promise.resolve([]);
+  };
+  // A dropped File carries no path in a web view. Kyber hands the page the
+  // drop's paths just before WebKit delivers it (window.__realmGlassDrop);
+  // each File is matched to one by name, and by size where Kyber knew it.
+  const dropped = (file) => {
+    const drop = Array.isArray(window.__realmGlassDrop) ? window.__realmGlassDrop : [];
+    const hit = file && drop.find((d) => d && d.name === file.name && (d.size < 0 || d.size === file.size));
+    return hit && typeof hit.path === "string" ? hit.path : "";
+  };
 
   const token = typeof window.__realmUiToken === "string" ? window.__realmUiToken : "";
   try { delete window.__realmUiToken; } catch { /* set non-configurable */ }
@@ -64,15 +84,19 @@
       const pick = window.__realmGlassPickFolder;
       return typeof pick === "function" ? pick() : Promise.resolve(null);
     },
-    pickFiles: empty,
+    // His composer's attach: Kyber's open panel, then described here.
+    pickFiles: () =>
+      native
+        ? native.postMessage({ ask: "pickFiles" }).then(describe, () => [])
+        : Promise.resolve([]),
     pickThemeFile: none,
     pickIconImage: none,
     compressIconImage: none,
     attachmentThumbnail: none,
-    describePaths: empty,
+    describePaths: describe,
     saveTempAttachment: () =>
       Promise.reject(new Error("attachments need Realm's desktop app")),
-    pathForFile: () => "",
+    pathForFile: dropped,
     clipboard: { readText: () => Promise.resolve("") },
     permissions: absent(["probe", "openSettings"]),
     // Two namespaces his store reads a shape from, not just a value: the
@@ -90,7 +114,16 @@
       request: () => Promise.resolve({ hostName: "Chewbacca glass", packaged: false, helperAvailable: false, rows: [] }),
     },
     updates: absent(["status", "check", "download", "install", "onChanged"]),
-    notify: absent(["show", "badge", "onActivate"]),
+    // A turn that settles or asks while the glass is down: Kyber draws it as
+    // a needs-you notice. Answers whether one was shown, as Electron's does.
+    notify: {
+      ...absent(["badge", "onActivate"]),
+      show: (input) =>
+        native
+          ? native.postMessage({ ask: "notify", title: String((input && input.title) || ""), body: String((input && input.body) || "") })
+              .then((shown) => shown === true, () => false)
+          : Promise.resolve(false),
+    },
     credentials: absent(["list", "status", "add", "remove", "share", "setPresenceTtl"]),
     passkeys: absent(["list", "remove", "share"]),
     browser: absent(["create", "destroy", "retain", "navigate", "nav", "search", "historyMenu", "setAllowlist", "setBounds", "onState", "pickElement", "cancelPick", "annotate", "cancelAnnotate", "setAccent", "blockedDownloads", "saveDownload", "dismissDownload", "onDownloadBlocked", "onPasskey", "menuState", "goToIndex", "find", "stopFind", "onFound", "onFindRequest", "zoom", "print", "setDevice", "screenshot", "clearData", "shareSignIn"]),

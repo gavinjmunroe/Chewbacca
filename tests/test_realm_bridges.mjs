@@ -1,0 +1,170 @@
+// The page half of the native bridges for Realm on the glass: bridge.js asks
+// Kyber (hud/Sources/KyberKit/RealmBridges.swift) for the open panel and
+// notifications, matches a dropped File to the paths Kyber handed it, and the
+// realm-ui server describes what was picked. Before this a press on his
+// composer's attach did nothing and a drop arrived with no path (morning
+// rehearsal, 2026-10-11).
+import test from "node:test";
+import assert from "node:assert/strict";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import vm from "node:vm";
+import {
+  describeFiles,
+  MAX_DESCRIBE,
+} from "../bin/lib/realm_ui/glass_routes.mjs";
+
+const BRIDGE = readFileSync(
+  new URL("../bin/lib/realm_ui/bridge.js", import.meta.url),
+  "utf8",
+);
+
+/** bridge.js run in a page with `native` as Kyber's ask channel (or none). */
+function page(native) {
+  const window = {
+    addEventListener() {},
+    webkit: native ? { messageHandlers: { realmGlassAsk: native } } : undefined,
+  };
+  vm.runInNewContext(BRIDGE, { window, document: {} });
+  return window;
+}
+
+test("describe keeps what he picked under his home and leaves out keys, strays and the gone", () => {
+  const home = mkdtempSync(join(tmpdir(), "bridges-home-"));
+  const away = mkdtempSync(join(tmpdir(), "bridges-away-"));
+  try {
+    writeFileSync(join(home, "notes.pdf"), "12345");
+    mkdirSync(join(home, "repo"));
+    writeFileSync(join(home, ".env"), "KEY=x");
+    mkdirSync(join(home, ".ssh"));
+    writeFileSync(join(home, ".ssh", "id_ed25519"), "k");
+    writeFileSync(join(away, "outside.txt"), "x");
+    symlinkSync(join(away, "outside.txt"), join(home, "link.txt"));
+    const got = describeFiles(
+      [
+        join(home, "notes.pdf"),
+        join(home, "repo"),
+        join(home, ".env"),
+        join(home, ".ssh", "id_ed25519"),
+        join(away, "outside.txt"),
+        join(home, "link.txt"),
+        join(home, "gone.txt"),
+        "relative.txt",
+        42,
+      ],
+      { home },
+    );
+    assert.deepEqual(
+      got.map((f) => [f.name, f.size, f.dir]),
+      [
+        ["notes.pdf", 5, false],
+        ["repo", 0, true],
+      ],
+    );
+    assert.deepEqual(describeFiles("not a list", { home }), []);
+    const many = Array.from({ length: MAX_DESCRIBE + 10 }, () =>
+      join(home, "notes.pdf"),
+    );
+    assert.equal(describeFiles(many, { home }).length, MAX_DESCRIBE);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+    rmSync(away, { recursive: true, force: true });
+  }
+});
+
+test("outside the glass nothing is picked and no notification claims to be shown", async () => {
+  const w = page(null);
+  assert.equal(JSON.stringify(await w.realm.pickFiles()), "[]");
+  assert.equal(
+    await w.realm.notify.show({ id: "n1", title: "Done", body: null }),
+    false,
+  );
+  assert.equal(w.realm.pathForFile({ name: "a.txt", size: 1 }), "");
+});
+
+test("attach asks Kyber's open panel, then describes exactly what came back", async () => {
+  const asked = [];
+  const w = page({
+    postMessage: (msg) => {
+      asked.push(msg);
+      return Promise.resolve(
+        msg.ask === "pickFiles" ? ["/Users/x/a.pdf"] : true,
+      );
+    },
+  });
+  const described = [];
+  w.__realmGlassDescribe = (paths) => {
+    described.push(paths);
+    return Promise.resolve([
+      { path: paths[0], name: "a.pdf", mime: "application/pdf", size: 3 },
+    ]);
+  };
+  const files = await w.realm.pickFiles();
+  assert.deepEqual(JSON.parse(JSON.stringify(asked)), [{ ask: "pickFiles" }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(described)), [["/Users/x/a.pdf"]]);
+  assert.equal(files[0].mime, "application/pdf");
+});
+
+test("a cancelled panel attaches nothing and never asks to describe", async () => {
+  const w = page({ postMessage: () => Promise.resolve([]) });
+  let called = false;
+  w.__realmGlassDescribe = () => ((called = true), Promise.resolve([]));
+  assert.equal(JSON.stringify(await w.realm.pickFiles()), "[]");
+  assert.equal(called, false);
+});
+
+test("a dropped File gets its path from Kyber's drop, by name and size", () => {
+  const w = page({ postMessage: () => Promise.resolve(true) });
+  w.__realmGlassDrop = [
+    { path: "/Users/x/repo", name: "repo", size: -1 },
+    { path: "/Users/x/a.txt", name: "a.txt", size: 5 },
+  ];
+  assert.equal(
+    w.realm.pathForFile({ name: "repo", size: 96 }),
+    "/Users/x/repo",
+  );
+  assert.equal(
+    w.realm.pathForFile({ name: "a.txt", size: 5 }),
+    "/Users/x/a.txt",
+  );
+  assert.equal(
+    w.realm.pathForFile({ name: "a.txt", size: 6 }),
+    "",
+    "a different file with the same name",
+  );
+  assert.equal(w.realm.pathForFile({ name: "b.txt", size: 5 }), "");
+});
+
+test("a notification goes to Kyber as plain title and body, shown only when Kyber says so", async () => {
+  const sent = [];
+  let answer = true;
+  const w = page({
+    postMessage: (msg) => (sent.push(msg), Promise.resolve(answer)),
+  });
+  assert.equal(
+    await w.realm.notify.show({
+      id: "n1",
+      title: "Claude finished",
+      body: null,
+    }),
+    true,
+  );
+  assert.deepEqual(JSON.parse(JSON.stringify(sent)), [
+    { ask: "notify", title: "Claude finished", body: "" },
+  ]);
+  answer = false;
+  assert.equal(
+    await w.realm.notify.show({ id: "n2", title: "x", body: "y" }),
+    false,
+  );
+  const broken = page({ postMessage: () => Promise.reject(new Error("gone")) });
+  assert.equal(await broken.realm.notify.show({ id: "n3", title: "x" }), false);
+});

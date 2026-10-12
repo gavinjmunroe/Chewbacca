@@ -70,6 +70,29 @@ def replies_owed(threads):
     return owed
 
 
+def solo_owed(replies, sent, drafted):
+    """The own-inbox path (gtme_solo: one Gmail, no Clay), used by Firm Foundation
+    and anyone running Chewbacca without Clay. A reply is answered once a draft
+    was saved for it or anything was sent to that person after it arrived."""
+    drafted_ids = {d.get("gmail_id") for d in drafted}
+    owed = []
+    for r in replies:
+        if r.get("kind") in NOT_OWED or r.get("gmail_id") in drafted_ids:
+            continue
+        who = (r.get("from") or r.get("email") or "").lower()
+        later = [s for s in sent if (s.get("email") or "").lower() == who and (s.get("at") or "") > (r.get("at") or "")]
+        if not later:
+            owed.append((who or "?", r.get("kind") or "?", (r.get("at") or "")[:10]))
+    return owed
+
+
+def read_jsonl(path):
+    try:
+        return [json.loads(l) for l in open(path) if l.strip()]
+    except OSError:
+        return []
+
+
 def client_unanswered(messages, client_user, me):
     """Messages and files from the client after our last message, oldest first.
     `messages` is one conversation's history, any order."""
@@ -127,8 +150,18 @@ def main(argv=None):
     report = {"client": a.client, "replies_owed": None, "client_unanswered": None, "not_run": []}
 
     try:
-        threads = json.load(open(a.inbox)) if a.inbox else fetch_inbox((cfg.get("workspaces") or [""])[0])
-        report["replies_owed"] = replies_owed(threads)
+        if a.inbox or cfg.get("workspaces"):
+            threads = json.load(open(a.inbox)) if a.inbox else fetch_inbox(cfg["workspaces"][0])
+            report["replies_owed"] = replies_owed(threads)
+        else:
+            # No Clay workspace: the own-inbox path keeps its replies on disk.
+            import gtme_operator as op
+            d = op.client_dir(a.client)
+            # A plan with nothing sent yet owes nobody; no plan at all is unknown.
+            if not any((d / f).exists() for f in ("replies.jsonl", "sent.jsonl", "plan.json")):
+                raise RuntimeError(f"no Clay workspace and no own-inbox state for {a.client}")
+            report["replies_owed"] = solo_owed(read_jsonl(d / "replies.jsonl"), read_jsonl(d / "sent.jsonl"),
+                                               read_jsonl(d / "drafted.jsonl"))
     except Exception as e:  # a check that did not run is never reported as clean
         report["not_run"].append(f"replies: {e}")
 
@@ -145,7 +178,8 @@ def main(argv=None):
         except Exception as e:
             report["not_run"].append(f"client messages: {e}")
     else:
-        report["not_run"].append("client messages: no client_slack {user, me, conversations} in clients.json")
+        # Not set up is said out loud, but it is not a failed check.
+        report["skipped"] = ["client messages: no client_slack {user, me, conversations} for this client in clients.json"]
 
     open_items = len(report["replies_owed"] or []) + len(report["client_unanswered"] or [])
     if a.json:
@@ -159,10 +193,14 @@ def main(argv=None):
             print(f"client   {principal} sent {n} message(s) in {ch} that nobody answered{sent}. Starts: \"{words}\"")
         for why in report["not_run"]:
             print(f"not run  {why}")
+        for why in report.get("skipped") or []:
+            print(f"skipped  {why}")
         if open_items:
             print(f"Not done: {open_items} open.")
         elif report["not_run"]:
             print("Unknown: a check did not run, so this is not a clean answer.")
+        elif report.get("skipped"):
+            print("Done on replies: nobody is waiting on us. Client messages are not checked until client_slack is set up.")
         else:
             print("Done: nobody is waiting on us and nothing the client sent is unread.")
     if report["not_run"]:

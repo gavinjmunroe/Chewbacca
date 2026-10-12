@@ -49,6 +49,17 @@ check("a thread missing its newest reply is owed, never called answered", "adrye
 check("an incomplete thread whose last word is ours is not owed", "done@fund.example" not in leads)
 check("a pass and an out of office are not owed", "pass@fund.example" not in leads and "ooo@fund.example" not in leads)
 
+# The own-inbox path (no Clay), the way Firm Foundation and any Chewbacca user
+# without Clay runs: replies.jsonl, sent.jsonl, drafted.jsonl on disk.
+rep = [{"from": "pastor@church.example", "kind": "question", "gmail_id": "g1", "at": "2026-10-11T10:00:00Z"},
+       {"from": "no@church.example", "kind": "pass", "gmail_id": "g2", "at": "2026-10-11T10:00:00Z"},
+       {"from": "drafted@church.example", "kind": "interested", "gmail_id": "g3", "at": "2026-10-11T10:00:00Z"},
+       {"from": "sent@church.example", "kind": "interested", "gmail_id": "g4", "at": "2026-10-11T10:00:00Z"}]
+sent = [{"email": "sent@church.example", "at": "2026-10-11T11:00:00Z"}]
+drafted = [{"gmail_id": "g3"}]
+solo = [o[0] for o in gtme_done.solo_owed(rep, sent, drafted)]
+check("own inbox: an unanswered question is owed", solo == ["pastor@church.example"])
+
 ME, JONAH = "UCALEB", "UJONAH"
 dm = [
     {"ts": "100.0", "user": ME, "text": "Get back to me on the PDFs"},

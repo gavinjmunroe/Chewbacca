@@ -1109,7 +1109,7 @@ fi
 # gate refuses to ship a generated one, and the Stop hook calls the gate by name.
 # gtme-dedupe is the exception: it builds a splink venv with uv on first run, like
 # scrape, and still runs exact passes on plain python3 when that build fails.
-for _tool in orphan-reap list-audit list-gate gtme-dedupe gtme-reply gtme-rules gtme-dnc gtme-score gtme-lookup kit-debt handoff-check learn durable-check corpus preflight gtme-graph gtme-math gtme-library gtme-signals gtme-grade gtme-learning clay-fixture-check review-gate task-graph graph-fuse work-ledger ux-learning jev decision-lab ux-decision ux-policy clay-review clay-build fanout site-fast untrusted-screen model-route intro list-sift ux-do decisions web-record bb brand-grab oss-apps team peel; do
+for _tool in orphan-reap list-audit list-gate gtme-dedupe gtme-reply gtme-rules gtme-dnc gtme-score gtme-lookup kit-debt handoff-check learn durable-check corpus preflight gtme-graph gtme-math gtme-library gtme-signals gtme-grade gtme-learning clay-fixture-check review-gate task-graph graph-fuse work-ledger ux-learning jev decision-lab ux-decision ux-policy clay-review clay-build fanout site-fast untrusted-screen api-grow model-route intro list-sift ux-do decisions web-record bb brand-grab oss-apps team peel; do
   if [ -f "$SCRIPT_DIR/bin/$_tool" ]; then
     link_tool "$_tool"
     log "$_tool installed to ~/.local/bin/"
@@ -2008,6 +2008,15 @@ _register("PostToolUse", hooks_dir + "/clay-reply-guard.sh", timeout=5,
 _register("PostToolUse", hooks_dir + "/untrusted-screen.sh", timeout=15,
           matcher="WebFetch|Bash|mcp__claude-in-chrome__.*|mcp__plugin_playwright_playwright__.*",
           status="Screening what was just read for instructions aimed at the agent...")
+
+# Every site browsed grows the API layer (Caleb, 2026-10-11: "it should
+# reverse engineer an api so moving forward it gets more and more cracked").
+# Before a browse, a host with taught ops is pointed at them; after one, a host
+# with none is logged and the agent is nudged once per session to teach a
+# read-only op or record why not. Context only, never blocks.
+for _event in ("PreToolUse", "PostToolUse"):
+    _register(_event, hooks_dir + "/api-grow.sh", timeout=5,
+              matcher="WebFetch|Bash|mcp__claude-in-chrome__navigate|mcp__plugin_playwright_playwright__browser_navigate|mcp__chrome-devtools__navigate_page|mcp__chrome-devtools__new_page")
 
 h["Notification"] = [{"hooks": [{
     "type": "command",

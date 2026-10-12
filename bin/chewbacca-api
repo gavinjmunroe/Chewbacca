@@ -10,6 +10,7 @@
 #                                      (brightspace, handshake, usc-reg, usc-fees: from
 #                                      whichever Chrome profile is signed in to USC)
 #   chewbacca api sync                 load the kit's taught sites into the engine
+#   chewbacca api grow                 sites browsed with no op yet, most visited first
 #   chewbacca api install              build the engine, wire MCP into Claude and Codex
 #
 # The engine is goodnight000/api-anything (MIT). It watches a site's own page
@@ -446,6 +447,7 @@ sys.exit(0 if lapsed else 1)' && login_from_profile "$1" quiet >/dev/null 2>&1; 
     fi
     exec api-anything call "$@"
     ;;
+  grow) exec "$ROOT/bin/api-grow" "$@" ;;
   sites|ops|logout|capture|inspect|verify|heal|export|add)
     need_engine || exit 1
     sync_sites --quiet

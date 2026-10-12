@@ -35,7 +35,7 @@ STATE="$HOME/.chewbacca"
 # name|one-line help. Help output, shell completion, and the unknown-command
 # error all read this, so they cannot disagree with each other.
 COMMANDS=(
-  "open|the whole kit on one screen"
+  "open|the whole kit on one screen; add --week for your week in its own window"
   "apps|list, run or test anything the team built (apps/)"
   "doctor|check the install and say what is broken"
   "status|what is installed, what is on, what is stale"

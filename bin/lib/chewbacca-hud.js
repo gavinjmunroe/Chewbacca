@@ -14,6 +14,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
 const { execFileSync } = require("node:child_process");
+const weekly = require("./weekly-dashboard");
 
 let DatabaseSync;
 try {
@@ -674,6 +675,16 @@ function serve({ port = 7474, host = "127.0.0.1", onReady }) {
       res.end(JSON.stringify(snapshot()));
       return;
     }
+    if (req.url.startsWith("/api/week")) {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(weekly.weekSnapshot()));
+      return;
+    }
+    if (req.url === "/week" || req.url.startsWith("/week?")) {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end(weekly.WEEK_PAGE);
+      return;
+    }
     if (req.url === "/" || req.url.startsWith("/?")) {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
       res.end(PAGE);
@@ -696,10 +707,17 @@ if (require.main === module) {
     serve({
       port,
       onReady: () => {
-        const url = `http://localhost:${port}`;
+        const week = process.argv.includes("--week");
+        const url = `http://localhost:${port}${week ? "/week" : ""}`;
         console.log(`  chewbacca is open at ${url}`);
         try {
-          execFileSync("open", [url]);
+          // The week view is a window you arrange, so it gets its own
+          // chrome-less window where Chrome is installed, not a browser tab.
+          if (week && fs.existsSync("/Applications/Google Chrome.app")) {
+            execFileSync("open", ["-na", "Google Chrome", "--args", `--app=${url}`, "--window-size=1180,820"]);
+          } else {
+            execFileSync("open", [url]);
+          }
         } catch {
           /* headless, the URL above is the whole answer */
         }

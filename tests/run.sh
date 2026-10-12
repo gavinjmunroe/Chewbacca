@@ -762,6 +762,11 @@ if group "installer"; then
   check  "brightspace-sync lists each item once and scans without writing" \
     bash "$ROOT/tests/brightspace_sync.sh" "$ROOT"
 
+  # chewbacca open --week reads commits, applications, chats and assignments
+  # from files. A cap on the commit list once hid all of the user's own.
+  check  "the weekly dashboard counts from git and files, not guesses" \
+    python3 "$ROOT/tests/test_weekly_dashboard.py"
+
   # 2026-10-10: the whole USC student path from a scratch HOME, for a student
   # with other courses than Caleb's: install links the real CLI, welcome finds
   # USC, lockin lists courses and pulls files, coursework due reads the result.

@@ -1,6 +1,6 @@
 ---
 name: feedback_policy_engine_errors_are_a_no
-description: Cedar skips a forbid whose condition errors, so a send policy reader must deny on any error and validate strictly; a policy mirror needs a parity test against the code it mirrors
+description: Cedar skips a forbid whose condition errors, so the send policy reader answers no on any error and validates strictly; but a sink refuses only on a NAMED rule, so a broken reader never stops a send; a policy mirror needs a parity test on odd shapes
 metadata:
   type: feedback
 ---
@@ -20,7 +20,17 @@ rule shape. Parity tests run on the odd shapes too, not just the real one.
 **Why:** a gate that fails open on a typo, or a mirror that drifts on an edge
 the test never feeds it, both look green until a text goes out at 1am.
 
-**How to apply:** any rule engine behind a send or guard: deny on error,
-validate strictly, and test parity with the inline code on odd inputs. A
+**But a broken reader never stops a send.** Caleb, 2026-10-12 9:54am, on a
+gate in front of agent sends: "Wait wtf of course it should be able to send
+texts or emails???" So the answer still says no on an error (`send-policy
+could` reports it honestly), and every sink asks `send_policy.refuses()`,
+which is true only when a rule is named. A no with no rule (a crash, a
+timeout, a bad fact) is logged as policy-error and the sink's own inline
+checks stand, the same as with no binary built (4a9748a4).
+
+**How to apply:** any rule engine behind a send or guard: deny on error in
+the engine, validate strictly, test parity with the inline code on odd
+inputs, and let only a named rule refuse at the sink. See
+[[feedback_agents_send_by_default]]. A
 binary lookup never uses a PATH search (tests stub shutil.which for fake
 `mac`, and the lookup found the stub). Links: [[project_chewbacca]].

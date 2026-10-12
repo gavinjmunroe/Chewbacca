@@ -20,6 +20,8 @@ mkdir -p "$HOME/.local/bin" "$T/chrome" "$T/fake"
 unset COURSEWORK_DIR CHEWIE_CHROME_PROFILE CHEWBACCA_ROOT CHEWBACCA_BRAIN_DIR
 # Stock macOS python3 first, the one a fresh Mac has, and an `open` that logs.
 printf '#!/bin/sh\necho "$*" >> "%s/opened"\n' "$T" > "$T/fake/open"; chmod +x "$T/fake/open"
+# Never the real osascript: it would put a tab in the developer's own Chrome.
+printf '#!/bin/sh\necho "osascript $*" | tr "\\n" " " >> "%s/opened"; echo >> "%s/opened"; echo 4242\n' "$T" "$T" > "$T/fake/osascript"; chmod +x "$T/fake/osascript"
 : > "$T/opened"
 export PATH="$T/fake:$HOME/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$NODE_DIR"
 
@@ -172,8 +174,8 @@ mkdir -p "$T/chrome/Profile 3"
 printf '{"profile":{"info_cache":{"Default":{"user_name":"me@gmail.com"},"Profile 3":{"user_name":"trojan@usc.edu"}}}}' > "$T/chrome/Local State"
 export CHEWBACCA_SIGNIN_WAIT=1
 out="$(chewbacca usc lockin 2>&1)"; rc=$?
-grep -q -- '--profile-directory=Profile 3' "$T/opened" && ok "sign-in opens in the profile signed into usc.edu" \
-  || no "sign-in did not use the school profile: $(cat "$T/opened")"
+grep -q -- '-n' "$T/opened" && no "sign-in launched a new browser window: $(cat "$T/opened")" \
+  || ok "sign-in never launches a browser window"
 [ "$rc" = 3 ] && printf '%s' "$out" | grep -q '^BLOCKED: Brightspace' && ! printf '%s' "$out" | grep -q 'Quit Chrome' \
   && ok "signed out says BLOCKED in one line" || no "signed-out lockin: rc=$rc $out"
 chewbacca usc lockin >/dev/null 2>&1

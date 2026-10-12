@@ -50,6 +50,12 @@ for seg in re.split(r"&&|\|\||;|\||\$\(|`", cmd):
     args = words[1:]
     if head == "open":
         flags = "".join(a[1:] for a in args if a.startswith("-") and not a.startswith("--"))
+        # -n hands a browser a new window, and Chrome fronts a new window even
+        # under -g: two flashes on 2026-10-11 came from exactly
+        # `open -g -na "Google Chrome" --args --profile-directory=...`.
+        if "n" in flags and re.search(r"chrome|safari|arc|brave|firefox|edge|comet", seg, re.I):
+            print("open -n starts a browser window, which always comes to the front: " + seg.strip()[:120])
+            raise SystemExit
         if "g" in flags or "R" in flags:
             continue
         targets = [a for a in args if not a.startswith("-")]

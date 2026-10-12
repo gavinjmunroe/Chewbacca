@@ -261,21 +261,64 @@ def open_signin():
         pass
     if os.environ.get("CHEWBACCA_NO_OPEN"):
         return False
-    # In the profile signed into the student's school account. A plain
-    # launch lands in whichever profile was used last, which for Caleb was his
-    # personal one, where USC sign-on fails.
-    try:
-        profile = load_tool("brightspace").PROFILE
-    except Exception:
-        profile = None
-    args = ["open", "-g", "-na", "Google Chrome", "--args"]
-    if profile:
-        args.append(f"--profile-directory={profile}")
-    shown = subprocess.run(args + ["https://brightspace.usc.edu/d2l/home"], check=False).returncode == 0
+    # Never a new window. Handing Chrome a profile on the command line opens a
+    # NEW window and Chrome brings it to the front even under `open -g`: on
+    # 2026-10-11 that flashed over Caleb's work twice ("WHY DID YOU WHIPLASH
+    # FLASH BANG ME WITH A NEW TAB"). Instead add a background tab to a window
+    # that already shows a usc.edu page (that window is the school profile),
+    # put the window's own tab back in front, and close ours once signed in.
+    shown = bool(add_hidden_tab("https://brightspace.usc.edu/d2l/home"))
     if shown:
         SIGNIN_STAMP.parent.mkdir(parents=True, exist_ok=True)
         SIGNIN_STAMP.touch()
     return shown
+
+
+HIDDEN_TAB = None
+
+
+def add_hidden_tab(url):
+    """A tab at the back of a usc.edu window, without activating Chrome. Returns its id."""
+    global HIDDEN_TAB
+    if subprocess.run(["pgrep", "-x", "Google Chrome"], capture_output=True).returncode != 0:
+        return None  # an AppleScript call would launch Chrome, which is its own flash
+    script = f'''
+tell application "Google Chrome"
+  set target to missing value
+  repeat with pass in {{"brightspace.usc.edu", ".usc.edu"}}
+    repeat with w in windows
+      repeat with t in tabs of w
+        if URL of t contains (pass as text) then
+          set target to w
+          exit repeat
+        end if
+      end repeat
+      if target is not missing value then exit repeat
+    end repeat
+    if target is not missing value then exit repeat
+  end repeat
+  if target is missing value then return ""
+  set keep to active tab index of target
+  set made to make new tab at end of tabs of target with properties {{URL:"{url}"}}
+  set active tab index of target to keep
+  return (id of made) as text
+end tell'''
+    r = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+    HIDDEN_TAB = r.stdout.strip() or None
+    return HIDDEN_TAB
+
+
+def close_hidden_tab():
+    if not HIDDEN_TAB:
+        return
+    subprocess.run(["osascript", "-e", f'''
+tell application "Google Chrome"
+  repeat with w in windows
+    repeat with t in tabs of w
+      if (id of t as text) is "{HIDDEN_TAB}" then close t
+    end repeat
+  end repeat
+end tell'''], capture_output=True)
 
 
 def wait_for_session():
@@ -285,11 +328,12 @@ def wait_for_session():
     while time.time() < deadline:
         try:
             if load_tool("brightspace").has_session_cookies():
+                close_hidden_tab()
                 return True
         except Exception:
             pass
         time.sleep(2)
-    return False
+    return False  # the tab stays: it's the sign-in page the student needs
 
 
 def blocked(bs, why):
@@ -314,7 +358,7 @@ def blocked(bs, why):
         if opened and wait_for_session():
             return "retry"
         print("BLOCKED: Brightspace isn't signed in in Chrome yet. "
-              + ("It's open in Chrome now: sign in once with your USC NetID, then rerun."
+              + ("It's waiting as a tab in your USC Chrome window: sign in once there, then rerun."
                  if opened else "Sign in once at https://brightspace.usc.edu in Chrome, then rerun."))
         return 3
     print(f"BLOCKED: {why}")

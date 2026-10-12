@@ -721,6 +721,129 @@ class BlueGreenTests(KitSandbox):
         self.assertIsNotNone(daemon_register.validate({"name": "w", "every": 60, "argv": ["/bin/true"], "swap": "overlap"}))
 
 
+@unittest.skipUnless(NODE, "node not installed")
+class SelfHandoverTests(KitSandbox):
+    """A service that hands itself over (realm-engine run) is never stopped by
+    a kit move. On 2026-10-12 the daemon stop-started the realm engine at
+    14:57:19Z and 15:03:47Z, 30 s and 23 s into two real Claude turns, and
+    both turns died (swaps.jsonl, day-ide-report.md). realm-engine already
+    waits for no turn to be running before it execs the new kit's copy."""
+
+    AGENT = r"""#!/bin/sh
+me=$(cd "$(dirname "$0")" && pwd -P)
+trap 'echo killed >> "{T}/killed.txt"; kill $child 2>/dev/null; exit 0' TERM
+echo "$me" >> "{T}/ran.txt"
+/bin/sh "$me/child.sh" &
+child=$!
+while :; do
+  cur=$(cd "{T}/kit/bin" && pwd -P)
+  if [ "$cur" != "$me" ] && [ ! -e "{T}/busy" ]; then
+    kill $child
+    exec /bin/sh "{T}/kit/bin/agent.sh"
+  fi
+  sleep 0.2
+done
+"""
+
+    launchd = BlueGreenTests.launchd
+    state = BlueGreenTests.state
+
+    def setUp(self):
+        super().setUp()
+        self.daemons = []
+        self.stop_launchd = False
+        for sha in (SHA_A, SHA_B):
+            b = self.tmp / "snapshots" / sha / "bin"
+            (b / "agent.sh").write_text(self.AGENT.replace("{T}", str(self.tmp)))
+            # A child whose command names its snapshot, like realm's node
+            # --import <snapshot>/config/data/realm/origin-guard.mjs.
+            (b / "child.sh").write_text("while :; do sleep 1; done\n")
+
+    def tearDown(self):
+        self.stop_launchd = True
+        for d in self.daemons:
+            if d.poll() is None:
+                d.send_signal(signal.SIGTERM)
+                try:
+                    d.wait(timeout=15)
+                except subprocess.TimeoutExpired:
+                    d.kill()
+        subprocess.run(["/usr/bin/pkill", "-f", str(self.tmp)], capture_output=True)
+        super().tearDown()
+
+    def register_agent(self, **extra):
+        svc = {"name": "realm", "keepalive": "crash",
+               "argv": ["/bin/sh", str(self.tmp / "kit/bin/agent.sh")], **extra}
+        d = self.tmp / "daemon/services"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "realm.json").write_text(json.dumps(svc))
+
+    def run_turn_across_a_move(self):
+        busy = self.tmp / "busy"
+        busy.write_text("a turn is running")
+        self.launchd()
+        first = None
+        for _ in range(80):
+            first = self.state().get("realm", {}).get("pid")
+            if first:
+                break
+            time.sleep(0.25)
+        self.assertTrue(first, "the agent never started")
+        first_daemon = self.daemons[-1].pid
+        self.point(SHA_B)
+        # Two daemon ticks past the restart onto the new kit, turn still running.
+        deadline = time.time() + 30
+        while time.time() < deadline and (self.daemons[-1].pid == first_daemon or len(self.daemons) < 2):
+            time.sleep(0.2)
+        time.sleep(11)
+        killed = self.tmp / "killed.txt"
+        self.assertFalse(killed.exists(), "the kit move killed the agent mid-turn")
+        self.assertEqual(self.state()["realm"]["pid"], first)
+        os.kill(first, 0)
+        # The turn ends: the agent hands itself over, same pid, new kit.
+        busy.unlink()
+        moved = False
+        for _ in range(80):
+            st = self.state().get("realm", {})
+            if st.get("pid") == first and st.get("gen") == SHA_B:
+                moved = True
+                break
+            time.sleep(0.25)
+        self.assertTrue(moved, f"the daemon never saw the handover: {self.state().get('realm')}")
+        self.assertFalse(killed.exists())
+        ran = (self.tmp / "ran.txt").read_text().split()
+        self.assertEqual([Path(r).parent.name for r in ran], [SHA_A, SHA_B])
+        swaps = self.tmp / "daemon/swaps.jsonl"
+        events = [json.loads(l) for l in swaps.read_text().splitlines()] if swaps.exists() else []
+        self.assertEqual([e for e in events if e["service"] == "realm" and e["mode"] != "self"], [])
+        code, st = self.status("--check")
+        self.assertEqual(code, 0, st.get("late"))
+
+    def test_the_realm_engine_adopted_from_its_plist_survives_a_kit_move_mid_turn(self):
+        # The live registration: adopted from com.chewbacca.realm, no swap key.
+        self.register_agent(adoptedFrom="com.chewbacca.realm")
+        self.run_turn_across_a_move()
+
+    def test_swap_self_survives_a_kit_move_mid_turn(self):
+        self.register_agent(swap="self")
+        self.run_turn_across_a_move()
+
+    def test_swap_self_validates_and_registers(self):
+        self.cli("register", "eng", "--restart-on-crash", "--swap", "self", "--", "/bin/true")
+        self.assertEqual(json.loads((self.tmp / "daemon/services/eng.json").read_text())["swap"], "self")
+        r = self.cli("register", "bad", "--every", "60", "--swap", "self", "--", "/bin/true", check=False)
+        self.assertEqual(r.returncode, 2)
+        sys.path.insert(0, str(ROOT / "bin" / "lib"))
+        import daemon_register
+        self.assertIsNone(daemon_register.validate({"name": "w", "keepalive": "crash", "argv": ["/bin/true"], "swap": "self"}))
+
+    def test_a_plist_adopted_realm_registers_as_self_handover(self):
+        out = node_eval("const d=require(%r);console.log(JSON.stringify(d.serviceFromPlist('com.chewbacca.realm',"
+                        "{ProgramArguments:['/usr/bin/env','python3','/x/realm-engine','run'],KeepAlive:{SuccessfulExit:false},RunAtLoad:true})))"
+                        % str(DAEMON), self.env)
+        self.assertEqual(out["swap"], "self")
+
+
 class ListenExecTests(unittest.TestCase):
     def test_people_dashboard_serves_on_the_handed_over_port(self):
         port = free_port()

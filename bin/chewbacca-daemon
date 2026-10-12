@@ -6,7 +6,7 @@
  *   chewbacca-daemon install            write the one LaunchAgent, adopt the old ones
  *   chewbacca-daemon register NAME (--every SEC | --at HH:MM[,HH:MM] | --keepalive | --app PATH)
  *                                [--nice N] [--env K=V]... [--start-later]
- *                                [--swap overlap|stop-start] [--listen PORT] [--health-http PATH] -- ARGV...
+ *                                [--swap overlap|stop-start|self] [--listen PORT] [--health-http PATH] -- ARGV...
  *   chewbacca-daemon unregister NAME
  *   chewbacca-daemon status [--json] [--check]
  *   chewbacca-daemon run                 the supervisor launchd starts
@@ -115,6 +115,17 @@ const SWAP_RETRY_S = 300;
 // starts within this long. launchd brought it back in 5.3 to 8.0 s on
 // 2026-10-12; anything far later is a crash we should not trust.
 const HANDOVER_MAX_S = 120;
+// Services that hand themselves over (swap "self"): the daemon never stops
+// one for a kit move. realm-engine run waits until no agent turn is running,
+// then execs the new kit's copy under the same pid. On 2026-10-12 the daemon
+// stop-started the realm engine at 14:57:19Z and 15:03:47Z, 30 s and 23 s
+// into two real Claude turns, and both turns died. A realm adopted from its
+// old plist carries no swap key, so its label alone says self.
+const SELF_HANDOVER_LABELS = new Set(["com.chewbacca.realm"]);
+// A self service still on the old kit fails `status --check` only past this.
+// Guessed, never measured: the longest real turn on 2026-10-12 was 82 s, and
+// an agent run can go much longer, so an hour before it reads as stuck.
+const SELF_STALE_GRACE_S = 3600;
 // ps prints a start time to the second, and spawn() returns within a few ms
 // of the fork, so a pid whose start is within 2 s of lastStart is ours.
 const SAME_START_MS = 2000;
@@ -140,7 +151,8 @@ function validate(svc) {
   if (svc.keepalive !== undefined && svc.keepalive !== true && svc.keepalive !== "crash") return "--keepalive is true or crash";
   if (svc.every !== undefined && !(Number.isFinite(svc.every) && svc.every >= 5)) return "--every needs whole seconds, at least 5";
   if (svc.at !== undefined && !(Array.isArray(svc.at) && svc.at.length && svc.at.every((t) => /^([01]\d|2[0-3]):[0-5]\d$/.test(t)))) return "--at needs HH:MM times";
-  if (svc.swap !== undefined && !["overlap", "stop-start"].includes(svc.swap)) return "--swap is overlap or stop-start";
+  if (svc.swap !== undefined && !["overlap", "stop-start", "self"].includes(svc.swap)) return "--swap is overlap, stop-start or self";
+  if (svc.swap === "self" && !svc.keepalive) return "--swap self needs --keepalive or --restart-on-crash";
   if (svc.swap === "overlap" && !svc.keepalive) return "--swap overlap needs --keepalive";
   if (svc.listen !== undefined && !(Number.isInteger(svc.listen) && svc.listen > 0 && svc.listen < 65536)) return "--listen needs a port";
   if (svc.health !== undefined && !(svc.health && typeof svc.health.http === "string" && svc.health.http.startsWith("/") && svc.listen))
@@ -148,6 +160,20 @@ function validate(svc) {
   if (svc.app !== undefined) { if (typeof svc.app !== "string" || !svc.app.endsWith(".app")) return "--app needs a .app path"; }
   else if (!Array.isArray(svc.argv) || !svc.argv.length || !svc.argv.every((a) => typeof a === "string")) return "give the command after --";
   return null;
+}
+
+// How a service moves to a new kit. One owner per answer: the registration,
+// or for an adopted realm plist, its label.
+function swapOf(svc) {
+  return svc.swap || (SELF_HANDOVER_LABELS.has(svc.adoptedFrom) ? "self" : undefined);
+}
+
+// The one snapshot a self service's process group runs from now, from ps, or
+// null while it can't tell (none named, or old and new both alive mid-exec).
+function selfGen(pid, table) {
+  const seen = new Set();
+  for (const r of table) if (r.pgid === pid || r.pid === pid) for (const sha of shasIn(r.command)) seen.add(sha);
+  return seen.size === 1 ? [...seen][0] : null;
 }
 
 function register(svc) {
@@ -206,6 +232,7 @@ function serviceFromPlist(label, p) {
     svc.at = slots;
   } else if (p.RunAtLoad) svc.keepalive = true;
   else return null;
+  if (SELF_HANDOVER_LABELS.has(label) && svc.keepalive) svc.swap = "self";
   if (p.EnvironmentVariables) svc.env = p.EnvironmentVariables;
   if (p.WorkingDirectory) svc.cwd = p.WorkingDirectory;
   if (Number.isInteger(p.Nice)) svc.nice = p.Nice;
@@ -831,11 +858,23 @@ function run() {
     // snapshots dir, would restart the service every tick.
     const cur = kitSha();
     swapTick(services, state, ctx);
+    let table = null;
     for (const svc of services) {
       const st = state[svc.name];
       if (!cur || !svc.keepalive || !st || !st.pid || greens.has(svc.name) || st.from === "checkout") continue;
       if (!children.has(svc.name) && !adopted.has(svc.name)) continue;
-      if (!st.gen || st.gen === cur || now < (st.swapRetryAt || 0)) continue;
+      if (!st.gen || st.gen === cur) continue;
+      // A self service moves itself; the daemon only reads where it went.
+      if (swapOf(svc) === "self") {
+        table = table || psTable();
+        const gen = selfGen(st.pid, table);
+        if (gen && gen !== st.gen) {
+          swapEvent({ service: svc.name, mode: "self", from: st.gen, to: gen, result: "handed itself over", ms: 0, downMs: 0 });
+          st.gen = gen; st.from = "kit";
+        }
+        continue;
+      }
+      if (now < (st.swapRetryAt || 0)) continue;
       // An argv pinned to one snapshot (chewbacca-bridge registered its
       // resolved path) would come back on the old code and swap every tick.
       if (generationOf(svc).gen !== cur) continue;
@@ -887,7 +926,7 @@ function generations() {
     const g = pid ? judge(st.gen, new Set([pid])) : { gen: null, seen: [], stale: false, pruned: [], staleFor: 0 };
     // A timed job finishes on the generation it started on, by design.
     if (!s.keepalive && !s.app) g.staleFor = 0;
-    return { name: s.name, when, running, pid, from: pid ? st.from || null : null, ...g,
+    return { name: s.name, when, running, pid, from: pid ? st.from || null : null, self: swapOf(s) === "self", ...g,
       lastStart: st.lastStart || null, lastExit: st.lastExit ?? null };
   });
   const self = readJSON(SELF, {});
@@ -911,7 +950,7 @@ function generations() {
 function status(json, check) {
   const g = generations();
   const loaded = launchctl(["print", `gui/${process.getuid()}/${LABEL}`]).status === 0;
-  const late = g.services.filter((r) => r.stale && r.staleFor > STALE_GRACE_S);
+  const late = g.services.filter((r) => r.stale && r.staleFor > (r.self ? SELF_STALE_GRACE_S : STALE_GRACE_S));
   // The daemon itself waits on a timed job by design, and its keepalive
   // services are swapped meanwhile, so it shows but never fails the check.
   if (check) process.exitCode = late.length ? 1 : 0;
@@ -925,6 +964,7 @@ function status(json, check) {
   if (g.daemon && g.daemon.stale) console.log(`  daemon itself still on ${short(g.daemon.gen)}, ${g.daemon.staleFor}s after the move`);
   for (const r of g.services) {
     const where = !r.running ? "" : r.pruned.length ? `  PRUNED ${short(r.pruned[0])}`
+      : r.stale && r.self ? `  on ${short(r.seen.find((x) => x !== g.current))} for ${r.staleFor}s, moves itself once no turn is running`
       : r.stale ? `  STALE ${short(r.seen.find((x) => x !== g.current))} for ${r.staleFor}s`
       : r.from === "checkout" ? "  from the checkout" : `  ${short(r.gen)}`;
     console.log(`  ${r.name.padEnd(22)} ${r.when.padEnd(16)} ${r.running ? "running" : `last ${ago(r.lastStart)}, exit ${r.lastExit ?? "-"}`}${where}`);
@@ -1002,4 +1042,4 @@ function main(argv) {
 }
 
 if (require.main === module) main(process.argv.slice(2));
-module.exports = { generationOf, shasIn, validate, serviceFromPlist, lastSlot, due, parseRegister, plistXML, adoptLegacy, register, startedAt };
+module.exports = { generationOf, shasIn, swapOf, selfGen, validate, serviceFromPlist, lastSlot, due, parseRegister, plistXML, adoptLegacy, register, startedAt };

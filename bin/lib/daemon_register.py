@@ -38,8 +38,10 @@ def validate(svc: dict) -> Optional[str]:
         return "every needs whole seconds, at least 5"
     if "at" in svc and not (svc["at"] and all(SLOT.match(t) for t in svc["at"])):
         return "at needs HH:MM times"
-    if svc.get("swap") not in (None, "overlap", "stop-start"):
-        return "swap is overlap or stop-start"
+    if svc.get("swap") not in (None, "overlap", "stop-start", "self"):
+        return "swap is overlap, stop-start or self"
+    if svc.get("swap") == "self" and not svc.get("keepalive"):
+        return "swap self needs keepalive"
     if svc.get("swap") == "overlap" and not svc.get("keepalive"):
         return "swap overlap needs keepalive"
     if "listen" in svc and not (isinstance(svc["listen"], int) and 0 < svc["listen"] < 65536):

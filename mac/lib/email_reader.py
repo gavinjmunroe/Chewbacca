@@ -422,6 +422,10 @@ def send(to, subject, text, dry_run=False, runner=subprocess.run):
     key = f"sent|{to.lower()}|{sent_at}|{subject or ''}"
     if dry_run:
         return 0, {"ok": True, "dry_run": True, "id": row_id(key), "argv": argv[:3] + ["--to", to, "--subject", subject or "", "--body", f"<{len(text)} chars>"]}
+    # The one switch every sender honors; this one didn't until 2026-10-11,
+    # so a session that set it to stay safe could still send mail here.
+    if os.environ.get("CHEWBACCA_NO_SEND"):
+        return 3, {"ok": False, "error": "sending is disabled (CHEWBACCA_NO_SEND)"}
     try:
         p = runner(argv, capture_output=True, text=True, timeout=60)
     except FileNotFoundError:

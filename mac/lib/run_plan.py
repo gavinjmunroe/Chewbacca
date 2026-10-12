@@ -14,7 +14,7 @@ and gates every irreversible action in the grammar itself, does not compound.
     chewie plan run     plan.json        run it; confirm-gated actions need --yes
     chewie plan run     plan.json --yes  approve the confirm-gated actions
 """
-import json, os, subprocess, sys
+import json, os, re, subprocess, sys
 
 import time as _time
 from datetime import datetime
@@ -106,6 +106,10 @@ def run_query(q):
         a = ["web", "read"] + ([q["url"]] if q.get("url") else [])
         return _chewie(*a).stdout
     if name == "app_data":
+        # A query reads. An AppleScript that sends is an action, and actions
+        # are confirm-gated; a query was not, so it could send (2026-10-11).
+        if re.search(r"\bsend\b", q["script"], re.I):
+            raise PlanError("an app_data query cannot send; use send_text or send_email")
         return _applescript(q["script"]).stdout
     if name == "file":
         return subprocess.run(["cat", q["path"]], capture_output=True, text=True).stdout
@@ -139,6 +143,8 @@ def run_action(a, approved):
             f'tell application "Calendar" to tell calendar "{cal}" to make new event '
             f'with properties {{summary:"{a["summary"]}", start date:date "{a["start"]}", '
             f'end date:date "{a["start"]}"}}')
+    if name in ("send_text", "send_email") and os.environ.get("CHEWBACCA_NO_SEND"):
+        raise PlanError("sending is disabled (CHEWBACCA_NO_SEND)")
     if name == "send_text":
         return _applescript(
             f'tell application "Messages" to send "{a["body"]}" to buddy "{a["to"]}"')

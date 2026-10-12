@@ -1047,6 +1047,8 @@ if group "installer"; then
     bash "$ROOT/tests/web_headless.sh"
   check  "font-guard refuses code that names a not-installed macOS font" \
     /usr/bin/python3 "$ROOT/tests/test_font_guard.py"
+  check  "every outward send path is listed and keeps its gate" \
+    /usr/bin/python3 "$ROOT/tests/test_send_paths.py"
 
   check  "committed checksums describe the committed tree" \
     python3 "$ROOT/tools/committed_checksums.py"

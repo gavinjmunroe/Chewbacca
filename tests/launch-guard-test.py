@@ -167,6 +167,24 @@ cases = [(*c, None) for c in cases] + [
      None, None, None, 0, None),
 ]
 
+# 2026-10-11: the Bash description is never run. "Quit and relaunch Kyber"
+# there refused a plain quit. The block cases are the seven bypasses a review
+# reproduced against a narrower rule tried the same night; the substring rule
+# must keep refusing every one.
+U = lambda c, want, desc="": (c[:60], "Bash", {"command": c, "description": desc},  # noqa: E731
+                              None, None, None, want, None)
+cases += [
+    U("osascript -e 'quit app \"Kyber\"' && sleep 1 && open -g -a Kyber", 0,
+      "Quit and relaunch Kyber, check listener and surfaces"),
+    U('nice chewie web click "Launch"', 2),
+    U('{ chewie web click "Launch"; }', 2),
+    U('W=launch; chewie web click $W', 2),
+    U('find . -maxdepth 0 -exec chewie web click launch \\;', 2),
+    U('cat <<EOF | osascript\ntell application "System Events" to click button "Launch" of window 1\nEOF', 2),
+    U('echo "a <<END"\nchewie web click launch', 2),
+    U('fish -c "chewie web click launch"', 2),
+]
+
 bad = 0
 for name, tool, ti, receipt, files, last_url, want, chat in cases:
     got = run(tool, ti, receipt, files, last_url, chat)

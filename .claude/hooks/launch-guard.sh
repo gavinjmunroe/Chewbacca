@@ -393,8 +393,15 @@ case "$tool" in
       refuse "the command could not be read."
     # A UI driver clicks whatever page is open, which the command line doesn't
     # show, so a launch-shaped UI action refuses whether or not it names Clay.
-    if printf '%s' "$lower" | grep -qE 'chewie|jev-browse|peekaboo|mac-use|cliclick|osascript' &&
-       printf '%s' "$lower" | grep -qE "$WORDS" && ! chat_ok launch; then
+    # Judged on the command, never the Bash description, which nothing runs:
+    # on 2026-10-11 "Quit and relaunch Kyber" in a description refused a plain
+    # `osascript -e 'quit app "Kyber"'`. Narrowing further (command position,
+    # heredoc bodies) was tried the same night and a review reproduced seven
+    # bypasses (nice, find -exec, `cat <<EOF | osascript`, ...), so the
+    # substring rule stays.
+    cmdlower="$(printf '%s' "$cmd" | tr '[:upper:]' '[:lower:]')"
+    if printf '%s' "$cmdlower" | grep -qE 'chewie|jev-browse|peekaboo|mac-use|cliclick|osascript' &&
+       printf '%s' "$cmdlower" | grep -qE "$WORDS" && ! chat_ok launch; then
       refuse "a UI click can't be tied to one action on one campaign; a person presses Start in the Clay UI."
     fi
     # Cheap first look: a command that never mentions Clay (quotes and

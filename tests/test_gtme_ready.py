@@ -286,6 +286,13 @@ gtme_grade.gate_render(camp, rows, g, company_fields={"audf_firm"})
 text = " ".join(g.fails)
 check("a firm name ending in L.P. that the copy prints fails gate 4", "legal form" in text, g.fails)
 check("a firm name with an emoji that the copy prints fails gate 4", "emoji" in text, g.fails)
+# 2026-10-12: 16 Nordic, Spanish, Italian and French forms passed the first list.
+for name in ("Creandum AB", "Vaaka Partners Oy", "Erhvervsinvest Management A/S", "Magnum Industrial Partners, S.L.",
+             "VAM Investments s.p.a.", "Antin Infrastructure Partners, S.A.S", "SERGAN Management Sàrl",
+             "Capricorn Venture Partners N.V."):
+    check(f"legal form caught: {name}", gtme_grade.LEGAL_SUFFIX.search(name) is not None)
+for name in ("Accel", "Creandum", "Lab Ventures", "Oyster Capital", "Kasab", "Third Lake Capital"):
+    check(f"plain firm name not flagged: {name}", gtme_grade.LEGAL_SUFFIX.search(name) is None)
 
 print(f"\n{'all passed' if not fails else str(fails) + ' failed'}")
 sys.exit(1 if fails else 0)

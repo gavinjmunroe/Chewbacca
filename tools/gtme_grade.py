@@ -153,10 +153,13 @@ def repair(text):
 PLACEHOLDER = re.compile(r"(\[[A-Z][^\]]*\]|\bXXX\b|lorem ipsum|\bTODO\b|(?<!\{)\{(first|company)\w*\}(?!\}))", re.I)
 URL = re.compile(r"^https?://\S+\.\S+", re.I)
 # A legal form at the end of a firm name: L.P., LP, LLC, L.L.C., LLP, Inc., Ltd,
-# GmbH, plc, Corp., S.A., S.a.r.l., AG, B.V., N.V., Pte/Pty Ltd.
+# GmbH, plc, Corp., S.A., S.a.r.l., AG, B.V., N.V., Pte/Pty Ltd. The Nordic,
+# Spanish, Italian and French forms (AB, Oy, A/S, S.L., S.p.A., S.A.S, Sàrl)
+# were added 2026-10-12, when 16 of them survived a cleanup this list missed.
 LEGAL_SUFFIX = re.compile(r"(,\s*|\s+)(l\.?\s?p\.?|l\.?\s?l\.?\s?[cp]\.?|inc\.?|incorporated|ltd\.?|limited|gmbh|"
                           r"plc|corp\.?|corporation|s\.?\s?a\.?|s\.?\s?a\.?\s?r\.?\s?l\.?|a\.?g\.?|b\.?\s?v\.?|"
-                          r"n\.?\s?v\.?|(pte|pty)\.?\s+ltd\.?)\s*$", re.I)
+                          r"n\.?\s?v\.?|(pte|pty)\.?\s+ltd\.?|ab|oy|a/s|s\.?\s?l\.?|s\.?\s?p\.?\s?a\.?|"
+                          r"s\.?\s?a\.?\s?s\.?|s[aà]rl|k\.?\s?k\.?|kg)\s*$", re.I)
 COMPANY_COLS = {"company", "company_name", "firm", "organization"}
 BASE_FIELDS = {"first_name", "last_name", "full_name", "company", "company_name", "email"}
 

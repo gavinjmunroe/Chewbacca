@@ -8,6 +8,9 @@ Always on. Any file made for the user to use or pass on follows this.
 - **They might edit it: `.md`.** Prep sheets, plans, drafts and notes for themselves. They paste it into Google Docs.
 - **It goes to someone else: PDF.** Anything for a teammate, professor, client or investor.
 
+- **Link it by absolute path.** In the reply, link the file as `/Users/<user>/Downloads/<name>` with spaces as `%20`. A link relative to the shell's cwd is dead, because the editor resolves it from the session root (2026-10-11: two `../../Downloads/...` links refused by link-guard on the Chewbacca one-pager).
+- **A one-pager PDF has to be one page.** `chewbacca pdf` has no layout flags, so render from a copy with the blank lines between bullets removed, then read the page count it prints. Over one page means cut bullets, never shrink the type by hand (2026-10-11: 38 bullets spilled 8 lines, 33 fit).
+
 ## Shape follows how it gets used
 
 - **Used live** (a call, a meeting, a demo, a pitch): number the sections in the order things happen, and write the lines as what to say or do at that moment. Open, ask, show, ask for the thing, close.

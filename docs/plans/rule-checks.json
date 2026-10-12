@@ -1,0 +1,163 @@
+{
+  "about": "Every always-loaded rule from docs/plans/context-budget.md and what refuses a break of it. status: check (a file below refuses or flags it), prose (nothing does), propose-delete or propose-move (a proposal for Caleb, nothing deleted). tools/rule_checks.py prints the share with a check and fails if it drops under floor.",
+  "floor": 0.68,
+  "floor_history": [
+    {
+      "date": "2026-10-11",
+      "share": 0.545,
+      "checks": 12,
+      "rules": 22,
+      "source": "context-budget.md as written on 10/11"
+    },
+    {
+      "date": "2026-10-12",
+      "share": 0.682,
+      "checks": 15,
+      "rules": 22,
+      "source": "reengineer step 15"
+    }
+  ],
+  "rules": [
+    {
+      "id": "no-em-dash",
+      "source": "writing.md",
+      "status": "check",
+      "checks": [
+        ".claude/hooks/slop-guard.sh",
+        ".claude/hooks/prose-guard.sh",
+        ".claude/hooks/thinking-dash-guard.sh"
+      ]
+    },
+    {
+      "id": "banned-words-and-slop-shapes",
+      "source": "writing.md",
+      "status": "check",
+      "checks": ["bin/prose-check", "bin/slop-check"]
+    },
+    {
+      "id": "chat-register",
+      "source": "writing.md, core/voice.md",
+      "status": "check",
+      "checks": [".claude/hooks/slop-guard.sh"]
+    },
+    {
+      "id": "essay-into-shared-doc",
+      "source": "writing.md",
+      "status": "check",
+      "checks": [".claude/hooks/essay-gate.sh"]
+    },
+    {
+      "id": "pray-first",
+      "source": "CLAUDE.md",
+      "status": "check",
+      "checks": [".claude/hooks/prayer-guard.sh"]
+    },
+    {
+      "id": "never-hand-a-command",
+      "source": "do-it-yourself.md",
+      "status": "check",
+      "checks": [".claude/hooks/handoff-guard.sh"]
+    },
+    {
+      "id": "scope-words-are-the-spec",
+      "source": "do-it-yourself.md",
+      "status": "check",
+      "checks": [".claude/hooks/scope-guard.sh"]
+    },
+    {
+      "id": "stage-by-name",
+      "source": "git.md",
+      "status": "check",
+      "checks": [".githooks/pre-commit"]
+    },
+    {
+      "id": "heavy-work-through-jobs",
+      "source": "do-it-yourself.md",
+      "status": "check",
+      "checks": [".claude/hooks/load-guard.sh"]
+    },
+    {
+      "id": "never-vercel",
+      "source": "team lesson feedback_never_vercel",
+      "status": "check",
+      "checks": [".claude/hooks/vercel-guard.sh"]
+    },
+    {
+      "id": "never-destroy-uncommitted-work",
+      "source": "git.md",
+      "status": "check",
+      "checks": [".claude/hooks/destructive-guard.sh"]
+    },
+    {
+      "id": "untrusted-content",
+      "source": "untrusted-content.md",
+      "status": "check",
+      "checks": [".claude/hooks/untrusted-screen.sh"]
+    },
+
+    {
+      "id": "no-ai-attribution",
+      "source": "git.md",
+      "status": "check",
+      "since": "2026-10-12",
+      "checks": [".claude/hooks/attribution-guard.sh", ".githooks/commit-msg"]
+    },
+    {
+      "id": "fix-carries-a-test",
+      "source": "review-discipline.md",
+      "status": "check",
+      "since": "2026-10-12",
+      "checks": [".githooks/commit-msg"]
+    },
+    {
+      "id": "never-publish-an-artifact",
+      "source": "CLAUDE.md",
+      "status": "check",
+      "since": "2026-10-12",
+      "checks": [".claude/hooks/artifact-guard.sh"]
+    },
+
+    {
+      "id": "branch-naming",
+      "source": "git.md",
+      "status": "propose-delete",
+      "why": "chewbacca land puts commits straight on main, so the branch name rarely survives a day; nothing reads it."
+    },
+    {
+      "id": "parameterized-sql",
+      "source": "security.md",
+      "status": "propose-move",
+      "why": "Belongs in stack-rules (database) and a lint in repos with SQL, not every shell session."
+    },
+    {
+      "id": "typescript-standards",
+      "source": "typescript.md, 1,288 tokens",
+      "status": "propose-move",
+      "why": "Stack guidance; stack-rules already loads on TypeScript work."
+    },
+    {
+      "id": "naming-conventions",
+      "source": "naming.md, 1,064 tokens",
+      "status": "propose-delete",
+      "why": "Generic conventions the model follows untold; no check could tell a good name from a bad one."
+    },
+    {
+      "id": "intent-is-not-fact",
+      "source": "context-discipline.md",
+      "status": "prose",
+      "why": "Judgment about the user's own life; keep as prose. A check would need to know what happened."
+    },
+    {
+      "id": "debugging-protocol",
+      "source": "CLAUDE.md, 302 tokens",
+      "status": "propose-delete",
+      "why": "Generic steps the debug method hook already prints on debug-shaped prompts."
+    },
+    {
+      "id": "ui-prohibitions",
+      "source": "CLAUDE.md",
+      "status": "propose-delete",
+      "why": "Duplicates design-system.md, which loads on UI files; these load in every shell session."
+    }
+  ]
+}

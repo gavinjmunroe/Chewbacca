@@ -101,3 +101,38 @@ Caleb's call.
 - brain-recall missing a memory a task needed. Its sealed eval
   (`reference_brain_rerank_bench`) is the gate: the indexes stop loading only
   if recall holds on that set.
+
+## Step 15: prose rules become checks or go (2026-10-12)
+
+The table above is now data: `docs/plans/rule-checks.json`, one row per rule,
+read by `tools/rule_checks.py share` (the number) and `verify` (every named
+check exists, hooks are registered in setup.sh, and the share never drops
+under the floor). tests/test_rule_checks.py runs `verify` in the suite.
+
+Number: 12 of 22 rules had a check on 10/11 (54.5%). 15 of 22 now (68.2%).
+
+New checks:
+
+- No AI attribution (git.md): `attribution-guard.sh` on every Bash commit,
+  tag, note or gh pr/issue/release, reading -F message files too, and
+  `.githooks/commit-msg` on every commit in the kit. Human co-authors pass.
+- A fix carries a test (review-discipline.md): `.githooks/commit-msg` refuses
+  a `fix:` commit that changes code with no test file beside it.
+  `NO_TEST_OK="<reason>"` lets one through. Docs, skills, memory and
+  setup.sh-only fixes pass. On the last 300 fix commits on main, 44 had no
+  test and about 28 of those changed code. `chewbacca land --paths` commits
+  with --no-verify, so it runs commit-msg itself now.
+- Never publish an Artifact (CLAUDE.md): `artifact-guard.sh` on the Artifact
+  tool. Read, list, open, quickstart and delete pass. `CHEWBACCA_ARTIFACTS=1`
+  turns it off for a person who wants artifacts.
+
+Proposals for Caleb, nothing deleted (each row's `why` in the JSON):
+
+- Delete: branch naming (git.md), naming.md, the debugging protocol and the
+  UI prohibitions in CLAUDE.md (design-system.md already loads on UI files).
+- Move to stack-rules: typescript.md, parameterized SQL (security.md).
+- Keep as prose: never record intent as fact. It's a judgment about what
+  happened in his life, and no check can see that.
+
+Accepting all six drops about 3,000 tokens from every first turn and takes
+the share to 15 of 16 (94%).

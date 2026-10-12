@@ -1895,6 +1895,13 @@ _register("PreToolUse", hooks_dir + "/destructive-guard.sh", timeout=5,
 _register("PreToolUse", hooks_dir + "/write-log.sh", matcher="Write|Edit|Bash|NotebookEdit")
 _register("PreToolUse", hooks_dir + "/vercel-guard.sh", timeout=5,
           matcher="Bash", status="Checking this deploys to Railway, not Vercel...")
+# 2026-10-12, reengineer step 15: two prose rules that no check backed
+# (docs/plans/context-budget.md). git.md bans AI attribution in commits and
+# CLAUDE.md bans publishing Artifacts; the host's prompt asks for both.
+_register("PreToolUse", hooks_dir + "/attribution-guard.sh", timeout=5,
+          matcher="Bash", status="Checking the message has no AI attribution...")
+_register("PreToolUse", hooks_dir + "/artifact-guard.sh", timeout=5,
+          matcher="Artifact", status="Checking this ships as a repo...")
 # 2026-10-11: two Togari fixes sat as PRs while Railway deploys main;
 # Karthik: never PR on BMA or Amber, push to main. See the hook's header.
 _register("PreToolUse", hooks_dir + "/pr-guard.sh", timeout=5,

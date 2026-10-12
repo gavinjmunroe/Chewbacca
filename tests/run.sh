@@ -893,6 +893,9 @@ if group "installer"; then
     bash "$ROOT/tests/railway_domain_guard.sh"
   check  "vercel-guard refuses Vercel deploys and allows teardown" \
     bash "$ROOT/tests/vercel_guard.sh"
+  # Reengineer step 15: prose rules that became checks, and the share ratchet.
+  check  "attribution, artifact and commit-msg checks refuse what git.md, CLAUDE.md and review-discipline.md ban" \
+    python3 "$ROOT/tests/test_rule_checks.py"
   check  "pr-guard refuses a pull request on a BMA or Amber repo" \
     bash "$ROOT/tests/pr_guard.sh"
   # 2026-10-11, the repeats ranked in docs/plans/REPEAT-MISTAKES.md.

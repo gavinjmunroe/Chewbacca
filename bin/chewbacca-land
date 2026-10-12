@@ -200,6 +200,20 @@ def main():
                 if not run(["git", "diff", "--cached", "--name-only"], wt).stdout.strip():
                     print("land: nothing to land, origin already has these files")
                     return 0
+                # --no-verify skips pre-commit's stale-index check, which a
+                # fresh worktree can't fail, and with it commit-msg. That one
+                # judges the message and staged files (AI attribution, a fix
+                # with no test), so it runs here by hand.
+                hook = os.path.join(wt, ".githooks", "commit-msg")
+                if os.access(hook, os.X_OK):
+                    with tempfile.NamedTemporaryFile("w", suffix=".msg", delete=False) as mf:
+                        mf.write(a.message)
+                    try:
+                        h = subprocess.run([hook, mf.name], cwd=wt, text=True, capture_output=True)
+                    finally:
+                        os.unlink(mf.name)
+                    if h.returncode != 0:
+                        raise SystemExit(f"land: {(h.stderr or h.stdout).strip()}")
                 p = subprocess.run(["git", "commit", "-q", "--no-verify", "-F", "-", "--", *a.paths], cwd=wt, input=a.message, text=True, capture_output=True)
                 if p.returncode != 0:
                     raise SystemExit(f"land: commit failed: {(p.stderr or p.stdout).strip()}")

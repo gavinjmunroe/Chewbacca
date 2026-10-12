@@ -1,0 +1,50 @@
+#!/bin/bash
+# Two prose rules from git.md and review-discipline.md, as a check on the
+# message and the staged files of every commit made in this repo.
+#
+# 1. No AI attribution. git.md: "Never commit Co-Authored-By lines. No AI
+#    attribution in commit messages." Until 2026-10-12 nothing read a commit
+#    message for it (docs/plans/context-budget.md, "prose only"), and the host
+#    asks for that trailer by default. No bypass: the rule has no exceptions.
+#
+# 2. A fix that changes code carries a test. review-discipline.md: "Every bug
+#    fix must include a test that would have caught the bug." Measured on
+#    2026-10-12 over the last 300 fix: commits on main: 44 had no test file,
+#    and about 28 of those changed code (005ecc09, a hookd gate bypass fix,
+#    among them). Docs, skills, memory and setup-only path links are left
+#    alone: 16 of the 44 were those, and they have nothing to test.
+#    Bypass, with the reason in the variable so the next reader sees it:
+#        NO_TEST_OK="mode bit only" git commit ...
+#
+# `chewbacca land --paths` commits with --no-verify, so it runs this file
+# itself before committing. Cherry-picks keep the original's verdict.
+set -uo pipefail
+msg_file="${1:-}"
+[ -f "$msg_file" ] || exit 0
+# Comment lines are what git strips before saving the message.
+msg="$(grep -v '^#' "$msg_file")"
+
+if printf '%s' "$msg" | grep -iqE 'co-authored-by:.*(claude|anthropic|copilot|chatgpt|openai|codex|gemini|cursor)|noreply@anthropic\.com|generated with \[?claude'; then
+  echo "commit-msg: this message carries AI attribution. git.md: never commit Co-Authored-By lines, no AI attribution. Drop the trailer and commit again." >&2
+  exit 1
+fi
+
+subject="$(printf '%s\n' "$msg" | sed -n '/[^[:space:]]/{p;q;}')"
+case "$subject" in fix:*|fix\(*) ;; *) exit 0 ;; esac
+[ -n "${NO_TEST_OK:-}" ] && exit 0
+
+staged="$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null)"
+[ -n "$staged" ] || exit 0
+# A test file anywhere in the commit counts. The names match the suite's own
+# layout: tests/, hud/Tests/, *_test.*, test_*, *.test.*, *.spec.*.
+if printf '%s\n' "$staged" | grep -qE '(^|/)(tests?|Tests)/|(^|/)test_[^/]*$|_test\.[a-z]+$|\.(test|spec)\.[a-z]+$|Tests?\.swift$'; then
+  exit 0
+fi
+code="$(printf '%s\n' "$staged" | grep -E '\.(py|sh|bash|js|mjs|cjs|ts|tsx|swift|rs|go|rb)$|^(bin|tools|crates|mac|hud|\.claude/hooks|\.githooks)/' \
+  | grep -vE '\.md$|^SHA256SUMS\.txt$|^setup\.sh$' || true)"
+[ -n "$code" ] || exit 0
+
+echo "commit-msg: a fix: commit changes code with no test beside it (review-discipline.md: every bug fix carries a test that would have caught it)." >&2
+echo "  code: $(printf '%s' "$code" | head -5 | tr '\n' ' ')" >&2
+echo "  Add the test, or say why there is none: NO_TEST_OK=\"<reason>\" git commit ..." >&2
+exit 1

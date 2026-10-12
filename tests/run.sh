@@ -1664,6 +1664,7 @@ if group "hud"; then
   check  "site-gate calls a flash a flash, a thin phone thin, a deck a deck and a flat screen flat" python3 "$ROOT/tests/test_site_gate_flash_parity.py"
   check  "site-gate refuses a wall of text and passes beats and articles" python3 "$ROOT/tests/site_gate_walls.py"
   check  "untrusted-screen flags text aimed at the agent, and only that" python3 "$ROOT/tests/test_screen.py"
+  check  "api-grow points taught hosts at their ops and nudges untaught ones once" python3 "$ROOT/tests/test_api_grow.py"
   check  "model-route maps Jev's class to the router's targets" python3 "$ROOT/tests/test_model_route.py"
   check  "model-route hands a plan to a cheaper session only with runnable acceptance checks" python3 "$ROOT/tests/test_model_handoff.py"
   check  "intro walks you, a person, an org, and nothing else" python3 "$ROOT/tests/test_intro.py"

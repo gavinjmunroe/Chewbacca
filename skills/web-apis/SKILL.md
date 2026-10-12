@@ -33,27 +33,27 @@ search found nothing, and nothing was sent wrong. `class: "auth"` names the
 Every site's caveats live in `library/api-sites/<site>.md` (and `chewbacca api ops`).
 Read them before the first call: most failures are a param format they spell out.
 
-| site | ops | for |
-| --- | --- | --- |
-| yc | searchCompanies, companiesByBatch, getCompany | T Combinator outbound to YC startups, founders |
-| linkedin | getMe, getProfile, getCompany, searchPeople, searchCompanies | his session; see the LinkedIn warning below |
-| linkedin-jobs | searchJobs, getJob | hiring-surge signals, logged out |
-| producthunt | launchesOnDate, searchProducts, getProduct | just-launched signals, makers |
-| luma | cityEvents, getEvent | LA founder events (`city=la`) |
-| google-maps | searchPlaces, getPlace | small-business sites, local leads |
-| usc-classes | listPrograms, listCourses, getSections, searchCourses | registration planning (20271 = Spring 2027) |
-| rmp | searchProfessors, getProfessor | instructors at USC (`schoolId=U2Nob29sLTEzODE=`) |
-| brightspace | myCourses, upcoming, assignments, submissions, grades, announcements, content | his courses; `chewbacca api login brightspace` first (12 hour session) |
-| usc-jobs | searchJobs, getJob | USC's public staff job board, pay included |
-| usc-events | upcoming, searchEvents | calendar.usc.edu |
-| sc-engage | searchOrgs, getOrg, orgEvents | USC clubs, officers, club events |
-| usc-dining | menuBreakfast, menuBrunch, menuLunch, menuDinner | dining hall menus, a few days ahead |
-| usc-libraries | studyRooms | open study-room slots (read only, never books) |
-| usc-directory | searchPeople | profs and staff: title, department, email |
-| handshake | searchJobs, getJob, events, careerFairs | the student's connectSC session; .json endpoints only, the pages write on load |
-| usc-reg | registrationAppointment, holds, schedule, courseBin, each taking term=<code> (20271 is Spring 2027) | WebReg through the student's USC sign-in; browser tier, 6 to 9 s, run it through `chewbacca jobs submit --net` |
-| usc-fees | registeredTerms, termSummary | Registration and Fee Summary: a term's charges, credits, net charges and units (no balance or due date); `chewbacca api login usc-fees` first |
-| bundled | google-flights, airbnb, amazon, goodreads, youtube, x, instagram, hacker-news | upstream's own |
+| site          | ops                                                                                                 | for                                                                                                                                           |
+| ------------- | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| yc            | searchCompanies, companiesByBatch, getCompany                                                       | T Combinator outbound to YC startups, founders                                                                                                |
+| linkedin      | getMe, getProfile, getCompany, searchPeople, searchCompanies                                        | his session; see the LinkedIn warning below                                                                                                   |
+| linkedin-jobs | searchJobs, getJob                                                                                  | hiring-surge signals, logged out                                                                                                              |
+| producthunt   | launchesOnDate, searchProducts, getProduct                                                          | just-launched signals, makers                                                                                                                 |
+| luma          | cityEvents, getEvent                                                                                | LA founder events (`city=la`)                                                                                                                 |
+| google-maps   | searchPlaces, getPlace                                                                              | small-business sites, local leads                                                                                                             |
+| usc-classes   | listPrograms, listCourses, getSections, searchCourses                                               | registration planning (20271 = Spring 2027)                                                                                                   |
+| rmp           | searchProfessors, getProfessor                                                                      | instructors at USC (`schoolId=U2Nob29sLTEzODE=`)                                                                                              |
+| brightspace   | myCourses, upcoming, assignments, submissions, grades, announcements, content                       | his courses; `chewbacca api login brightspace` first (12 hour session)                                                                        |
+| usc-jobs      | searchJobs, getJob                                                                                  | USC's public staff job board, pay included                                                                                                    |
+| usc-events    | upcoming, searchEvents                                                                              | calendar.usc.edu                                                                                                                              |
+| sc-engage     | searchOrgs, getOrg, orgEvents                                                                       | USC clubs, officers, club events                                                                                                              |
+| usc-dining    | menuBreakfast, menuBrunch, menuLunch, menuDinner                                                    | dining hall menus, a few days ahead                                                                                                           |
+| usc-libraries | studyRooms                                                                                          | open study-room slots (read only, never books)                                                                                                |
+| usc-directory | searchPeople                                                                                        | profs and staff: title, department, email                                                                                                     |
+| handshake     | searchJobs, getJob, events, careerFairs                                                             | the student's connectSC session; .json endpoints only, the pages write on load                                                                |
+| usc-reg       | registrationAppointment, holds, schedule, courseBin, each taking term=<code> (20271 is Spring 2027) | WebReg through the student's USC sign-in; browser tier, 6 to 9 s, run it through `chewbacca jobs submit --net`                                |
+| usc-fees      | registeredTerms, termSummary                                                                        | Registration and Fee Summary: a term's charges, credits, net charges and units (no balance or due date); `chewbacca api login usc-fees` first |
+| bundled       | google-flights, airbnb, amazon, goodreads, youtube, x, instagram, hacker-news                       | upstream's own                                                                                                                                |
 
 Formats that bit during teaching: LinkedIn job locations in full
 (`Austin, Texas, United States`, a bare `Austin` became Colorado); Google Maps
@@ -67,6 +67,17 @@ LinkedIn warning: signed-in LinkedIn calls got both of his Chrome sessions
 revoked on 2026-10-10, minutes after use. Use linkedin-jobs (logged out) for
 anything public, and treat the signed-in `linkedin` ops as a last resort, a
 handful of calls at most.
+
+## Every site browsed grows the API
+
+A hook runs `api-grow` around every browse (WebFetch, the browser MCPs, chewie
+web, jev-browse, scrape, curl). Before the browse, a host that already has ops
+gets them named, so call those. After a browse to a host with none, the visit
+is logged and you're told once per session to teach it. Answer the user first,
+then teach one read-only op for the data you just pulled, as below. A one-off
+page with nothing repeatable (a docs article, one news story) gets
+`api-grow skip <host> "<why>"` instead, so no tab asks again. `chewbacca api
+grow` lists what's been browsed and never taught, most visited first.
 
 ## Teaching a new site
 

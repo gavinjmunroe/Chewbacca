@@ -22,6 +22,14 @@
 
 const crypto = require("node:crypto");
 const fs = require("node:fs");
+// The verdict log (tools/verdicts.py reads it), loaded up front and guarded so
+// a missing file can never throw after a write has gone out.
+let verdictLog;
+try {
+  verdictLog = require("./lib/verdicts");
+} catch {
+  verdictLog = { record() {} };
+}
 const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
@@ -1194,7 +1202,21 @@ async function runOp(name, kv, flags) {
       call: surfaceKey(op, cands[0].s), request, ...(op.verified === false ? { verified: false } : {}) }, EXIT.ok);
   }
   if (isWrite(op)) {
-    const refuse = (reason) => out({ ok: false, op: name, class: "refused", gate: op.gate, reason, payload: { op: name, args }, request }, EXIT.refused);
+    // One verdict row per write (tools/verdicts.py): the op, never its payload.
+    // A reason that names a refusal from the body (unfinishedReply) could quote
+    // it; verdicts.js's scrub drops any reason holding an arg's value.
+    const argValues = Object.values(args || {}).filter((v) => typeof v === "string");
+    const verdict = (decision, reason) => {
+      try {
+        verdictLog.record("send", `clay ${name}`, decision, 0, verdictLog.scrub ? verdictLog.scrub(reason, argValues) : "", `clay ${name}`);
+      } catch {
+        /* a missing row, never a failed write */
+      }
+    };
+    const refuse = (reason) => {
+      verdict(process.env.CHEWBACCA_NO_SEND === "1" ? "held" : "refuse", reason);
+      return out({ ok: false, op: name, class: "refused", gate: op.gate, reason, payload: { op: name, args }, request }, EXIT.refused);
+    };
     if (process.env.CHEWBACCA_NO_SEND === "1") refuse("CHEWBACCA_NO_SEND=1 is set");
     if (!flags.allowWrites) refuse("a write needs --allow-writes");
     const s = cands[0].s;
@@ -1226,6 +1248,7 @@ async function runOp(name, kv, flags) {
     const t0 = Date.now();
     const r = await prep.send();
     const tried = [{ surface: s.type, call: surfaceKey(op, s), ok: !!r.ok, ms: Date.now() - t0, ...(r.ok ? {} : { class: r.class, reason: r.reason }) }];
+    verdict(r.ok ? "sent" : "failed", r.ok ? "" : `${r.class}: ${r.reason}`);
     if (!r.ok) out({ ok: false, op: name, class: r.class, reason: r.reason, sha256: shownHash, tried, ui: uiRoute(op, args) }, EXIT.failed);
     // A write never read back after a real call reads back now, every time,
     // until a person sets verified:true in registry.json.

@@ -341,6 +341,30 @@ def send(target, text, dry_run=False, path=None):
             "channel": reply.get("channel") or channel}
 
 
+def _chewbacca_verdicts():
+    """tools/verdicts.py, the kit's verdict log, loaded by path so no module
+    here can shadow it; None when it isn't there. `chewbacca why --verdicts`
+    reads what it writes."""
+    try:
+        import importlib.util
+        mod = sys.modules.get("chewbacca_verdicts")
+        if mod is None:
+            here = os.path.dirname(os.path.realpath(__file__))
+            spec = importlib.util.spec_from_file_location(
+                "chewbacca_verdicts", os.path.join(here, "../../tools", "verdicts.py"))
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            sys.modules["chewbacca_verdicts"] = mod
+        return mod
+    except Exception:
+        return None
+
+
+# One send row per call (sent, held by CHEWBACCA_NO_SEND, dry-run, failed).
+if _chewbacca_verdicts():
+    send = _chewbacca_verdicts().logged_send("slack send", send, to_key="target")
+
+
 def main():
     argv = sys.argv[1:]
     if argv[:1] == ["send"]:

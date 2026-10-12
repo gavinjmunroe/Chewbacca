@@ -36,6 +36,7 @@ type hook_init >/dev/null 2>&1 && hook_init machine-budget.sh 5
 # load-guard reads) lets a fan-out through when Caleb said it's worth it.
 
 set -uo pipefail
+type hook_unbuffer >/dev/null 2>&1 && hook_unbuffer  # stderr goes straight to the host from here on
 exec /usr/bin/env python3 -I -c '
 import json, os, re, subprocess, sys, time
 

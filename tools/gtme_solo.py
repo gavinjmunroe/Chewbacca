@@ -669,6 +669,35 @@ def mime(m: dict, sender: dict) -> dict:
     return body
 
 
+def _chewbacca_verdicts():
+    """tools/verdicts.py, the kit's verdict log, loaded by path so no module
+    here can shadow it; None when it isn't there. `chewbacca why --verdicts`
+    reads what it writes."""
+    try:
+        import importlib.util
+        mod = sys.modules.get("chewbacca_verdicts")
+        if mod is None:
+            here = os.path.dirname(os.path.realpath(__file__))
+            spec = importlib.util.spec_from_file_location(
+                "chewbacca_verdicts", os.path.join(here, ".", "verdicts.py"))
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            sys.modules["chewbacca_verdicts"] = mod
+        return mod
+    except Exception:
+        return None
+
+
+# One send row per batch: sent, held by CHEWBACCA_NO_SEND, or refused by a
+# gate above (stale, changed, already sent).
+def _logged_cmd_send(fn):
+    v = _chewbacca_verdicts()
+    if not v:
+        return fn
+    return v.logged_send("gtme send", fn, who=lambda a, k: "", about=lambda a, k: "%s batch %s" % (
+        getattr(a[0], "client", ""), getattr(a[0], "batch", "")))
+
+
 def cmd_send(a) -> int:
     plan = plan_of(a.client)
     d = cdir(a.client)
@@ -738,6 +767,9 @@ def cmd_send(a) -> int:
     op.write_json(path, batch)
     print(f"{sent} of {len(batch['mails'])} sent from your Gmail.")
     return 0
+
+
+cmd_send = _logged_cmd_send(cmd_send)
 
 
 # ── inbox: what came back ─────────────────────────────────────────────────

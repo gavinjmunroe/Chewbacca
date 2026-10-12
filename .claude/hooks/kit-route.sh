@@ -18,8 +18,43 @@ type hook_init >/dev/null 2>&1 && hook_init kit-route.sh 5
 KIT_ROUTE_PAYLOAD=$(cat)
 export KIT_ROUTE_PAYLOAD
 
+type hook_unbuffer >/dev/null 2>&1 && hook_unbuffer  # stderr goes straight to the host from here on
 exec python3 -I <<'PY'
-import json, os, re, subprocess, sys
+import atexit, json, os, re, subprocess, sys, time
+
+_T0 = time.time()
+
+def _verdict(kind, name, decision, ms=0, reason="", subject="", event="", session=""):
+    """One row in ~/.chewbacca/logs/verdicts.tsv, the format tools/verdicts.py
+    reads (`chewbacca why --verdicts`). Inlined in skill-route.sh and
+    kit-route.sh because install.sh copies only *.sh into ~/.claude/hooks.
+    Never raises."""
+    try:
+        if os.environ.get("CHEWBACCA_VERDICTS") == "0":
+            return
+        import time as _time
+        path = os.environ.get("CHEWBACCA_VERDICT_LOG") or os.path.join(
+            os.environ.get("CHEWBACCA_LOG_DIR") or os.path.expanduser("~/.chewbacca/logs"), "verdicts.tsv")
+        def c(value, cap):
+            return str(value or "").replace("\t", " ").replace("\n", " ").replace("\r", " ")[:cap]
+        row = "\t".join([str(int(_time.time() * 1000)), kind, c(name, 200), c(event, 60), c(decision, 40),
+                         str(int(ms or 0)), c(session or os.environ.get("CLAUDE_CODE_SESSION_ID", ""), 80),
+                         c(subject, 300), c(reason, 600)]) + "\n"
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        try:
+            os.write(fd, row.encode("utf-8", "replace"))
+        finally:
+            os.close(fd)
+    except Exception:
+        pass
+
+
+# One verdict row per prompt: the kit or project it pointed at, or none.
+_ROUTED = {"decision": "skip", "reason": ""}
+atexit.register(lambda: _verdict("router", "kit-route.sh", _ROUTED["decision"], (time.time() - _T0) * 1000,
+                                 _ROUTED["reason"], event="UserPromptSubmit",
+                                 session=str((globals().get("payload") or {}).get("session_id") or "")))
 
 try:
     payload = json.loads(os.environ.get("KIT_ROUTE_PAYLOAD") or "{}")
@@ -242,6 +277,7 @@ if not best:
 
 _, name, path, _hits, kind = best
 short = path.replace(os.path.expanduser("~"), "~")
+_ROUTED.update(decision="route", reason="%s %s at %s" % (kind, name, short))
 
 print(json.dumps({
     "hookSpecificOutput": {

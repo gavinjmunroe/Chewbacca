@@ -305,6 +305,32 @@ def send(network, room, text, dry_run=False, client=None):
     return {"ok": bool(out.get("event_id")), "event_id": out.get("event_id", "")}
 
 
+def _chewbacca_verdicts():
+    """tools/verdicts.py, the kit's verdict log, loaded by path so no module
+    here can shadow it; None when it isn't there. `chewbacca why --verdicts`
+    reads what it writes."""
+    try:
+        import importlib.util
+        mod = sys.modules.get("chewbacca_verdicts")
+        if mod is None:
+            here = os.path.dirname(os.path.realpath(__file__))
+            spec = importlib.util.spec_from_file_location(
+                "chewbacca_verdicts", os.path.join(here, "../../tools", "verdicts.py"))
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            sys.modules["chewbacca_verdicts"] = mod
+        return mod
+    except Exception:
+        return None
+
+
+# One send row per call (sent, held by CHEWBACCA_NO_SEND, dry-run, failed).
+if _chewbacca_verdicts():
+    send = _chewbacca_verdicts().logged_send(
+        "matrix send", send, who=lambda a, k: "%s %s" % (k.get("network", a[0] if a else ""),
+                                                      k.get("room", a[1] if len(a) > 1 else "")))
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     if argv and argv[0] == "room":

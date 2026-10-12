@@ -31,6 +31,14 @@
 "use strict";
 
 const { execFile, spawn } = require("node:child_process");
+// The verdict log, loaded up front and guarded so a missing file can never
+// throw after a send has gone out (review, 2026-10-12).
+let verdicts;
+try {
+  verdicts = require("./verdicts");
+} catch {
+  verdicts = { sendRow() {} };
+}
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -902,10 +910,13 @@ function createWrites({ bin, registryFile, choicesFor }) {
     if (!now || now !== d.bind)
       return refuse("where it would go has changed since the draft");
     if (process.env.CHEWBACCA_NO_SEND) {
+      verdicts.sendRow(`mcp ${d.entry}`, "held", d.bind.slice(0, 120), "CHEWBACCA_NO_SEND");
       logEvent({ op: "confirm-no-send", write: d.entry, draft: id }, who);
       return `CHEWBACCA_NO_SEND is set, so nothing was sent. The draft checked out: ${d.bind.slice(0, 200)}`;
     }
     const r = await kind.send({ ...d, argv });
+    verdicts.sendRow(`mcp ${d.entry}`, r.code === 0 ? "sent" : "failed", d.bind.slice(0, 120),
+      r.code === 0 ? "" : `exit ${r.code}`);
     logEvent({ op: "confirm", write: d.entry, draft: id, exit: r.code }, who);
     return r.code === 0 ? `Sent. ${said(r)}` : `Not sent: ${said(r)}`;
   }

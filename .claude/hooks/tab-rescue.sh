@@ -30,7 +30,7 @@ stamp_due() {  # stamp_due <file> <seconds>
 
 SIM_REAP="${SIM_REAP_BIN:-$(command -v sim-reap 2>/dev/null)}"
 if [ -n "$SIM_REAP" ] && stamp_due "$LOG_DIR/.sim-reap-stamp" "${SIM_REAP_INTERVAL:-600}"; then
-  ( nice -n 19 python3 -I "$SIM_REAP" >> "$LOG_DIR/sim-reap.log" 2>&1 ) </dev/null >/dev/null 2>&1 &
+  ( nice -n 19 python3 -I "$SIM_REAP" >> "$LOG_DIR/sim-reap.log" 2>&1 ) </dev/null >/dev/null 2>&1 8>&- &
   disown 2>/dev/null || true
 fi
 
@@ -38,7 +38,7 @@ fi
 # (load 37 on 14 cores, 2026-10-10). New tabs start at 0, hence once a minute.
 NICER="${AGENT_NICE_BIN:-$(command -v agent-nice 2>/dev/null)}"
 if [ -n "$NICER" ] && stamp_due "$LOG_DIR/.agent-nice-stamp" "${AGENT_NICE_INTERVAL:-60}"; then
-  ( python3 -I "$NICER" >> "$LOG_DIR/agent-nice.log" 2>&1 ) </dev/null >/dev/null 2>&1 &
+  ( python3 -I "$NICER" >> "$LOG_DIR/agent-nice.log" 2>&1 ) </dev/null >/dev/null 2>&1 8>&- &
   disown 2>/dev/null || true
 fi
 

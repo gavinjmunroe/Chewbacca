@@ -102,6 +102,9 @@ fn spawn(script: &PathBuf) -> std::io::Result<Child> {
         .arg(script)
         // The guard's own first line hands it to hookd unless this is set.
         .env("HOOKD_INNER", "1")
+        // hookd writes this guard's verdict row (main.rs); lib.sh writes none
+        // when its parent is this pid (a deeper process still logs).
+        .env("HOOKD_VERDICTS", std::process::id().to_string())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

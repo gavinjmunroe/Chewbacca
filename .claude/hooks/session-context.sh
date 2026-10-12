@@ -290,7 +290,7 @@ if command -v people >/dev/null 2>&1; then
   # otherwise log a second, wildly wrong duration minutes later.
   ( trap - EXIT
     people texts sync >/dev/null 2>&1
-    people events auto >/dev/null 2>&1 ) >/dev/null 2>&1 &
+    people events auto >/dev/null 2>&1 ) >/dev/null 2>&1 8>&- &
   disown 2>/dev/null || true
 fi
 

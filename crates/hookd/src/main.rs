@@ -22,6 +22,7 @@ mod dispatch;
 mod gate;
 mod json;
 mod terminal;
+mod verdicts;
 
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
@@ -43,35 +44,69 @@ pub(crate) fn head_of(script: &Path) -> String {
     String::from_utf8_lossy(&buf).into_owned()
 }
 
-fn run_guard(script: &Path, args: &[String], payload: &[u8]) -> i32 {
+/// What a guard run directly handed back: its exit, and the stdout and
+/// stderr it printed, which run_guard has already passed on to the host.
+pub(crate) struct Ran {
+    pub code: i32,
+    pub stdout: Vec<u8>,
+    pub stderr: Vec<u8>,
+}
+
+fn run_guard(script: &Path, args: &[String], payload: &[u8]) -> Ran {
     let child = Command::new("/bin/bash")
         .arg(script)
         .args(args)
         // The guard's own first line hands it to hookd unless this is set,
         // so a guard run by hookd runs its body instead of looping back.
         .env("HOOKD_INNER", "1")
+        // hookd writes this guard's verdict row; lib.sh writes none when its
+        // parent is this pid (a deeper process inheriting it still logs).
+        .env("HOOKD_VERDICTS", std::process::id().to_string())
         .stdin(Stdio::piped())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
+        // Read here, then handed on unchanged, so the row can say why. The
+        // host reads a hook's output only once it exits, as it did before.
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn();
     let mut child = match child {
         Ok(child) => child,
         // The guard itself could not start. The host would have seen the
         // same failure running it directly; report it the same way.
         Err(err) => {
-            eprintln!("hookd: could not start {}: {err}", script.display());
-            return 1;
+            let msg = format!("hookd: could not start {}: {err}\n", script.display());
+            eprint!("{msg}");
+            return Ran { code: 1, stdout: Vec::new(), stderr: msg.into_bytes() };
         }
     };
     if let Some(mut stdin) = child.stdin.take() {
         // A guard that exits before reading everything closes the pipe;
-        // that is its business, not an error.
-        let _ = stdin.write_all(payload);
+        // that is its business, not an error. A thread, so a guard that
+        // prints a lot before it reads can't stall on a full pipe.
+        let body = payload.to_vec();
+        std::thread::spawn(move || {
+            let _ = stdin.write_all(&body);
+        });
     }
-    match child.wait() {
-        Ok(status) => status.code().unwrap_or(1),
-        Err(_) => 1,
-    }
+    // Read to the end, as the host did when it held these pipes itself: a
+    // guard whose child keeps stdout open made the host wait then too. A
+    // shorter wait could cut a JSON deny on stdout into an allow (review,
+    // 2026-10-12), so nothing here gives up before the host's own timeout.
+    let ran = match child.wait_with_output() {
+        Ok(out) => Ran { code: out.status.code().unwrap_or(1), stdout: out.stdout, stderr: out.stderr },
+        Err(_) => Ran { code: 1, stdout: Vec::new(), stderr: Vec::new() },
+    };
+    let _ = std::io::stdout().write_all(&ran.stdout);
+    let _ = std::io::stderr().write_all(&ran.stderr);
+    ran
+}
+
+/// The verdict row for a guard that ran.
+fn record(script: &Path, payload: &[u8], code: i32, stdout: &[u8], stderr: &[u8], took: std::time::Duration) {
+    let _ = std::panic::catch_unwind(|| {
+        let name = script.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let (decision, reason) = verdicts::decision(code, stdout, stderr);
+        verdicts::write(&name, &verdicts::call(payload), decision, &reason, took);
+    });
 }
 
 fn log_path() -> Option<PathBuf> {
@@ -115,7 +150,11 @@ fn gate(args: &[String]) -> i32 {
     let verdict = std::panic::catch_unwind(|| decide(&head, &payload)).unwrap_or(Verdict::Run);
     let code = match verdict {
         Verdict::Skip => 0,
-        Verdict::Run => run_guard(&script, &args[1..], &payload),
+        Verdict::Run => {
+            let ran = run_guard(&script, &args[1..], &payload);
+            record(&script, &payload, ran.code, &ran.stdout, &ran.stderr, started.elapsed());
+            ran.code
+        }
     };
     trace(&script, verdict, code, started.elapsed().as_micros());
     code
@@ -150,12 +189,15 @@ fn dispatch(args: &[String]) -> i32 {
         // the call through every guard at once. Run them all, plainly, one by
         // one, and keep any block.
         Err(_) => {
-            let codes: Vec<i32> = guards.iter().map(|g| run_guard(&g.script, &[], &payload)).collect();
+            let codes: Vec<i32> = guards.iter().map(|g| run_guard(&g.script, &[], &payload).code).collect();
             return if codes.contains(&2) { 2 } else { codes.into_iter().find(|c| *c != 0).unwrap_or(0) };
         }
     };
     for (guard, (verdict, outcome, at)) in guards.iter().zip(&results) {
         trace(&guard.script, *verdict, outcome.code, at.as_micros());
+        if *verdict == Verdict::Run {
+            record(&guard.script, &payload, outcome.code, &outcome.stdout, &outcome.stderr, *at);
+        }
     }
     let outcomes: Vec<dispatch::Outcome> = results.into_iter().map(|(_, o, _)| o).collect();
     let merged = std::panic::catch_unwind(|| dispatch::merge(&outcomes))
@@ -207,7 +249,11 @@ fn terminal_event(args: &[String]) -> i32 {
     let (verdict, code) = match fast {
         // Written here; the script (and its Python) never starts.
         Some(()) => (Verdict::Skip, 0),
-        None => (Verdict::Run, run_guard(&script, &args[1..], &payload)),
+        None => {
+            let ran = run_guard(&script, &args[1..], &payload);
+            record(&script, &payload, ran.code, &ran.stdout, &ran.stderr, started.elapsed());
+            (Verdict::Run, ran.code)
+        }
     };
     trace(&script, verdict, code, started.elapsed().as_micros());
     code

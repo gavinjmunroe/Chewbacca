@@ -59,7 +59,7 @@ COMMANDS=(
   "changelog|what changed between versions"
   "skills|list, search, or show a skill"
   "commands|list, search, or show a slash command"
-  "why|which rule or skill governs a behavior"
+  "why|which rule or skill governs a behavior; --refused says what refused and why"
   "log|what the kit has done recently"
   "bench|time the things that run on every session"
   "context|measure what the kit costs you before you type"

@@ -1068,6 +1068,8 @@ if group "installer"; then
     /usr/bin/python3 "$ROOT/tests/test_hookd_terminal.py"
   check  "the bash parser only drops refusals of words the shell never runs, and the guards' suites hold with it" \
     /usr/bin/python3 "$ROOT/tests/test_bashparse.py"
+  check  "every hook, router and send writes one verdict row, and why --refused reads them" \
+    /usr/bin/python3 "$ROOT/tests/test_verdicts.py"
 
   check  "committed checksums describe the committed tree" \
     python3 "$ROOT/tools/committed_checksums.py"

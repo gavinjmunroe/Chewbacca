@@ -681,17 +681,44 @@ def run_sql(store: str, statement: str, limit: int) -> dict:
         con.close()
 
 
+def _chewbacca_verdicts():
+    """tools/verdicts.py, the kit's verdict log, loaded by path so no module
+    here can shadow it; None when it isn't there. `chewbacca why --verdicts`
+    reads what it writes."""
+    try:
+        import importlib.util
+        mod = sys.modules.get("chewbacca_verdicts")
+        if mod is None:
+            here = os.path.dirname(os.path.realpath(__file__))
+            spec = importlib.util.spec_from_file_location(
+                "chewbacca_verdicts", os.path.join(here, "../tools", "verdicts.py"))
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            sys.modules["chewbacca_verdicts"] = mod
+        return mod
+    except Exception:
+        return None
+
+
 def forward_to_app(store: str, verb: str, args: list[str]) -> int:
     app, _verbs = APP_VERBS[store]
+    sends = store == "messages" and verb == "send"
+    v = _chewbacca_verdicts() if sends else None
+    to = args[0] if args else ""
     if store == "messages" and os.environ.get("CHEWBACCA_NO_SEND"):
         # 2026-10-08: a live test send reached a client. CHEWBACCA_NO_SEND
         # turns every send into a printout.
         print(f"[no send] mac messages send {' '.join(args)}")
+        if v:
+            v.send_row("mac-db messages send", "held", to, "CHEWBACCA_NO_SEND")
         return 0
     exe = shutil.which("mac")
     if not exe:
         raise Unreadable("the `mac` CLI is missing; ./doctor.sh says how to install it")
-    return subprocess.run([exe, app, verb, *args]).returncode
+    code = subprocess.run([exe, app, verb, *args]).returncode
+    if v:
+        v.send_row("mac-db messages send", "sent" if code == 0 else "failed", to, "" if code == 0 else "exit %d" % code)
+    return code
 
 
 # ---- output ------------------------------------------------------------------

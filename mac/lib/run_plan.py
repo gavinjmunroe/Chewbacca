@@ -88,6 +88,31 @@ def _chewie(*args):
     return subprocess.run([BIN, *args], capture_output=True, text=True)
 
 
+def _chewbacca_verdicts():
+    """tools/verdicts.py, the kit's verdict log, loaded by path so no module
+    here can shadow it; None when it isn't there. `chewbacca why --verdicts`
+    reads what it writes."""
+    try:
+        import importlib.util
+        mod = sys.modules.get("chewbacca_verdicts")
+        if mod is None:
+            here = os.path.dirname(os.path.realpath(__file__))
+            spec = importlib.util.spec_from_file_location(
+                "chewbacca_verdicts", os.path.join(here, "../../tools", "verdicts.py"))
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            sys.modules["chewbacca_verdicts"] = mod
+        return mod
+    except Exception:
+        return None
+
+
+def _send_row(name, decision, a, reason=""):
+    v = _chewbacca_verdicts()
+    if v:
+        v.send_row("plan " + name, decision, a.get("to"), reason, values=(a.get("body"), a.get("subject")))
+
+
 def _applescript(script):
     return subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
 
@@ -149,16 +174,21 @@ def run_action(a, approved):
             f'with properties {{summary:"{a["summary"]}", start date:date "{a["start"]}", '
             f'end date:date "{a["start"]}"}}')
     if name in ("send_text", "send_email") and os.environ.get("CHEWBACCA_NO_SEND"):
+        _send_row(name, "held", a, "CHEWBACCA_NO_SEND")
         raise PlanError("sending is disabled (CHEWBACCA_NO_SEND)")
     if name == "send_text":
-        return _applescript(
+        r = _applescript(
             f'tell application "Messages" to send "{a["body"]}" to buddy "{a["to"]}"')
+        _send_row(name, "sent" if r.returncode == 0 else "failed", a, (r.stderr or "").strip())
+        return r
     if name == "send_email":
-        return _applescript(
+        r = _applescript(
             f'tell application "Mail"\nset m to make new outgoing message with properties '
             f'{{subject:"{a["subject"]}", content:"{a["body"]}", visible:true}}\n'
             f'tell m to make new to recipient at end of to recipients '
             f'with properties {{address:"{a["to"]}"}}\ntell m to send\nend tell')
+        _send_row(name, "sent" if r.returncode == 0 else "failed", a, (r.stderr or "").strip())
+        return r
     if name == "run_shell":
         return subprocess.run(["bash", "-c", a["cmd"]], capture_output=True, text=True)
     raise PlanError(f"no runner for action {name}")

@@ -48,6 +48,7 @@ print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart",
       "additionalContext": os.environ.get("MSG", "")}}))
 PY
 }
+type hook_unbuffer >/dev/null 2>&1 && hook_unbuffer  # stderr goes straight to the host from here on
 trap flush EXIT
 
 # ── Which repo ────────────────────────────────────────────────────────────────

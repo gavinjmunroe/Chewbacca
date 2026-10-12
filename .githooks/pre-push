@@ -89,6 +89,10 @@ touched '^(\.claude/hooks/|crates/hookd/|tools/hookd_replay\.py|tests/fixtures/h
 # guard's header, hookd or setup's folding can lose a block, so it runs here.
 touched '^(setup\.sh|\.claude/hooks/|crates/hookd/)' && \
   run "one hookd dispatch answers like separate hooks" /usr/bin/python3 tests/test_hookd_dispatch.py
+# lib.sh holds every hook's stderr to read its refusal; a change there or in
+# hookd that lost or reordered it would change what the host sees.
+touched '^(\.claude/hooks/lib\.sh|crates/hookd/|tools/verdicts\.py|bin/lib/verdicts\.js|bin/lib/why\.sh)' && \
+  run "every verdict logged, output unchanged" /usr/bin/python3 tests/test_verdicts.py
 touched '^(\.claude/hooks/terminal-loop\.sh|crates/hookd/|mac/lib/terminal(_events)?\.py)' && \
   run "hookd's board rows match the Python terminal hook" /usr/bin/python3 tests/test_hookd_terminal.py
 # Six team notes reached main with no index line on 2026-10-10 and the

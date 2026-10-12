@@ -33,8 +33,36 @@ SKILL_ROUTE_PAYLOAD=$(cat)
 export SKILL_ROUTE_PAYLOAD
 export SKILL_ROUTE_SELF="${BASH_SOURCE[0]}"
 
+type hook_unbuffer >/dev/null 2>&1 && hook_unbuffer  # stderr goes straight to the host from here on
 exec python3 -I <<'PY'
-import atexit, json, os, re, sys
+import atexit, json, os, re, sys, time
+
+_T0 = time.time()
+
+def _verdict(kind, name, decision, ms=0, reason="", subject="", event="", session=""):
+    """One row in ~/.chewbacca/logs/verdicts.tsv, the format tools/verdicts.py
+    reads (`chewbacca why --verdicts`). Inlined in skill-route.sh and
+    kit-route.sh because install.sh copies only *.sh into ~/.claude/hooks.
+    Never raises."""
+    try:
+        if os.environ.get("CHEWBACCA_VERDICTS") == "0":
+            return
+        import time as _time
+        path = os.environ.get("CHEWBACCA_VERDICT_LOG") or os.path.join(
+            os.environ.get("CHEWBACCA_LOG_DIR") or os.path.expanduser("~/.chewbacca/logs"), "verdicts.tsv")
+        def c(value, cap):
+            return str(value or "").replace("\t", " ").replace("\n", " ").replace("\r", " ")[:cap]
+        row = "\t".join([str(int(_time.time() * 1000)), kind, c(name, 200), c(event, 60), c(decision, 40),
+                         str(int(ms or 0)), c(session or os.environ.get("CLAUDE_CODE_SESSION_ID", ""), 80),
+                         c(subject, 300), c(reason, 600)]) + "\n"
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        try:
+            os.write(fd, row.encode("utf-8", "replace"))
+        finally:
+            os.close(fd)
+    except Exception:
+        pass
 
 
 def route_shadow(row):
@@ -106,6 +134,30 @@ SHADOW = {"hook": "skill-route", "session_id": str(payload.get("session_id") or 
           "gate_threshold": None, "candidates": [], "shown": [], "required": []}
 if not os.environ.get("SKILL_ROUTE_BUILD_CACHE"):
     atexit.register(lambda: route_shadow(dict(SHADOW)))
+
+
+def _route_verdict():
+    """What this prompt was routed to, as one verdict row: require (a skill
+    the next tool call is gated on), route (skills shown), or skip with the
+    gate that stopped it. The prompt itself stays in route-shadow.jsonl."""
+    if SHADOW.get("required"):
+        decision = "require"
+    elif SHADOW.get("shown"):
+        decision = "route"
+    else:
+        decision = "skip"
+    top = ", ".join("%s %s" % (c.get("name"), c.get("score")) for c in (SHADOW.get("candidates") or [])[:3])
+    parts = [("required: " + ", ".join(SHADOW["required"])) if SHADOW.get("required") else "",
+             ("shown: " + ", ".join(SHADOW["shown"])) if SHADOW.get("shown") else "",
+             ("gate: " + SHADOW["gate"]) if SHADOW.get("gate") else "",
+             ("top: " + top) if top else "",
+             ("method: " + SHADOW["method"]) if SHADOW.get("method") else ""]
+    _verdict("router", "skill-route.sh", decision, (time.time() - _T0) * 1000,
+             "; ".join(x for x in parts if x), event="UserPromptSubmit", session=SHADOW.get("session_id", ""))
+
+
+if not os.environ.get("SKILL_ROUTE_BUILD_CACHE"):
+    atexit.register(_route_verdict)
 # Too short to match on, or a slash command the person already chose.
 if len(prompt) < 12 or prompt.startswith("/"):
     SHADOW["gate"] = "short-or-slash"

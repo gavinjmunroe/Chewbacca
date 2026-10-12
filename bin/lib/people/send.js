@@ -23,6 +23,14 @@ const { findPerson } = require("./lookup");
 const { quietFor } = require("./quiet-hours");
 
 const { APPS, BRIDGED } = require("./apps");
+// Loaded up front and guarded, so a missing file can never throw after a
+// send has already gone out (review, 2026-10-12).
+let verdicts;
+try {
+  verdicts = require("../verdicts");
+} catch {
+  verdicts = { sendRow() {} };
+}
 
 // The LinkedIn export (msg_id under 6e12) is a one-time dump with nowhere to
 // reply; only bridged LinkedIn rows (6e12 and up) are a thread send can use.
@@ -231,7 +239,25 @@ function openAutomationPane() {
   return true;
 }
 
+// One send row per call: sent, held by CHEWBACCA_NO_SEND, or failed. The
+// child it hands a send to (gmail.py, slack.py, matrix.py) writes none.
 function dispatch(via, to, text, flags) {
+  const started = Date.now();
+  const before = process.env.CHEWBACCA_SEND_LOGGED;
+  process.env.CHEWBACCA_SEND_LOGGED = "1";
+  let r;
+  try {
+    r = dispatchUnlogged(via, to, text, flags);
+  } finally {
+    if (before === undefined) delete process.env.CHEWBACCA_SEND_LOGGED;
+    else process.env.CHEWBACCA_SEND_LOGGED = before;
+  }
+  const decision = r.code === 0 ? "sent" : r.code === 3 ? "held" : "failed";
+  verdicts.sendRow(`people send ${via}`, decision, to, r.code === 0 ? "" : r.err || `exit ${r.code}`, started, [text]);
+  return r;
+}
+
+function dispatchUnlogged(via, to, text, flags) {
   // Tests set this so a mistake in a test can never reach a real phone. On
   // 2026-10-08 a check meant to refuse a send had not applied, and the test
   // call delivered "hi" to a client.

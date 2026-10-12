@@ -25,6 +25,7 @@ type hook_init >/dev/null 2>&1 && hook_init ask-capture.sh 3
 ASK_PAYLOAD=$(cat)
 export ASK_PAYLOAD
 
+type hook_unbuffer >/dev/null 2>&1 && hook_unbuffer  # stderr goes straight to the host from here on
 exec python3 -I <<'PY'
 import json, os, pathlib, time
 

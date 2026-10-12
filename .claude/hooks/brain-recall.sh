@@ -27,6 +27,7 @@ type hook_init >/dev/null 2>&1 && hook_init brain-recall.sh 3
 BRAIN_RECALL_PAYLOAD=$(cat)
 export BRAIN_RECALL_PAYLOAD
 
+type hook_unbuffer >/dev/null 2>&1 && hook_unbuffer  # stderr goes straight to the host from here on
 exec python3 -I <<'PY'
 import atexit, json, os, re, shutil, subprocess
 

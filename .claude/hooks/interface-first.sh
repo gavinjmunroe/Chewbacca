@@ -42,5 +42,6 @@ fi
 [ "${CHEWBACCA_INTERFACE_FIRST:-1}" = "0" ] && exit 0
 
 REASON="Load the interface skill before writing this page ($LINES lines, $(basename "$FILE")). Then, before any markup: name the template from its taxonomy (a tool someone practices or studies with is a session, one thing on screen at a time, never tabs over a card grid), name the stance and who reads it, and say what the content is as itself (the instrument, the document, the conversation). On 2026-10-11 a study app skipped this and shipped as a flat grid of cards."
+type hook_verdict >/dev/null 2>&1 && hook_verdict refuse "$REASON"
 jq -n --arg r "$REASON" '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $r}}'
 exit 0

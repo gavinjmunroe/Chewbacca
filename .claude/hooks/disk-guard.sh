@@ -63,7 +63,7 @@ if [ $((NOW - LAST)) -ge "${DISK_PRUNE_INTERVAL:-600}" ] && mkdir "$LOG_DIR/.dis
   ( trap 'rmdir "$LOG_DIR/.disk-guard-lock" 2>/dev/null' EXIT
     echo "$(date -u +%FT%TZ) ${FREE_GB} GB free, pruning" >> "$LOG"
     nice -n 19 bash -c "$PRUNE" >> "$LOG" 2>&1
-    echo "$(date -u +%FT%TZ) pruned" >> "$LOG" ) </dev/null >/dev/null 2>&1 &
+    echo "$(date -u +%FT%TZ) pruned" >> "$LOG" ) </dev/null >/dev/null 2>&1 8>&- &
   disown 2>/dev/null || true
   STARTED=1
 fi

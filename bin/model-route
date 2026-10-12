@@ -47,6 +47,18 @@ def plugin_confident(prompt: str) -> bool:
 SUBCOMMANDS = ("handoff", "check", "accept")
 
 
+def _verdict(decision, reason, started, session):
+    """One router row in the kit's verdict log (tools/verdicts.py). Never raises."""
+    try:
+        import time
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
+        import verdicts
+        verdicts.record("router", "model-route", decision, (time.time() - started) * 1000, reason,
+                        event="UserPromptSubmit", session=session)
+    except Exception:
+        pass
+
+
 def main(argv: list[str]) -> int:
     # Only a real file after the word makes it a subcommand, so a prompt that
     # happens to start with "check" still gets classified.
@@ -56,18 +68,25 @@ def main(argv: list[str]) -> int:
     if argv[:1] == ["--hook"]:
         if os.environ.get("CLAUDE_MODEL_ROUTER_CHILD"):
             return 0
+        import time
+        started = time.time()
         try:
             event = json.load(sys.stdin)
         except ValueError:
             return 0
         prompt = event.get("prompt") if isinstance(event, dict) else None
+        session = str(event.get("session_id") or "") if isinstance(event, dict) else ""
         if not isinstance(prompt, str) or prompt.lstrip().startswith(("~", "/")):
             return 0
         if plugin_confident(prompt):
+            _verdict("skip", "the keyword router is confident", started, session)
             return 0
         r = model_route.classify(prompt)
         if not r["class"]:
+            _verdict("skip", "Jev placed it in no class", started, session)
             return 0
+        _verdict("route", "%s (%.2f): %s %s" % (r["class"], r["confidence"], r["model"], r["effort"] or ""),
+                 started, session)
         effort = f" at {r['effort']} effort" if r["effort"] else ""
         note = (f"Jev reads this prompt as {r['class']} work ({r['confidence']:.2f}): "
                 f"{r['model']}{effort}. The keyword router was not confident here. Use this "

@@ -202,7 +202,9 @@ PERSONAL = re.compile(
     r'[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\.[A-Za-z.]{2,}'      # an email address
     r'|\+\d{7,15}\b|\b\d{3}[ .-]\d{3}[ .-]\d{4}\b|\b\d{10,}\b'  # a phone number or long id
     r'|\b(?:sk-|pk_|rk_|ghp_|gho_|ghs_|github_pat_|xox[abprs]-|AKIA|AIza|ya29\.)[A-Za-z0-9_-]{8,}'  # a key
-    r'|(?=[A-Za-z0-9_+=-]*\d)(?=[A-Za-z0-9_+=-]*[A-Za-z])[A-Za-z0-9_+=-]{32,}'  # a token or hash
+    r'|(?=[A-Za-z0-9_+/=-]*\d)(?=[A-Za-z0-9_+/=-]*[A-Za-z])[A-Za-z0-9_+=-]{24,}'  # a token or hash
+    r'|Authorization|Bearer|Cookie:|--password|--token|\s-u\s+\S+:'  # a credential in transit
+    r'|export\s+\w*(?:KEY|TOKEN|SECRET|PASS)\w*='  # one being set
     r'|https?://\S*[?#]'                                    # a URL carrying a query
     r'|<<'                                                   # a heredoc body
     # A grep list of five or more terms is how a search for names or private
@@ -261,6 +263,18 @@ def corpus(args):
         cwds.append(cwd if cwd.startswith('~') else '~')
     picked = sorted(pick_covering(commands, args.size), key=lambda i: commands[i])
     text = ''.join(json.dumps({'command': commands[i], 'cwd': cwds[i]}, ensure_ascii=False) + '\n' for i in picked)
+    # The kit's own secret scanner reads the result too: the filter above is a
+    # denylist, and a second reader with different rules catches what it misses.
+    scan = ROOT / 'bin/secret-scan'
+    with tempfile.NamedTemporaryFile('w', suffix='.jsonl', delete=False) as tmp:
+        tmp.write(text)
+    try:
+        if scan.exists():
+            found = subprocess.run([str(scan), tmp.name], capture_output=True, text=True)
+            if found.returncode != 0:
+                raise SystemExit('secret-scan flagged the corpus; nothing written:\n' + found.stdout[-2000:])
+    finally:
+        os.unlink(tmp.name)
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(text)
     print(f'{len(picked)} of {len(commands)} clean calls -> {args.out}')

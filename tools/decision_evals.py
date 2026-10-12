@@ -54,9 +54,14 @@ SCAN = (".claude/hooks/", "bin/", "tools/", "crates/")
 # The HUD lane belongs to another overnight chain (reengineer plan, step 11);
 # its files are neither read here nor gated, so this can't refuse its lands.
 OTHER_LANE = re.compile(r"^(hud/|skills/hud/|bin/kyber-surfaces|bin/[^/]*-engine$|bin/lib/realm_ui/)")
-REFUSES = re.compile(r"\bexit 2\b|permissionDecision\W{0,4}deny|[\"']decision[\"']\s*:\s*[\"']block")
+# Every refusal spelling the kit's hooks use (review of 812b84a1, 2026-10-12):
+# kit-debt.sh blocks with jq's unquoted `decision: "block"`, hookd-fallback.sh
+# with Python's sys.exit(2), write-log.sh passes a tool's code on as `exit $?`.
+REFUSES = re.compile(r"\bexit\s+(2\b|\"?\$)|sys\.exit\(\s*2\s*\)|permissionDecision\W{0,4}deny"
+                     r"|\bdecision[\"']?\s*:\s*[\"']block")
 ROUTER = re.compile(r"rout(e|er|ing)")
-CLASSIFIER = re.compile(r"classif|intent|judge|scor(e|ing)|triage")
+# score only as its own word: scoreboard.py is not a classifier.
+CLASSIFIER = re.compile(r"classif|intent|judge|triage|(^|[-_])scor(e|er|ing)($|[-_])")
 # A component's own eval or tuner is not a component.
 NOT_A_COMPONENT = re.compile(r"eval|tune|test")
 DATA = {".md", ".json", ".jsonl", ".toml", ".lock", ".txt", ".yml", ".yaml", ".tsv", ".csv"}
@@ -78,7 +83,9 @@ def discover(root: Path = ROOT, files=None) -> dict:
             continue
         if f.startswith(".claude/hooks/") and stem != "lib":
             # A hook that can refuse is a guard whatever its name says.
-            text = p.read_text(errors="replace")
+            # A comment that mentions exit 2 refuses nothing.
+            text = "\n".join(line for line in p.read_text(errors="replace").splitlines()
+                              if not line.lstrip().startswith("#"))
             if re.search(r"-(guard|gate)$", stem) or REFUSES.search(text):
                 found[f] = "guard"
                 continue
@@ -92,10 +99,12 @@ def discover(root: Path = ROOT, files=None) -> dict:
 
 
 def gated(root: Path, path: str) -> bool:
+    """The same test hookd_replay.gated_hooks uses to pick what it replays:
+    a .sh hook with a `# gate:` or `# gate-file:` line."""
     p = root / path
-    if not path.startswith(".claude/hooks/") or not p.is_file():
+    if not path.startswith(".claude/hooks/") or p.suffix != ".sh" or not p.is_file():
         return False
-    return any(line.startswith("# gate:") for line in p.read_text(errors="replace").splitlines()[:12])
+    return re.search(r"^# gate(?:-file)?:", p.read_text(errors="replace"), re.M) is not None
 
 
 def wired(root: Path, test: str) -> bool:
@@ -124,6 +133,8 @@ def eval_problems(root: Path, path: str, ev: dict) -> list:
     stem = Path(path).stem
     out = []
     kind = ev.get("type")
+    if path in (ev.get("script"), ev.get("test")):
+        return [f"{path}: names itself as its own eval"]
     if kind == "replay":
         test, corpus = ev.get("test", ""), ev.get("corpus", "")
         if not (root / test).is_file():
@@ -160,7 +171,9 @@ def coverage(root: Path, reg: dict) -> dict:
     """{path: (kind, how)} where how is gated, replay, sealed or None."""
     evals = reg.get("evals", {})
     # A component's own eval script is not a component.
-    scripts = {ev.get("script") or ev.get("test") for ev in evals.values()}
+    # Never a path that is itself under evals: a router named as its own
+    # script would vanish from discovery (review of 812b84a1).
+    scripts = {ev.get("script") or ev.get("test") for ev in evals.values()} - set(evals)
     found = {p: k for p, k in discover(root).items() if p not in scripts}
     for path, kind in reg.get("components", {}).items():
         if (root / path).exists():
@@ -204,6 +217,11 @@ def problems(root: Path = ROOT, reg=None, base=None) -> list:
         added = grand - set(base.get("grandfathered", []))
         for path in sorted(added):
             out.append(f"{path}: grandfathered here but not on the base; the list only shrinks")
+        # A hand-listed component or eval can't quietly drop off either.
+        for key in ("components", "evals"):
+            for path in sorted(set(base.get(key, {})) - set(reg.get(key, {}))):
+                if (root / path).exists():
+                    out.append(f"{path}: listed under {key} on the base, dropped here")
     return out
 
 

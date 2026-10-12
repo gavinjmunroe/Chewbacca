@@ -182,6 +182,56 @@ class DecisionEvals(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertIn("listed under evals but gone", err)
 
+    def test_every_refusal_spelling_makes_a_guard(self):
+        # Review of 812b84a1: kit-debt.sh, hookd-fallback.sh and write-log.sh
+        # refuse with these and were missed by the first regex.
+        self.repo.write(".claude/hooks/a.sh", "jq -n '{decision: \"block\", reason: $r}'\n")
+        self.repo.write(".claude/hooks/b.sh", "python3 - <<'PY'\nimport sys\nsys.exit(2)\nPY\n")
+        self.repo.write(".claude/hooks/c.sh", "tool \"$@\"\nexit $?\n")
+        self.repo.write(".claude/hooks/d.py", "import sys\nsys.exit( 2 )\n")
+        self.repo.write(".claude/hooks/e.sh", 'echo \'{"permissionDecision": "deny"}\'\n')
+        rc, err = self.repo.verify()
+        self.assertEqual(rc, 1)
+        for name in ("a.sh", "b.sh", "c.sh", "d.py", "e.sh"):
+            self.assertIn(f".claude/hooks/{name}: a new guard", err)
+
+    def test_a_comment_about_exit_2_is_not_a_guard(self):
+        self.repo.write(".claude/hooks/notes.sh", "#!/bin/bash\n# never exit 2 here\nexit 0\n")
+        self.repo.write("tools/scoreboard.py", "x = 1\n")
+        rc, err = self.repo.verify()
+        self.assertEqual(rc, 0, err)
+
+    def test_a_gate_file_header_is_replayed_too(self):
+        # hookd_replay.gated_hooks replays `# gate-file:` guards (skill-gate.sh).
+        self.repo.write(".claude/hooks/new-gate.sh", "#!/bin/bash\n# gate-file: x\n" + GUARD)
+        rc, err = self.repo.verify()
+        self.assertEqual(rc, 0, err)
+
+    def test_a_component_cannot_be_its_own_eval(self):
+        self.repo.write("tools/mail_router.py", "x = 1\n")
+        reg = self.repo.reg()
+        reg["evals"]["tools/mail_router.py"] = {"type": "sealed", "script": "tools/mail_router.py",
+                                                "set": "~/x", "floor": "x"}
+        self.repo.registry(reg)
+        rc, err = self.repo.verify()
+        self.assertEqual(rc, 1)
+        self.assertIn("names itself as its own eval", err)
+
+    def test_a_hand_listed_classifier_cannot_drop_off_against_the_base(self):
+        self.repo.write("tools/reply_kind.py", "def classify(x): pass\n")
+        self.repo.write("tools/reply_kind_check.py", "reply_kind\n")
+        reg = self.repo.reg()
+        reg["components"]["tools/reply_kind.py"] = "classifier"
+        reg["evals"]["tools/reply_kind.py"] = {"type": "sealed", "script": "tools/reply_kind_check.py",
+                                               "set": "~/x", "floor": "acc 0.9"}
+        self.repo.registry(reg)
+        self.repo.commit()
+        reg["components"], reg["evals"] = {}, {}
+        self.repo.registry(reg)
+        rc, err = self.repo.verify("--base", "HEAD")
+        self.assertEqual(rc, 1)
+        self.assertIn("tools/reply_kind.py: listed under components on the base, dropped here", err)
+
     def test_the_hud_lane_is_not_read(self):
         self.repo.write("hud/scripts/voice_router.py", "x = 1\n")
         self.repo.write("bin/lib/realm_ui/route.py", "x = 1\n")

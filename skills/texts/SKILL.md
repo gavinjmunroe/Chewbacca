@@ -327,6 +327,11 @@ Never put a shorthand in the draft that only the agent's notes explain. "I
 said yes to Jonah being my #1" came from a memory file, and Caleb asked "#1
 what?". Spell out what was said, when, and about what, or cut it.
 
+Pull the thread again right before handing over the final draft. A negotiation
+moves while you draft: on 2026-10-12 Sagar sent four texts (3:54 to 3:59pm)
+asking three direct questions while six drafts answered his 3:51 message, and
+the miss only surfaced when voice-check reprinted the thread.
+
 ## Sending
 
 To send, use `people send`, and only when the user asked for a specific

@@ -39,6 +39,9 @@ library/crafts/website.md. Prose does not fire, so this is the half that does.
 check, at 1440x900 and 390x844, on every url given:
     console errors and uncaught exceptions          none allowed
     horizontal scroll at 390                        none allowed
+    in WebKit as an iPhone 15 Pro: horizontal
+      scroll, or a visible img, video or canvas
+      drawn under 2px tall                          none allowed
     dead controls: href="#", "", javascript:,
       a same-page #anchor with no target, a link
       or button with no accessible name, or a
@@ -249,6 +252,45 @@ def hard_cutoffs(pg) -> list[str]:
     pg.evaluate("scrollTo(0,0)")
     return found
 
+# Chromium at 390 passed three bugs Caleb's iPhone showed on usctts.com on
+# 2026-10-11: five advisor faces 0px tall ("on mobile Andrew laffoon is the
+# only face I see"), /apply and /work-with-us 33,554,432px wide (a canvas whose
+# CSS lived in another page's stylesheet), and a 0px mailbox video. So the
+# phone pass runs in WebKit, the engine his phone uses.
+PHONE_PROBE = """() => ({
+  over: document.documentElement.scrollWidth - innerWidth,
+  flat: [...document.querySelectorAll('img,video,canvas')].filter(e => {
+    const r = e.getBoundingClientRect(), s = getComputedStyle(e);
+    return r.height < 2 && s.display !== 'none' && s.visibility !== 'hidden' &&
+      !e.closest('[aria-hidden=true]');
+  }).map(e => String(e.currentSrc || e.getAttribute('src') || e.className || e.tagName).slice(0, 80)),
+})"""
+
+
+def phone_fails(probe: dict) -> list[str]:
+    """Verdicts from one WebKit iPhone load: sideways scroll, flat media."""
+    fails = []
+    if probe.get("over", 0) > 1:
+        fails.append(f"iphone safari: horizontal scroll, page is {probe['over']}px wider than the screen")
+    fails += [f"iphone safari: drawn under 2px tall: {f}" for f in probe.get("flat", [])]
+    return fails
+
+
+def phone_check(pw, url) -> list[str]:
+    try:
+        b = pw.webkit.launch()
+    except Exception as e:  # missing engine is a failure, never a silent pass
+        return [f"iphone safari: webkit did not launch ({e}); run: python3 -m playwright install webkit"]
+    try:
+        ctx = b.new_context(**pw.devices["iPhone 15 Pro"])
+        pg = ctx.new_page()
+        pg.goto(url, wait_until="load", timeout=60000)
+        pg.wait_for_timeout(2500)
+        return phone_fails(pg.evaluate(PHONE_PROBE))
+    finally:
+        b.close()
+
+
 def check_page(pw, url, out):
     fails = []
     # A not-found page is meant to answer 404 (T Combinator's unknown-slug
@@ -364,6 +406,8 @@ def check_page(pw, url, out):
           ? a.effect.target.className.baseVal : a.effect.target && a.effect.target.className) || '').toString().slice(0, 30))""")
     fails += [f"runs under reduced motion: {r}" for r in sorted(set(running))]
     ctx.close(); b.close()
+    if expect == 200:
+        fails += phone_check(pw, url)
     out[url + (f"@{expect}" if expect != 200 else "")] = fails
     return fails
 

@@ -28,6 +28,13 @@ import {
   secretPath,
   FOCUS_FRESH_MS,
 } from "../bin/lib/realm_ui/glass_routes.mjs";
+import {
+  turnFrom,
+  tabTruth,
+  transcriptFinder,
+  idsFrom,
+  STALE_MS,
+} from "../bin/lib/realm_ui/tab_truth.mjs";
 
 const ev = (seq, type, payload, ts = seq * 1000) => ({
   seq,
@@ -542,4 +549,162 @@ test("the bridge answers his access shapes, so @ never crashes the page", async 
     const shape = await call;
     assert.ok(shape && Array.isArray(shape.rows), JSON.stringify(shape));
   }
+});
+
+// The tiles' truth (tab_truth.mjs). Caleb, 2026-10-11 8:25pm: all nine tiles
+// read "Done 5m" while GTME and TTS Logo were mid-turn, because realm's
+// imported rows say "idle" and carry the import time. These lines are the
+// shapes Claude Code writes, copied from the live TTS Logo transcript.
+const at = (iso) => Date.parse(iso);
+const line = (o) => JSON.stringify(o);
+const asst = (ts, stop, blocks = ["text"]) =>
+  line({
+    type: "assistant",
+    timestamp: ts,
+    isSidechain: false,
+    message: { stop_reason: stop, content: blocks.map((type) => ({ type })) },
+  });
+const user = (ts, content) =>
+  line({ type: "user", timestamp: ts, isSidechain: false, message: { content } });
+const MID_TOOL = [
+  user("2026-10-12T03:20:00.000Z", "Push the forehead out"),
+  asst("2026-10-12T03:26:49.513Z", "tool_use", ["thinking"]),
+  asst("2026-10-12T03:27:01.160Z", "tool_use", ["tool_use"]),
+  line({ type: "attachment", timestamp: "2026-10-12T03:27:01.233Z" }),
+  user("2026-10-12T03:27:02.575Z", [{ type: "tool_result", content: "ok" }]),
+  asst("2026-10-12T03:27:05.083Z", "tool_use", ["tool_use"]),
+  line({ type: "last-prompt" }),
+  line({ type: "custom-title" }),
+];
+const FINISHED = [
+  user("2026-10-12T03:04:00.000Z", "WP2 next due date"),
+  asst("2026-10-12T03:04:41.147Z", "end_turn"),
+  line({ type: "attachment", timestamp: "2026-10-12T03:04:41.370Z" }),
+  line({ type: "system", subtype: "stop_hook_summary", timestamp: "2026-10-12T03:04:44.132Z" }),
+  line({ type: "last-prompt" }),
+  line({ type: "cost-state" }),
+];
+
+test("a tab mid-tool is running, and its age is its last message, not the import", () => {
+  const now = at("2026-10-12T03:27:30.000Z");
+  const t = turnFrom(MID_TOOL, { touchedAt: now - 1000, now });
+  assert.equal(t.state, "running");
+  assert.equal(t.lastAt, at("2026-10-12T03:27:05.083Z"));
+});
+
+test("a turn that ended is done, whatever hook lines came after it", () => {
+  const now = at("2026-10-12T03:30:00.000Z");
+  const t = turnFrom(FINISHED, { touchedAt: now, now });
+  assert.deepEqual(t, { state: "done", lastAt: at("2026-10-12T03:04:41.147Z") });
+});
+
+test("a prompt with no answer yet is running; Esc ends the turn", () => {
+  const now = at("2026-10-12T03:00:05.000Z");
+  const asked = [user("2026-10-12T03:00:00.000Z", "Restart the hud")];
+  assert.equal(turnFrom(asked, { now }).state, "running");
+  const esc = [
+    ...asked,
+    user("2026-10-12T03:00:02.000Z", [{ type: "text", text: "[Request interrupted by user]" }]),
+  ];
+  assert.equal(turnFrom(esc, { now }).state, "done");
+});
+
+test("a turn left open with no write for STALE_MS is stopped, not working", () => {
+  const last = at("2026-10-12T03:27:05.083Z");
+  const now = last + STALE_MS + 1;
+  assert.equal(turnFrom(MID_TOOL, { touchedAt: last, now }).state, "stopped");
+  // A subagent still writing its own file keeps the turn alive.
+  assert.equal(turnFrom(MID_TOOL, { touchedAt: now - 1000, now }).state, "running");
+});
+
+test("subagent and meta lines never stand in for the tab's own last message", () => {
+  const now = at("2026-10-12T03:05:00.000Z");
+  const lines = [
+    ...FINISHED,
+    line({
+      type: "user",
+      isSidechain: true,
+      timestamp: "2026-10-12T03:04:59.000Z",
+      message: { content: "sub" },
+    }),
+    line({ type: "user", isMeta: true, timestamp: "2026-10-12T03:04:59.500Z", message: { content: "caveat" } }),
+  ];
+  assert.equal(turnFrom(lines, { now, touchedAt: now }).state, "done");
+});
+
+test("only well formed session ids are read, at most fifty", () => {
+  const id = "597a44cd-b859-4fd1-abb1-48e1a65c4791";
+  assert.deepEqual(idsFrom(`${id},../../etc/passwd,${id},nope`), [id]);
+  assert.equal(tabTruth("../x", () => "/etc/passwd"), null);
+  const many = Array.from({ length: 60 }, (_, i) =>
+    `00000000-0000-0000-0000-${String(i).padStart(12, "0")}`,
+  ).join(",");
+  assert.equal(idsFrom(many).length, 50);
+});
+
+test("GET /glass/tabs reads each tile's own transcript from its projects folder", async () => {
+  const home = realpathSync(mkdtempSync(join(tmpdir(), "glass-tabs-")));
+  const live = "597a44cd-b859-4fd1-abb1-48e1a65c4791";
+  const done = "a4a1a2bd-ec9a-4e73-b7a4-2a6d4934896a";
+  const codex = "11111111-2222-3333-4444-555555555555";
+  mkdirSync(join(home, ".claude/projects/-Users-x"), { recursive: true });
+  mkdirSync(join(home, ".claude/projects/-Users-x-code"), { recursive: true });
+  writeFileSync(join(home, ".claude/projects/-Users-x", `${live}.jsonl`), MID_TOOL.join("\n") + "\n");
+  writeFileSync(join(home, ".claude/projects/-Users-x-code", `${done}.jsonl`), FINISHED.join("\n") + "\n");
+  const { server, call } = await serve(home);
+  try {
+    assert.equal(
+      (await call(`/glass/tabs?ids=${live}`, { headers: { "X-Glass-Token": "nope" } })).status,
+      403,
+    );
+    const r = await call(`/glass/tabs?ids=${live},${done},${codex}`);
+    assert.equal(r.status, 200);
+    const { tabs } = await r.json();
+    assert.equal(tabs[live].state, "running");
+    assert.equal(tabs[live].lastAt, at("2026-10-12T03:27:05.083Z"));
+    assert.equal(tabs[done].state, "done");
+    assert.equal(tabs[codex], null);
+  } finally {
+    server.close();
+  }
+});
+
+test("the tiles take the tab's truth over realm's imported idle row", () => {
+  // What realm held at 8:25pm: every row idle, every updatedAt the resync.
+  const resync = at("2026-10-12T03:19:19.000Z");
+  const rows = [
+    { id: "a", title: "Midterms", status: "idle", updatedAt: resync, providerSessionId: "pa" },
+    { id: "b", title: "TTS Logo", status: "idle", updatedAt: resync, providerSessionId: "pb" },
+    { id: "c", title: "GTME", status: "idle", updatedAt: resync, providerSessionId: "pc" },
+    { id: "d", title: "Realm run", status: "running", updatedAt: resync, providerSessionId: null },
+  ];
+  const truths = {
+    pa: { state: "done", lastAt: at("2026-10-12T03:04:41.147Z") },
+    pb: { state: "running", lastAt: at("2026-10-12T03:27:05.083Z") },
+    pc: { state: "running", lastAt: at("2026-10-12T03:27:02.876Z") },
+  };
+  assert.equal(m.tileState(rows[1], false, truths.pb).word, "Working");
+  assert.equal(m.tileState(rows[0], false, truths.pa).word, "Done");
+  assert.equal(m.tileState(rows[0], false, { state: "stopped", lastAt: 1 }).word, "Stopped");
+  // realm's own live states still win where realm is running the session.
+  assert.equal(m.tileState({ status: "waiting_permission" }, false, truths.pa).word, "Needs you");
+  assert.equal(m.tileState(rows[3], false, undefined).word, "Working");
+  assert.equal(m.tileTime(rows[1], truths.pb), truths.pb.lastAt);
+  assert.equal(m.tileTime(rows[3], undefined), resync);
+  assert.deepEqual(
+    m.tileOrder(rows, truths).map((r) => r.title),
+    ["TTS Logo", "GTME", "Realm run", "Midterms"],
+  );
+  assert.equal(m.tileOrder(rows, truths, 2).length, 2);
+});
+
+test("a code card is a grid, so lit and diff tints reach the end of a long line", () => {
+  const css = readFileSync(
+    new URL("../bin/lib/realm_ui/glass/glass.css", import.meta.url),
+    "utf8",
+  );
+  const block = /\.glass-code \{([^}]*)\}/.exec(css)[1];
+  assert.match(block, /display: grid;/);
+  assert.match(block, /grid-template-columns: minmax\(max-content, 1fr\);/);
+  assert.match(/\.glass-line \{([^}]*)\}/.exec(css)[1], /display: block;/);
 });

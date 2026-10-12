@@ -240,14 +240,39 @@ export function visible(stage, now) {
   return out;
 }
 
-/** The tile's words for one session. */
-export function tileState(session, needsYou) {
+/** The tile's words for one session. `truth` is what its Claude Code tab is
+ *  really doing (GET /glass/tabs, tab_truth.mjs): realm's imported row says
+ *  "idle" for a tab that is mid-turn in another window, so the transcript
+ *  wins over it, except where realm itself is running the session. */
+export function tileState(session, needsYou, truth) {
   const s = session?.status;
   if (needsYou || s === "waiting_permission")
     return { word: "Needs you", tone: "needs" };
-  if (s === "running") return { word: "Working", tone: "running" };
+  if (s === "running" || truth?.state === "running")
+    return { word: "Working", tone: "running" };
   if (s === "error") return { word: "Failed", tone: "failed" };
+  if (truth?.state === "stopped") return { word: "Stopped", tone: "done" };
   return { word: "Done", tone: "done" };
+}
+
+/** When a tile's session last did something: its last message, when the
+ *  transcript says so, else realm's own `updatedAt` (for a session realm ran,
+ *  that is real; for an imported one it is only the import time). */
+export function tileTime(session, truth) {
+  return truth?.lastAt ?? session?.updatedAt ?? 0;
+}
+
+/** The tiles in the order the glass draws them: needing you, then working,
+ *  then the rest, newest first, at most `max`. */
+export function tileOrder(sessions, truths = {}, max = 9) {
+  const rank = (s) => {
+    const tone = tileState(s, false, truths[s.providerSessionId]).tone;
+    return tone === "needs" ? 0 : tone === "running" ? 1 : 2;
+  };
+  const when = (s) => tileTime(s, truths[s.providerSessionId]);
+  return [...sessions]
+    .sort((a, b) => rank(a) - rank(b) || when(b) - when(a))
+    .slice(0, max);
 }
 
 /** The tile's "doing now" line from its newest event. */

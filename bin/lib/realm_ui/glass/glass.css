@@ -290,6 +290,12 @@
   color: var(--red);
 }
 .glass-code {
+  /* A grid, so every line stretches to the widest one and a lit or diff
+     tint runs to the end of a long line when the card scrolls sideways. As
+     display block, a line stopped at the card's visible width (verifier,
+     shots 04 and 05, 10/11). */
+  display: grid;
+  grid-template-columns: minmax(max-content, 1fr);
   margin: 0;
   padding: 4px 0 10px;
   font-family: var(--font-mono);

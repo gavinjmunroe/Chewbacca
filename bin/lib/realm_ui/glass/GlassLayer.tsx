@@ -40,7 +40,9 @@ import {
   litRange,
   nowLine,
   reduce,
+  tileOrder,
   tileState,
+  tileTime,
   visible,
   voiceIntent,
   COMMAND_LINGER_MS,
@@ -54,6 +56,7 @@ type Session = {
   title: string;
   cwd: string;
   lastEventSeq?: number;
+  providerSessionId?: string | null;
   updatedAt?: number;
   createdAt?: number;
 };
@@ -62,6 +65,7 @@ type Stored = {
   sessionId: string;
   event: { type: string; ts?: number; payload?: Record<string, unknown> };
 };
+type Truth = { state: "running" | "done" | "stopped"; lastAt: number | null };
 type Rect = { left: number; top: number; width: number; height: number };
 type Mode = "tiles" | "work";
 type Hunk = {
@@ -89,6 +93,11 @@ const SHRINK_MS = 240;
 // The page tells the server it still has the glass this often, so hud-listen
 // can trust a report no older than FOCUS_FRESH_MS (45 s) in glass_routes.mjs.
 const FOCUS_BEAT_MS = 20_000;
+// How often the tiles ask what their tabs are really doing (/glass/tabs),
+// while the tiles are shown. A turn flips Working to Done within this long.
+// Each ask stats and tails nine transcripts, a few ms. Guessed, not measured
+// against his eye.
+const TRUTH_BEAT_MS = 5_000;
 const OVERLAY =
   '[role="dialog"],[role="alertdialog"],[role="menu"],[role="listbox"],[aria-modal="true"]';
 const FAILED_LINE = /FAIL|not ok|Error|\bfailed\b/;
@@ -196,6 +205,7 @@ export function GlassLayer({ store }: { store: StoreApi<AppState> }) {
   const [picked, setPicked] = useState(0);
   const [sessions, setSessions] = useState<Record<string, Session>>({});
   const [last, setLast] = useState<Record<string, Stored>>({});
+  const [truths, setTruths] = useState<Record<string, Truth | null>>({});
   const [light, setLight] = useState<{
     rect: Rect;
     to: Rect | null;
@@ -270,15 +280,45 @@ export function GlassLayer({ store }: { store: StoreApi<AppState> }) {
     document.documentElement.setAttribute("data-glass", mode);
   }, [mode]);
 
-  const tiles = useMemo(() => {
-    const rank = (s: Session) =>
-      s.status === "waiting_permission" ? 0 : s.status === "running" ? 1 : 2;
-    return Object.values(sessions)
-      .sort(
-        (a, b) => rank(a) - rank(b) || (b.updatedAt ?? 0) - (a.updatedAt ?? 0),
-      )
-      .slice(0, MAX_TILES);
-  }, [sessions]);
+  // What each session's Claude Code tab is really doing, keyed by the CLI's
+  // session id. Asked for every session, not just the drawn nine, since the
+  // answer decides which nine are drawn.
+  const providerIds = useMemo(
+    () =>
+      Object.values(sessions)
+        .map((s) => s.providerSessionId)
+        .filter((id): id is string => Boolean(id))
+        .sort()
+        .join(","),
+    [sessions],
+  );
+  useEffect(() => {
+    if (!booted || !shown || mode !== "tiles" || !providerIds) return;
+    let live = true;
+    const ask = () =>
+      glassFetch(`/glass/tabs?ids=${encodeURIComponent(providerIds)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((body) => {
+          if (live && body?.tabs) setTruths(body.tabs as Record<string, Truth | null>);
+        })
+        .catch(() => {});
+    ask();
+    const t = window.setInterval(ask, TRUTH_BEAT_MS);
+    return () => {
+      live = false;
+      window.clearInterval(t);
+    };
+  }, [booted, shown, mode, providerIds]);
+
+  const tiles = useMemo(
+    () =>
+      tileOrder(
+        Object.values(sessions),
+        truths as Record<string, Truth>,
+        MAX_TILES,
+      ) as Session[],
+    [sessions, truths],
+  );
 
   // His palette, his sidebar or a click in his panes can move focus to
   // another session while the workspace is up; the stage follows it.
@@ -542,6 +582,7 @@ export function GlassLayer({ store }: { store: StoreApi<AppState> }) {
         <TileField
           leaving={mode !== "tiles"}
           tiles={tiles}
+          truths={truths}
           last={last}
           picked={picked}
           tileRefs={tileRefs.current}
@@ -609,13 +650,15 @@ function Light({
 function TileField(props: {
   leaving: boolean;
   tiles: Session[];
+  truths: Record<string, Truth | null>;
   last: Record<string, Stored>;
   picked: number;
   tileRefs: Map<string, HTMLElement>;
   onPick: (i: number) => void;
   onGrow: (id: string) => void;
 }) {
-  const { leaving, tiles, last, picked, tileRefs, onPick, onGrow } = props;
+  const { leaving, tiles, truths, last, picked, tileRefs, onPick, onGrow } =
+    props;
   // A press on the empty glass takes the surface down, as a click off it
   // does; Escape is the keyboard's way to the same place.
   const onGround = (e: { target: unknown; currentTarget: unknown }) => {
@@ -632,7 +675,10 @@ function TileField(props: {
       ) : (
         <div className="glass-tiles" role="list" aria-label="Agents">
           {tiles.map((s, i) => {
-            const st = tileState(s, false);
+            const truth = s.providerSessionId
+              ? (truths[s.providerSessionId] ?? undefined)
+              : undefined;
+            const st = tileState(s, false, truth);
             const now = nowLine(last[s.id]);
             const meta = AGENT_META[s.agentKind as keyof typeof AGENT_META];
             return (
@@ -662,7 +708,7 @@ function TileField(props: {
                     )}
                     {st.word}
                   </span>
-                  <span className="glass-tile-age">{age(s.updatedAt)}</span>
+                  <span className="glass-tile-age">{age(tileTime(s, truth))}</span>
                 </span>
                 <span className="glass-tile-title">
                   {s.title || "Untitled"}

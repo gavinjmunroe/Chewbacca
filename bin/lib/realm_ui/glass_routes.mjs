@@ -7,6 +7,7 @@
 //   GET  /glass/focus    hud-listen asks the same
 //   POST /glass/voice    hud-listen hands a sentence to the page that has the glass
 //   GET  /glass/file     one text file under $HOME, read only, for the stage's file view
+//   GET  /glass/tabs     what each tile's Claude Code tab is really doing (tab_truth.mjs)
 //   POST /glass/reject   put one hunk back, on a press: `git apply -R` of exactly that hunk
 //
 // Every route needs the pipe's own token in `X-Glass-Token` (the one in the
@@ -18,6 +19,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, normalize, sep } from "node:path";
 import { timingSafeEqual } from "node:crypto";
+import { idsFrom, tabTruth, transcriptFinder } from "./tab_truth.mjs";
 
 // A file the stage will read. The stage shows a window of lines around a
 // change, so a file past this is one no person reads on the glass anyway.
@@ -140,7 +142,7 @@ export function rejectHunk(
 
 /** The page's voice channel and focus, held in memory for this server's life. */
 export function glassState() {
-  return { focus: null, listeners: new Set() };
+  return { focus: null, listeners: new Set(), find: null };
 }
 
 function readBody(req) {
@@ -212,6 +214,15 @@ export function handleGlass(
         ? { ...f, age: now() - f.at, listening: state.listeners.size }
         : { shown: false, listening: state.listeners.size },
     );
+    return true;
+  }
+  if (route === "GET /glass/tabs") {
+    state.find ??= transcriptFinder(join(home, ".claude", "projects"));
+    const at = now();
+    const tabs = {};
+    for (const id of idsFrom(url.searchParams.get("ids")))
+      tabs[id] = tabTruth(id, state.find, { now: at });
+    json(res, 200, { tabs });
     return true;
   }
   if (route === "GET /glass/file") {

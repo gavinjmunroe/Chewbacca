@@ -1837,6 +1837,10 @@ _register("PreToolUse", hooks_dir + "/pr-guard.sh", timeout=5,
 # A post that tags a client waits for a fresh, clean gtme done. See the hook.
 _register("PreToolUse", hooks_dir + "/client-ask-guard.sh", timeout=5,
           matcher="Bash", status="Checking the client has nothing unanswered first...")
+# 2026-10-11: a PDF took minutes by hand while chewbacca pdf-grade code sat in
+# the GTM report. A job the kit already does is pointed at its command.
+_register("PreToolUse", hooks_dir + "/use-the-kit-guard.sh", timeout=5,
+          matcher="Bash", status="Checking the kit does not already do this...")
 # 2026-10-11: generated prose went into a team Google Doc and a teammate
 # called it "the slop version". Long Doc writes now pass slop-check --essay
 # first. See the hook's header.

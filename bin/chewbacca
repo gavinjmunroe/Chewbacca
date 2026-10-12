@@ -232,6 +232,11 @@ google)
   shift
   exec python3 "$ROOT/bin/chewbacca-google" "$@"
   ;;
+pdf)
+  # Markdown or text to PDF in about 2 s a file. See bin/chewbacca-pdf.
+  shift
+  exec python3 "$ROOT/bin/chewbacca-pdf" "$@"
+  ;;
 docs)
   # Local .docx, .xlsx and .pptx through genoffice. See bin/chewbacca-docs.
   shift

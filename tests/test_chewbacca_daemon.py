@@ -248,6 +248,12 @@ class InstallersWriteNoPlistTests(unittest.TestCase):
     FILES = ["setup.sh", "bin/chewbacca-bridge", "bin/hud-autostart", "bin/lib/people/dashboard.js",
              "tools/kit_runtime.py", "apps/live/agent/install", "bin/maintain", "bin/main-ci"]
 
+    def test_agent_watch_runs_on_stock_python(self):
+        # 2026-10-11 16:57: Homebrew Python 3.14 segfaulted in its GC running
+        # kyber-sessions watch, and the crash dialog landed on Caleb's screen.
+        text = (ROOT / "setup.sh").read_text()
+        self.assertIn('register agent-watch --every 60 --nice 10 -- /usr/bin/python3 ', text)
+
     def test_no_installer_bootstraps_its_own_agent(self):
         for rel in self.FILES:
             text = (ROOT / rel).read_text()

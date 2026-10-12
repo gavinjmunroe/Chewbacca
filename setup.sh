@@ -2768,7 +2768,10 @@ if command -v brew &>/dev/null; then
   # tabs died at 2:47pm and Caleb found out an hour later from the sidebar,
   # and tab-rescue's hook only speaks when he types in some other tab, which
   # never happens when he works from the HUD.
-  _daemon register agent-watch --every 60 --nice 10 -- "$HOME/.local/bin/kyber-sessions" watch &&
+  # Stock /usr/bin/python3, never the shebang's Homebrew 3.14: on 2026-10-11 at
+  # 16:57 a run segfaulted inside 3.14's garbage collector, and as a child of the
+  # Chewbacca runtime the crash put "Python quit unexpectedly" on Caleb's screen.
+  _daemon register agent-watch --every 60 --nice 10 -- /usr/bin/python3 "$HOME/.local/bin/kyber-sessions" watch &&
     log "agent alerts on the HUD every minute" || warn "could not schedule agent alerts"
 
   # Install the one LaunchAgent last, and fold in any per-job agent an older

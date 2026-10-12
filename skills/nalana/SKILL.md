@@ -33,6 +33,13 @@ Why the script exists, so nobody "simplifies" it back:
 - A running Nalana ignores `--python`, and its quit dialog cancels an
   AppleScript quit, so the script stops it with `pkill` first. Save open work
   before running it.
+- **Another tab may be in the live Nalana.** Check first
+  (`lsof -nP -iTCP:9876 -sTCP:LISTEN`, `tabs list`). If it's up, never run
+  `nalana-mcp`: its `pkill` wipes that tab's scene. Render from a script in a
+  second, headless Nalana instead:
+  `Nalana -b --factory-startup --python <script.py> -- <out_dir>`. On
+  2026-10-11 the /way caption clouds were made this way (TTS-Dev
+  `blender/clouds.py`) while the logo tab held the live one.
 
 ## Name collision
 

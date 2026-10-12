@@ -1291,6 +1291,34 @@ if [ -z "${CHEWBACCA_SUITE:-}" ] && command -v cargo >/dev/null 2>&1 && [ -f "$S
   fi
 fi
 
+# chewbacca-writelog (crates/writelog) answers write-log in Rust and reads the
+# brain from an FSEvents journal instead of running git status before and
+# after every call: 0.61 s of CPU per Bash call (Pre plus Post) became
+# 0.018 s, and 415 ms of wall per event 28 ms, on a 6,000 dirty-file test
+# brain (2026-10-11, load 6, tests/test_writelog_rust.py). The watcher
+# runs as one daemon service. Who writes the real log is the one-word file
+# ~/.chewbacca/writelog.mode (python, shadow or rust), which setup never
+# changes. No cargo, no binary: write_log.py runs, exactly as before.
+if [ -z "${CHEWBACCA_SUITE:-}" ] && command -v cargo >/dev/null 2>&1 && [ -f "$SCRIPT_DIR/crates/writelog/Cargo.toml" ]; then
+  if CARGO_TARGET_DIR="$HOME/.chewbacca/build/writelog" cargo build --quiet --release \
+       --manifest-path "$SCRIPT_DIR/crates/writelog/Cargo.toml" 2>/dev/null; then
+    mkdir -p "$HOME/.local/bin"
+    install -m 755 "$HOME/.chewbacca/build/writelog/release/chewbacca-writelog" "$HOME/.local/bin/chewbacca-writelog.new" &&
+      mv -f "$HOME/.local/bin/chewbacca-writelog.new" "$HOME/.local/bin/chewbacca-writelog"
+    if [ "$(uname)" = "Darwin" ]; then
+      python3 - "$SCRIPT_DIR" "$HOME/.local/bin/chewbacca-writelog" <<'PY' || warn "writelog watcher not registered; write-log keeps using git status."
+import sys
+sys.path.insert(0, sys.argv[1] + "/bin/lib")
+import daemon_register
+print(daemon_register.register("writelog-watch", [sys.argv[2], "serve"], keepalive=True))
+PY
+    fi
+    log "chewbacca-writelog built to ~/.local/bin/chewbacca-writelog"
+  else
+    warn "chewbacca-writelog did not build; write-log runs in Python, as before."
+  fi
+fi
+
 # Merge drivers for SHA256SUMS.txt and the README counts block. On 2026-10-09
 # about ten tabs pushed main and nearly every merge stopped on those two
 # generated files. .gitattributes names the drivers; git config holds the

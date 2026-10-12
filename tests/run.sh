@@ -585,6 +585,8 @@ if group "tools"; then
   check  "no scope list in the kit asks for read-only access" python3 "$ROOT/tests/test_never_read_only.py"
   check  "no integration types into or raises an app window" python3 "$ROOT/tests/test_integrations_no_app_windows.py"
   check  "native write tracking observes content and workspace changes" python3 "$ROOT/tests/test_write_log.py"
+  check  "chewbacca-writelog logs the rows write_log.py does, from the FSEvents journal, under 50 ms a call" \
+    /usr/bin/python3 "$ROOT/tests/test_writelog_rust.py"
   check  "no code reaches a folder at its pre-2026-10-05 top-level path" python3 "$ROOT/tests/test_moved_paths.py"
   check  "preflight describes setup.sh accurately" python3 "$ROOT/tests/test_preflight.py"
   check  "context cost --json is valid" bash -c "python3 '$ROOT/tools/context_cost.py' --json | python3 -m json.tool"

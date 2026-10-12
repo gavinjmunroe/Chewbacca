@@ -58,7 +58,8 @@ if printf '%s' "$cmd" | grep -qE 'Library/Messages/chat\.db|\.chewbacca/people/p
 # agent typed RAW_MESSAGES_OK=1 on its next call. So the chat.db thread rule
 # lets through only one bare sqlite3 call (no cd, pipe, second command,
 # redirect, substitution or dot command) with exactly one SELECT whose every
-# output column is count, sum, avg, total, min or max, and whose text names no
+# output column is count, sum, avg or total (min and max hand back a value,
+# so max(chat_identifier) is a handle: security review 10/12), whose text names no
 # column that holds words and selects no *. A hand-built "who is waiting"
 # query returns chat ids, not counts, so it is still refused. This only
 # narrows the chat.db rule; the people.db rule below is untouched.
@@ -84,7 +85,7 @@ for ch in m.group(1):
     else:
         cur += ch
 items.append(cur)
-agg = re.compile(r"(count|sum|avg|total|min|max)\s*\((?:[^()]|\([^()]*\))*\)(\s+(as\s+)?\w+)?", re.I)
+agg = re.compile(r"(count|sum|avg|total)\s*\((?:[^()]|\([^()]*\))*\)(\s+(as\s+)?\w+)?", re.I)
 print(1 if all(agg.fullmatch(i.strip()) for i in items) else 0)
 ' 2>/dev/null || echo 0)"
 fi

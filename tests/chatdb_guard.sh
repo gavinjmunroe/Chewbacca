@@ -29,6 +29,8 @@ t "count with a substitution"   2 "sqlite3 ~/Library/Messages/chat.db \"\$(cat q
 t "a chat id beside a count" 2 "sqlite3 -readonly ~/Library/Messages/chat.db \"select chat_id, count(*) from chat_message_join group by chat_id order by 2 desc limit 5\""
 t "a count over a subquery"   2 "sqlite3 ~/Library/Messages/chat.db \"select count(*) from message where ROWID in (select message_id from chat_message_join) and is_from_me=0\""
 t "a dot mode before a count" 2 "sqlite3 ~/Library/Messages/chat.db .headers \"select count(*) from message where is_from_me=1\""
+t "max of a handle"            2 "sqlite3 ~/Library/Messages/chat.db \"select max(chat_identifier) from chat c join chat_message_join j on j.chat_id=c.ROWID\""
+t "min of a handle id"          2 "sqlite3 ~/Library/Messages/chat.db \"select min(h.id), count(*) from message m join handle h on h.ROWID=m.handle_id where m.is_from_me=0\""
 t "count through python"        2 "python3 -c \"import sqlite3; print(sqlite3.connect('chat.db').execute('select count(*), sum(is_from_me) from message').fetchall())\""
 echo "SHOULD PASS (exit 0):"
 # 2026-10-12, the weekly false-positive report's top refusal: a volume check

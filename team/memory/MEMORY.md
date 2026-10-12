@@ -306,4 +306,5 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_gate_words_see_the_whole_payload: hookd gate words match the whole payload; `path` hid in transcript_path, a U+0130 case fold spelled a gated word, and Write turns backslash-u escapes into characters (10/12)
 - feedback_hud_ide_tells_a_story: the HUD agents IDE reads like a story, Lemma-level; each glass region has one job, transcript one press away, never a sequence of lines (10/11)
 - feedback_chain_waits_in_the_queue: chain overnight jobs with jobs submit --after ID, never a wait in a claude -p prompt; two quit doing nothing on 10/11
+- feedback_morning_done_means_seen_live: a UI job is "done" only once seen on the live surface; otherwise say landed or rehearsed and list what was never pressed ("Ur sure the IDE is done?", 10/12)
 - feedback_held_stderr_leaks_to_children: a hook holding the host stderr on fd 8 leaked it into the watchdog sleep and every `&` spawn (5 s EOF per hook); take the fd after forks, `8>&-` on spawns, time EOF in tests (10/12)

@@ -968,6 +968,34 @@ print("|".join([d.get("sha") or "none", d.get("origin_main") or "none",
   fi
 fi
 
+# Background services run on the kit generation they started from. On
+# 2026-10-11 three processes ran from snapshots already pruned, and nothing
+# said so. `status --check` fails when a daemon service is still on an old
+# generation more than 60 s after kit/current moved.
+GEN_NODE="$HOME/.chewbacca/runtime/node"; [ -x "$GEN_NODE" ] || GEN_NODE="$(command -v node 2>/dev/null)"
+if [ "${CHEWBACCA_NO_RUNTIME:-0}" != 1 ] && [ -n "$GEN_NODE" ] && [ -f "$REPO_DIR/bin/chewbacca-daemon" ] \
+   && [ -d "$HOME/.chewbacca/daemon/services" ]; then
+  GEN_JSON="$("$GEN_NODE" "$REPO_DIR/bin/chewbacca-daemon" status --json 2>/dev/null)"
+  GEN_LINE="$(printf '%s' "$GEN_JSON" | python3 -I -c '
+import json, sys
+try:
+    d = json.loads(sys.stdin.read())
+except Exception:
+    print("?||"); sys.exit()
+pruned = ["pid %s (%s)" % (o["pid"], o["command"].split()[0].rsplit("/", 1)[-1]) for o in d.get("others", []) if o.get("pruned")]
+print("|".join([str(len(d.get("late", []))), ", ".join(d.get("late", [])), "; ".join(pruned)]))
+' 2>/dev/null)"
+  IFS='|' read -r GEN_LATE GEN_NAMES GEN_PRUNED <<<"${GEN_LINE:-?||}"
+  if [ "$GEN_LATE" = "?" ]; then
+    warn "could not read chewbacca-daemon status"
+  elif [ "$GEN_LATE" -gt 0 ]; then
+    bad "background service(s) still on an old kit generation past 60 s: $GEN_NAMES" "chewbacca-daemon status" major
+  else
+    ok "every background service runs on the current kit generation"
+  fi
+  [ -n "$GEN_PRUNED" ] && warn "process(es) outside the daemon run from a pruned kit snapshot: $GEN_PRUNED"
+fi
+
 if [ -f "$HOME/.chewbacca/install-manifest.json" ]; then
   ok "install manifest present, uninstall knows what to remove"
 else

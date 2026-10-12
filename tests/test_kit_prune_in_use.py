@@ -5,6 +5,8 @@
 saw nothing; the snapshot path was still in each process's argv. And when
 lsof failed, in_use() said nothing was busy, so a slow lsof pruned
 everything."""
+import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -37,6 +39,10 @@ class InUseTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.snaps = Path(self.temp.name).resolve() / 'snapshots'
         self.snaps.mkdir()
+        # Never read the live daemon's state: its generations would join every answer.
+        env = mock.patch.dict(os.environ, {'CHEWBACCA_DAEMON_DIR': str(Path(self.temp.name) / 'no-daemon')})
+        env.start()
+        self.addCleanup(env.stop)
 
     def test_a_snapshot_named_only_in_argv_is_busy(self):
         ps = ('/usr/bin/python3 /x/other\n'
@@ -53,6 +59,19 @@ class InUseTests(unittest.TestCase):
     def test_when_nothing_can_look_nothing_is_free(self):
         with mock.patch.object(kit_runtime.subprocess, 'run', side_effect=fake_run(None, None)):
             self.assertIsNone(kit_runtime.in_use(self.snaps))
+
+    def test_a_generation_the_daemon_records_for_a_live_pid_is_busy(self):
+        # Reengineer step 9: a service run as `bash -lc "$HOME/.local/bin/x"`
+        # names no snapshot in argv, and only the daemon's state knows it.
+        d = Path(self.temp.name) / 'daemon'
+        d.mkdir()
+        (d / 'state.json').write_text(json.dumps({
+            'svc': {'pid': os.getpid(), 'gen': 'cafe1234'},
+            'dead': {'pid': 2 ** 22 + 7, 'gen': 'dead5678'},
+            'bad': {'pid': 'x', 'gen': 'bad'}}))
+        with mock.patch.dict(os.environ, {'CHEWBACCA_DAEMON_DIR': str(d)}), \
+                mock.patch.object(kit_runtime.subprocess, 'run', side_effect=fake_run('', '')):
+            self.assertEqual(kit_runtime.in_use(self.snaps), {'cafe1234'})
 
     def test_prune_removes_nothing_when_it_could_not_look(self):
         for name in ('a1', 'b2', 'c3', 'd4'):

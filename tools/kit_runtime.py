@@ -260,9 +260,35 @@ def in_use(snaps: Path) -> Optional[set]:
                 names.add(chunk.split(os.sep, 1)[0].split()[0] if chunk.split() else "")
     except (OSError, subprocess.SubprocessError):
         pass
+    # And the generation chewbacca-daemon recorded for each live service. A
+    # service started as `bash -lc "$HOME/.local/bin/x"` reaches its snapshot
+    # through a link, so neither lsof nor its argv names it (reengineer step 9).
+    names |= daemon_generations()
     names.discard("")
     # Neither could look: nothing is known to be free, so nothing is.
     return names if looked else None
+
+
+def daemon_generations() -> set:
+    """Snapshot shas the daemon's state names for a pid still alive. Adds to
+    in_use, never subtracts: an unreadable state file keeps nothing extra."""
+    state = Path(os.environ.get("CHEWBACCA_DAEMON_DIR") or Path.home() / ".chewbacca" / "daemon") / "state.json"
+    try:
+        rows = json.loads(state.read_text())
+    except (OSError, ValueError):
+        return set()
+    out = set()
+    for st in rows.values() if isinstance(rows, dict) else []:
+        if not isinstance(st, dict) or not isinstance(st.get("gen"), str) or not isinstance(st.get("pid"), int):
+            continue
+        try:
+            os.kill(st["pid"], 0)
+        except ProcessLookupError:
+            continue
+        except OSError:
+            pass  # alive, someone else's
+        out.add(st["gen"])
+    return out
 
 
 def prune(source: Path, base: Path, keep_sha: str) -> List[str]:

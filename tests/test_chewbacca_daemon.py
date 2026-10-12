@@ -279,5 +279,215 @@ class InstallersWriteNoPlistTests(unittest.TestCase):
             self.assertNotIn("launchctl load", text, rel)
 
 
+SHA_A = "a" * 40
+SHA_B = "b" * 40
+
+
+@unittest.skipUnless(NODE, "node not installed")
+class GenerationTests(unittest.TestCase):
+    """Reengineer step 9: every service knows the kit snapshot it runs from.
+
+    On 2026-10-11 room-capture, hud-speak and the origin-guard server ran from
+    snapshots already pruned, and only reading ps by hand showed it.
+    """
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp()).resolve()
+        self.env = dict(os.environ,
+                        CHEWBACCA_DAEMON_DIR=str(self.tmp / "daemon"),
+                        CHEWBACCA_LAUNCH_AGENTS=str(self.tmp / "agents"),
+                        CHEWBACCA_DAEMON_LOGS=str(self.tmp / "logs"),
+                        CHEWBACCA_KIT=str(self.tmp / "kit"))
+        (self.tmp / "agents").mkdir()
+        for sha, word in ((SHA_A, "old"), (SHA_B, "new")):
+            b = self.tmp / "snapshots" / sha / "bin"
+            b.mkdir(parents=True)
+            (b / "svc.sh").write_text(f"#!/bin/sh\necho {word} >> '{self.tmp}/ran.txt'\nexec sleep 300\n")
+            (b / "svc.sh").chmod(0o755)
+        self.point(SHA_A)
+        self.procs = []
+
+    def tearDown(self):
+        for p in self.procs:
+            try:
+                os.killpg(p.pid, signal.SIGKILL)
+            except OSError:
+                pass
+            p.wait(timeout=5)
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def point(self, sha, age_s=0):
+        link = self.tmp / "kit"
+        tmp = self.tmp / ".kit-new"
+        os.symlink(f"snapshots/{sha}", tmp)
+        os.replace(tmp, link)
+        if age_s:
+            t = time.time() - age_s
+            os.utime(link, (t, t), follow_symlinks=False)
+
+    def cli(self, *args, check=True):
+        r = subprocess.run([NODE, str(DAEMON), *args], capture_output=True, text=True, env=self.env, timeout=30)
+        if check and r.returncode:
+            raise AssertionError(r.stdout + r.stderr)
+        return r
+
+    def status(self, *extra):
+        r = self.cli("status", "--json", *extra, check=False)
+        return r.returncode, json.loads(r.stdout)
+
+    def spawn(self, argv):
+        p = subprocess.Popen(argv, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.procs.append(p)
+        return p
+
+    def test_status_flags_a_service_on_an_old_generation_and_check_fails_past_a_minute(self):
+        self.cli("register", "svc", "--keepalive", "--", "/bin/sh", str(self.tmp / "kit/bin/svc.sh"))
+        p = self.spawn(["/bin/sh", str(self.tmp / "snapshots" / SHA_A / "bin/svc.sh")])
+        (self.tmp / "daemon").mkdir(exist_ok=True)
+        (self.tmp / "daemon/state.json").write_text(json.dumps(
+            {"svc": {"pid": p.pid, "argv0": "sh", "gen": SHA_A, "from": "kit", "lastStart": 1}}))
+        rc, d = self.status("--check")
+        row = d["services"][0]
+        self.assertEqual((rc, row["gen"], row["stale"]), (0, SHA_A, False))
+        # The kit moves on; 10 s later the service is stale but inside the grace.
+        self.point(SHA_B, age_s=10)
+        rc, d = self.status("--check")
+        row = d["services"][0]
+        self.assertTrue(row["stale"])
+        self.assertEqual(rc, 0, "a service stale for 10 s already fails the check")
+        # Past the 60 s line the check fails, naming it.
+        self.point(SHA_B, age_s=120)
+        rc, d = self.status("--check")
+        self.assertEqual((rc, d["late"]), (1, ["svc"]))
+        self.assertEqual(d["services"][0]["pruned"], [])
+        # Its snapshot is pruned under it: the row says so.
+        shutil.rmtree(self.tmp / "snapshots" / SHA_A)
+        rc, d = self.status("--check")
+        self.assertEqual(d["services"][0]["pruned"], [SHA_A])
+        self.assertIn("PRUNED", self.cli("status", check=False).stdout)
+
+    def test_a_timed_job_mid_run_on_an_old_generation_is_not_late(self):
+        self.cli("register", "job", "--every", "600", "--", "/bin/sh", str(self.tmp / "kit/bin/svc.sh"))
+        p = self.spawn(["/bin/sh", str(self.tmp / "snapshots" / SHA_A / "bin/svc.sh")])
+        (self.tmp / "daemon").mkdir(exist_ok=True)
+        (self.tmp / "daemon/state.json").write_text(json.dumps(
+            {"job": {"pid": p.pid, "argv0": "sh", "gen": SHA_A, "from": "kit", "lastStart": 1}}))
+        self.point(SHA_B, age_s=120)
+        rc, d = self.status("--check")
+        self.assertTrue(d["services"][0]["stale"])
+        self.assertEqual(rc, 0, "a timed job finishing on its own generation failed the check")
+
+    def test_status_lists_processes_outside_the_daemon_on_a_pruned_snapshot(self):
+        gone = self.tmp / "snapshots" / ("c" * 40) / "bin" / "room-capture"
+        # "; true" keeps sh from exec'ing sleep, so $0 stays in its command line.
+        self.spawn(["/bin/sh", "-c", "sleep 300; true", str(gone)])
+        rc, d = self.status()
+        hits = [o for o in d["others"] if "c" * 40 == o["gen"]]
+        self.assertEqual(len(hits), 1, d["others"])
+        self.assertTrue(hits[0]["pruned"])
+
+    def test_generation_of_argv(self):
+        code = (f"const d=require({json.dumps(str(DAEMON))});process.stdout.write(JSON.stringify(["
+                f"d.generationOf({{argv:['/bin/sh',{json.dumps(str(self.tmp / 'kit/bin/svc.sh'))}]}}),"
+                f"d.generationOf({{argv:['/bin/bash','-lc','exec \\\"$HOME/x\\\"']}}),"
+                f"d.generationOf({{argv:['node','--import','file://{self.tmp}/snapshots/{SHA_B}/bin/svc.sh','x']}})]))")
+        got = node_eval(code, self.env)
+        self.assertEqual(got[0], {"gen": SHA_A, "from": "kit"})
+        self.assertEqual(got[1], {"gen": SHA_A, "from": "assumed"})
+        self.assertEqual(got[2], {"gen": SHA_B, "from": "kit"})
+
+    def test_a_kit_outside_the_snapshots_never_restarts_a_service_in_a_loop(self):
+        # With no snapshot to name, a service's generation is unknown, and an
+        # unknown generation must not count as old on every tick.
+        for d in ("one", "two"):
+            (self.tmp / d / "bin").mkdir(parents=True)
+            shutil.copy(self.tmp / "snapshots" / SHA_A / "bin/svc.sh", self.tmp / d / "bin/svc.sh")
+        os.remove(self.tmp / "kit")
+        os.symlink(self.tmp / "one", self.tmp / "kit")
+        self.cli("register", "slow", "--every", "600", "--", "/bin/sleep", "60")
+        self.cli("register", "svc", "--keepalive", "--", "/bin/sh", str(self.tmp / "kit/bin/svc.sh"))
+        proc = subprocess.Popen([NODE, str(DAEMON), "run"], env=self.env,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            time.sleep(3)
+            tmp = self.tmp / ".kit-new"
+            os.symlink(self.tmp / "two", tmp)
+            os.replace(tmp, self.tmp / "kit")
+            time.sleep(12)
+        finally:
+            proc.send_signal(signal.SIGTERM)
+            proc.wait(timeout=15)
+        st = json.loads((self.tmp / "daemon/state.json").read_text())["svc"]
+        self.assertIsNone(st.get("lastEnd"), f"the service was stopped with an unknown generation: {st}")
+
+    def test_a_service_pinned_to_one_snapshot_is_not_swapped_in_a_loop(self):
+        # chewbacca-bridge registers its resolved path, so its argv names one
+        # snapshot and a restart lands on that same old code.
+        self.cli("register", "slow", "--every", "600", "--", "/bin/sleep", "60")
+        self.cli("register", "svc", "--keepalive", "--", "/bin/sh", str(self.tmp / "snapshots" / SHA_A / "bin/svc.sh"))
+        proc = subprocess.Popen([NODE, str(DAEMON), "run"], env=self.env,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            time.sleep(3)
+            self.point(SHA_B)
+            time.sleep(12)
+        finally:
+            proc.send_signal(signal.SIGTERM)
+            proc.wait(timeout=15)
+        st = json.loads((self.tmp / "daemon/state.json").read_text())["svc"]
+        self.assertIsNone(st.get("lastEnd"), f"a pinned service was swapped onto its own old code: {st}")
+
+    def test_a_swap_flag_left_in_state_never_cancels_a_crash_only_stop(self):
+        # A daemon that exits mid-swap leaves swapping: true on disk; a clean
+        # exit of a crash-only service (realm stopped on purpose) must still stay down.
+        hits = self.tmp / "hits.txt"
+        self.cli("register", "clean", "--restart-on-crash", "--", "/bin/sh", "-c", f"echo z >> '{hits}'; exit 0")
+        (self.tmp / "daemon/state.json").write_text(json.dumps({"clean": {"swapping": True, "gen": SHA_A}}))
+        proc = subprocess.Popen([NODE, str(DAEMON), "run"], env=self.env,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            time.sleep(12)
+        finally:
+            proc.send_signal(signal.SIGTERM)
+            proc.wait(timeout=15)
+        self.assertEqual(len(hits.read_text().split()), 1, "a clean exit was restarted")
+
+    def test_keepalive_moves_to_the_new_generation_while_a_timed_job_holds_the_daemon(self):
+        # people-sync ran 960 s on 2026-10-12, and the daemon waits for timed
+        # jobs before restarting, so every keepalive service sat on old code.
+        self.cli("register", "slow", "--every", "600", "--", "/bin/sleep", "60")
+        self.cli("register", "svc", "--keepalive", "--", "/bin/sh", str(self.tmp / "kit/bin/svc.sh"))
+        proc = subprocess.Popen([NODE, str(DAEMON), "run"], env=self.env,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        state = self.tmp / "daemon/state.json"
+        try:
+            first = None
+            for _ in range(40):
+                st = json.loads(state.read_text()) if state.exists() else {}
+                if st.get("svc", {}).get("pid") and st.get("slow", {}).get("pid"):
+                    first = st["svc"]["pid"]
+                    break
+                time.sleep(0.25)
+            self.assertTrue(first, "services never started")
+            self.assertEqual(json.loads(state.read_text())["svc"]["gen"], SHA_A)
+            self.point(SHA_B)
+            moved = None
+            for _ in range(80):
+                st = json.loads(state.read_text())
+                if st["svc"].get("pid") and st["svc"]["pid"] != first and st["svc"].get("gen") == SHA_B:
+                    moved = st
+                    break
+                time.sleep(0.25)
+            self.assertIsNone(proc.poll(), "the daemon exited with a timed job mid-run")
+            self.assertTrue(moved, "the keepalive service stayed on the old generation")
+            self.assertEqual((self.tmp / "ran.txt").read_text().split(), ["old", "new"])
+            rc, d = self.status("--check")
+            row = next(r for r in d["services"] if r["name"] == "svc")
+            self.assertFalse(row["stale"])
+        finally:
+            proc.send_signal(signal.SIGTERM)
+            proc.wait(timeout=15)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -105,10 +105,18 @@ class JudgeTests(unittest.TestCase):
 
     def test_an_override_on_the_next_call_is_overrode(self):
         rows = self.rank(lambda t: t
-                         .call('Bash', bash('git reset --hard'), refused_by='destructive-guard.sh')
+                         .call('Bash', bash('git reset --hard'), refused_by='destructive-guard.sh',
+                               reason='refusing. Prefix DESTRUCTIVE_OK=1 if you mean it.')
                          .call('Bash', bash('DESTRUCTIVE_OK=1 git reset --hard')))
         self.assertEqual(rows['destructive-guard.sh']['overrode'], 1)
         self.assertEqual(rows['destructive-guard.sh']['got_past'], 1)
+
+    def test_another_guards_override_is_not_this_ones(self):
+        rows = self.rank(lambda t: t
+                         .call('Bash', bash('sqlite3 chat.db "select is_from_me from message"'),
+                               refused_by='chatdb-guard.sh', reason='refusing. Prefix RAW_MESSAGES_OK=1.')
+                         .call('Bash', bash('DESTRUCTIVE_OK=1 git checkout -- f')))
+        self.assertEqual(rows['chatdb-guard.sh']['overrode'], 0)
 
     def test_the_same_call_again_that_passes_is_reran(self):
         rows = self.rank(lambda t: t
@@ -204,10 +212,14 @@ class WeeklyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             projects = Path(tmp) / 'projects'
             t = Transcript(projects)
+            # Stamped now: the real chatdb-guard's last change must come before
+            # these refusals or they are only counted (review 10/12).
+            now = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z')
             for i in range(2):
                 t.call('Bash', bash(f'sqlite3 chat.db "select count(*) from message where is_from_me={i}"'),
-                       refused_by='chatdb-guard.sh')
-                t.call('Bash', bash(f'RAW_MESSAGES_OK=1 sqlite3 chat.db "select count(*) from message where is_from_me={i}"'))
+                       refused_by='chatdb-guard.sh', reason='refusing. Prefix RAW_MESSAGES_OK=1.', at=now)
+                t.call('Bash', bash(f'RAW_MESSAGES_OK=1 sqlite3 chat.db "select count(*) from message where is_from_me={i}"'),
+                       at=now)
             t.save()
             home = Path(tmp) / 'chew'
             env = dict(os.environ, CHEWBACCA_HOME=str(home))
@@ -226,6 +238,22 @@ class WeeklyTests(unittest.TestCase):
                                     '--root', str(projects), '--scope', tmp], env=env,
                                    capture_output=True, text=True, timeout=120)
             self.assertIn('not due', again.stdout)
+
+
+class LedgerTests(unittest.TestCase):
+    def test_a_new_top_guard_in_the_same_iso_week_files_its_own_task(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ['CHEWBACCA_HOME'] = tmp
+            try:
+                monday = datetime.datetime(2026, 10, 19, 9, 0)
+                sunday = datetime.datetime(2026, 10, 25, 9, 0)
+                row = {'refused': 3, 'before_fix': 0, 'got_past': 2, 'overrode': 2, 'reran': 0}
+                first = hr.file_top_offender([dict(row, hook='chatdb-guard.sh')], monday, tmp)
+                second = hr.file_top_offender([dict(row, hook='lesson-guard.sh')], sunday, tmp)
+            finally:
+                del os.environ['CHEWBACCA_HOME']
+            self.assertTrue(first and second)
+            self.assertNotEqual(first, second)
 
 
 if __name__ == '__main__':

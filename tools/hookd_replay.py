@@ -47,6 +47,7 @@ from pathlib import Path
 import random
 import re
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -458,11 +459,11 @@ def same_call(call):
     return ' '.join(json.dumps(data, sort_keys=True).split())
 
 
-def judge(call, later, refused, hook):
+def judge(call, later, refused, hook, reason=''):
     """What the agent did in the calls right after `hook` refused `call`.
 
-    overrode  a later call carried an _OK= override the refused one lacked,
-              and this hook let it through
+    overrode  a later call carried the _OK= override this refusal named,
+              which the refused call lacked, and this hook let it through
     reran     the same call again, unchanged, got through
     changed   a later call of the same tool, reworked, got through
     complied  anything else, including loading a Skill first (what skill-gate
@@ -470,6 +471,9 @@ def judge(call, later, refused, hook):
     """
     text = same_call(call)
     had_override = bool(OVERRIDE.search(text))
+    # Only the override this guard's own message names counts: a later
+    # DESTRUCTIVE_OK=1 says nothing about a chatdb-guard refusal (review 10/12).
+    named = set(re.findall(r'\b([A-Z][A-Z0-9_]*_OK)=', reason))
     best = 0.0
     for nxt in later:
         if nxt.get('name') == 'Skill':
@@ -477,7 +481,7 @@ def judge(call, later, refused, hook):
         if (refused.get(nxt.get('id')) or (None, None))[1] == hook:
             continue
         other = same_call(nxt)
-        if not had_override and OVERRIDE.search(other):
+        if not had_override and named & set(re.findall(r'\b([A-Z][A-Z0-9_]*_OK)=', other)):
             return 'overrode', 1.0
         if nxt.get('name') == call.get('name'):
             if other == text:
@@ -556,7 +560,7 @@ def fp_rank(days, root=PROJECTS, fixed_at=last_change):
             if fixes[hook] and (call.get('_at') or '')[:19] < fixes[hook]:
                 row['before_fix'] += 1
                 continue
-            verdict, ratio = judge(call, later, refused, hook)
+            verdict, ratio = judge(call, later, refused, hook, hit[2])
             row[verdict] += 1
             if verdict in ('overrode', 'reran') and len(row['samples']) < 20:
                 nxt = next((c for c in later if c.get('name') == call.get('name')), {})
@@ -625,12 +629,20 @@ def file_top_offender(ranked, now, scope):
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import work_ledger
     year, week, _ = now.isocalendar()
-    key = f'guard-fp-{year}-w{week:02d}'
-    work_ledger.add(scope, f"Fix this week's top false-positive guard: {top['hook']}", key, owner='claude',
-                    next_action=(f"{top['got_past']} of {top['refused'] - top['before_fix']} refusals in 7 days were got past "
-                                 f"({top['overrode']} overrode, {top['reran']} reran). Report: "
-                                 f"{report_dir()}/{now:%Y-%m-%d}.md. Fix with a test that fails on the old "
-                                 'guard, then rerun tools/hookd_replay.py fp.'))
+    # The hook is in the key: a Monday catch-up and the next Sunday share an
+    # ISO week, and add() refuses a known key with a different title.
+    key = f"guard-fp-{year}-w{week:02d}-{top['hook']}"
+    try:
+        work_ledger.add(scope, f"Fix this week's top false-positive guard: {top['hook']}", key, owner='claude',
+                        next_action=(f"{top['got_past']} of {top['refused'] - top['before_fix']} refusals in 7 days "
+                                     f"were got past ({top['overrode']} overrode, {top['reran']} reran). Report: "
+                                     f"{report_dir()}/{now:%Y-%m-%d}.md. Fix with a test that fails on the old "
+                                     'guard, then rerun tools/hookd_replay.py fp.'))
+    except (ValueError, OSError, sqlite3.Error) as err:
+        # The report is already written; a ledger hiccup must not turn the
+        # daemon's daily run into a traceback.
+        print(f'guard-fp: ledger task not filed: {err}', file=sys.stderr)
+        return None
     return key
 
 

@@ -71,7 +71,7 @@ f892df995c4d12be40168af03d8fa9885b7a8713e5f5243ed3ebf783a83c60e5  .claude/hooks/
 b8b84bdfe46a02e3382e108e757e0e283c15120b2a63954764c244913e8bd5e4  .claude/hooks/untrusted-screen.sh
 eef74e625330892626e8681772d39d45cfd0698e3bc1e8e481d360a16e91f5b7  .claude/hooks/use-the-kit-guard.sh
 3369382daf04ba6aaa49e65680d51279f1ac826cfc04a82a5affe41d8443be4b  .claude/hooks/ux-guard.sh
-2a4decde156b0a72105a06537ae058603bef7a72359f849e20467e27ac6fd901  .claude/hooks/vercel-guard.sh
+5684b06d426e89eb20a81d8389ca11fd872cbaa9811e064c86521956848f79c0  .claude/hooks/vercel-guard.sh
 9b34e33178561029acc8e248a128abe6a19330d95f75b7630d97ecc828eb003e  .claude/hooks/vibe-guard.sh
 0215c7122d134acfee5d86ada6e4e72b68793ff2271163e8b54d91a8f41c41a8  .claude/hooks/voice-guard.sh
 3afe78e28a3262de7ebc2367f1f27e7c5790ac12da69c3034b961a04c108e76a  .claude/hooks/voice-remind.sh

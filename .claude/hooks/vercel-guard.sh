@@ -15,13 +15,22 @@ type hook_init >/dev/null 2>&1 && hook_init vercel-guard.sh 5
 #
 # Tearing an existing Vercel project down stays allowed (vercel remove,
 # vercel project rm), so moving off it is never blocked.
+#
+# Which host a user deploys to is that user's call. The guard refuses only
+# when ~/.chewbacca/policy/no-vercel exists, and its refusal is that file's
+# own text (where to deploy instead). The stranger test on 2026-10-12 found
+# every fresh install refusing Vercel with Caleb's quote and his Railway
+# workspace in the message.
 
 set -uo pipefail
+POLICY="$HOME/.chewbacca/policy/no-vercel"
+[ -f "$POLICY" ] || exit 0
 command -v jq >/dev/null 2>&1 || exit 0
 cmd="$(jq -r '.tool_input.command // empty' 2>/dev/null)"
 [ -n "$cmd" ] || exit 0
 printf '%s' "$cmd" | grep -qE '(^[[:space:]]*|[;&|(][[:space:]]*)(npx[[:space:]]+(-y[[:space:]]+)?)?vercel([[:space:]]|$)' || exit 0
 printf '%s' "$cmd" | grep -qE 'vercel[[:space:]]+(remove|rm|project[[:space:]]+(rm|remove|ls)|ls|list|whoami|inspect|logout)\b' && exit 0
 
-echo "vercel-guard: Caleb, 2026-10-10: \"never do anything on vercel ever again.\" Deploy to Railway instead: railway init -n <name> -w \"Caleb Newton's Projects\", railway add --service web, railway up --service web --detach (or link the GitHub repo so main auto-deploys), then railway-domain <name>. Removing an existing Vercel project is still allowed." >&2
+why="$(head -c 600 "$POLICY" 2>/dev/null | tr '\n' ' ')"
+echo "vercel-guard: Vercel is turned off on this Mac ($POLICY). ${why:-Deploy somewhere else.} Removing an existing Vercel project is still allowed." >&2
 exit 2

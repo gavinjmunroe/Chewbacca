@@ -308,7 +308,7 @@ def send(network, room, text, dry_run=False, client=None):
     return {"ok": bool(out.get("event_id")), "event_id": out.get("event_id", "")}
 
 
-def _send_refusal(channel, to, text):
+def _send_refusal(channel, to, text, subject=""):
     """tools/send_approval.py's answer for this exact message: None when a
     person's press approved it, else why nothing was sent. Loaded by path like
     verdicts.py; when it can't load, nothing sends."""
@@ -324,7 +324,7 @@ def _send_refusal(channel, to, text):
             sys.modules["chewbacca_send_approval"] = mod
     except Exception as err:
         return "the send approval check couldn't load (%s), so nothing was sent" % err
-    return mod.refusal(channel, to, text)
+    return mod.refusal(channel, to, text, subject)
 
 
 def _chewbacca_verdicts():

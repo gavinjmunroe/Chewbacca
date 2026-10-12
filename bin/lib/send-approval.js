@@ -27,17 +27,18 @@ const sha = (s) =>
     .update(Buffer.from(String(s), "utf8"))
     .digest("hex");
 
-// Must match send_approval.binding(): channel, address and text joined by NUL.
-function binding(channel, to, text) {
-  return sha([channel, to, text].map(String).join("\0"));
+// Must match send_approval.binding(): channel, address, text and subject
+// joined by NUL.
+function binding(channel, to, text, subject = "") {
+  return sha([channel, to, text, subject || ""].map(String).join("\0"));
 }
 
-function mintPressed(channel, to, text, press) {
+function mintPressed(channel, to, text, press, subject = "") {
   const dir = path.join(root(), "tokens");
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   fs.chmodSync(root(), 0o700);
   fs.chmodSync(dir, 0o700);
-  const file = path.join(dir, `${binding(channel, to, text)}.json`);
+  const file = path.join(dir, `${binding(channel, to, text, subject)}.json`);
   const tmp = `${file}.${process.pid}.tmp`;
   fs.writeFileSync(
     tmp,
@@ -45,6 +46,7 @@ function mintPressed(channel, to, text, press) {
       channel: String(channel),
       to: String(to),
       text_sha: sha(text),
+      subject_sha: sha(subject || ""),
       press: String(press),
       at: Date.now() / 1000,
     }),
@@ -56,7 +58,7 @@ function mintPressed(channel, to, text, press) {
 
 // { ok: true, press } or { ok: false, err }. A missing module or a python
 // that won't start refuses: no approval check means no send.
-function take(channel, to, text) {
+function take(channel, to, text, subject = "") {
   if (!fs.existsSync(PY))
     return {
       ok: false,
@@ -64,7 +66,14 @@ function take(channel, to, text) {
     };
   const r = spawnSync(
     "python3",
-    [PY, "take", "--channel", String(channel), "--to", String(to)],
+    // --flag=value, so an address or subject that starts with a dash stays a value.
+    [
+      PY,
+      "take",
+      `--channel=${channel}`,
+      `--to=${to}`,
+      `--subject=${subject || ""}`,
+    ],
     // Long enough for a person at the terminal to read the draft and type
     // send. Guessed, never measured; a send nobody answers just refuses.
     { input: String(text), encoding: "utf8", timeout: 300000 },

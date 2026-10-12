@@ -426,7 +426,7 @@ def send(to, subject, text, dry_run=False, runner=subprocess.run):
     # so a session that set it to stay safe could still send mail here.
     if os.environ.get("CHEWBACCA_NO_SEND"):
         return 3, {"ok": False, "error": "sending is disabled (CHEWBACCA_NO_SEND)"}
-    refused = _send_refusal("email", to, text)
+    refused = _send_refusal("email", to, text, subject or "")
     if refused:
         return 6, {"ok": False, "error": refused}
     try:
@@ -446,7 +446,7 @@ def send(to, subject, text, dry_run=False, runner=subprocess.run):
     return 0, {"ok": True, "id": row_id(key)}
 
 
-def _send_refusal(channel, to, text):
+def _send_refusal(channel, to, text, subject=""):
     """tools/send_approval.py's answer for this exact message: None when a
     person's press approved it, else why nothing was sent. Loaded by path like
     verdicts.py; when it can't load, nothing sends."""
@@ -462,7 +462,7 @@ def _send_refusal(channel, to, text):
             sys.modules["chewbacca_send_approval"] = mod
     except Exception as err:
         return "the send approval check couldn't load (%s), so nothing was sent" % err
-    return mod.refusal(channel, to, text)
+    return mod.refusal(channel, to, text, subject)
 
 
 def _chewbacca_verdicts():

@@ -330,11 +330,7 @@ function dispatchUnlogged(via, to, text, flags) {
   const reader = textsReader(via === "slack" ? "slack.py" : "gmail.py");
   if (!reader) return { code: 2, err: `${via} is not set up in this kit yet` };
   const args = [reader, "send", "--to", to, "--text", text];
-  if (via === "email")
-    args.push(
-      "--subject",
-      String(flags.subject || text.split("\n")[0].slice(0, 60)),
-    );
+  if (via === "email") args.push("--subject", emailSubject(flags, text));
   return run("python3", args);
 }
 
@@ -425,10 +421,18 @@ function sendRoom(d, name, text, via, flags, P) {
 // address the send would hand over, so a press handler (kit_confirm) can mint
 // the approval for what the person saw. It approves nothing by itself.
 function approvalLine(flags, channel, to, text) {
+  const subject = channel === "email" ? emailSubject(flags, text) : "";
   if (flags["approval-binding"])
     process.stdout.write(
-      "approval-binding " + JSON.stringify({ channel, to, text }) + "\n",
+      "approval-binding " +
+        JSON.stringify({ channel, to, text, subject }) +
+        "\n",
     );
+}
+
+// The subject an email goes out with, and so the one its approval is bound to.
+function emailSubject(flags, text) {
+  return String(flags.subject || text.split("\n")[0].slice(0, 60));
 }
 
 function cmdSend(argv) {

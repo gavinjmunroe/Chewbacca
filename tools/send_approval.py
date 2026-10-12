@@ -2,11 +2,12 @@
 """Send approval: nothing reaches another person without a person's press.
 
 Every sink (people send, mac-db's iMessage path, Mail.app via email_reader,
-gmail, slack, matrix, a plan's send step) calls take(channel, to, text) right
-before it hands the message over. take() returns the kind of press that
-approved this exact message, or raises NoApproval and nothing is sent. An
-approval is bound to the channel, the address and the text, works once, and
-dies after 15 minutes. The plan is docs/plans/send-approval.md.
+gmail, slack, matrix, a plan's send step) calls take(channel, to, text,
+subject) right before it hands the message over. take() returns the kind of
+press that approved this exact message, or raises NoApproval and nothing is
+sent. An approval is bound to the channel, the address, the text and an
+email's subject, works once, and dies after 15 minutes. The plan is
+docs/plans/send-approval.md.
 
 What counts as a press, checked in this order:
 
@@ -14,9 +15,11 @@ What counts as a press, checked in this order:
    handlers mint: kit_confirm in bin/lib/mcp-writes.js after the six-digit
    code it showed checks out, and this module after 2 to 4 below. There is
    no mint command, so no flag an agent passes makes one.
-2. A HUD button press. Until the HUD surfaces mint tokens themselves (the
-   HUD lane), a send whose process tree runs up to the `kyber-surfaces run`
-   press handler, with no agent and no job runner above it, counts.
+2. A press in Kyber, the HUD app. Until the HUD mints tokens at its own
+   buttons (the HUD lane), a send whose process tree runs up to the Kyber
+   executable (checked by its real path, never its argv), with no agent and
+   no job runner in between, counts. The home panel's Send runs
+   `kyber-surfaces home --send <id>` this way.
 3. CHEWBACCA_SEND_CODE set to the six-digit code this module put on the
    person's screen for this exact message. The person reads it out only if
    they want it sent.
@@ -29,12 +32,14 @@ What this does not stop: a process running as the same user can write a
 token file by hand, or drive the screen to read the code. Both are deliberate
 circumvention, not a flag or a habit, and both are named in the plan.
 
-    send_approval.py take --channel C --to T      the text on stdin; exit 0
-                                                  prints the press, exit 3 refuses
-    send_approval.py status                       pending codes and live tokens
+    send_approval.py take --channel C --to T [--subject S]
+                          the text on stdin; exit 0 prints the press, exit 3 refuses
+    send_approval.py status   pending codes and live tokens
 
 Runs on /usr/bin/python3 3.9.
 """
+import ctypes
+import ctypes.util
 import hashlib
 import hmac
 import json
@@ -65,15 +70,14 @@ CODE_ROUNDS = 200000
 # bridge. Matched on the full command line of every ancestor: the CLI and
 # VS Code binaries are named `claude`, Codex is `codex`, the desktop apps
 # run from their .app bundles, chewbacca-jobs runs what agents submit, and
-# hud-listen (the voice agent) and realm-engine (the agents IDE) are agents
-# that run under Kyber, so Kyber above them proves no press.
+# hud-listen (the voice agent) and realm (the agents IDE) are agents that run
+# under Kyber, so Kyber above them proves no press. Spoofing this only makes
+# a send refuse.
 AGENT = re.compile(r"(^|/)(claude|codex)(\s|$)|claude-code|@anthropic-ai/|/Claude\.app/|/Codex\.app/"
                    r"|chewbacca-jobs|(^|/)hud-listen(\s|$)|(^|/)realm-engine(\s|$)|/realm/")
-# The HUD's press handlers, as `ps` showed them on 2026-10-12: Kyber.app,
-# which runs `kyber-surfaces home --send <id>` when the home panel's Send is
-# pressed, and the surfaces daemon (.../bin/kyber-surfaces run) that takes
-# button presses over hud.sock.
-HUD_HANDLER = re.compile(r"/Kyber\.app/Contents/MacOS/Kyber(\s|$)|(^|/)kyber-surfaces run(\s|$)")
+# The HUD app's executable, as proc_pidpath reported it on 2026-10-12. Read
+# from the kernel, not from argv, which `exec -a` sets to anything.
+KYBER_EXE = "/Applications/Kyber.app/Contents/MacOS/Kyber"
 
 
 class NoApproval(Exception):
@@ -92,14 +96,14 @@ def _dir(name):
     return path
 
 
-def binding(channel, to, text):
-    """The one key an approval is good for: this channel, this address, this text."""
-    raw = "\0".join((str(channel), str(to), str(text)))
-    return hashlib.sha256(raw.encode("utf-8", "surrogatepass")).hexdigest()
-
-
-def _text_sha(text):
+def _sha(text):
     return hashlib.sha256(str(text).encode("utf-8", "surrogatepass")).hexdigest()
+
+
+def binding(channel, to, text, subject=""):
+    """The one key an approval is good for: this channel, this address, this
+    text and, for email, this subject."""
+    return _sha("\0".join((str(channel), str(to), str(text), str(subject or ""))))
 
 
 def _write_private(path, obj):
@@ -114,54 +118,62 @@ def _log(op, channel, to, press="", reason=""):
     row = {"at": int(time.time()), "op": op, "channel": channel, "to": to,
            "press": press, "reason": reason, "pid": os.getpid()}
     try:
-        fd = os.open(os.path.join(root(), "log.jsonl"), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        fd = os.open(os.path.join(_dir("."), "log.jsonl"), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
         with os.fdopen(fd, "a") as f:
             f.write(json.dumps(row) + "\n")
     except OSError:
         pass
 
 
-def mint(channel, to, text, press):
+def _claim(path):
+    """Take a file for this process alone, or None when another has it. The
+    rename is the single use: two processes racing for one file can't both
+    win it."""
+    claim = "%s.claim.%d" % (path, os.getpid())
+    try:
+        os.rename(path, claim)
+    except OSError:
+        return None, None
+    try:
+        with open(claim) as f:
+            got = json.load(f)
+    except (OSError, ValueError):
+        got = None
+    return (got if isinstance(got, dict) else None), claim
+
+
+def _drop(path):
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
+
+
+def mint(channel, to, text, press, subject=""):
     """For press handlers only: approve this exact message once."""
-    b = binding(channel, to, text)
+    b = binding(channel, to, text, subject)
     _write_private(os.path.join(_dir("tokens"), b + ".json"),
-                   {"channel": channel, "to": to, "text_sha": _text_sha(text),
+                   {"channel": channel, "to": to, "text_sha": _sha(text), "subject_sha": _sha(subject or ""),
                     "press": press, "at": time.time()})
     _log("mint", channel, to, press)
     return b
 
 
-def _take_token(channel, to, text):
-    b = binding(channel, to, text)
-    path = os.path.join(_dir("tokens"), b + ".json")
-    claim = "%s.taken.%d" % (path, os.getpid())
-    try:
-        # The rename is the single use: two sinks racing for one token can't
-        # both win it.
-        os.rename(path, claim)
-    except OSError:
+def _take_token(channel, to, text, subject):
+    tok, claim = _claim(os.path.join(_dir("tokens"), binding(channel, to, text, subject) + ".json"))
+    if claim:
+        _drop(claim)
+    if not tok or time.time() - float(tok.get("at") or 0) > TOKEN_LIFE:
         return None
-    try:
-        with open(claim) as f:
-            tok = json.load(f)
-    except (OSError, ValueError):
-        tok = None
-    finally:
-        try:
-            os.unlink(claim)
-        except OSError:
-            pass
-    if not isinstance(tok, dict):
-        return None
-    if time.time() - float(tok.get("at") or 0) > TOKEN_LIFE:
-        return None
-    if (tok.get("channel"), tok.get("to"), tok.get("text_sha")) != (channel, to, _text_sha(text)):
+    if (tok.get("channel"), tok.get("to"), tok.get("text_sha"), tok.get("subject_sha")) != \
+            (channel, to, _sha(text), _sha(subject or "")):
         return None
     return str(tok.get("press") or "token")
 
 
 def ancestry(pid=None, ps_out=None):
-    """Command lines from this process up to launchd, or None when ps fails."""
+    """(pid, command line) from this process up to launchd, or None when ps
+    fails. A process reparented to launchd ends the chain there."""
     if ps_out is None:
         try:
             ps_out = subprocess.run(["/bin/ps", "-axo", "pid=,ppid=,command="],
@@ -180,18 +192,32 @@ def ancestry(pid=None, ps_out=None):
     while pid in procs and pid not in seen and pid > 1:
         seen.add(pid)
         ppid, cmd = procs[pid]
-        chain.append(cmd)
+        chain.append((pid, cmd))
         pid = ppid
     return chain
 
 
+def exe_path(pid):
+    """The executable the kernel started for pid (libproc's proc_pidpath), or
+    None. Unlike argv, a process can't choose what this says."""
+    try:
+        lib = ctypes.CDLL(ctypes.util.find_library("proc") or "/usr/lib/libproc.dylib")
+        buf = ctypes.create_string_buffer(4096)
+        n = lib.proc_pidpath(ctypes.c_int(pid), buf, ctypes.c_uint32(4096))
+        return buf.value.decode("utf-8", "replace") if n > 0 else None
+    except (OSError, AttributeError, ValueError):
+        return None
+
+
 def agent_above(chain):
     # Fail closed: no process tree means we can't rule an agent out.
-    return chain is None or any(AGENT.search(cmd) for cmd in chain)
+    return chain is None or any(AGENT.search(cmd) for _pid, cmd in chain)
 
 
-def hud_press(chain):
-    return chain is not None and not agent_above(chain) and any(HUD_HANDLER.search(cmd) for cmd in chain)
+def hud_press(chain, exe=exe_path):
+    if chain is None or agent_above(chain):
+        return False
+    return any(exe(pid) == KYBER_EXE for pid, _cmd in chain)
 
 
 def _code_hash(code, salt):
@@ -211,28 +237,34 @@ def _read(path):
         return None
 
 
-def _check_code(channel, to, text, given):
-    b = binding(channel, to, text)
-    path = _pending_path(b)
-    pend = _read(path)
+def _check_code(channel, to, text, subject, given):
+    path = _pending_path(binding(channel, to, text, subject))
+    pend, claim = _claim(path)
+    if claim:
+        _drop(claim)
     if not pend or time.time() - float(pend.get("at") or 0) > TOKEN_LIFE:
         raise NoApproval(
             "CHEWBACCA_SEND_CODE doesn't match a code shown for this exact message (a different text or "
-            "address, or it expired). Run it again without the code to put a new one on the person's screen. "
-            "Nothing was sent.")
+            "address, it expired, or another check has it right now). Run it again without the code to put "
+            "a new one on the person's screen. Nothing was sent.")
     if re.fullmatch(r"\d{6}", given or "") and hmac.compare_digest(_code_hash(given, pend["salt"]), pend["hash"]):
-        os.unlink(path)
         return "code"
     pend["tries"] = int(pend.get("tries") or 0) + 1
     if pend["tries"] >= MAX_CODE_TRIES:
-        os.unlink(path)
         raise NoApproval("Wrong send code three times, so that code is gone. Nothing was sent.")
+    # Put back only while claimed, so a guess racing this one finds no file
+    # and is refused rather than spending a try nobody counted.
     _write_private(path, pend)
     raise NoApproval("That isn't the send code on the person's screen; only they can read it to you. Nothing was sent.")
 
 
 def _kit_root():
     return os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+
+
+def _what(channel, to, text, subject):
+    line = " ".join(str(text).split())
+    return "%s to %s: %s%s" % (channel, to, ("[%s] " % subject) if subject else "", line)
 
 
 def show_code(code, what):
@@ -268,9 +300,8 @@ def show_code(code, what):
         return False
 
 
-def _request_code(channel, to, text, show):
-    b = binding(channel, to, text)
-    path = _pending_path(b)
+def _request_code(channel, to, text, subject, show):
+    path = _pending_path(binding(channel, to, text, subject))
     pend = _read(path)
     if pend and time.time() - float(pend.get("shown_at") or 0) < RESHOW_AFTER:
         raise NoApproval(
@@ -279,8 +310,7 @@ def _request_code(channel, to, text, show):
             "Nothing was sent.")
     code = "%06d" % secrets.randbelow(1000000)
     salt = secrets.token_hex(16)
-    what = "%s to %s: %s" % (channel, to, " ".join(str(text).split()))
-    if not show(code, what):
+    if not show(code, _what(channel, to, text, subject)):
         _log("refused", channel, to, reason="no screen for the code")
         raise NoApproval(
             "No press for this send, and no way to show the person a send code here (no HUD, no "
@@ -294,7 +324,7 @@ def _request_code(channel, to, text, show):
         "with CHEWBACCA_SEND_CODE=<code>. Never guess it. Nothing was sent.")
 
 
-def tty_press(channel, to, text):
+def tty_press(channel, to, text, subject=""):
     """True when someone typed `send` at the controlling terminal, False when
     they typed anything else, None when there's no terminal to ask."""
     try:
@@ -302,50 +332,50 @@ def tty_press(channel, to, text):
     except OSError:
         return None
     with os.fdopen(fd, "r+", buffering=1) as tty:
-        tty.write("\nSend this %s message to %s?\n  %s\nType send to send it, anything else cancels: "
-                  % (channel, to, str(text)[:400]))
+        tty.write("\nSend this %s message to %s?\n%s  %s\nType send to send it, anything else cancels: "
+                  % (channel, to, ("  Subject: %s\n" % subject) if subject else "", str(text)[:400]))
         tty.flush()
         answer = tty.readline()
     return answer.strip().lower() == "send"
 
 
-def take(channel, to, text, show=None, tty=None, env=None, chain=False):
+def take(channel, to, text, subject="", show=None, tty=None, env=None, chain=False, exe=exe_path):
     """Consume the approval for this exact message, or raise NoApproval.
     Returns which press approved it: a minted token's press, hud, code or tty."""
-    channel, to, text = str(channel), str(to), str(text)
+    channel, to, text, subject = str(channel), str(to), str(text), str(subject or "")
     env = os.environ if env is None else env
-    press = _take_token(channel, to, text)
+    press = _take_token(channel, to, text, subject)
     if press:
         _log("take", channel, to, press)
         return press
     chain = ancestry() if chain is False else chain
-    if hud_press(chain):
+    if hud_press(chain, exe):
         _log("take", channel, to, "hud")
         return "hud"
     given = (env.get("CHEWBACCA_SEND_CODE") or "").strip()
     if given:
         try:
-            press = _check_code(channel, to, text, given)
+            press = _check_code(channel, to, text, subject, given)
         except NoApproval as e:
             _log("refused", channel, to, reason=str(e)[:120])
             raise
         _log("take", channel, to, press)
         return press
     if not agent_above(chain):
-        typed = (tty or tty_press)(channel, to, text)
+        typed = (tty or tty_press)(channel, to, text, subject)
         if typed:
             _log("take", channel, to, "tty")
             return "tty"
         if typed is False:
             _log("refused", channel, to, reason="cancelled at the terminal")
             raise NoApproval("Cancelled at the terminal. Nothing was sent.")
-    _request_code(channel, to, text, show or show_code)
+    _request_code(channel, to, text, subject, show or show_code)
 
 
-def refusal(channel, to, text):
+def refusal(channel, to, text, subject=""):
     """take() for callers that report errors as strings: None when approved."""
     try:
-        take(channel, to, text)
+        take(channel, to, text, subject)
         return None
     except NoApproval as e:
         return str(e)
@@ -370,6 +400,7 @@ def main(argv=None):
     t = sub.add_parser("take", help="consume the approval for one message; the text is on stdin")
     t.add_argument("--channel", required=True)
     t.add_argument("--to", required=True)
+    t.add_argument("--subject", default="")
     sub.add_parser("status")
     a = ap.parse_args(argv)
     if a.cmd == "status":
@@ -377,7 +408,7 @@ def main(argv=None):
         return 0
     text = sys.stdin.read()
     try:
-        print(take(a.channel, a.to, text))
+        print(take(a.channel, a.to, text, a.subject))
         return 0
     except NoApproval as e:
         print(str(e), file=sys.stderr)

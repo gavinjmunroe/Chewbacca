@@ -28,10 +28,18 @@ sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "mac" / "lib"))
 import send_approval as sa  # noqa: E402
 
-AGENT_CHAIN = ["/bin/zsh", "claude", "/bin/bash"]
-PERSON_CHAIN = ["/bin/zsh", "/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal"]
-HUD_CHAIN = ["python3 tools/send_approval.py take", "node /k/bin/people texts drafts send 3",
-             "/opt/homebrew/bin/python3 /Users/x/.chewbacca/kit/current/bin/kyber-surfaces run"]
+AGENT_CHAIN = [(301, "/bin/zsh"), (300, "claude"), (299, "/bin/bash")]
+PERSON_CHAIN = [(401, "/bin/zsh"), (400, "/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal")]
+# The home panel's Send: Kyber runs `kyber-surfaces home --send <id>`
+# (hud/Sources/KyberKit/Home.swift), which runs people texts drafts send.
+KYBER_PID = 500
+PANEL_CHAIN = [(503, "python3 tools/send_approval.py take"), (502, "node /k/bin/people texts drafts send 3"),
+               (501, "/opt/homebrew/bin/python3 /k/bin/kyber-surfaces home --send task:r"),
+               (KYBER_PID, "/Applications/Kyber.app/Contents/MacOS/Kyber")]
+
+
+def kyber_exe(pid):
+    return sa.KYBER_EXE if pid == KYBER_PID else "/bin/zsh"
 
 
 class Sandbox(unittest.TestCase):
@@ -124,32 +132,71 @@ class TakeTests(Sandbox):
         with self.assertRaises(sa.NoApproval):
             sa.take("imessage", "+1", "hi", tty=lambda *a: False, chain=PERSON_CHAIN)
 
-    def test_a_hud_press_counts_only_with_no_agent_above_it(self):
-        self.assertEqual(sa.take("imessage", "+1", "hi", chain=HUD_CHAIN), "hud")
-        with self.assertRaises(sa.NoApproval):
-            sa.take("imessage", "+1", "hi", show=lambda *a: False, chain=HUD_CHAIN + AGENT_CHAIN)
-        jobs = HUD_CHAIN + ["/usr/bin/python3 /Users/x/.local/bin/chewbacca-jobs _run 100"]
-        with self.assertRaises(sa.NoApproval):
-            sa.take("imessage", "+1", "hi", show=lambda *a: False, chain=jobs)
+    def no_tty(self):
+        return mock.Mock(side_effect=AssertionError("tty offered"))
 
     def test_the_home_panels_send_is_a_press(self):
-        # Kyber.app runs `kyber-surfaces home --send <id>` on the panel's Send
-        # (hud/Sources/KyberKit/Home.swift), which runs people texts drafts send.
-        panel = ["python3 tools/send_approval.py take", "node /k/bin/people texts drafts send 3",
-                 "/opt/homebrew/bin/python3 /k/bin/kyber-surfaces home --send task:r",
-                 "/Applications/Kyber.app/Contents/MacOS/Kyber"]
-        self.assertEqual(sa.take("imessage", "+1", "hi", chain=panel), "hud")
-        # The voice agent and the agents IDE run under Kyber too; they are agents.
-        for agent in ("/opt/homebrew/bin/python3 /Users/x/.local/bin/hud-listen",
+        self.assertEqual(sa.take("imessage", "+1", "hi", chain=PANEL_CHAIN, exe=kyber_exe), "hud")
+        # Anything agent-run between the press and the send means no press:
+        # an agent shell, the job queue, the voice agent, the agents IDE.
+        for agent in ("claude", "/usr/bin/python3 /Users/x/.local/bin/chewbacca-jobs _run 100",
+                      "/opt/homebrew/bin/python3 /Users/x/.local/bin/hud-listen",
                       "/opt/homebrew/bin/python3 /Users/x/.local/bin/realm-engine run",
                       "node /Users/x/code/vendor/realm/apps/server/dist/main.js"):
+            chain = PANEL_CHAIN[:2] + [(600, agent)] + PANEL_CHAIN[2:]
             with self.assertRaises(sa.NoApproval, msg=agent):
-                sa.take("imessage", "+1", "hi", show=lambda *a: False,
-                        tty=mock.Mock(side_effect=AssertionError("tty offered")), chain=panel[:2] + [agent] + panel[3:])
+                sa.take("imessage", "+1", "hi", show=lambda *a: False, tty=self.no_tty(), chain=chain, exe=kyber_exe)
+
+    def test_kyber_is_known_by_its_executable_never_its_argv(self):
+        # `exec -a /Applications/Kyber.app/Contents/MacOS/Kyber sh ...` makes ps
+        # print Kyber's path for a shell. The kernel's path for that pid is sh.
+        spoofed = PANEL_CHAIN[:3] + [(700, "/Applications/Kyber.app/Contents/MacOS/Kyber")]
+        with self.assertRaises(sa.NoApproval):
+            sa.take("imessage", "+1", "hi", show=lambda *a: False, tty=lambda *a: None, chain=spoofed,
+                    exe=lambda pid: "/bin/sh")
+        # The same for the surfaces daemon: a command line that names it is
+        # not a press on its own.
+        surfaces = PANEL_CHAIN[:2] + [(800, "/opt/homebrew/bin/python3 /k/bin/kyber-surfaces run")]
+        with self.assertRaises(sa.NoApproval):
+            sa.take("imessage", "+1", "hi", show=lambda *a: False, tty=lambda *a: None, chain=surfaces,
+                    exe=lambda pid: "/opt/homebrew/bin/python3")
+
+    def test_exe_path_reads_the_kernel(self):
+        self.assertEqual(os.path.realpath(sa.exe_path(os.getpid()) or ""),
+                         os.path.realpath(sys.executable) if "Python.app" not in (sa.exe_path(os.getpid()) or "")
+                         else os.path.realpath(sa.exe_path(os.getpid())))
+        self.assertTrue(sa.exe_path(os.getpid()))
+        self.assertIsNone(sa.exe_path(999999))
+
+    def test_an_email_approval_is_bound_to_its_subject(self):
+        sa.mint("email", "a@b.co", "body", "kit_confirm", subject="Lunch")
+        with self.assertRaises(sa.NoApproval):
+            sa.take("email", "a@b.co", "body", subject="Wire the $40k today", show=lambda *a: False, chain=AGENT_CHAIN)
+        self.assertEqual(sa.take("email", "a@b.co", "body", subject="Lunch", chain=AGENT_CHAIN), "kit_confirm")
+
+    def test_two_guesses_at_once_spend_two_tries(self):
+        got, show = self.shown()
+        with self.assertRaises(sa.NoApproval):
+            sa.take("email", "a@b.co", "x", show=show, chain=AGENT_CHAIN)
+        real = got[0][0]
+        wrong = "000000" if real != "000000" else "111111"
+        path = sa._pending_path(sa.binding("email", "a@b.co", "x"))
+        # While one guess holds the pending code, a second finds nothing and
+        # is refused; it never gets a free try against the hash.
+        held, claim = sa._claim(path)
+        self.assertIsNotNone(held)
+        with self.assertRaises(sa.NoApproval) as e:
+            sa.take("email", "a@b.co", "x", env={"CHEWBACCA_SEND_CODE": real}, chain=AGENT_CHAIN)
+        self.assertIn("another check has it", str(e.exception))
+        os.rename(claim, path)
+        for _ in range(sa.MAX_CODE_TRIES):
+            with self.assertRaises(sa.NoApproval):
+                sa.take("email", "a@b.co", "x", env={"CHEWBACCA_SEND_CODE": wrong}, chain=AGENT_CHAIN)
+        self.assertFalse(os.path.exists(path))
 
     def test_an_unreadable_process_tree_counts_as_an_agent(self):
         self.assertTrue(sa.agent_above(None))
-        self.assertFalse(sa.hud_press(None))
+        self.assertFalse(sa.hud_press(None, kyber_exe))
         with self.assertRaises(sa.NoApproval):
             sa.take("imessage", "+1", "hi", show=lambda *a: False,
                     tty=mock.Mock(side_effect=AssertionError("tty offered")), chain=None)
@@ -165,6 +212,7 @@ class TakeTests(Sandbox):
         self.assertTrue(sa.agent_above(sa.ancestry(90, ps)))
         self.assertFalse(sa.agent_above(sa.ancestry(50, ps)))
         self.assertIsNone(sa.ancestry(12345, ps))
+        self.assertEqual([pid for pid, _ in sa.ancestry(70, ps)], [70, 60, 50])
 
     def test_this_shell_is_an_agent(self):
         # This suite runs from an agent tab or a test runner; either way the
@@ -182,9 +230,15 @@ class TakeTests(Sandbox):
 
     def test_js_and_python_agree_on_the_token(self):
         js = ("const s=require(%s);s.mintPressed('whatsapp','9@s.whatsapp.net','caf\\u00e9 \\ud83d\\ude00','kit_confirm');"
-              "console.log(s.binding('a','b','c'))" % json.dumps(str(ROOT / "bin/lib/send-approval.js")))
-        out = subprocess.run(["node", "-e", js], capture_output=True, text=True, check=True).stdout.strip()
-        self.assertEqual(out, sa.binding("a", "b", "c"))
+              "s.mintPressed('email','-a@b.co','body','kit_confirm','-Re: x');"
+              "console.log(s.binding('a','b','c'), s.binding('a','b','c','d'));"
+              "process.env.CHEWBACCA_SEND_CODE_SHOW='off';"
+              "console.log(JSON.stringify(s.take('email','-a@b.co','body','-Re: x')))"
+              % json.dumps(str(ROOT / "bin/lib/send-approval.js")))
+        out = subprocess.run(["node", "-e", js], capture_output=True, text=True, check=True).stdout.splitlines()
+        self.assertEqual(out[0], "%s %s" % (sa.binding("a", "b", "c"), sa.binding("a", "b", "c", "d")))
+        # A dash-led address and subject reach take() as values, not flags.
+        self.assertEqual(json.loads(out[1]), {"ok": True, "press": "kit_confirm"})
         self.assertEqual(sa.take("whatsapp", "9@s.whatsapp.net", "café \U0001F600", chain=AGENT_CHAIN),
                          "kit_confirm")
 
@@ -198,7 +252,7 @@ class SinkTests(Sandbox):
         code, res = email_reader.send("a@b.co", "s", "body", runner=runner)
         self.assertEqual(code, 6)
         self.assertFalse(res["ok"])
-        sa.mint("email", "a@b.co", "body", "test")
+        sa.mint("email", "a@b.co", "body", "test", subject="s")
         runner = mock.Mock(return_value=mock.Mock(returncode=0, stdout="{}", stderr=""))
         code, res = email_reader.send("a@b.co", "s", "body", runner=runner)
         self.assertEqual(code, 0, res)
@@ -212,8 +266,12 @@ class SinkTests(Sandbox):
         with mock.patch.object(gmail, "gws", gws), mock.patch.object(gmail, "sending_account", return_value=None):
             self.assertFalse(gmail.send("a@b.co", "s", "body")["ok"])
         gws.assert_not_called()
-        sa.mint("email", "a@b.co", "body", "test")
+        sa.mint("email", "a@b.co", "body", "test", subject="other")
         gws = mock.Mock(return_value='{"id": "m1"}')
+        with mock.patch.object(gmail, "gws", gws), mock.patch.object(gmail, "sending_account", return_value=None):
+            self.assertFalse(gmail.send("a@b.co", "s", "body")["ok"], "an approval for another subject sent")
+        gws.assert_not_called()
+        sa.mint("email", "a@b.co", "body", "test", subject="s")
         with mock.patch.object(gmail, "gws", gws), mock.patch.object(gmail, "sending_account", return_value=None):
             self.assertTrue(gmail.send("a@b.co", "s", "body")["ok"])
         gws.assert_called_once()
@@ -381,7 +439,8 @@ class PeopleSendTests(Sandbox):
         r = subprocess.run(send[:4] + ["--dry-run", "--approval-binding"], env=env, capture_output=True, text=True)
         line = [ln for ln in r.stdout.splitlines() if ln.startswith("approval-binding ")]
         self.assertEqual(json.loads(line[0].split(" ", 1)[1]),
-                         {"channel": "whatsapp", "to": "15550102@s.whatsapp.net", "text": "running late"})
+                         {"channel": "whatsapp", "to": "15550102@s.whatsapp.net", "text": "running late",
+                          "subject": ""})
 
 
 if __name__ == "__main__":

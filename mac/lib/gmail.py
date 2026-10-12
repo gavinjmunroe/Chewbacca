@@ -456,7 +456,7 @@ def send(to, subject, text, dry_run=False):
         return {"ok": True, "dry_run": True, "to": to}
     if os.environ.get("CHEWBACCA_NO_SEND"):
         return {"ok": False, "error": "sending is disabled (CHEWBACCA_NO_SEND)"}
-    refused = _send_refusal("email", to, text)
+    refused = _send_refusal("email", to, text, subject or "(no subject)")
     if refused:
         return {"ok": False, "error": refused}
     ACCOUNT["cfg"] = sending_account(to)
@@ -468,7 +468,7 @@ def send(to, subject, text, dry_run=False):
         return {"ok": False, "error": str(err)[:200]}
 
 
-def _send_refusal(channel, to, text):
+def _send_refusal(channel, to, text, subject=""):
     """tools/send_approval.py's answer for this exact message: None when a
     person's press approved it, else why nothing was sent. Loaded by path like
     verdicts.py; when it can't load, nothing sends."""
@@ -484,7 +484,7 @@ def _send_refusal(channel, to, text):
             sys.modules["chewbacca_send_approval"] = mod
     except Exception as err:
         return "the send approval check couldn't load (%s), so nothing was sent" % err
-    return mod.refusal(channel, to, text)
+    return mod.refusal(channel, to, text, subject)
 
 
 def _chewbacca_verdicts():

@@ -732,7 +732,13 @@ function outward(bin) {
       // The confirmed code is the person's press; this is the one place it
       // becomes an approval, for the exact channel, address and text drafted.
       send: (d) => {
-        approvals.mintPressed(d.approval.channel, d.approval.to, d.approval.text, "kit_confirm");
+        approvals.mintPressed(
+          d.approval.channel,
+          d.approval.to,
+          d.approval.text,
+          "kit_confirm",
+          d.approval.subject || "",
+        );
         return run(B("people"), d.argv, { timeout: 60000 });
       },
     },

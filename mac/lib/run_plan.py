@@ -88,7 +88,7 @@ def _chewie(*args):
     return subprocess.run([BIN, *args], capture_output=True, text=True)
 
 
-def _send_refusal(channel, to, text):
+def _send_refusal(channel, to, text, subject=""):
     """tools/send_approval.py's answer for this exact message: None when a
     person's press approved it, else why nothing was sent. Loaded by path like
     verdicts.py; when it can't load, nothing sends."""
@@ -104,7 +104,7 @@ def _send_refusal(channel, to, text):
             sys.modules["chewbacca_send_approval"] = mod
     except Exception as err:
         return "the send approval check couldn't load (%s), so nothing was sent" % err
-    return mod.refusal(channel, to, text)
+    return mod.refusal(channel, to, text, subject)
 
 
 def _chewbacca_verdicts():
@@ -198,7 +198,8 @@ def run_action(a, approved):
     # --yes approves the plan, never a send: an agent passes --yes itself. The
     # send step stops here until a person's press approves this exact message.
     if name in ("send_text", "send_email"):
-        refused = _send_refusal("imessage" if name == "send_text" else "email", a["to"], a["body"])
+        refused = _send_refusal("imessage" if name == "send_text" else "email", a["to"], a["body"],
+                                 a.get("subject", "") if name == "send_email" else "")
         if refused:
             _send_row(name, "failed", a, "no press")
             raise PlanError(refused)

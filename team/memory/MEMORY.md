@@ -146,7 +146,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 
 - feedback_read_all_of_brightspace: course material can hide behind announcement links (ACAD 185 master spreadsheet links every deck); read news + homepage links and export Google files before saying "0 files" (10/11)
 - feedback_usc_signin_uses_school_profile: chewb signs students into USC itself in the usc.edu Chrome profile, waits for SSO, BLOCKED only on a real password/Duo; Default profile hit SSO Login Failed (10/11)
-- feedback_practice_tool_is_a_session: study/practice tools are a one-thing-at-a-time session around the real object, never tabs over cards; interface-first.sh refuses a UI page before the interface skill (10/11)
+- feedback_practice_tool_is_a_session: study/practice tools are a one-thing-at-a-time session around the real object, never tabs over cards; teach each item before any quiz ("idk any of the chords", 10/12); interface-first.sh refuses a UI page before the interface skill (10/11)
 - feedback_practice_app_whole_semester: exam practice apps cover every lecture so far, not just the next exam ("I know none of it", BISC 10/11); audit every screen at 390 in Chromium + WebKit
 - feedback_never_read_course_ai_policies: never look up, store, quote or gate on a course AI policy; the student's call, and it turned USC students away (10/11); tests/no_ai_policy_gate.sh enforces
 - feedback_3d_means_nalana: any 3D or render work starts in Nalana (live Blender + MCP), and every 3D subagent brief names it; a logo took ~12 blind headless renders (10/11)

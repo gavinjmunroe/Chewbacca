@@ -27,6 +27,13 @@ guide progress                   # what they already got wrong
 If `guide progress` shows missed topics, the new guide opens on those. Do not
 rebuild the whole unit because one section was weak.
 
+**Teach before you test.** Every item gets a teach step (the answer shown,
+spelled out in words, with the move from the item before it) before any recall
+drill reaches it. Caleb, 2026-10-12, two hours before a guitar midterm whose
+chord drills were all quizzes: "idk any of the chords". When time is short, the
+items on the exam come first and in the order they're performed, and a day
+plan on the page shifts from the real start time when he's behind.
+
 ## Making one
 
 ```sh

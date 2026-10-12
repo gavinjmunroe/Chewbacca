@@ -30,3 +30,20 @@ the time-blocked plan for the day went onto the app's home screen (blocks with
 the current one highlighted from the clock, what to drill in each, the exam at
 the end). Put the day's plan inside the practice app, not only in chat, so the
 tab with the agent can close.
+
+Exam morning, 10:13am, 2026-10-12: "Bro fix the guitar site idk any of the
+chords". The app had two chord drills (build every chord, name every chord)
+and both only TESTED him: a blank neck and "place the fingers". Someone
+starting from zero can't pass a test they were never taught. The fix was a
+"Learn the chords" step first on the list: one chord full screen, every finger
+written out in words ("ring finger: string 5, fret 3"), the strings to skip,
+the move from the previous chord, a play button, then a self-rating. The
+pieces he performs (C, Am, Dm, G7 for Chord Ex #13) come first and in order,
+not shuffled.
+
+**Never:** ship a practice app whose first contact with an item is a quiz.
+Every item needs a teach step before any recall drill, and when time is short
+the items on the exam come first. At 10:22 he wrote "fix the times im cooked
+just starting the chords rn": a time-blocked plan on the home screen has to
+move when he's behind, so shift every block from the real start time and cut
+the lowest-value items out loud ("skip the other 9 today").

@@ -39,6 +39,7 @@ TRANSCRIPT=$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty' 2>/dev/nul
 RL_MSG="$MSG" RL_TRANSCRIPT="$TRANSCRIPT" perl - <<'PL'
 use strict; use warnings; use Encode qw(decode_utf8);
 my $m = decode_utf8($ENV{RL_MSG} // "");
+my $raw = $m;                   # drafts he pastes live in code blocks, so a rule flagged [4] reads them too
 $m =~ s/```.*?(?:```|\z)//sg;   # code is data, not his voice
 $m =~ s/^\s*>.*$//mg;           # a quoted line is somebody's words, not the reply's
 my $q = qr/['\x{2019}]/;
@@ -53,6 +54,8 @@ my @rules = (
    "asks a person for a fact a lookup finds. Caleb, 2026-10-11: \"Never ask humans things that you don't need a human for\" after a zip code request for 2849 Summerdale Dr, \"1 search online away\". Look it up first: `chewbacca resolve \"<question>\" --about <who>`. Only ask what no source has.", 0, 1],
   [qr/\b(?:photos?|pics?|pictures?|a scan|scans)\s+of\s+(?:ur|your)\s+(?:paper\s+|handwritten\s+)?draft|\bsend\s+(?:me\s+)?(?:ur|your)\s+(?:paper|handwritten)\s+draft/i,
    "asks for his paper draft. He hand-writes first and has Claude draft from his picks to compare; never ask for the paper draft (feedback_paper_draft_first_then_compare, 2026-10-09: \"Bro just do it\")."],
+  [qr/\by${q}?all\b/i,
+   "writes yall or y'all. Caleb says ygs for a group: \"ygs, not yall. I thought I told you this\" (2026-10-12, a gc draft in a code block; first set 2026-10-06 in core/voice.md).", 0, 0, 1],
 );
 # The last thing he typed, read only when a study rule matched: a study answer
 # to a study question is the job, not a nudge.
@@ -77,8 +80,9 @@ sub asked_about_school {
   return 0;
 }
 for my $r (@rules) {
-  next if $r->[2] && $m =~ $r->[0] && asked_about_school();
-  if ($m =~ $r->[0]) {
+  my $s = $r->[4] ? $raw : $m;
+  next if $r->[2] && $s =~ $r->[0] && asked_about_school();
+  if ($s =~ $r->[0]) {
     my $dir = $ENV{CHEWBACCA_HOME} || "$ENV{HOME}/.chewbacca";
     mkdir $dir unless -d $dir;
     my $found = "";

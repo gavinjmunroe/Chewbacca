@@ -43,6 +43,9 @@ expect 0 "a refusal already happened this prompt" "u'll see it" true
 expect 2 "the 10-11 zip code ask, verbatim" "What's the city and zip for 2849 Summerdale? Footer needs the full address"
 grep -q "Hurst, TX 76054" "$T/home/voice-flags.pending" 2>/dev/null \
   || { echo "FAIL: the ask rule didn't carry resolve's answer forward"; fail=1; }
+expect 2 "the 10-12 gc draft, yall inside a code block" $'Something like:\n```\nIf yall decide anything just drop it here\n```'
+expect 2 "y'all in chat" "Y'all are set"
+expect 0 "ygs is fine" $'```\nHey ygs I am gonna miss class\n```'
 expect 0 "an ordinary report" "Pushed 3 commits to main, tests pass, the site is live."
 
 start=$(perl -MTime::HiRes=time -e 'printf "%d", time*1000')

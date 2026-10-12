@@ -1133,7 +1133,7 @@ unset _tool
 # under Kyber's own Microphone and Screen Recording grants, and it drives
 # room-capture; granola-import brings Granola's past meetings across once.
 _installed_hud=""
-for _tool in hud hud-listen hud-runtime hud-codex hud-gemini hud-ollama hud-accounts hud-context hud-watch hud-speak hud-guide hud-music kyber-sessions text-command superassistant chewbacca-mcp portal hud-autostart meeting-autopilot room-capture granola-import realm-engine; do
+for _tool in hud hud-listen hud-runtime hud-codex hud-gemini hud-ollama hud-accounts hud-context hud-watch hud-speak hud-guide hud-music kyber-sessions text-command superassistant chewbacca-mcp portal hud-autostart meeting-autopilot room-capture granola-import realm-engine realm-ui; do
   if [ -f "$SCRIPT_DIR/bin/$_tool" ]; then
     link_tool "$_tool"
     _installed_hud="$_installed_hud $_tool"

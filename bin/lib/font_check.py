@@ -113,10 +113,10 @@ CONTEXT = 60
 
 def mentions(text: str, names: Optional[List[str]] = None) -> List[str]:
     """The not-installed downloadable fonts this text asks for as a font."""
-    names = missing() if names is None else names
     low = text.lower()
     if "font" not in low:
-        return []
+        return []  # before missing(): CoreText costs ~50 ms for nothing
+    names = missing() if names is None else names
     found = []
     for name in names:
         n = name.lower()

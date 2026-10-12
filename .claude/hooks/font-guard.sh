@@ -17,6 +17,11 @@ set -uo pipefail
 
 INPUT="$(cat 2>/dev/null || true)"
 [ -n "$INPUT" ] || exit 0
+# Every check below needs the word "font" in the code (font_check.CONTEXT),
+# and the raw JSON holds every ASCII word of the decoded text. Deciding that
+# here skips python and CoreText: on 2026-10-11 font-guard cost 0.25 s CPU on
+# a plain `ls`, the second most expensive hook on every Bash call.
+case "$INPUT" in *[Ff][Oo][Nn][Tt]*) ;; *) exit 0 ;; esac
 HERE="$(cd "$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")" && pwd)"
 LIB=""
 for cand in "$HERE/../../bin/lib" "$HOME/.chewbacca/kit/current/bin/lib"; do

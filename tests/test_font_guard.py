@@ -12,6 +12,30 @@ HOOK = ROOT / ".claude" / "hooks" / "font-guard.sh"
 sys.path.insert(0, str(ROOT / "bin" / "lib"))
 import font_check  # noqa: E402
 
+# Speed, 2026-10-11: on a plain `ls` the hook cost 0.25 s CPU, python plus a
+# CoreText call, though nothing without the word "font" can ever be refused.
+# These run everywhere, before the catalog skip below.
+import os  # noqa: E402
+import tempfile  # noqa: E402
+from unittest import mock  # noqa: E402
+
+with mock.patch.object(font_check, "missing", side_effect=AssertionError("CoreText read")):
+    assert font_check.mentions("ls -la && git status") == [], "no font word, no hits"
+with tempfile.TemporaryDirectory() as temp:
+    hooks = Path(temp) / ".claude" / "hooks"
+    lib = Path(temp) / "bin" / "lib"
+    hooks.mkdir(parents=True)
+    lib.mkdir(parents=True)
+    (hooks / "font-guard.sh").write_text(HOOK.read_text())
+    marker = Path(temp) / "imported"
+    (lib / "font_check.py").write_text(
+        "open(%r, 'w').close()\ndef mentions(text):\n    return []\n" % str(marker))
+    body = json.dumps({"tool_name": "Bash", "tool_input": {"command": "ls -la"}})
+    code = subprocess.run(["bash", str(hooks / "font-guard.sh")], input=body,
+                          capture_output=True, text=True).returncode
+    assert code == 0 and not marker.exists(), "a payload without 'font' must never start python"
+print("ok   no python and no CoreText for a command without the word font")
+
 if not font_check.CATALOG_DIR.is_dir():
     print("  skip font-guard (no macOS font catalog)")
     raise SystemExit(0)

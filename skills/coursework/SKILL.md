@@ -237,6 +237,13 @@ and the MPGU 120A midterm two days out only surfaced when he asked about it,
 because the guitar ledger had no deliverables at all ("I need a rlllyyyy long
 time to lock in for my guitar midterm I don't know jack").
 
+Before any hour-by-hour block plan, read the day's calendar first
+(`mac calendar list --json` for today) and build the blocks around what is
+already booked. Then put the plan on the practice app's home screen when one
+exists, so he can close the tab. Never-do, from 2026-10-12, exam morning: a
+7:45 to 12:00 guitar midterm plan put guitar practice straight through 9:00
+and he had to say "I hv a meeting 9-9:30 bro".
+
 ## Answering questions about the semester
 
 - **"What's due?"** `coursework due`. Do not editorialize the list into a plan

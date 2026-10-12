@@ -231,7 +231,7 @@ def swap_current(base: Path, sha: str) -> None:
     os.replace(tmp, base / "current")  # rename(2): never a moment without `current`
 
 
-def in_use(snaps: Path) -> set:
+def in_use(snaps: Path) -> Optional[set]:
     """Snapshot names some running process still has open: a file, a
     directory or its cwd, per lsof. On 2026-10-10 hud-listen ran from
     95e730c4 from 18:29, four updates pruned that snapshot under it, and
@@ -240,15 +240,29 @@ def in_use(snaps: Path) -> set:
     process can still miss this; that is why hud-listen hands over on an
     update (bin/lib/kit_snapshot.py) and why KEEP stays above one."""
     prefix = str(snaps.resolve()) + os.sep
+    names, looked = set(), False
     try:
         out = subprocess.run(["lsof", "-nP", "-Fn"], capture_output=True, text=True, timeout=60).stdout
+        looked = True
+        for line in out.splitlines():
+            if line.startswith("n") and line[1:].startswith(prefix):
+                names.add(line[1 + len(prefix):].split(os.sep, 1)[0])
     except (OSError, subprocess.SubprocessError):
-        return set()
-    names = set()
-    for line in out.splitlines():
-        if line.startswith("n") and line[1:].startswith(prefix):
-            names.add(line[1 + len(prefix):].split(os.sep, 1)[0])
-    return names
+        pass
+    # A process's command line too, which lsof can't see once Python has read
+    # its script. On 2026-10-11 hud-speak ran from 9528874d and room-capture
+    # from 4ee62036 after both snapshots were pruned; both paths sat in argv.
+    try:
+        out = subprocess.run(["ps", "-axww", "-o", "command="], capture_output=True, text=True, timeout=30).stdout
+        looked = True
+        for spelled in {prefix, str(snaps) + os.sep}:
+            for chunk in out.split(spelled)[1:]:
+                names.add(chunk.split(os.sep, 1)[0].split()[0] if chunk.split() else "")
+    except (OSError, subprocess.SubprocessError):
+        pass
+    names.discard("")
+    # Neither could look: nothing is known to be free, so nothing is.
+    return names if looked else None
 
 
 def prune(source: Path, base: Path, keep_sha: str) -> List[str]:
@@ -266,8 +280,8 @@ def prune(source: Path, base: Path, keep_sha: str) -> List[str]:
             if d.name != keep_sha:
                 kept += 1
             continue
-        if d.name in busy:
-            continue  # a live process runs from it; the next update tries again
+        if busy is None or d.name in busy:
+            continue  # a live process runs from it, or we couldn't look; next update tries again
         remove_snapshot(source, d)
         removed.append(d.name[:12])
     return removed

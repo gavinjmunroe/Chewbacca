@@ -89,6 +89,20 @@ x
 EOF"
 t "subshell cd does not leak"   2 "$T/dirty" "( cd $T/clean ); git reset --hard"
 t "cd - is unknowable"          2 "$T/dirty" "cd $T/clean; cd -; git reset --hard"
+# Regression review, 2026-10-11: a smarter reading lost work in all eight
+# while the old rule refused them. Complex commands judge the cwd again.
+t "CDPATH cd"                   2 "$T/dirty" "CDPATH=$T cd clean && cd $T/dirty && git reset --hard"
+t "printf -v retargets"         2 "$T/dirty" "W=$T/clean; printf -v W %s \"\$PWD\"; git -C \"\$W\" reset --hard"
+t "GIT_DIR alone"               2 "$T/dirty" "GIT_DIR=$T/clean/.git git reset --hard"
+t "here-string then reset"      2 "$T/dirty" "grep -c x <<<hello
+git reset --hard"
+t "fake override in quotes"     2 "$T/dirty" "echo \"; DESTRUCTIVE_OK=1 \$(git reset --hard)\""
+t "override then background"    2 "$T/dirty" "echo hi; DESTRUCTIVE_OK=1 true & git reset --hard"
+t "<<- piped to sh"             2 "$T/dirty" "cat <<-EOF | sh
+	git reset --hard
+	EOF"
+t "arithmetic shift"            2 "$T/dirty" "echo \$((1<<X))
+git reset --hard"
 touch "$T/clean/untracked.txt"
 t "clean -f, untracked only"    2 "$T/clean" "git clean -f"
 rm -f "$T/clean/untracked.txt"

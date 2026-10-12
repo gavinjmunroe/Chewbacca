@@ -49,9 +49,16 @@ while i < len(lines):
     line = lines[i]
     kept.append(line)
     i += 1
-    for tag in re.findall(r"<<-?\s*['\"]?([A-Za-z_]\w*)['\"]?", line):
+    # Not a here-string (<<<) and not arithmetic: a heredoc only when its
+    # terminator line really follows. Otherwise nothing is dropped.
+    for tag in re.findall(r"(?<!<)<<(?!<)-?\s*['\"]?([A-Za-z_]\w*)['\"]?", line):
+        rest = [l.strip() for l in lines[i:]]
+        if tag not in rest:
+            continue
         opener = re.split(r"&&|\|\||;|\|", line.split("<<", 1)[0])[-1].split()
-        runs = bool(opener) and os.path.basename(opener[0]) in SHELLS
+        # Fed to a shell directly or through a pipe: the body runs.
+        runs = (bool(opener) and os.path.basename(opener[0]) in SHELLS) or bool(
+            re.search(r"\|\s*(?:\S*/)?(?:sh|bash|zsh|dash|ksh|fish|python3?|node|perl|ruby)\b", line))
         while i < len(lines) and lines[i].strip() != tag:
             if runs:
                 kept.append(lines[i])
@@ -62,6 +69,21 @@ body = "\n".join(kept)
 # directory after a piece unknowable from the text, so every directory the
 # command names is judged, not just the tracked one.
 uncertain = bool(re.search(r"[()\x60]|\bpopd\b|\bcd\s+-(\s|$)", body))
+# Only a simple command gets the precise reading below: one line, no heredoc,
+# here-string, substitution, background job, subshell, group, shell -c, eval,
+# source, xargs, pushd/popd, cd -, CDPATH, GIT_DIR or printf -v, and no
+# separator inside quotes. Anything else is also judged in the session's cwd,
+# exactly as before 2026-10-11. A review that night reproduced eight ways a
+# smarter reading of complex commands lost work the old rule had kept; the
+# guard is a net for accidents, and accidents live in the simple commands.
+SPECIAL = re.compile(r"\n|<<|\$\(|\x60|(?<![&>])&(?![&>])|[(){}]"
+                     r"|\b(?:eval|source|xargs|pushd|popd|CDPATH|GIT_DIR|GIT_WORK_TREE|GIT_INDEX_FILE|mapfile|readarray|exec|alias)\b"
+                     r"|printf\s+-v|\bcd\s+-(?:\s|$)|\b(?:sh|bash|zsh|dash|ksh|fish)\s+-c\b"
+                     r"|\|\s*(?:sh|bash|zsh|dash|ksh|fish|python3?|node|perl|ruby)\b")
+quotes_clean = not any(re.search(r"[;&|]", q) for q in re.findall(r"'[^']*'|\"[^\"]*\"", cmd))
+simple = not SPECIAL.search(cmd) and quotes_clean and not uncertain
+if not simple and re.match(r"\s*DESTRUCTIVE_OK=1\s", cmd):
+    raise SystemExit  # the old whole-command override, for a command too complex to read
 segments = re.split(r"&&|\|\||;|\n|\|", body)
 
 SAFE = ["git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null",
@@ -184,7 +206,7 @@ for seg in segments:
                 if "$" not in value and chr(96) not in value:
                     names[key] = value
         continue
-    ok_here = "DESTRUCTIVE_OK=1" in assigned
+    ok_here = simple and "DESTRUCTIVE_OK=1" in assigned
     if ok_here:
         continue  # the override names this command, and only this one
     found = len(PHRASE.findall(dequote(seg)))
@@ -246,13 +268,13 @@ for seg in segments:
     # phrase in the piece ($(...), an alias) is hidden.
     hidden += max(0, found - (1 if destroys and PHRASE.search(" ".join(a)) else 0))
     if destroys:
-        for d in ([here] + sorted(targets - {here}) if uncertain else [here]):
+        for d in ([here] if simple else [here, cwd] + sorted(targets - {here, cwd})):
             if repo_dirty(d, untracked=(verb == "clean")):
                 print(f"`git {' '.join(a)}` would throw away uncommitted work in {d}, and other tabs share this checkout.")
                 raise SystemExit
 # A phrase no parsed git call accounts for: something the parser can't see
 # runs it (eval, sh -c, $x). Judge the cwd and every directory the text names.
-if hidden:
+if hidden or (not simple and PHRASE.search(dequote(body))):
     for m in re.finditer(r"(?:-C|cd|pushd|--work-tree=?|GIT_WORK_TREE=)\s*(\S+)", dequote(body)):
         targets.add(resolve(m.group(1).rstrip(";)&|"), cwd))
     first = PHRASE.search(dequote(body))

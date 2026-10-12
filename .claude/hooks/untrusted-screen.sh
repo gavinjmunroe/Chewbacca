@@ -1,4 +1,11 @@
 #!/bin/bash
+# hookd skips this guard for a Bash call that names none of the readers it
+# screens (the case list below). Every other tool always runs it. Proven by
+# tools/hookd_replay.py: 0.023 s of CPU and 29 ms after every Bash call
+# before (2026-10-12).
+# gate: messages mail notes people chrome-js summarize scrape chewie
+# gate: clay-inbox browser-bridge curl
+[ -z "${HOOKD_INNER:-}" ] && [ -x "$HOME/.local/bin/hookd" ] && exec "$HOME/.local/bin/hookd" gate "$0" "$@"
 # PostToolUse: warn when content just read talks to the agent reading it.
 #
 # The untrusted-content rule is the only defence the kit had against a web

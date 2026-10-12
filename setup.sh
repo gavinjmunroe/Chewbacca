@@ -1499,7 +1499,7 @@ def gated(command):
             head = f.read(8192)
     except OSError:
         return command
-    if "\n# gate:" not in head:
+    if "\n# gate:" not in head and "\n# gate-file:" not in head:
         return command
     script = shlex.quote(command)
     return ('H="$HOME/.local/bin/hookd"; [ -x "$H" ] && exec "$H" gate ' + script

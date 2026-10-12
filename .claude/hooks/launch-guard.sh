@@ -1,4 +1,11 @@
 #!/bin/bash
+# hookd skips this guard for a Bash call that names none of these words:
+# every Bash refusal below needs a Clay mention, a receipt or grade name, or
+# a UI driver. Every other tool always runs it. Proven by
+# tools/hookd_replay.py: 0.113 s of CPU on every Bash call before (2026-10-12).
+# gate: clay sequencer campaign send-gate-receipt launch-guard-last-url
+# gate: gtme-grade gtme_grade_key chewie jev-browse peekaboo mac-use cliclick osascript
+[ -z "${HOOKD_INNER:-}" ] && [ -x "$HOME/.local/bin/hookd" ] && exec "$HOME/.local/bin/hookd" gate "$0" "$@"
 # Timing, logging, a watchdog and an output cap. See lib.sh.
 # shellcheck source=/dev/null
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" 2>/dev/null || true

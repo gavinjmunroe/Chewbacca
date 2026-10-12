@@ -1,4 +1,10 @@
 #!/bin/bash
+# hookd skips this guard for a Bash call while this session has no
+# skill-required marker: on Bash it only ever acts on that file (see below).
+# Every other tool always runs it. 0.062 s of CPU on every Bash call before
+# (2026-10-12).
+# gate-file: state/skill-required-{session}
+[ -z "${HOOKD_INNER:-}" ] && [ -x "$HOME/.local/bin/hookd" ] && exec "$HOME/.local/bin/hookd" gate "$0" "$@"
 # Timing, logging, a watchdog and an output cap. See lib.sh.
 # shellcheck source=/dev/null
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" 2>/dev/null || true

@@ -28,7 +28,10 @@ CRATE = ROOT / 'crates/hookd'
 HOOKS = ROOT / '.claude/hooks'
 CORPUS = ROOT / 'tests/fixtures/hookd-replay/bash.jsonl'
 REPLAY = ROOT / 'tools/hookd_replay.py'
-TARGET = Path(tempfile.gettempdir()) / 'chewbacca-hookd-test-target'
+# One build dir per checkout. Shared, a test in another worktree (or
+# another tab on main) relinked release/hookd from its own source, and
+# this checkout's tests ran that binary (2026-10-12).
+TARGET = Path(tempfile.gettempdir()) / ('chewbacca-hookd-test-target-' + hashlib.sha1(str(ROOT).encode()).hexdigest()[:10])
 PASSED = Path(tempfile.gettempdir()) / 'chewbacca-hookd-parity'
 # Four guard runs at once: a full cold replay of 13 guards measured 2026-10-12
 # took ~4 min at 4 jobs and load 11; one changed guard takes ~20 s.

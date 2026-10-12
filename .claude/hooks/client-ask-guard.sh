@@ -1,4 +1,9 @@
 #!/bin/bash
+# hookd skips this guard for a Bash call that never runs slackcli.
+# Proven by tools/hookd_replay.py: 0.057 s of CPU on every Bash call before
+# (2026-10-12).
+# gate: slackcli
+[ -z "${HOOKD_INNER:-}" ] && [ -x "$HOME/.local/bin/hookd" ] && exec "$HOME/.local/bin/hookd" gate "$0" "$@"
 # Timing, logging, a watchdog and an output cap. See lib.sh.
 # shellcheck source=/dev/null
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" 2>/dev/null || true

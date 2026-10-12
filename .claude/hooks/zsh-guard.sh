@@ -1,4 +1,11 @@
 #!/bin/bash
+# hookd skips this guard for a Bash call with none of these: rule 1 needs
+# `for` (for path in) or `path=`, rules 2 and 3 need a $ expansion. Not the
+# bare word path: every hook payload carries "transcript_path", so it ran on
+# every call (hook_bench, 2026-10-12). Proven by tools/hookd_replay.py: 0.087 s
+# of CPU on every Bash call before.
+# gate: $ path= for
+[ -z "${HOOKD_INNER:-}" ] && [ -x "$HOME/.local/bin/hookd" ] && exec "$HOME/.local/bin/hookd" gate "$0" "$@"
 # Timing, logging, a watchdog and an output cap. See lib.sh.
 # shellcheck source=/dev/null
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" 2>/dev/null || true

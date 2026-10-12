@@ -2,7 +2,7 @@
 name: clay-navigation
 description: "Answer anything about Clay without opening it, via `chewbacca clay <op>`: campaigns, replies, bounces, credits, tables, rows, workflows, runs, mailboxes. Never uses Sculptor, never sends or launches."
 triggers: >-
-  Answer any question about what is in Clay without opening Clay, through `chewbacca clay <op>`: a campaign's sends, replies, bounces, bounce health, sequence steps, enrolled leads and activity; who replied and what they wrote (the master inbox and one lead's thread); credit balance and what burned credits; tables, row counts, rows, columns, auto-run settings, enrichment run status and a table's change history; audiences and segments; workflows, their graph, runs and each run's steps (did the Togari webhook fire); sender mailboxes with warmup and SMTP errors; the blocklist. Use whenever someone asks what Clay shows, checks a campaign, table, workflow or credits, or is about to open Clay to look something up. Also for the few UI-only Clay jobs (Find People, run empty rows, configure an enrichment column), which get the exact clay-go route. It never uses Sculptor and never sends or launches a campaign.
+  Answer any question about what is in Clay without opening Clay, through `chewbacca clay <op>`: a campaign's sends, replies, bounces, bounce health, sequence steps, enrolled leads and activity; who replied and what they wrote (the master inbox and one lead's thread); credit balance and what burned credits; tables, row counts, rows, columns, auto-run settings, enrichment run status and a table's change history; audiences and segments; workflows, their graph, runs and each run's steps (did the Togari webhook fire); sender mailboxes with warmup and SMTP errors; the blocklist. Use whenever someone asks what Clay shows, checks a campaign, table, workflow or credits, or is about to open Clay to look something up. Also for the few UI-only Clay jobs (Find People, run empty rows, configure an enrichment column), which get the exact clay-go route. It never uses Sculptor, and it launches a campaign only through the gated START, never by telling a person to click.
 ---
 
 # Clay navigation
@@ -36,31 +36,31 @@ comes back, with `surface`, `ms` and every surface `tried`.
   reply/blocklist/forward webhook run").
 - Which op answers which question (each runs as `chewbacca clay <op> k=v`):
 
-  | Question                                         | Op                                                            |
-  | ------------------------------------------------ | ------------------------------------------------------------- |
-  | how many sent, replied, bounced, per campaign     | campaign-stats, then campaign-analytics campaign=             |
-  | who replied and what they said                    | inbox, then thread campaign_id= lead_id=                      |
-  | is a campaign at risk of auto-pausing on bounces  | bounce-health campaign=                                       |
-  | which mailboxes are failing or cold               | sender-accounts                                               |
-  | what burned credits                               | credit-usage days=7                                           |
-  | how big is a table, did a column error            | table-count table=, table-status table=                       |
-  | who changed this table                            | table-history table=                                          |
-  | did a workflow run, which step failed             | workflows, workflow-runs workflow=, workflow-run-steps workflow= run= |
-  | is a lead still enrolled, paused or finished      | campaign-leads campaign=                                      |
-  | is this address blocked                           | blocklist, or `gtme-dnc check EMAIL` across every source      |
+  | Question                                         | Op                                                                    |
+  | ------------------------------------------------ | --------------------------------------------------------------------- |
+  | how many sent, replied, bounced, per campaign    | campaign-stats, then campaign-analytics campaign=                     |
+  | who replied and what they said                   | inbox, then thread campaign_id= lead_id=                              |
+  | is a campaign at risk of auto-pausing on bounces | bounce-health campaign=                                               |
+  | which mailboxes are failing or cold              | sender-accounts                                                       |
+  | what burned credits                              | credit-usage days=7                                                   |
+  | how big is a table, did a column error           | table-count table=, table-status table=                               |
+  | who changed this table                           | table-history table=                                                  |
+  | did a workflow run, which step failed            | workflows, workflow-runs workflow=, workflow-run-steps workflow= run= |
+  | is a lead still enrolled, paused or finished     | campaign-leads campaign=                                              |
+  | is this address blocked                          | blocklist, or `gtme-dnc check EMAIL` across every source              |
+
 - Writes: `reply`, `forward`, `blocklist-add`, and 16 more built from Clay's
   own frontend code without ever sending one: `add-column`, `update-column`,
   `table-auto-run`, `run-cells` (five rows at most), `cancel-run`,
   `add-rows`, `update-rows`, `delete-rows`, `import`, `add-leads` (the CLI's
   `audiences update --filter`; always `audience= filter= campaign=cam_...`,
   campaign required, after a passing `gtme-grade --action add-leads` on that
-  campaign), `campaign-status` (PAUSED or STOPPED only;
-  a start never goes out from here), `lead-category`, `mark-read`,
+  campaign), `campaign-status` (PAUSED, STOPPED, or START on a draft with a
+  passing launch grade and pre-send gate), `lead-category`, `mark-read`,
   `blocklist-remove`, `blocklist-add-bulk`, `page-view-activity`. Every write
-  refuses unless called with `--allow-writes` and a person typing the op name
-  at a real terminal. Agent shells have no terminal, so an agent can't send
-  one: run it with `--dry-run` to print the exact request (method, URL, body,
-  no cookie), then hand Caleb the command.
+  refuses unless called with `--allow-writes` and Caleb's ok: him typing the
+  op name at a terminal, or a prompt from him in chat within 2 hours. The
+  agent runs the write itself; it never hands him the command.
 - The 16 carry `verified: false` in `registry.json` with their evidence: the
   bundle file, its sha256, the ts-rest contract and offset, the zod body
   schema and the UI call that builds the body. Until a person flips it, every
@@ -69,8 +69,9 @@ comes back, with `surface`, `ms` and every surface `tried`.
   `app.clay.com`'s `/assets/*.js`, find `<contractName>:{method:` for the
   path and body schema, then the `.<contractName>.` call site for the body
   the page sends.
-- UI-only jobs (find people, run empty rows, configure a column, start a
-  campaign) print the exact `clay-go` route instead of doing anything.
+- UI-only jobs (find people, run empty rows, configure a column) print a
+  `clay-go` route the agent drives itself in the background. Starting a
+  campaign is not one of them anymore.
 - `chewbacca clay doctor` checks the api-anything pin, the build and the
   imported Clay session. The session comes from Chrome Profile 7, the one
   signed in as caleb@bluemodernadvisory.com:
@@ -179,8 +180,22 @@ all three are gates even though their labels don't say save or run.
   automation separately; a column switch does not prove other automation is off.
 - Test no more than five selected rows per live test. Verify selected rows and
   run scope before executing. Never choose an all-rows or bulk run as a shortcut.
-- Do not send, launch, activate, or schedule campaigns. Prepared copy remains
-  draft output in Clay.
+- Do not send, launch, activate, or schedule campaigns outside the gated
+  START below. Prepared copy remains draft output in Clay.
+
+## Standing user corrections, 2026-10-12
+
+Caleb: "Never tell anyone to press anything in clay themselves and never
+flashbang anyone fix chewbs".
+
+- Never end a plan, reply, ledger step or `gtme next` line on "Caleb presses
+  Start" or any other click in Clay for a person. The agent starts a graded
+  draft itself: `chewbacca clay campaign-status ws=<ws> campaign=cam_...
+status=START --allow-writes` (draft only, launch grade, pre-send gate, his
+  chat ok; code-enforced since 1c53d357).
+- Never bring a Clay tab, window or app to the front while doing it. Reads and
+  writes go through `chewbacca clay`; any page an agent opens stays in the
+  background.
 
 ## Clay mistakes already paid for, and what now stops each one
 

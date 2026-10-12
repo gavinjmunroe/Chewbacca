@@ -36,6 +36,12 @@ expect 0 "React render is not 3D" "$(agent_call 'Fix the list so it does not re-
 expect 2 "new repo, first time" "$(bash_call 'git init amber-keyboard')"
 grep -q "amber-circles" "$T/err" || { echo "FAIL: the closest existing repo was not named"; fail=1; }
 expect 0 "same new repo, second time" "$(bash_call 'git init amber-keyboard')"
+# 2026-10-12: one look per project, whatever command starts it. The weekly
+# false-positive report found `git init` then `gh repo create` for one folder
+# refused twice, and the second rerun unchanged.
+expect 2 "git init after a cd, first time" "$(bash_call 'mkdir -p ~/code/design-quiz2 && cd ~/code/design-quiz2 && git init -q')"
+expect 0 "gh repo create for the project already looked at" "$(bash_call 'cd ~/code/design-quiz2 && gh repo create calebnewtonusc/design-quiz2 --private --source=. --push')"
+expect 2 "a different project still gets its look" "$(bash_call 'gh repo create calebnewtonusc/marketing-midterm --private')"
 expect 0 "scaffold in a scratch dir" "$(jq -nc '{tool_name:"Bash", session_id:"s1", cwd:"/private/tmp/x/scratchpad", tool_input:{command:"npx create-next-app demo"}}')"
 expect 0 "git init mention inside another command" "$(bash_call 'echo git init is how you start')"
 

@@ -129,19 +129,29 @@ for toks in segments(cmd):
 SCAFFOLD = re.compile(r"^(?:git init|gh repo create|npx (?:-y )?create-[\w-]+|npm (?:create|init) [\w@/-]+|"
                       r"pnpm create|yarn create|bun create|cargo new|swift package init|rails new|"
                       r"django-admin startproject|flutter create|expo init|npx (?:-y )?create-expo-app)\b")
+here = Path(os.environ["LG_CWD"] or ".")
 for toks in segments(cmd):
     line = " ".join(toks)
+    if toks[0] == "cd" and len(toks) > 1:
+        here = here / Path(toks[1]).expanduser()
+        continue
     m = SCAFFOLD.match(line)
     if not m:
         continue
     args = [t for t in toks[len(m.group(0).split()):] if not t.startswith("-")]
-    target = Path(args[0]).name if args else Path(os.environ["LG_CWD"] or ".").name
+    target = Path(args[0]).name if args else here.name
     where = str(Path(os.environ["LG_CWD"] or ".").resolve())
     # Scratch and test trees are throwaway by design.
     if re.match(r"^/(?:private/)?(?:tmp|var/folders)/", where) or "scratch" in where:
         continue
     session = os.environ["LG_SESSION"]
-    key = hashlib.sha256(f"{session}|{where}|{line}".encode()).hexdigest()[:24]
+    # One look per project per session. The weekly false-positive report
+    # (hookd_replay.py fp) on 2026-10-12 found 3 refusals by this rule that
+    # week rerun unchanged, and 2 of them were the second refusal for one
+    # project: `git init` in ~/code/design-quiz2, then `gh repo create
+    # calebnewtonusc/design-quiz2 --source=.`, each keyed on its own command
+    # line. Both name the same project, so the key is the project name.
+    key = hashlib.sha256(f"{session}|{target.lower()}".encode()).hexdigest()[:24]
     state = Path(os.environ.get("CHEWBACCA_HOME") or home / ".chewbacca") / "state" / "lesson-guard"
     try:
         state.mkdir(parents=True, exist_ok=True)
@@ -164,7 +174,7 @@ for toks in segments(cmd):
     print(f"lesson-guard: about to start a new project ({line[:60]}). On 2026-10-04 a whole night went into "
           "a new keyboard while amber-circles already existed, and on 10-07 Caleb said \"Bro we hv the repo\" "
           "(feedback_find_the_existing_thing_first). Look first: gh repo list, ls ~/code/*/, the brain index."
-          + (f" Closest existing by name: {", ".join(near[:6])}." if near else "")
+          + (" Closest existing by name: " + ", ".join(near[:6]) + "." if near else "")
           + " If none of them is it, run the same command again and it goes through.", file=sys.stderr)
     sys.exit(2)
 '

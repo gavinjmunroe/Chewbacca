@@ -501,7 +501,7 @@ test("the file view reads text under home only", async () => {
 });
 
 test("the file view never shows keys, tokens or keychains, even under home", async () => {
-  for (const p of ["/Users/x/.ssh/id_ed25519", "/Users/x/proj/.env", "/Users/x/proj/.env.local", "/Users/x/.aws/credentials", "/Users/x/certs/server.pem", "/Users/x/.chewbacca/realm-ui/server.json", "/Users/x/.chewbacca/realm/daemon.json"]) {
+  for (const p of ["/Users/x/.ssh/id_ed25519", "/Users/x/proj/.env", "/Users/x/proj/.env.local", "/Users/x/.aws/credentials", "/Users/x/certs/server.pem", "/Users/x/.chewbacca/realm-ui/server.json", "/Users/x/.chewbacca/realm/daemon.json", "/Users/x/proj/.git/config"]) {
     assert.ok(secretPath(p), p);
   }
   for (const p of ["/Users/x/proj/web/lib/orgs.ts", "/Users/x/proj/.github/workflows/ci.yml", "/Users/x/proj/env.ts"]) assert.ok(!secretPath(p), p);

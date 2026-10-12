@@ -14,7 +14,7 @@
 // server.mjs has already refused any request whose Host is not this server.
 // A request carrying an Origin must carry this server's. Stdlib only.
 import { readFileSync, statSync, realpathSync } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, normalize, sep } from "node:path";
 import { timingSafeEqual } from "node:crypto";
@@ -53,7 +53,7 @@ export function underHome(path, home = homedir()) {
 // Files the stage never reads even under $HOME: keys, tokens and keychains.
 // An agent may well edit a `.env`, but the stage shows a window of lines on a
 // glass someone else can see, and a key on screen is worse than a missing view.
-const SECRET_PATH = /(^|\/)(\.ssh|\.gnupg|\.aws|\.netrc|\.config\/gcloud|Library\/Keychains|\.chewbacca\/realm-ui\/server\.json|daemon\.json)(\/|$)|(^|\/)\.env(\.[^/]*)?$|\.(pem|key|p12|keychain-db)$/;
+const SECRET_PATH = /(^|\/)(\.git|\.ssh|\.gnupg|\.aws|\.netrc|\.config\/gcloud|Library\/Keychains|\.chewbacca\/realm-ui\/server\.json|daemon\.json)(\/|$)|(^|\/)\.env(\.[^/]*)?$|\.(pem|key|p12|keychain-db)$/;
 
 export function secretPath(path) {
   return SECRET_PATH.test(String(path));
@@ -64,17 +64,12 @@ export function secretPath(path) {
  *  is the allowlist; an ignored file (a `.env`, a build output) is never shown. */
 export function inCheckout(file, git = "git") {
   const dir = dirname(file);
-  try {
-    execFileSync(git, ["-C", dir, "rev-parse", "--is-inside-work-tree"], { stdio: "ignore" });
-  } catch {
-    return false;
-  }
-  try {
-    execFileSync(git, ["-C", dir, "check-ignore", "-q", file], { stdio: "ignore" });
-    return false; // exit 0: ignored
-  } catch {
-    return true; // exit 1: not ignored
-  }
+  // Fails closed: only "true" from rev-parse, and only exit 1 (not ignored)
+  // from check-ignore, let a file through. An error from either is a no.
+  const inside = spawnSync(git, ["-C", dir, "rev-parse", "--is-inside-work-tree"], { encoding: "utf8" });
+  if (inside.status !== 0 || String(inside.stdout).trim() !== "true") return false;
+  const ignored = spawnSync(git, ["-C", dir, "check-ignore", "-q", file], { stdio: "ignore" });
+  return ignored.status === 1;
 }
 
 /** A unified diff of one hunk, the way git writes it, for `git apply`. */

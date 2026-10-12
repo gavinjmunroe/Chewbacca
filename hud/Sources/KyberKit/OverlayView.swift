@@ -195,6 +195,7 @@ public struct OverlayView: View {
                     .environment(\.hudKeyboardFocus,
                         model.keyboardFocus?.surface == surface.id ? model.keyboardFocus : nil)
                     .environment(\.hudEditingField, model.editingField)
+                    .environment(\.hudDismiss, { model.dismiss(surface.id) })
                     .frame(width: surface.width)
                     .background {
                         GeometryReader { proxy in

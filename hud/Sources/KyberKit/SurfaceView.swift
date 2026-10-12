@@ -717,6 +717,10 @@ public struct SurfaceView: View {
         case "Web":
             return AnyView(WebPaneView(url: p["url"]?.display ?? ""))
 
+        case "App":
+            let height = p["h"]?.doubleValue.map { CGFloat($0) }
+            return AnyView(AppPaneView(url: p["url"]?.display ?? "", height: height))
+
         case "Hits":
             let action = p["action"]?.stringValue
             return AnyView(

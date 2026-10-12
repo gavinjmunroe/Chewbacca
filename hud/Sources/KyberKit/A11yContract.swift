@@ -82,6 +82,9 @@ enum A11yContract {
         "Hits": Entry(role: .own, name: []),
         // A live page (WebPane.swift), named by its host.
         "Web": Entry(role: .own, name: []),
+        // A whole local app (AppPane.swift): Realm's own interface, which
+        // carries its own accessibility tree.
+        "App": Entry(role: .own, name: []),
     ]
 
     /// The name a component is announced by: the first of its name props

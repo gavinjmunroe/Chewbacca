@@ -2,11 +2,17 @@
 """surface_intent: the sentences that open or close a live surface with no
 model, and the near misses that must still reach the model. The person
 resolver and the CLI are stubbed: nothing reads the real graph or opens."""
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "bin" / "lib"))
+# The card path: with Realm's interface built on this Mac, "show my agents"
+# opens it instead (tests/test_realm_ui.py covers that). Pinned so the answer
+# does not depend on what is in ~/.chewbacca.
+os.environ["CHEWBACCA_REALM_UI_HOME"] = tempfile.mkdtemp(prefix="no-realm-ui-")
 import surface_intent as si  # noqa: E402
 
 failed = 0

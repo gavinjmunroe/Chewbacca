@@ -463,6 +463,31 @@ navigation inside the page is held to that, and the page gets a fresh
 non-persistent data store, so it sees no cookie or login from anything else.
 
 ```
+c app App url=@/realm/url
+```
+
+**App** is a whole local web app as the surface's content (AppPane.swift):
+Realm's own desktop interface, which `realm-ui` builds from Carlton's
+renderer and serves on 127.0.0.1:47317 with a pipe to the engine. It fills
+the surface's height (or `h=` points, never under Realm's 600), loads only
+http on 127.0.0.1 or localhost, keeps its own persistent store apart from
+every other web view, opens a link off its origin in the browser in the
+background, and takes the keyboard when clicked without activating Kyber.
+The pipe's token is never served over http: the pane reads it from
+~/.chewbacca/realm-ui/server.json (0600) and sets it in the page as a
+document-start user script, top frame only, so another account on the Mac
+that can reach the port still cannot reach the engine.
+Escape inside the page closes the surface unless a dialog, menu, list,
+text field, the editor or a terminal has it (the bridge decides and posts
+`dismiss`). The `realm` surface (bin/lib/surfaces/realm_app.py) is a glance
+centred on glass, so a click off it takes it down too. "Show my agents" and
+the rail's agents icon open it whenever the bundle is built, and the Swift
+agent card otherwise. Offscreen renders draw it empty, like Web; the
+offscreen check is a WKWebView in a window parked off every display, where
+macOS throttles frames, so Realm's entrance animations must be finished
+before the snapshot or its panes come out blank.
+
+```
 c f Hits caption=@/findFilesCap items=@/findFiles action=ks-open
 d /findFiles [{"id":"f1:0","kind":"file","where":"bin/lib/surfaces","segments":[{"text":"agents","match":true},{"text":".py","match":false}]}]
 ```

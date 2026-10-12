@@ -24,7 +24,8 @@ from . import Context, Provider, comp
 BADGES = Path.home() / ".bob" / "badges.json"
 # Kinds that are not a destination of their own: person and space need an
 # argument, engine needs an id (oss lists the engines), apps is this rail.
-NOT_LISTED = ("person", "space", "engine", "apps")
+# realm is the agents icon itself when Realm's interface is built (opens()).
+NOT_LISTED = ("person", "space", "engine", "apps", "realm")
 # Order is by what gets opened most: what is waiting first, then the day,
 # then the conversations and the work.
 ORDER = ("needs-you", "today", "conversations", "whatsapp", "meetings", "tasks", "people", "agents", "code",
@@ -88,4 +89,8 @@ class Apps(Provider):
 
     def opens(self, kind: str) -> str | None:
         """The kind a rail press may open, or None."""
+        if kind == "agents":
+            from . import realm_app  # noqa: PLC0415
+
+            return "realm" if realm_app.available() else kind
         return kind if kind in kinds() else None

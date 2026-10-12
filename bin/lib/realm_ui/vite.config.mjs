@@ -1,0 +1,86 @@
+// Builds Realm's desktop renderer (Carlton Aikins, github.com/31Carlton7/realm,
+// apps/desktop/src/renderer) as a static bundle for the Chewbacca glass.
+//
+// bin/realm-ui copies the renderer and the two workspace packages it imports
+// (@realm/contracts, @realm/ui) next to this file, then runs `vite build`
+// here. The plugins are Carlton's own from apps/desktop/electron.vite.config.ts,
+// copied as written; electron-vite's renderer target is plain Vite underneath,
+// so the only differences are the two below.
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
+import { scaleTextSizes } from "./apps/desktop/src/renderer/src/theme/text-scale";
+
+// From electron.vite.config.ts (Carlton Aikins): KaTeX's woff and truetype faces
+// are dropped so the bundle ships one format.
+const katexWoff2Only = () => ({
+  name: "realm:katex-woff2-only",
+  enforce: "pre",
+  transform(code, id) {
+    if (!id.includes("katex") || !id.endsWith(".css")) return null;
+    const out = code.replace(
+      /,\s*url\([^)]*\.(?:woff|ttf)\)\s*format\("(?:woff|truetype)"\)/g,
+      "",
+    );
+    return out === code ? null : { code: out, map: null };
+  },
+});
+
+// From electron.vite.config.ts (Carlton Aikins): the text-size preference
+// multiplies every size in styles.css at build time.
+const textScale = () => ({
+  name: "realm:text-scale",
+  enforce: "pre",
+  transform(code, id) {
+    if (!/[\\/]src[\\/]renderer[\\/]src[\\/]styles\.css(?:\?.*)?$/.test(id))
+      return null;
+    return { code: scaleTextSizes(code), map: null };
+  },
+});
+
+// Difference one: Electron's preload put window.realm on the page before any
+// script ran. Here a classic script served by server.mjs does it, ahead of the
+// module entry, so the bundle sees the same global on its first line.
+const glassBridge = () => ({
+  name: "chewbacca:realm-bridge",
+  transformIndexHtml(html) {
+    return html.replace(
+      '<script type="module"',
+      '<script src="/realm-bridge.js"></script><script type="module"',
+    );
+  },
+});
+
+export default defineConfig({
+  root: "apps/desktop/src/renderer",
+  base: "/",
+  plugins: [
+    katexWoff2Only(),
+    textScale(),
+    react(),
+    tailwindcss(),
+    glassBridge(),
+  ],
+  resolve: {
+    // Difference two: Realm's @realm/ui imports the paid Hugeicons Pro pack,
+    // which needs Carlton's token to install. Every one of the 184 icons it
+    // names exists under the same name in the free pack (checked 2026-10-11
+    // against @hugeicons/core-free-icons 1.2.1), so the import is pointed there.
+    // The free set draws its own stroke-rounded shapes, so a few glyphs differ.
+    alias: {
+      "@hugeicons-pro/core-stroke-rounded": "@hugeicons/core-free-icons",
+    },
+  },
+  build: {
+    outDir: "../../../../dist",
+    emptyOutDir: true,
+    // electron-vite targets the Chromium Electron ships; noVNC (the machine
+    // pane) uses top-level await, which Vite's default browser target refuses.
+    // WKWebView on macOS 15 is Safari 18, which has had it since Safari 15.
+    target: ["safari16", "chrome120"],
+    // Measured on the first build: mermaid and the CodeMirror languages put
+    // several chunks past Vite's 500 kB warning, which is expected for a
+    // desktop app served from loopback.
+    chunkSizeWarningLimit: 8000,
+  },
+});

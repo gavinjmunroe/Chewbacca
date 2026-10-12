@@ -226,6 +226,15 @@ def find_person(name: str):
         return None
 
 
+def agents_surface() -> str:
+    """`realm` (Carlton's own interface) when its bundle is built, else the card."""
+    try:
+        from surfaces import realm_app  # noqa: PLC0415
+    except ImportError:
+        return "agents"
+    return "realm" if realm_app.available() else "agents"
+
+
 def parse(said: str, resolve_person=find_person) -> Command | None:
     """The surface command `said` asks for, or None for anything else."""
     s = _norm(said)
@@ -237,14 +246,16 @@ def parse(said: str, resolve_person=find_person) -> Command | None:
     if m and m.group("task").strip(" .!?"):
         return Command("task", m.group("task").strip().rstrip(".!?"), m.group("folder") or "")
     if SESSIONS_CLOSE.match(s):
-        return Command("close", "agents")
+        return Command("close", agents_surface())
     if SESSIONS.match(s):
         # Every agent, any provider, on the realm engine's panel
         # (bin/lib/surfaces/agents.py), which also shows the open Claude
         # Code and Codex tabs. kyber-sessions' own panel is no longer the
         # answer to "show my agents" (2026-10-10, "Realm is supposed to be
-        # inside the hud").
-        return Command("open", "agents")
+        # inside the hud"). When Realm's own interface is built, that is the
+        # answer instead (bin/realm-ui, 2026-10-11, "Carlton told me to copy
+        # them bro"); the rebuilt card stays for a Mac without the bundle.
+        return Command("open", agents_surface())
     m = STOP.match(s)
     if m:
         return Command("stop", m.group("name").strip())

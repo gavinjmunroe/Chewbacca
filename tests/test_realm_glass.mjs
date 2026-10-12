@@ -104,6 +104,19 @@ test("an edit is lit at the lines it wrote, inside a window of context", () => {
   assert.equal(m.litRange(text, "not there"), null);
 });
 
+test("an edit is lit wherever it is, read before or after it landed", () => {
+  const edit = { before: "a = 1\n", after: "a = 2\nb = 3\n" };
+  const old = "x\na = 1\ny\n";
+  const now = "x\na = 2\nb = 3\ny\n";
+  assert.deepEqual(m.editRange(old, edit, false), { range: { start: 2, end: 2 }, landed: false });
+  // Read after the edit landed while the call is still open: the written lines.
+  assert.deepEqual(m.editRange(now, edit, false), { range: { start: 2, end: 3 }, landed: true });
+  assert.deepEqual(m.editRange(now, edit, true), { range: { start: 2, end: 3 }, landed: true });
+  // Read before the write while the call says done: the lines it replaces.
+  assert.deepEqual(m.editRange(old, edit, true), { range: { start: 2, end: 2 }, landed: false });
+  assert.deepEqual(m.editRange("nothing", edit, true), { range: null, landed: true });
+});
+
 test("the stage follows one turn: file while editing, command while running, then only the diff", () => {
   let s = m.emptyStage();
   s = m.reduce(s, ev(1, "user_message", { text: "fix it", attachments: [] }));

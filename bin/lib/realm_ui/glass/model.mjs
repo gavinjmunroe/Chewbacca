@@ -119,6 +119,23 @@ export function litRange(text, needle) {
   return { start, end: start + span - 1 };
 }
 
+/** Where one edit sits in the file as read, and whether it has landed.
+ *  The file can be read before or after the edit is applied (an agent
+ *  writes the file and reports the call in either order, and the glass reads
+ *  it over the network), so the text it is looked for in is whichever is
+ *  there: the written lines first once the call is done, the lines it
+ *  replaces before that, then the other. */
+export function editRange(text, edit, done) {
+  const before = edit?.before ?? "";
+  const after = edit?.after ?? "";
+  const order = done ? [[after, true], [before, false]] : [[before, false], [after, true]];
+  for (const [needle, landed] of order) {
+    const range = litRange(text, needle);
+    if (range) return { range, landed };
+  }
+  return { range: null, landed: Boolean(done) };
+}
+
 /** The lines a viewer shows around a lit range: the change with `context`
  *  lines either side, never more than `max` in all. */
 export function excerpt(text, range, { context = 6, max = 28 } = {}) {

@@ -1,0 +1,479 @@
+// An agent turn told by the screen, for Realm on the Chewbacca glass.
+//
+// Part of our layer over Carlton Aikins' Realm renderer
+// (github.com/31Carlton7/realm), which runs untouched underneath. Caleb,
+// 2026-10-11 8:29pm: "literal storytelling level UX like the lemma site, each
+// part of your screen being intentional, not just a sequence of lines".
+//
+// Template: a HUD session, one turn, one object on screen at a time. Stance:
+// Carlton's quiet instrument. The content is the agent's turn as itself: its
+// file, its check, its diff. Growing a tile lands here, not on his transcript.
+// Seven regions, each with one job (skills/hud/SKILL.md, "An agent turn told
+// by the screen"):
+//
+//   ask        what he asked, which agent, how long ago. Never changes.
+//   headline   one sentence: what is happening now, or what happened
+//   beats      You asked, Reading, Changing, Proving, Your call, Done
+//   proof      what proved it, or plainly that nothing did
+//   figure     ONE object for the beat, swapped on one crossfade (Lemma's
+//              pinned panel): files read, the file changing, the check
+//              running, the command it wants, the hunks, what changed
+//   call       the one decision waiting on him, with the press that answers it
+//   doors      Transcript and Reply: his full workspace, one press away
+//
+// The beats come from beats.mjs, which reads his engine's session events.
+// Type, colour and motion are his tokens; nothing moves at rest except the
+// lit beat's dot while the agent works.
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AGENT_META } from "@realm/contracts";
+import { rpc } from "../src/rpc/client";
+import {
+  CommandView,
+  FileView,
+  Review,
+  TestsView,
+  type Session,
+} from "./GlassLayer";
+import {
+  beat,
+  beatLine,
+  decision,
+  emptyStory,
+  figure,
+  fromHistory,
+  headline,
+  proof,
+  tell,
+  SETTLE_HOLD_MS,
+} from "./beats.mjs";
+
+type Stored = {
+  seq: number;
+  sessionId: string;
+  event: { type: string; ts?: number; payload?: Record<string, unknown> };
+};
+type ChangedFile = {
+  path: string;
+  additions?: number | null;
+  deletions?: number | null;
+};
+type PermissionView = { shown: string; exact: boolean };
+type StoryShape = {
+  asked: string;
+  reads: string[];
+  edited: string[];
+  permission: {
+    requestId: string;
+    toolName: string;
+    command: string;
+    question: boolean;
+    view: PermissionView;
+  } | null;
+  stage: {
+    running: boolean;
+    settledAt: number;
+    file: Parameters<typeof FileView>[0]["call"] | null;
+    command: Parameters<typeof CommandView>[0]["call"] | null;
+    tests: Parameters<typeof TestsView>[0]["call"] | null;
+    changes: { root: string; checkpointId?: string; afterTree?: string; files: ChangedFile[] } | null;
+  };
+};
+type Call = {
+  kind: string;
+  requestId?: string;
+  line: string;
+  verbs: { id: string; text: string }[];
+} | null;
+
+const base = (path: string) => path.split("/").filter(Boolean).pop() ?? path;
+const dirOf = (path: string, cwd: string) => {
+  const rel = path.startsWith(`${cwd}/`) ? path.slice(cwd.length + 1) : path;
+  return rel.split("/").slice(0, -1).join("/");
+};
+const ago = (ms?: number) => {
+  if (!ms) return "";
+  const s = Math.max(0, (Date.now() - ms) / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+};
+
+// Turns the person kept, by session and checkpoint. Kept outside the
+// component because Story unmounts on every trip to the transcript and back,
+// and a Keep that came back as a question would be a lie about what he did.
+const KEPT = new Set<string>();
+// History pages read back to find where a long turn began: 400 events a
+// page, the same window Stage reads, up to 10 pages (4,000 events). Guessed.
+const HISTORY_PAGE = 400;
+const HISTORY_PAGES = 10;
+
+/** The events of the newest turn: pages back until the turn's ask is in
+ *  hand, so a turn longer than one page still knows what was asked and what
+ *  it edited. */
+async function turnEvents(id: string, lastEventSeq: number): Promise<Stored[]> {
+  let after = Math.max(0, lastEventSeq - HISTORY_PAGE);
+  let list = (await rpc().call("sessions.events", { id, afterSeq: after, limit: HISTORY_PAGE })) as unknown as Stored[];
+  for (let page = 1; page < HISTORY_PAGES && after > 0; page++) {
+    if (list.some((e) => e.event.type === "user_message")) break;
+    after = Math.max(0, after - HISTORY_PAGE);
+    const earlier = (await rpc().call("sessions.events", { id, afterSeq: after, limit: HISTORY_PAGE })) as unknown as Stored[];
+    const first = list[0]?.seq ?? Infinity;
+    list = [...earlier.filter((e) => e.seq < first), ...list];
+  }
+  return list;
+}
+
+export function Story({
+  session,
+  onTranscript,
+}: {
+  session: Session;
+  onTranscript: (reply: boolean) => void;
+}) {
+  const [story, setStory] = useState(emptyStory);
+  const [loaded, setLoaded] = useState(false);
+  const [wantsInView, setWantsInView] = useState(false);
+  const figureRef = useRef<HTMLDivElement | null>(null);
+  const [reviewEmpty, setReviewEmpty] = useState(false);
+  const [, setTick] = useState(0);
+  const lastSeq = useRef(0);
+  // When this page saw the turn settle live. The hold for a late diff counts
+  // from here, so a slow delivery can't skip it; a turn read from history has
+  // none and counts from the engine's own timestamp.
+  const settleSeen = useRef(0);
+
+  // The newest turn of this session from his engine, then its live events.
+  // Live events that land while the history is still loading wait in a
+  // buffer and are replayed after it, so none is lost to the history's
+  // answer (a permission_request lost there would leave the agent waiting
+  // with no Allow on the glass).
+  useEffect(() => {
+    let alive = true;
+    let ready = false;
+    const buffer: Stored[] = [];
+    setStory(emptyStory());
+    setLoaded(false);
+    setReviewEmpty(false);
+    lastSeq.current = 0;
+    settleSeen.current = 0;
+    const noteLive = (stored: Stored) => {
+      if (stored.event.type === "user_message") {
+        setReviewEmpty(false);
+        settleSeen.current = 0;
+      }
+      const status = (stored.event.payload as { status?: string } | undefined)?.status;
+      if (stored.event.type === "status" && status !== "running" && status !== "waiting_permission")
+        settleSeen.current = Date.now();
+    };
+    const settle = (list: Stored[]) => {
+      if (!alive) return;
+      let s = fromHistory(list);
+      lastSeq.current = list.at(-1)?.seq ?? 0;
+      for (const stored of buffer.sort((a, b) => a.seq - b.seq)) {
+        if (stored.seq <= lastSeq.current) continue;
+        lastSeq.current = stored.seq;
+        noteLive(stored);
+        s = tell(s, stored);
+      }
+      buffer.length = 0;
+      ready = true;
+      setStory(s);
+      setLoaded(true);
+    };
+    turnEvents(session.id, session.lastEventSeq ?? 0)
+      .then(settle)
+      .catch(() => settle([]));
+    const off = rpc().on("session.event", (ev) => {
+      const stored = ev as unknown as Stored;
+      if (stored.sessionId !== session.id) return;
+      if (!ready) {
+        buffer.push(stored);
+        return;
+      }
+      if (stored.seq <= lastSeq.current) return;
+      lastSeq.current = stored.seq;
+      noteLive(stored);
+      setStory((s: unknown) => tell(s, stored));
+    });
+    return () => {
+      alive = false;
+      off();
+    };
+  }, [session.id]);
+
+  const st = story as unknown as StoryShape;
+  // A turn is named by its checkpoint and the tree it left; a diff without
+  // a checkpoint can't be told from the next one, so its Keep is never kept.
+  const changes = st.stage.changes;
+  const keptKey =
+    changes?.checkpointId && changes.afterTree
+      ? `${session.id}:${changes.checkpointId}:${changes.afterTree}`
+      : "";
+  const [keptHere, setKeptHere] = useState("");
+  const kept = Boolean(keptKey) && (KEPT.has(keptKey) || keptHere === keptKey);
+  // A diff whose hunks are all gone already (kept, committed or put back
+  // elsewhere) has no decision left in it.
+  const settledKept = kept || reviewEmpty;
+  const settledAt = st.stage.settledAt;
+  const settledFor = !settledAt
+    ? Infinity
+    : Date.now() - (settleSeen.current || settledAt);
+  const b = beat(story, { kept: settledKept, settledFor }) as string;
+  // One re-render when the hold for a late diff runs out.
+  useEffect(() => {
+    if (!settledAt) return;
+    const left = SETTLE_HOLD_MS - (Date.now() - (settleSeen.current || settledAt));
+    if (left <= 0) return;
+    const t = window.setTimeout(() => setTick((n) => n + 1), left + 20);
+    return () => window.clearTimeout(t);
+  }, [settledAt]);
+
+  const line = useMemo(() => headline(story, b), [story, b]);
+  const beats = beatLine(b);
+  const proved = proof(story);
+  const call = decision(story, { kept: settledKept }) as Call;
+  const fig = figure(story, b);
+  const meta = AGENT_META[session.agentKind as keyof typeof AGENT_META];
+
+  // Allow is pressable only while the whole request is on screen: none of it
+  // below a fold or past the figure's edge.
+  const requestId = call?.kind === "permission" ? (call.requestId ?? "") : "";
+  useEffect(() => {
+    setWantsInView(false);
+    if (!requestId || fig !== "permission") return;
+    const el = figureRef.current?.querySelector(".story-wants");
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => setWantsInView(entries.some((e) => e.intersectionRatio >= 0.999)),
+      { threshold: [0, 0.999, 1] },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [requestId, fig]);
+
+  const answer = useCallback(
+    (id: string) => {
+      if (!call) return;
+      if (id === "keep") {
+        if (!keptKey) return;
+        KEPT.add(keptKey);
+        return setKeptHere(keptKey);
+      }
+      if (id === "answer") return onTranscript(false);
+      // Only the request still on the glass is answered: one that was
+      // answered or settled meanwhile is gone from the story already.
+      const pending = (story as unknown as StoryShape).permission;
+      if (
+        call.kind === "permission" &&
+        (id === "allow" || id === "deny") &&
+        pending?.requestId === call.requestId &&
+        pending !== null &&
+        (id === "deny" || (pending.view.exact && wantsInView))
+      ) {
+        // His engine records the answer as a permission_response, which takes
+        // the call off the glass. If the engine refuses, his own card in the
+        // transcript is the way through.
+        void rpc()
+          .call("sessions.respondPermission", {
+            id: session.id,
+            requestId: call.requestId ?? "",
+            decision: id,
+          })
+          .catch(() => onTranscript(false));
+      }
+    },
+    [call, onTranscript, session.id, story, keptKey, wantsInView],
+  );
+
+  return (
+    <section
+      className="story"
+      data-beat={b}
+      data-working={st.stage.running || undefined}
+      data-loading={!loaded || undefined}
+      aria-label={`${session.title}: ${line}`}
+    >
+      <header className="story-ask">
+        <span className="story-label">{st.asked ? "You asked" : "Ready"}</span>
+        <p className="story-asked">{st.asked || session.title || "Untitled"}</p>
+        <span className="story-meta">
+          {meta?.label ?? session.agentKind} · {base(session.cwd)}
+          {session.updatedAt ? ` · ${ago(session.updatedAt)}` : ""}
+        </span>
+      </header>
+
+      <div className="story-tell">
+        <h1 className="story-headline" key={line} aria-live="polite">
+          {loaded ? line : session.title || "Untitled"}
+        </h1>
+        {beats.length > 0 && (
+        <ol className="story-beats" aria-label="Where the turn is">
+          {beats.map((x: { id: string; word: string; state: string }) => {
+            const failedHere = b === "failed" && x.id === "done";
+            return (
+              <li
+                key={x.id}
+                data-state={failedHere ? "lit" : x.state}
+                data-tone={failedHere ? "bad" : undefined}
+              >
+                <span className="story-beat-dot" aria-hidden="true" />
+                {failedHere ? "Failed" : x.word}
+              </li>
+            );
+          })}
+        </ol>
+        )}
+        {proved && (
+          <p className="story-proof" data-tone={proved.tone}>
+            {proved.text}
+          </p>
+        )}
+      </div>
+
+      {call && (
+        <div
+          className="story-call"
+          data-kind={call.kind}
+          key={`${call.kind}:${call.requestId ?? ""}`}
+        >
+          <p className="story-call-line">{call.line}</p>
+          <div className="story-call-verbs">
+            {call.verbs.map((v) => (
+              <button
+                key={v.id}
+                type="button"
+                className="glass-word"
+                data-tone={v.id === "deny" ? "bad" : undefined}
+                onClick={() => answer(v.id)}
+                disabled={v.id === "allow" && !wantsInView}
+                title={
+                  v.id === "keep"
+                    ? "Leaves every change as the agent wrote it. Nothing is written."
+                    : v.id === "allow" && !wantsInView
+                      ? "Bring the whole request on the right into view first."
+                      : undefined
+                }
+              >
+                {v.text}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {fig !== "none" && (
+        <div className="story-figure" key={fig} data-figure={fig} ref={figureRef}>
+          {fig === "reads" && (
+            <FileList
+              label="Opened"
+              files={st.reads.map((path) => ({ path }))}
+              cwd={session.cwd}
+              litLast
+            />
+          )}
+          {fig === "file" && st.stage.file && (
+            <FileView
+              key={`f:${st.stage.file.path}`}
+              call={st.stage.file}
+              cwd={session.cwd}
+            />
+          )}
+          {fig === "command" && st.stage.command && (
+            <CommandView call={st.stage.command} />
+          )}
+          {fig === "tests" && st.stage.tests && (
+            <TestsView call={st.stage.tests} />
+          )}
+          {fig === "permission" && st.permission && (
+            <Wants view={st.permission.view} tool={st.permission.toolName} />
+          )}
+          {fig === "review" && st.stage.changes && (
+            <Review changes={st.stage.changes} onEmpty={setReviewEmpty} />
+          )}
+          {fig === "changed" && (
+            <FileList
+              label="Changed"
+              files={
+                st.stage.changes?.files?.length
+                  ? st.stage.changes.files
+                  : st.edited.map((path) => ({ path }))
+              }
+              cwd={st.stage.changes?.root ?? session.cwd}
+            />
+          )}
+        </div>
+      )}
+
+      <nav className="story-doors" aria-label="The transcript">
+        <button
+          type="button"
+          className="glass-word"
+          onClick={() => onTranscript(false)}
+        >
+          Transcript
+        </button>
+        <button
+          type="button"
+          className="glass-word"
+          onClick={() => onTranscript(true)}
+        >
+          Reply
+        </button>
+      </nav>
+    </section>
+  );
+}
+
+function FileList({
+  label,
+  files,
+  cwd,
+  litLast = false,
+}: {
+  label: string;
+  files: ChangedFile[];
+  cwd: string;
+  litLast?: boolean;
+}) {
+  return (
+    <section className="story-list" aria-label={label}>
+      <span className="story-label">{label}</span>
+      <ul>
+        {files.map((f, i) => {
+          const dir = dirOf(f.path, cwd);
+          return (
+            <li
+              key={f.path}
+              data-lit={(litLast && i === files.length - 1) || undefined}
+            >
+              <span className="story-file">{base(f.path)}</span>
+              {dir && <span className="glass-dir">{dir}</span>}
+              {f.additions != null && (
+                <span className="story-count">
+                  <span data-tone="good">+{f.additions}</span>{" "}
+                  <span data-tone="bad">-{f.deletions ?? 0}</span>
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+/** The whole request as agents.py shows it: the tool's real name and its
+ *  input as JSON, newlines escaped so nothing hides on a second line.
+ *  Wrapped, never scrolled sideways, so none of it sits out of sight. */
+function Wants({ view, tool }: { view: PermissionView; tool: string }) {
+  return (
+    <section className="glass-card" data-kind="wants">
+      <header className="glass-card-head">
+        <span className="glass-verb">Wants to use</span>
+        <span className="glass-path">{tool}</span>
+      </header>
+      <pre className="glass-code glass-term story-wants">{view.shown}</pre>
+    </section>
+  );
+}

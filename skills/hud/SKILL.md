@@ -594,6 +594,104 @@ Rejected:
 4. **Layout toggles and saved layouts** (Cursor's top-right layout menu). The
    layout follows the agent; nobody arranges it.
 
+## An agent turn told by the screen
+
+Caleb, 2026-10-11 8:29pm: "It needs to be a digestible UX! Vscode and the
+claude app are ok at it, carlton's is pretty good! With the power of HUD we
+can make this literal storytelling level UX like the lemma site, each part of
+your screen being intentional, not just a sequence of lines". Built as
+bin/lib/realm_ui/glass/beats.mjs (the beats, pure) and Story.tsx (the
+regions), over Carlton's renderer, which stays untouched.
+
+Researched first. Lemma's site (our replica, apps/lemma-replica, W3-panels)
+pins ONE stage and changes the state of one set of objects as a single
+progress value moves: a caption on the left says the one idea, the panel on
+the right shows it, and the four panels crossfade one at a time, never side by
+side. Bret Victor's Explorable Explanations: the reader can "read it as-is",
+the deeper layer is there on demand, and there are "no UI elements screaming
+for attention". Segel and Heer's martini glass (Narrative Visualization,
+2010): a narrow author-driven stem, then the reader is released into
+exploration. Bostock's "How to Scroll": no surprise motion, readers keep
+their own controls. What that means for an agent turn: the glass tells the
+stem (what happened, in order, one idea at a time), and the transcript is the
+bowl, one press away.
+
+### The beats, and the one region that owns each
+
+One agent turn has six beats. Each is decided from Realm's own session events
+(beats.mjs `beat()`), never guessed from text.
+
+| Beat      | Comes from                                    | Headline says                    | The figure shows                     |
+| --------- | --------------------------------------------- | -------------------------------- | ------------------------------------ |
+| You asked | `user_message`, nothing done yet              | "Starting on it"                 | nothing                              |
+| Reading   | Read, Grep, Glob, LS calls                    | "Reading orgs.ts"                | the files it opened, newest lit      |
+| Changing  | Edit, Write, MultiEdit                        | "Changing orgs.ts"               | that file, the changed lines lit     |
+| Proving   | a test or check command                       | "Running the tests"              | the command, then its verdict        |
+| Your call | `permission_request`, or a settled diff       | what it wants, or what it did    | the command it wants, or the hunks   |
+| Done      | settled, nothing waiting                      | the first sentence of its answer | what changed, as file names          |
+
+Regions, each with one job:
+
+1. **The ask** (top left, small, quiet ink): "You asked: fix the org access",
+   the agent and its age. It never changes during the turn.
+2. **The headline** (left, the biggest type on the glass, 28): one sentence of
+   what is happening now, or what happened. The only thing you have to read.
+3. **The beat line** (under the headline): the six beat words in order. Past
+   beats are read, the current one is lit, later ones are faint. This is the
+   whole progress bar; there is no other.
+4. **The figure** (right, one object): the thing the beat is about. One at a
+   time, swapped on one crossfade, like Lemma's four panels.
+5. **The proof** (under the beat line once something ran): "Proved: 4 tests
+   passed", "Checked: npx tsc ran clean", or "Not checked: nothing ran". A
+   turn that changed code and proved nothing says so, plainly.
+6. **Your call** (bottom left): the one decision waiting on him, with the
+   press that answers it and what it does. A permission is "Allow: runs npm
+   test" and "Deny". A question it asked is "Answer it", which opens the
+   transcript at its card. A settled diff is "Keep all 2 files" (writes
+   nothing) beside the per-hunk Reject in the figure. With nothing waiting the
+   region is not drawn.
+7. **The transcript door** (bottom right): "Transcript" and "Reply", both
+   open Carlton's full workspace. Voice that fills the reply opens it too.
+
+### At rest, working, and needing him
+
+- **At rest** (Done): the ask, the headline, the beat line all read, the proof,
+  and the changed files. Nothing moves. One glance answers "what happened and
+  did it prove it".
+- **Working**: the headline and the figure change with each beat. The only
+  thing that moves at rest is the lit beat's dot, breathing (the one live-work
+  signal); under Reduce Motion it is still.
+- **Needs him**: the beat line lands on Your call, the call region appears in
+  his orange edge, and the headline says what it wants in words.
+
+### The transcript stays, one press away
+
+Carlton's workspace (conversation, composer, his stage column) is mounted the
+whole time, so "Transcript" is instant. Escape from the transcript comes back
+to the story; Escape from the story goes back to the tiles.
+
+### Subtraction: what the story removes from Carlton's default view, and why
+
+- The conversation scroll. It is the sequence of lines he asked to stop seeing
+  by default; it is the transcript, one press away.
+- The composer, the branch bar, the model picker, the machine and folder
+  footer. Replying is a press ("Reply") or the talk key, not a field that sits
+  there.
+- The breadcrumb header and its icons. The ask region already names the work.
+- "Worked for", the message action icons (copy, retry, branch, thumbs). Not
+  part of what happened.
+- The "Edited 2 files +20 -3" card and its Undo and Review. The figure and the
+  call region carry the same facts and the same presses.
+- The stage column's stacked cards (file, command, tests, changes at once).
+  The figure shows one object; the others are beats already told.
+
+### Motion
+
+From Carlton's ladder only, 140 to 320 ms. One morph per change: the figure
+swaps on one 200 ms crossfade, the headline on one 140 ms swap, the beat line
+moves its light in 240 ms. The tile still grows into the story in 320 ms.
+Nothing moves at rest except the lit beat's dot.
+
 ## Rules
 
 **Everything on the glass is instant.** A surface paints its last known state

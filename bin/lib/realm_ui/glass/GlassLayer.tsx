@@ -3,8 +3,11 @@
 // this draws what makes it an OS surface instead of a window:
 //
 //   tiles    every agent as a tile floating on the desktop, nothing else
-//   grow     pressing a tile grows it into his full workspace in one
+//   grow     pressing a tile grows it into the story of its turn in one
 //            continuous morph of light; Escape shrinks it back into its tile
+//   story    the agent's turn told by the screen, one region per job
+//            (Story.tsx); Transcript or Reply opens his full workspace, and
+//            Escape there comes back to the story
 //   stage    beside the conversation, only while there is something on it:
 //            the file the agent is editing with the changed lines lit, the
 //            command it is running (folded away after), the tests when they
@@ -34,10 +37,11 @@ import { Icon } from "@realm/ui";
 import { rpc } from "../src/rpc/client";
 import type { AppState } from "../src/state/store";
 import { Spinner } from "../src/components/Spinner";
+import { Story } from "./Story";
 import {
+  editRange,
   emptyStage,
   excerpt,
-  litRange,
   nowLine,
   reduce,
   tileOrder,
@@ -48,7 +52,7 @@ import {
   COMMAND_LINGER_MS,
 } from "./model.mjs";
 
-type Session = {
+export type Session = {
   id: string;
   spaceId: string;
   agentKind: string;
@@ -67,7 +71,9 @@ type Stored = {
 };
 type Truth = { state: "running" | "done" | "stopped"; lastAt: number | null };
 type Rect = { left: number; top: number; width: number; height: number };
-type Mode = "tiles" | "work";
+// tiles: every agent. story: one agent's turn told by the screen. work: his
+// full workspace, the transcript, one press from the story.
+type Mode = "tiles" | "story" | "work";
 type Hunk = {
   header: string;
   oldStart: number;
@@ -174,8 +180,16 @@ function useShown(): boolean {
   // it is hidden, or a page warmed at launch would claim the talk key while
   // nothing is on the glass. Hidden visibility always counts as not shown.
   // A browser outside Kyber (the headless checks) uses visibility alone.
-  const inKyber = Boolean((window as unknown as { webkit?: { messageHandlers?: { realmGlass?: unknown } } }).webkit?.messageHandlers?.realmGlass);
-  const [shown, setShown] = useState(() => !inKyber && document.visibilityState === "visible");
+  const inKyber = Boolean(
+    (
+      window as unknown as {
+        webkit?: { messageHandlers?: { realmGlass?: unknown } };
+      }
+    ).webkit?.messageHandlers?.realmGlass,
+  );
+  const [shown, setShown] = useState(
+    () => !inKyber && document.visibilityState === "visible",
+  );
   useEffect(() => {
     const w = window as unknown as { __realmGlassShown?: (v: boolean) => void };
     // What Kyber last said, so a page attached a frame before its window
@@ -333,7 +347,7 @@ export function GlassLayer({ store }: { store: StoreApi<AppState> }) {
   );
 
   // Tell the server who has the glass, for hud-listen's voice path.
-  const target = mode === "work" ? focus : (tiles[picked]?.id ?? null);
+  const target = mode === "tiles" ? (tiles[picked]?.id ?? null) : focus;
   const targetTitle = (target && sessions[target]?.title) || "";
   useEffect(() => {
     const report = () =>
@@ -368,7 +382,7 @@ export function GlassLayer({ store }: { store: StoreApi<AppState> }) {
   // workspace (hud/CLAUDE.md, the light morph), his app comes up under it,
   // then the light goes out. Under Reduce Motion nothing travels.
   const grow = useCallback(
-    (id: string) => {
+    (id: string, land: Mode = "story") => {
       const s = sessions[id];
       if (!s || morphing.current) return;
       setFocus(id);
@@ -383,7 +397,7 @@ export function GlassLayer({ store }: { store: StoreApi<AppState> }) {
         height: 140,
       };
       if (reduceMotion()) {
-        setMode("work");
+        setMode(land);
         return;
       }
       morphing.current = true;
@@ -391,7 +405,7 @@ export function GlassLayer({ store }: { store: StoreApi<AppState> }) {
       setLight({ rect: from, to: null, ms: GROW_MS, out: false });
       requestAnimationFrame(() =>
         requestAnimationFrame(() => {
-          setMode("work");
+          setMode(land);
           setLight({ rect: from, to: workRect(), ms: GROW_MS, out: false });
           window.setTimeout(
             () => setLight((l) => (l ? { ...l, out: true } : l)),
@@ -446,12 +460,14 @@ export function GlassLayer({ store }: { store: StoreApi<AppState> }) {
     };
     w.__realmGlass = {
       onEscape: () => {
-        if (modeRef.current !== "work") return false;
+        if (modeRef.current === "tiles") return false;
         if (document.querySelector(OVERLAY)) return false;
         const f = document.activeElement;
         if (f && f.closest?.(".cm-editor,.xterm")) return false;
         (f as HTMLElement | null)?.blur?.();
-        shrink();
+        // The transcript steps back to the story; the story to the tiles.
+        if (modeRef.current === "work") setMode("story");
+        else shrink();
         return true;
       },
     };
@@ -566,9 +582,11 @@ export function GlassLayer({ store }: { store: StoreApi<AppState> }) {
       const insert =
         intent.kind === "mention" ? `@${intent.name}` : (intent.text ?? said);
       const who =
-        modeRef.current === "work" ? focusRef.current : tiles[picked]?.id;
+        modeRef.current === "tiles" ? tiles[picked]?.id : focusRef.current;
       if (!who) return;
-      if (modeRef.current !== "work") grow(who);
+      // The reply lives in his composer, in the transcript.
+      if (modeRef.current === "tiles") grow(who, "work");
+      else if (modeRef.current === "story") setMode("work");
       fillWhenThere(".composer-input", insert, true);
     };
     window.addEventListener("realm-glass-voice", onVoice);
@@ -576,6 +594,19 @@ export function GlassLayer({ store }: { store: StoreApi<AppState> }) {
   }, [store, tiles, picked, grow]);
 
   const focused = focus ? sessions[focus] : null;
+  // The agent on the glass went away (deleted, or gone from his list on a
+  // refresh): back to the tiles, never a blank glass only Escape leaves.
+  const haveSessions = Object.keys(sessions).length > 0;
+  useEffect(() => {
+    if (mode !== "tiles" && focus && haveSessions && !focused && !morphing.current) setMode("tiles");
+  }, [mode, focus, focused, haveSessions]);
+  // Transcript and Reply on the story: his workspace, already mounted, so
+  // this is a crossfade and never a load. Reply puts the caret in his
+  // composer.
+  const openTranscript = useCallback((reply: boolean) => {
+    setMode("work");
+    if (reply) fillWhenThere(".composer-input", "", true);
+  }, []);
   return createPortal(
     <div className="glass-layer" data-mode={mode}>
       {(mode === "tiles" || leaving) && (
@@ -588,6 +619,13 @@ export function GlassLayer({ store }: { store: StoreApi<AppState> }) {
           tileRefs={tileRefs.current}
           onPick={setPicked}
           onGrow={grow}
+        />
+      )}
+      {mode === "story" && focused && (
+        <Story
+          key={focused.id}
+          session={focused}
+          onTranscript={openTranscript}
         />
       )}
       {mode === "work" && focused && <Stage session={focused} />}
@@ -608,7 +646,12 @@ function fillWhenThere(
   const el = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(
     selector,
   );
-  if (!el) {
+  // An element still under a hidden #root (the mode that shows it hasn't
+  // committed yet) can't take focus, and text typed into it is lost: wait
+  // for it to be drawn.
+  const drawn =
+    el && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden";
+  if (!el || !drawn) {
     if (tries > 0)
       window.setTimeout(
         () => fillWhenThere(selector, text, append, tries - 1),
@@ -617,6 +660,12 @@ function fillWhenThere(
     return;
   }
   el.focus();
+  // Nothing to add: the caret goes to the end of whatever draft is there.
+  if (append && !text) {
+    const end = el.value.length;
+    el.setSelectionRange(end, end);
+    return;
+  }
   if (append) {
     const end = el.value.length;
     el.setSelectionRange(end, end);
@@ -771,6 +820,10 @@ function Stage({ session }: { session: Session }) {
   // The newest turn of this session, then live events.
   useEffect(() => {
     let alive = true;
+    // Live events that land before the history answers wait here and are
+    // replayed after it, so the history's answer can't drop them.
+    let ready = false;
+    const buffer: Stored[] = [];
     setStage(emptyStage());
     lastSeq.current = 0;
     rpc()
@@ -784,26 +837,43 @@ function Stage({ session }: { session: Session }) {
         const list = events as unknown as Stored[];
         let start = 0;
         for (let i = list.length - 1; i >= 0; i--) {
-          if (list[i].event.type === "user_message") {
+          if (list[i]?.event.type === "user_message") {
             start = i;
             break;
           }
         }
         let s = emptyStage();
         for (const ev of list.slice(start)) s = reduce(s, ev);
-        lastSeq.current = list.length ? list[list.length - 1].seq : 0;
+        lastSeq.current = list.at(-1)?.seq ?? 0;
         // A settled turn read from history shows its review, never a command
         // that finished long ago.
         if (!s.running) s = { ...s, command: null, file: null, tests: null };
+        for (const stored of buffer.sort((a, b) => a.seq - b.seq)) {
+          if (stored.seq <= lastSeq.current) continue;
+          lastSeq.current = stored.seq;
+          s = reduce(s, stored);
+        }
+        buffer.length = 0;
+        ready = true;
         setStage(s);
       })
-      .catch(() => {});
+      .catch(() => {
+        ready = true;
+        let s = emptyStage();
+        for (const stored of buffer.sort((a, b) => a.seq - b.seq)) s = reduce(s, stored);
+        buffer.length = 0;
+        if (alive) setStage(s);
+      });
     const off = rpc().on("session.event", (ev) => {
       const stored = ev as unknown as Stored;
-      if (stored.sessionId !== session.id || stored.seq <= lastSeq.current)
+      if (stored.sessionId !== session.id) return;
+      if (!ready) {
+        buffer.push(stored);
         return;
+      }
+      if (stored.seq <= lastSeq.current) return;
       lastSeq.current = stored.seq;
-      setStage((s) => reduce(s, stored));
+      setStage((s: unknown) => reduce(s, stored));
     });
     return () => {
       alive = false;
@@ -832,14 +902,27 @@ function Stage({ session }: { session: Session }) {
     if (parts.length) root.setAttribute("data-glass-stage", "");
     else root.removeAttribute("data-glass-stage");
   }, [parts.length]);
-  useEffect(() => () => document.documentElement.removeAttribute("data-glass-stage"), []);
+  useEffect(
+    () => () => document.documentElement.removeAttribute("data-glass-stage"),
+    [],
+  );
   if (!raw.length) return null;
   return (
-    <aside className="glass-stage" aria-label="What the agent is doing" hidden={!parts.length}>
-      {parts.includes("file") && st.file && <FileView key={`f:${st.file.path}`} call={st.file} cwd={session.cwd} />}
-      {parts.includes("command") && st.command && <CommandView call={st.command} />}
+    <aside
+      className="glass-stage"
+      aria-label="What the agent is doing"
+      hidden={!parts.length}
+    >
+      {parts.includes("file") && st.file && (
+        <FileView key={`f:${st.file.path}`} call={st.file} cwd={session.cwd} />
+      )}
+      {parts.includes("command") && st.command && (
+        <CommandView call={st.command} />
+      )}
       {parts.includes("tests") && st.tests && <TestsView call={st.tests} />}
-      {raw.includes("review") && st.changes && <Review changes={st.changes} onEmpty={setReviewEmpty} />}
+      {raw.includes("review") && st.changes && (
+        <Review changes={st.changes} onEmpty={setReviewEmpty} />
+      )}
     </aside>
   );
 }
@@ -852,7 +935,7 @@ function Card({ kind, children }: { kind: string; children: ReactNode }) {
   );
 }
 
-function FileView({ call, cwd }: { call: FileCall; cwd: string }) {
+export function FileView({ call, cwd }: { call: FileCall; cwd: string }) {
   const abs = joinPath(cwd, call.path);
   const [text, setText] = useState<string | null>(
     call.kind === "write" ? (call.text ?? "") : null,
@@ -873,18 +956,17 @@ function FileView({ call, cwd }: { call: FileCall; cwd: string }) {
       alive = false;
     };
   }, [abs, call.done, call.kind, call.text]);
-  const needle =
-    call.kind === "write"
+  const found =
+    text === null || call.kind === "write"
       ? null
-      : call.done
-        ? call.edits?.[0]?.after
-        : call.edits?.[0]?.before;
+      : editRange(text, call.edits?.[0], call.done);
   const range =
     text === null
       ? null
       : call.kind === "write"
         ? { start: 1, end: Math.min(28, text.split("\n").length) }
-        : litRange(text, needle ?? "");
+        : found?.range ?? null;
+  const landed = call.kind === "write" ? call.done : (found?.landed ?? call.done);
   const view = text === null ? null : excerpt(text, range);
   const verb =
     call.kind === "write"
@@ -920,7 +1002,7 @@ function FileView({ call, cwd }: { call: FileCall; cwd: string }) {
               <span
                 key={n}
                 className="glass-line"
-                data-lit={lit ? (call.done ? "after" : "before") : undefined}
+                data-lit={lit ? (landed ? "after" : "before") : undefined}
               >
                 <span className="glass-ln">{n}</span>
                 {line || " "}
@@ -933,7 +1015,7 @@ function FileView({ call, cwd }: { call: FileCall; cwd: string }) {
   );
 }
 
-function CommandView({ call }: { call: CommandCall }) {
+export function CommandView({ call }: { call: CommandCall }) {
   const tail = call.output
     .split("\n")
     .filter((l) => l.trim())
@@ -959,7 +1041,7 @@ function CommandView({ call }: { call: CommandCall }) {
   );
 }
 
-function TestsView({ call }: { call: TestsCall }) {
+export function TestsView({ call }: { call: TestsCall }) {
   const c = call.counts;
   const failedLines = call.output
     .split("\n")
@@ -1011,34 +1093,49 @@ type FileHunks = {
  *  wrote it; Reject puts it back (realm-ui's /glass/reject, `git apply -R`
  *  of exactly that hunk). Each button says what it changes before the press,
  *  and a file whose hunks are all kept offers Stage, which is git add. */
-function Review({ changes, onEmpty }: { changes: Changes; onEmpty: (empty: boolean) => void }) {
+// The most files whose diffs the review reads at once. Twelve keeps one
+// turn's review to a few screens of hunks; guessed, never measured.
+const REVIEW_FILES = 12;
+
+export function Review({
+  changes,
+  onEmpty,
+}: {
+  changes: Changes;
+  onEmpty: (empty: boolean) => void;
+}) {
   const [files, setFiles] = useState<FileHunks[]>([]);
+  // Files whose diff couldn't be read, or that sit past the ones read here.
+  // Their changes may still be on disk, so the review is never reported
+  // empty while any are left: a failed read must not skip his call.
+  const [unread, setUnread] = useState(0);
   const fetchOne = useCallback(
-    (path: string) =>
+    (path: string): Promise<Hunk[] | null> =>
       rpc()
         .call("workspace.fileDiff", { cwd: changes.root, path, staged: false })
         .then((d) => (d as unknown as { hunks: Hunk[] }).hunks)
-        .catch(() => [] as Hunk[]),
+        .catch(() => null),
     [changes.root],
   );
   useEffect(() => {
     let alive = true;
     Promise.all(
-      changes.files
-        .slice(0, 12)
-        .map(async (f) => ({
-          path: f.path,
-          hunks: await fetchOne(f.path),
-          state: {},
-          staged: false,
-          note: "",
-        })),
+      changes.files.slice(0, REVIEW_FILES).map(async (f) => ({
+        path: f.path,
+        hunks: await fetchOne(f.path),
+        state: {},
+        staged: false,
+        note: "",
+      })),
     )
       .then((list) => {
         if (!alive) return;
-        const shown = list.filter((f) => f.hunks.length);
+        const failed = list.filter((f) => f.hunks === null).length;
+        const left = failed + Math.max(0, changes.files.length - REVIEW_FILES);
+        const shown = list.filter((f): f is FileHunks => Boolean(f.hunks?.length));
         setFiles(shown);
-        onEmpty(shown.length === 0);
+        setUnread(left);
+        onEmpty(shown.length === 0 && left === 0);
       })
       .catch(() => {});
     return () => {
@@ -1064,7 +1161,12 @@ function Review({ changes, onEmpty }: { changes: Changes; onEmpty: (empty: boole
       }));
       return;
     }
-    const hunks = await fetchOne(path);
+    const read = await fetchOne(path);
+    if (read === null) {
+      update(path, (f) => ({ ...f, note: "Put back. The diff couldn't be read again; the transcript has it." }));
+      return;
+    }
+    const hunks = read;
     update(path, (f) => {
       // The hunks left keep their Keep by content, since their indexes moved.
       const kept = new Set(
@@ -1093,9 +1195,14 @@ function Review({ changes, onEmpty }: { changes: Changes; onEmpty: (empty: boole
       ok ? { ...f, staged: true } : { ...f, note: "That didn't stage." },
     );
   };
-  if (!files.length) return null;
+  if (!files.length && !unread) return null;
   return (
     <Card kind="review">
+      {unread > 0 && (
+        <p className="glass-note">
+          {unread} {unread === 1 ? "file's" : "files'"} changes couldn't be shown here. The transcript has them.
+        </p>
+      )}
       <header className="glass-card-head">
         <span className="glass-verb">Changes</span>
         <span className="glass-path">

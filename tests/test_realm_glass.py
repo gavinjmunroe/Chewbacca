@@ -44,7 +44,7 @@ def realm_status(repo: Path) -> str:
 class LayerFiles(unittest.TestCase):
     def test_layer_is_ours_and_credits_him(self):
         names = sorted(p.name for p in LAYER.iterdir())
-        self.assertEqual(names, ["GlassLayer.tsx", "glass.css", "install.tsx", "main.tsx", "model.mjs"])
+        self.assertEqual(names, ["GlassLayer.tsx", "Story.tsx", "beats.mjs", "glass.css", "install.tsx", "main.tsx", "model.mjs"])
         for p in LAYER.iterdir():
             self.assertIn("Carlton Aikins", p.read_text(), p.name)
 
@@ -55,7 +55,7 @@ class LayerFiles(unittest.TestCase):
 
     def test_a_layer_change_rebuilds(self):
         texts = realm_ui.layer_texts()
-        self.assertEqual(len(texts), 5)
+        self.assertEqual(len(texts), 7)
         self.assertTrue(any(t.startswith("GlassLayer.tsx\n") for t in texts))
 
     def test_vite_points_the_entry_at_ours_and_refuses_a_missing_seam(self):
@@ -107,6 +107,7 @@ class HisRenderer(unittest.TestCase):
             self.assertIn("__realmGlassInstalled", bundle, "our layer is in the bundle")
             self.assertIn("glass-tile", bundle)
             self.assertIn("realm-glass-voice", bundle)
+            self.assertIn("story-headline", bundle, "the story of a turn is in the bundle")
             css = "".join(p.read_text(errors="ignore") for p in (dist / "assets").glob("*.css"))
             self.assertIn("data-glass", css, "our stylesheet is in")
             copied = home / "build" / "apps" / "desktop" / "src" / "renderer"

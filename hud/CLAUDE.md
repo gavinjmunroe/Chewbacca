@@ -536,7 +536,20 @@ for byte his (`REALM_GLASS_BUILD=1`, about a minute).
   mounted and live underneath, not drawn. The surface is `chrome=clear`: no
   frosted field, since the page floats its own surfaces and a field the size
   of the surface read as a window.
-- **One morph.** A press grows a lit outline from the tile to the workspace
+- **The story first, the transcript one press away.** Caleb, 2026-10-11
+  8:29pm: "literal storytelling level UX like the lemma site, each part of
+  your screen being intentional, not just a sequence of lines". A tile grows
+  into the story of the agent's turn (glass/Story.tsx, beats from
+  glass/beats.mjs), not into his transcript: what was asked, one headline
+  sentence, the beat line (You asked, Reading, Changing, Proving, Your call,
+  Done), what proved it, one figure for the beat, and the one decision
+  waiting. Transcript and Reply open his workspace (mounted all along, so
+  instant); Escape there steps back to the story, and from the story to the
+  tiles. Allow on the glass is offered only when the whole request is on
+  screen (beats.mjs permissionView, ported from agents.py); otherwise the
+  press is his own card. The spec and the subtraction list are in
+  skills/hud/SKILL.md, "An agent turn told by the screen".
+- **One morph.** A press grows a lit outline from the tile to the story
   (320 ms, his `--dur-move`, `--ease-out-strong`); his app comes up under it
   while the tiles fade, so no frame is empty, and the light goes out. Escape
   shrinks it back into its tile (240 ms). Escape inside his palette, a menu,

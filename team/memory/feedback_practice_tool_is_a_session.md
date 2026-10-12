@@ -19,7 +19,8 @@ study-guide craft warns against, styled.
 template (skills/interface/references/taxonomy.md): a short home list with
 progress, then one item full screen around the object itself (the rebuild used
 a drawn guitar neck lighting each note, a staff under a playhead, one play
-button, a rating after each run). `.claude/hooks/interface-first.sh` denies a
+button, a rating after each run). His verdict on that rebuild, 40 minutes after
+the first one: "Wait this is a highk goated ux." `.claude/hooks/interface-first.sh` denies a
 150+ line UI page Write until the interface skill is loaded, and design-gate
 now renders a standalone .html from disk instead of skipping it. See
 [[feedback_tasteful_editorial_is_the_new_slop]].

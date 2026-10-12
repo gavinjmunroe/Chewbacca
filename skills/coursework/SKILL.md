@@ -61,6 +61,13 @@ one call, and a lapsed session renews itself from Chrome:
   (ids from `chewbacca api call brightspace myCourses`)
 - Anything else: `brightspace get /le/1.75/<ou>/<path>`
 
+Never-dos, in his words (2026-10-11, mid quiz):
+- "IT should never take this long to find a place you already know": the
+  first call for anything Brightspace is `brightspace due` or the api op,
+  never grep, `find`, `chewie web` or a screenshot.
+- "STOP FLASH BANGING ME": no read opens a window, a tab or a headless
+  browser with a Dock icon. A sign-out is a BLOCKED line, nothing more.
+
 A quiz's questions 403 until the student opens an attempt, so no tool can
 read them first. Ask them to paste the questions; never start an attempt.
 On 2026-10-11 a quiz check took six tool calls across four tools (grep,

@@ -1399,7 +1399,7 @@ def verify(ws, cid, action):
 PRESEND = Path(os.path.expanduser("~/.chewbacca/state/send-gate-receipt.json"))
 
 
-def presend_ok():
+def presend_ok(allow_no_lines=False):
     """The client's pre-send gate (zeutara-gtme scripts/pre_send_gate.py) must
     also have passed in full in the last 12 hours on unchanged files. This was
     launch-guard's first check; it moved here with the rest on 2026-10-10."""
@@ -1409,8 +1409,10 @@ def presend_ok():
         return "no pre-send gate receipt (scripts/pre_send_gate.py with every check on)"
     # full_but_lines is every check except the personal first line, for a
     # sequence that carries no per-lead line (the 10-12 signal-split drafts).
-    # launch-guard already accepted it for a launch; this matches it.
-    if r.get("full") is not True and r.get("full_but_lines") is not True:
+    # Only a launch accepts it, where the launch grade's own merge-field gate
+    # refuses a line with no source; add-leads still needs a full pass.
+    partial_ok = allow_no_lines and r.get("full_but_lines") is True
+    if r.get("full") is not True and not partial_ok:
         return "the last pre-send gate pass skipped a check"
     t = r.get("time")
     if not isinstance(t, int) or not (0 <= time.time() - t < RECEIPT_TTL_S):
@@ -1438,9 +1440,21 @@ def verify_request(ws, cid, action, audience=None):
         receipt_file(ws, cid, ACTIONS[0])  # validates ws and cid
     except ValueError as exc:
         return str(exc)
-    why = presend_ok()
+    why = presend_ok(allow_no_lines=action == "launch")
     if why:
         return why
+    if action == "launch":
+        # The one check that makes a START a launch and never a resume. It runs
+        # here, on the scrubbed env and this ws, because chewbacca clay's own
+        # status read trusts whatever `clay` the caller's PATH finds (review of
+        # 0e45ca41), and the receipt ignores status.
+        try:
+            doc = fetch_state(ws, cid)
+        except Exception as exc:  # a read that fails refuses
+            return f"could not read the campaign from Clay: {exc}"
+        status = str(doc.get("status") or "").strip().lower()
+        if status != "draft":
+            return f"campaign {cid} is {status or 'of unknown status'}; only a draft is started, so a START is never a resume"
     if action == "add-leads":
         try:
             doc = fetch_state(ws, cid)

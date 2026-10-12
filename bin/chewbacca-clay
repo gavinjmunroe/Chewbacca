@@ -941,10 +941,11 @@ async function readback(op, args) {
   else if (rb.expect === "contains-all") { const all = leaves(got); ok = [].concat(want).every((w) => all.includes(String(w).toLowerCase())); }
   else if (rb.expect === "equals") {
     const seen = [rb.path, `campaign.${rb.path}`, `data.${rb.path}`].map((p) => pluck(got, p)).find((x) => x !== undefined);
-    // A START lands as whatever Clay calls a running campaign, never "START",
-    // so the readback only asks that it left draft.
-    if (rb.path === "status" && String(want).toUpperCase() === "START") ok = seen !== undefined && String(seen).toLowerCase() !== "draft";
-    else ok = seen !== undefined && String(seen).toLowerCase() === String(want).toLowerCase();
+    // A START lands as whatever Clay calls a running campaign, never "START".
+    // Clay's live value is unmeasured, so a draft, error, stopped or paused
+    // status reads as not started, and anything else as started.
+    if (rb.path === "status" && String(want) === "START") ok = seen !== undefined && !["draft", "error", "failed", "stopped", "paused"].includes(String(seen).toLowerCase());
+    else ok = seen !== undefined && String(seen) === String(want);
   }
   return { op: rb.op, check: rb.expect, ok: !!ok, run: cmd };
 }

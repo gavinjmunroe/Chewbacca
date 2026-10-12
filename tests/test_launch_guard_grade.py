@@ -160,6 +160,45 @@ open(os.path.join(e.clay_fx, "api-anything", "setCampaignStatus.json"), "w").wri
 e.env["CHEWBACCA_CLAY_TEST_CAMPAIGN_STATUS"] = "paused"
 code, out = e.clay(*START, "--allow-writes", answer="campaign-status")
 check("START refused on a paused campaign (that would be a resume)", refused(code, out, "never a resume"), out)
+# A lying status read (a doctored `clay` on PATH says draft) still can't resume:
+# the grade's own scrubbed read sees the campaign is paused (review of 0e45ca41).
+e = Env()
+e.presend()
+e.grade("cam_alpha", "launch")
+e.campaign("cam_alpha", status="paused")
+open(os.path.join(e.clay_fx, "api-anything", "setCampaignStatus.json"), "w").write(json.dumps(SENT))
+e.env["CHEWBACCA_CLAY_TEST_CAMPAIGN_STATUS"] = "draft"
+code, out = e.clay(*START, "--allow-writes", answer="campaign-status")
+check("START refused when only the front door's status read says draft", refused(code, out, "never a resume"), out)
+# Spellings Clay was never meant to get, and a grade for another workspace.
+for bad in ("status=start", "status= START", "status=Start"):
+    e = Env()
+    e.presend()
+    e.grade("cam_alpha", "launch")
+    code, out = e.clay("campaign-status", "campaign=cam_alpha", bad, "--allow-writes", answer="campaign-status")
+    check(f"START spelled {bad!r} refused", code != 0 and out.get("ok") is False, out)
+e = Env()
+e.presend()
+e.grade("cam_alpha", "launch")
+open(os.path.join(e.clay_fx, "api-anything", "setCampaignStatus.json"), "w").write(json.dumps(SENT))
+code, out = e.clay("campaign-status", "ws=9999999", "campaign=cam_alpha", "status=START", "--allow-writes",
+                   answer="campaign-status")
+check("a launch grade on one workspace does not start the campaign in another", code != 0 and out.get("ok") is False, out)
+# A no-lines pre-send pass covers a launch, never add-leads.
+e = Env()
+e.presend()
+r = json.load(open(os.path.join(e.state, "send-gate-receipt.json")))
+r.pop("full")
+r["full_but_lines"] = True
+json.dump(r, open(os.path.join(e.state, "send-gate-receipt.json"), "w"))
+e.grade("cam_alpha", "add-leads")
+v = subprocess.run([sys.executable, os.path.join(TOOLS, "gtme_grade.py"), "--verify", "--ws", WS, "--campaign", "cam_alpha",
+                    "--action", "add-leads", "--audience", "audseg_one"], capture_output=True, text=True, env=e.env, timeout=60)
+check("a no-lines pre-send pass does not cover add-leads", v.returncode != 0 and "skipped a check" in v.stderr, v.stderr)
+e.grade("cam_alpha", "launch")
+v = subprocess.run([sys.executable, os.path.join(TOOLS, "gtme_grade.py"), "--verify", "--ws", WS, "--campaign", "cam_alpha",
+                    "--action", "launch"], capture_output=True, text=True, env=e.env, timeout=60)
+check("a no-lines pre-send pass covers a launch of a draft", v.returncode == 0, v.stderr)
 # No pre-send gate receipt: the launch grade alone is not enough.
 e = Env()
 e.grade("cam_alpha", "launch")

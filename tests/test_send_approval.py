@@ -232,6 +232,37 @@ class TakeTests(Sandbox):
                 sa.take("email", "a@b.co", "x", env={"CHEWBACCA_SEND_CODE": real}, chain=AGENT_CHAIN)
         self.assertIn("Too many wrong send codes", str(e.exception))
 
+    def test_guesses_in_flight_count_before_they_are_checked(self):
+        # Fill the hour's budget with misses that haven't finished checking
+        # (written, not yet judged): the next guess is refused before its hash.
+        got, show = self.shown()
+        with self.assertRaises(sa.NoApproval):
+            sa.take("email", "a@b.co", "x", show=show, chain=AGENT_CHAIN)
+        for _ in range(sa.MAX_MISSES_PER_HOUR):
+            sa._miss("email")
+        with mock.patch.object(sa, "_code_hash", side_effect=AssertionError("checked past the budget")):
+            with self.assertRaises(sa.NoApproval) as e:
+                sa.take("email", "a@b.co", "x", env={"CHEWBACCA_SEND_CODE": got[0][0]}, chain=AGENT_CHAIN)
+        self.assertIn("Too many wrong send codes", str(e.exception))
+
+    def test_a_right_code_takes_back_its_reserved_miss(self):
+        got, show = self.shown()
+        with self.assertRaises(sa.NoApproval):
+            sa.take("email", "a@b.co", "x", show=show, chain=AGENT_CHAIN)
+        self.assertEqual(sa.take("email", "a@b.co", "x", env={"CHEWBACCA_SEND_CODE": got[0][0]}, chain=AGENT_CHAIN),
+                         "code")
+        self.assertEqual(sa._misses(), 0)
+
+    def test_only_a_few_codes_wait_at_once(self):
+        got, show = self.shown()
+        for n in range(sa.MAX_PENDING):
+            with self.assertRaises(sa.NoApproval):
+                sa.take("email", "a@b.co", "x%d" % n, show=show, chain=AGENT_CHAIN)
+        with self.assertRaises(sa.NoApproval) as e:
+            sa.take("email", "a@b.co", "one more", show=show, chain=AGENT_CHAIN)
+        self.assertIn("already waiting", str(e.exception))
+        self.assertEqual(len(got), sa.MAX_PENDING)
+
     def test_an_electron_helper_is_no_terminal(self):
         helper = "/Applications/Visual Studio Code.app/Contents/Frameworks/Code Helper.app/Contents/MacOS/Code Helper"
         chain = PERSON_CHAIN[:2] + [(TERMINAL_PID, "Code Helper", "??")]

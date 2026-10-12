@@ -101,6 +101,9 @@ TERMINAL_HOSTS = frozenset((
 # 9 an hour against 10^6 codes. Guessed, never measured: a person mistypes a
 # code a few times, not nine.
 MAX_MISSES_PER_HOUR = 9
+# Codes waiting at once. Each is a separate target to guess against, and a
+# person reads one draft at a time. Guessed, never measured.
+MAX_PENDING = 5
 
 
 class NoApproval(Exception):
@@ -288,8 +291,9 @@ def _misses():
 
 
 def _miss(channel):
-    _write_private(os.path.join(_dir("misses"), "%d-%s.json" % (time.time() * 1000, secrets.token_hex(8))),
-                   {"at": time.time(), "channel": channel})
+    path = os.path.join(_dir("misses"), "%d-%s.json" % (time.time() * 1000, secrets.token_hex(8)))
+    _write_private(path, {"at": time.time(), "channel": channel})
+    return path
 
 
 TOO_MANY = ("Too many wrong send codes in the last hour, so no code is checked or shown for a while. "
@@ -297,20 +301,24 @@ TOO_MANY = ("Too many wrong send codes in the last hour, so no code is checked o
 
 
 def _check_code(channel, to, text, subject, given):
-    if _misses() >= MAX_MISSES_PER_HOUR:
+    # The miss is written before the check and taken back only on a match, so
+    # guesses run side by side all count before any of them is checked.
+    reserved = _miss(channel)
+    if _misses() > MAX_MISSES_PER_HOUR:
         raise NoApproval(TOO_MANY)
     path = _pending_path(binding(channel, to, text, subject))
     pend, claim = _claim(path)
     if claim:
         _drop(claim)
     if not pend or time.time() - float(pend.get("at") or 0) > TOKEN_LIFE:
+        _drop(reserved)
         raise NoApproval(
             "CHEWBACCA_SEND_CODE doesn't match a code shown for this exact message (a different text or "
             "address, it expired, or another check has it right now). Run it again without the code to put "
             "a new one on the person's screen. Nothing was sent.")
     if re.fullmatch(r"\d{6}", given or "") and hmac.compare_digest(_code_hash(given, pend["salt"]), pend["hash"]):
+        _drop(reserved)
         return "code"
-    _miss(channel)
     pend["tries"] = int(pend.get("tries") or 0) + 1
     if pend["tries"] >= MAX_CODE_TRIES:
         raise NoApproval("Wrong send code three times, so that code is gone. Nothing was sent.")
@@ -373,6 +381,13 @@ def _request_code(channel, to, text, subject, show):
     if _misses() >= MAX_MISSES_PER_HOUR:
         _log("refused", channel, to, reason="too many wrong codes")
         raise NoApproval(TOO_MANY)
+    live = [n for n in os.listdir(_dir("pending"))
+            if time.time() - float((_read(os.path.join(_dir("pending"), n)) or {}).get("at") or 0) <= TOKEN_LIFE]
+    if len(live) >= MAX_PENDING:
+        _log("refused", channel, to, reason="too many codes waiting")
+        raise NoApproval(
+            "%d send codes are already waiting on the person's screen. Let those finish or expire first. "
+            "Nothing was sent." % len(live))
     code = "%06d" % secrets.randbelow(1000000)
     salt = secrets.token_hex(16)
     if not show(code, _what(channel, to, text, subject)):

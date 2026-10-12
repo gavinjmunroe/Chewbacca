@@ -288,7 +288,9 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_no_hard_cutoffs: No bright-edged photo on a dark section (cut it out or use a dark-edged asset); site-gate check fails it (10/10)
 - feedback_no_unintentional_animation: Text never fades up beat after beat or replays an entrance on change; one rise per page; site-gate research fails it (10/10)
 - feedback_phone_is_never_lesser: Phone version as rich as desktop, never flashes; site-gate parity + flash enforce it (FF site, 10/10)
+- project_firm_foundation_outbound: FF outbound 10/11 night, gtme ledger in the FF repo ops/, 261 DFW and 252 SoCal churches loaded, copy 86-95, nothing sent yet; next is Gavin's Gmail and Caleb's ok
 - project_firm_foundation_site: FF site after the 10/10 rebuild: one story, live on firm-foundation.up.railway.app, Vercel domain waits on Gavin
+- feedback_fix_the_default_path: every fix also makes the right move the easy default (a tool or first step), not only a refusal; chewbacca resolve is the example (10/11)
 - feedback_amber_stealth_in_public: Amber is stealth; public copy says "Stealth (PearX W27)", never the name, product or Amber Circles (10/11)
 - feedback_offscreen_render_was_blank: every HUD_LINES_FILE render of a tall panel was a blank card until 10/11 (ImageRenderer draws ScrollView as nothing); fixed + tallPanelRenders; look at every render
 - feedback_ledger_update_by_source_key: close ledger tasks by source_key from parsed JSON, never a grepped id; a grep marked the wrong active task done (10/11)

@@ -81,18 +81,26 @@ AGENT = re.compile(r"(^|/)(claude|codex)(\s|$)|claude-code|@anthropic-ai/|/Claud
 # The HUD app's executable, as proc_pidpath reported it on 2026-10-12. Read
 # from the kernel, not from argv, which `exec -a` sets to anything.
 KYBER_EXE = "/Applications/Kyber.app/Contents/MacOS/Kyber"
-# Apps a person types into, by their real executable path. Terminal lives
-# under /System/Applications/Utilities on this Mac; VS Code's and Cursor's
-# terminals run under their Code Helper inside the app bundle; sshd is a
-# person on another machine. Missing one only means that terminal gets the
-# six-digit code instead of the prompt.
-TERMINAL_HOST = re.compile(r"^/(System/)?Applications/(Utilities/)?(Terminal|iTerm|Ghostty|Warp|kitty|Alacritty"
-                           r"|WezTerm|Visual Studio Code|Cursor)\.app/|^/usr/sbin/sshd$")
-# Wrong codes burn a pending code after MAX_CODE_TRIES; this many burns in an
-# hour stops new codes being drawn, so guessing can't just ask for a fresh
-# code each time. 3 x 3 guesses an hour against 10^6 codes. Guessed, never
-# measured: a person mistyping a code three times, three times, is rare.
-MAX_BURNS_PER_HOUR = 3
+# Terminal apps a person types into, by each main executable's exact path
+# (Terminal's is under /System/Applications/Utilities on this Mac). Not VS
+# Code, Cursor or sshd: their helpers run any code they're handed
+# (ELECTRON_RUN_AS_NODE=1), so an agent could start one as a fake terminal.
+# A terminal missing here only gets the six-digit code instead of the prompt.
+TERMINAL_HOSTS = frozenset((
+    "/System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal",
+    "/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal",
+    "/Applications/iTerm.app/Contents/MacOS/iTerm2",
+    "/Applications/Ghostty.app/Contents/MacOS/ghostty",
+    "/Applications/kitty.app/Contents/MacOS/kitty",
+    "/Applications/Alacritty.app/Contents/MacOS/alacritty",
+    "/Applications/WezTerm.app/Contents/MacOS/wezterm-gui",
+    "/Applications/Warp.app/Contents/MacOS/stable",
+))
+# Every wrong code counts against one hourly budget, whichever code it was
+# for, so guessing can't reset by waiting out a code or asking for a new one.
+# 9 an hour against 10^6 codes. Guessed, never measured: a person mistypes a
+# code a few times, not nine.
+MAX_MISSES_PER_HOUR = 9
 
 
 class NoApproval(Exception):
@@ -252,7 +260,7 @@ def terminal_owned(chain, exe=exe_path):
     if not own:
         return False
     for i, item in enumerate(chain):
-        if i and TERMINAL_HOST.search(exe(item[0]) or ""):
+        if i and exe(item[0]) in TERMINAL_HOSTS:
             return _tty(chain[i - 1]) == own
     return False
 
@@ -274,7 +282,23 @@ def _read(path):
         return None
 
 
+def _misses():
+    d = _dir("misses")
+    return sum(1 for n in os.listdir(d) if (_read(os.path.join(d, n)) or {}).get("at", 0) > time.time() - 3600)
+
+
+def _miss(channel):
+    _write_private(os.path.join(_dir("misses"), "%d-%s.json" % (time.time() * 1000, secrets.token_hex(8))),
+                   {"at": time.time(), "channel": channel})
+
+
+TOO_MANY = ("Too many wrong send codes in the last hour, so no code is checked or shown for a while. "
+            "Send it from a terminal or the HUD. Nothing was sent.")
+
+
 def _check_code(channel, to, text, subject, given):
+    if _misses() >= MAX_MISSES_PER_HOUR:
+        raise NoApproval(TOO_MANY)
     path = _pending_path(binding(channel, to, text, subject))
     pend, claim = _claim(path)
     if claim:
@@ -286,10 +310,9 @@ def _check_code(channel, to, text, subject, given):
             "a new one on the person's screen. Nothing was sent.")
     if re.fullmatch(r"\d{6}", given or "") and hmac.compare_digest(_code_hash(given, pend["salt"]), pend["hash"]):
         return "code"
+    _miss(channel)
     pend["tries"] = int(pend.get("tries") or 0) + 1
     if pend["tries"] >= MAX_CODE_TRIES:
-        _write_private(os.path.join(_dir("burned"), "%d-%d.json" % (time.time() * 1000, os.getpid())),
-                       {"at": time.time(), "channel": channel})
         raise NoApproval("Wrong send code three times, so that code is gone. Nothing was sent.")
     # Put back only while claimed, so a guess racing this one finds no file
     # and is refused rather than spending a try nobody counted.
@@ -347,13 +370,9 @@ def _request_code(channel, to, text, subject, show):
             "No press for this send yet. A six-digit send code for it is on the person's screen; if they "
             "want it sent they'll read it to you, then run the same command with CHEWBACCA_SEND_CODE=<code>. "
             "Nothing was sent.")
-    burned = _dir("burned")
-    recent = [n for n in os.listdir(burned) if (_read(os.path.join(burned, n)) or {}).get("at", 0) > time.time() - 3600]
-    if len(recent) >= MAX_BURNS_PER_HOUR:
+    if _misses() >= MAX_MISSES_PER_HOUR:
         _log("refused", channel, to, reason="too many wrong codes")
-        raise NoApproval(
-            "Too many wrong send codes in the last hour, so no new code is shown for a while. Send it from a "
-            "terminal or the HUD. Nothing was sent.")
+        raise NoApproval(TOO_MANY)
     code = "%06d" % secrets.randbelow(1000000)
     salt = secrets.token_hex(16)
     if not show(code, _what(channel, to, text, subject)):

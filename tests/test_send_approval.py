@@ -196,9 +196,9 @@ class TakeTests(Sandbox):
         self.assertIsNotNone(status, seen)
         self.assertEqual(os.WEXITSTATUS(status), 0, seen)
 
-    def test_burned_codes_stop_new_ones(self):
+    def test_wrong_codes_share_one_hourly_budget(self):
         got, show = self.shown()
-        for n in range(sa.MAX_BURNS_PER_HOUR):
+        for n in range(sa.MAX_MISSES_PER_HOUR // sa.MAX_CODE_TRIES):
             text = "x%d" % n
             with self.assertRaises(sa.NoApproval):
                 sa.take("email", "a@b.co", text, show=show, chain=AGENT_CHAIN)
@@ -212,6 +212,33 @@ class TakeTests(Sandbox):
             sa.take("email", "a@b.co", "fresh", show=show, chain=AGENT_CHAIN)
         self.assertIn("Too many wrong send codes", str(e.exception))
         self.assertEqual(len(got), drawn)
+
+    def test_waiting_out_a_code_does_not_reset_the_guesses(self):
+        # The review's shape: two wrong guesses, let the code age past the
+        # re-show window, ask for a new one, repeat. Every miss still counts.
+        got, show = self.shown()
+        later = [sa.time.time()]
+        with mock.patch.object(sa.time, "time", side_effect=lambda: later[0]):
+            for _ in range(sa.MAX_MISSES_PER_HOUR // 2 + 1):
+                with self.assertRaises(sa.NoApproval):
+                    sa.take("email", "a@b.co", "x", show=show, chain=AGENT_CHAIN)
+                wrong = "000000" if got[-1][0] != "000000" else "111111"
+                for _ in range(2):
+                    with self.assertRaises(sa.NoApproval):
+                        sa.take("email", "a@b.co", "x", env={"CHEWBACCA_SEND_CODE": wrong}, chain=AGENT_CHAIN)
+                later[0] += sa.RESHOW_AFTER + 1
+            real = got[-1][0]
+            with self.assertRaises(sa.NoApproval) as e:
+                sa.take("email", "a@b.co", "x", env={"CHEWBACCA_SEND_CODE": real}, chain=AGENT_CHAIN)
+        self.assertIn("Too many wrong send codes", str(e.exception))
+
+    def test_an_electron_helper_is_no_terminal(self):
+        helper = "/Applications/Visual Studio Code.app/Contents/Frameworks/Code Helper.app/Contents/MacOS/Code Helper"
+        chain = PERSON_CHAIN[:2] + [(TERMINAL_PID, "Code Helper", "??")]
+        with self.assertRaises(sa.NoApproval):
+            sa.take("imessage", "+1", "hi", show=lambda *a: False,
+                    tty=mock.Mock(side_effect=AssertionError("an Electron helper was a terminal")), chain=chain,
+                    exe=lambda pid: helper if pid == TERMINAL_PID else "/bin/zsh")
 
     def no_tty(self):
         return mock.Mock(side_effect=AssertionError("tty offered"))

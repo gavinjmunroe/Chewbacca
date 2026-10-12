@@ -31,9 +31,13 @@ const readJson = (file, fallback) => {
   }
 };
 const expand = (p) => (p && p.startsWith("~") ? path.join(HOME, p.slice(1)) : p);
+// A server started by an app or a login item gets launchd's bare PATH, which
+// has neither the kit's tools nor Homebrew; the assignments card then read
+// "nothing due" because it could not find `coursework`.
+const TOOL_PATH = [path.join(HOME, ".local", "bin"), "/opt/homebrew/bin", "/usr/local/bin", process.env.PATH || "/usr/bin:/bin"].join(":");
 const run = (cmd, args, opts = {}) => {
   try {
-    return execFileSync(cmd, args, { encoding: "utf8", timeout: 20000, stdio: ["ignore", "pipe", "ignore"], ...opts }).trim();
+    return execFileSync(cmd, args, { encoding: "utf8", timeout: 20000, stdio: ["ignore", "pipe", "ignore"], env: { ...process.env, PATH: TOOL_PATH }, ...opts }).trim();
   } catch {
     return "";
   }
@@ -239,27 +243,32 @@ const WEEK_PAGE = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Chewbacca: this week</title>
 <style>
-:root{--void:#0b0c0e;--card:#14161a;--hair:rgba(255,255,255,.08);--ice:#eceef2;--steel:#8b94a0;--faint:#555d68;--amber:#f0b429;--green:#5ec27f;
---sans:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;--mono:ui-monospace,"SF Mono",Menlo,monospace}
+:root{color-scheme:light dark;
+--card:rgba(255,255,255,.64);--card-edge:rgba(0,0,0,.07);--ink:#1d1d1f;--steel:#6e6e73;--faint:#8e8e93;--hair:rgba(0,0,0,.08);
+--accent:#c25e00;--green:#248a3d;--bar:rgba(250,250,252,.55);
+--sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;--mono:ui-monospace,"SF Mono",Menlo,monospace}
+@media (prefers-color-scheme:dark){:root{--card:rgba(52,52,58,.58);--card-edge:rgba(255,255,255,.09);--ink:#f5f5f7;--steel:#a1a1a6;--faint:#8e8e93;--hair:rgba(255,255,255,.1);--accent:#ffb340;--green:#32d74b;--bar:rgba(28,28,30,.5)}}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
-body{background:var(--void);color:var(--ice);font:13px/1.45 var(--sans);-webkit-font-smoothing:antialiased;overflow:auto}
-header{position:sticky;top:0;z-index:50;display:flex;align-items:baseline;gap:14px;padding:14px 20px;background:rgba(11,12,14,.85);backdrop-filter:blur(14px);border-bottom:1px solid var(--hair)}
-header h1{font-size:15px;font-weight:600;letter-spacing:.01em}
-header .range{color:var(--steel);font-family:var(--mono);font-size:12px}
+body{background:Canvas;color:var(--ink);font:13px/1.45 var(--sans);-webkit-font-smoothing:antialiased;overflow:auto}
+body.native{background:transparent}
+header{position:sticky;top:0;z-index:50;display:flex;align-items:baseline;gap:12px;padding:14px 22px;background:var(--bar);-webkit-backdrop-filter:blur(24px) saturate(1.6);backdrop-filter:blur(24px) saturate(1.6);border-bottom:1px solid var(--hair)}
+body.native header{padding:16px 22px 12px 86px}
+header h1{font-size:15px;font-weight:600;letter-spacing:-.01em}
+header .range{color:var(--steel);font-size:12px;font-variant-numeric:tabular-nums}
 header .hint{margin-left:auto;color:var(--faint);font-size:11px}
-#board{position:relative;margin:18px 20px 40px}
-.card{position:absolute;width:340px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.35);overflow:hidden}
-.card.drag{box-shadow:0 18px 44px rgba(0,0,0,.55);border-color:rgba(255,255,255,.2);z-index:40}
-.card h2{cursor:grab;user-select:none;display:flex;justify-content:space-between;align-items:center;padding:11px 14px;font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--steel);border-bottom:1px solid var(--hair)}
-.card h2 small{font-weight:400;letter-spacing:0;text-transform:none;color:var(--faint)}
-.body{padding:12px 14px 14px}
-.nums{display:flex;gap:18px;margin-bottom:10px}
-.num b{display:block;font:600 30px/1.05 var(--mono);font-variant-numeric:tabular-nums}
-.num span{font-size:10.5px;color:var(--steel);text-transform:uppercase;letter-spacing:.06em}
-.num.hot b{color:var(--amber)}
+#board{position:relative;margin:20px 22px 40px}
+.card{position:absolute;width:340px;background:var(--card);-webkit-backdrop-filter:blur(30px) saturate(1.7);backdrop-filter:blur(30px) saturate(1.7);border:1px solid var(--card-edge);border-radius:14px;box-shadow:0 1px 2px rgba(0,0,0,.08),0 10px 28px rgba(0,0,0,.10);overflow:hidden}
+.card.drag{box-shadow:0 2px 4px rgba(0,0,0,.12),0 20px 44px rgba(0,0,0,.22);z-index:40}
+.card h2{cursor:grab;user-select:none;-webkit-user-select:none;display:flex;justify-content:space-between;align-items:center;padding:12px 16px 10px;font-size:12px;font-weight:600;letter-spacing:.01em;color:var(--steel)}
+.card h2 small{font-weight:400;color:var(--faint)}
+.body{padding:2px 16px 15px}
+.nums{display:flex;gap:20px;margin-bottom:10px}
+.num b{display:block;font:600 30px/1.05 var(--sans);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.num span{font-size:11px;color:var(--steel)}
+.num.hot b{color:var(--accent)}
 ul{list-style:none}
-li{padding:4px 0;border-top:1px solid var(--hair);display:flex;gap:8px;justify-content:space-between}
+li{padding:5px 0;border-top:1px solid var(--hair);display:flex;gap:8px;justify-content:space-between}
 li:first-child{border-top:0}
 li .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 li .m{color:var(--faint);font-family:var(--mono);font-size:11px;white-space:nowrap}
@@ -271,6 +280,7 @@ li .m{color:var(--faint);font-family:var(--mono);font-size:11px;white-space:nowr
 <header><h1>This week</h1><span class="range" id="range"></span><span class="hint">drag a card by its title. double-click a title to reset the layout.</span></header>
 <div id="board"><div class="empty" id="loading">Reading your week...</div></div>
 <script>
+if(location.search.indexOf("native=1")>-1)document.body.classList.add("native");
 const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const KEY="chewbacca.week.layout";
 let layout={};try{layout=JSON.parse(localStorage.getItem(KEY)||"{}")}catch{}

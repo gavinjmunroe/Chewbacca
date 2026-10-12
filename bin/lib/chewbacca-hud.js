@@ -846,9 +846,16 @@ if (require.main === module) {
             /* headless, the URL above is the whole answer */
           }
         };
-        // The week view is a window you arrange, so it gets its own
-        // chrome-less window where Chrome is installed, not a browser tab.
-        if (week && fs.existsSync("/Applications/Google Chrome.app")) {
+        // The week view is a window you arrange, so it gets the native Mac
+        // window when it is installed, then a chrome-less Chrome window.
+        const native = ["/Applications", path.join(os.homedir(), "Applications")]
+          .map((d) => path.join(d, "Chewbacca Week.app"))
+          .find((a) => fs.existsSync(a));
+        if (process.argv.includes("--no-open")) {
+          /* serving only: the native window starts this and opens itself */
+        } else if (week && native) {
+          launch("open", [native]);
+        } else if (week && fs.existsSync("/Applications/Google Chrome.app")) {
           launch("open", ["-na", "Google Chrome", "--args", `--app=${url}`, "--window-size=1180,820"]);
         } else {
           launch("open", [url]);

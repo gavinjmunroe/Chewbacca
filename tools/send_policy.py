@@ -5,8 +5,8 @@ The rules about who, when and how much (quiet hours, unowned addresses,
 NO_SEND, cold email caps and weekends, the Clay gates) live in
 config/send-policy.cedar. This module gathers the facts a rule reads, hands
 them to crates/sendpolicy (Cedar), and returns its answer. It never decides
-anything itself, and it is never a press: a yes here still needs
-send_approval.take() before anything reaches a person.
+anything itself, and it is never a press: a yes here still goes through
+send_approval.take(), which asks for a press only in press mode.
 
     send_policy.py could text --channel imessage [--name "Sagar Tiwari"] [--group]
                               [--after-hours] [--at 2026-10-12T23:30:00-07:00]
@@ -321,7 +321,8 @@ def main(argv=None):
     if a.json:
         print(json.dumps(got, indent=2))
     elif got["decision"] == "allow":
-        print("yes: no rule in config/send-policy.cedar stops it (a person's press is still needed)")
+        print("yes: no rule in config/send-policy.cedar stops it (a person's press too, only when "
+              "~/.chewbacca/send-approvals/mode says press)")
     elif got["decision"] == "unavailable":
         print("can't say: " + "; ".join(got.get("errors") or []))
     else:

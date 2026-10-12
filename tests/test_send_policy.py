@@ -314,6 +314,8 @@ class Could(unittest.TestCase):
                            "--at", "2026-10-07T16:00:00+00:00", env={"PEOPLE_DIR": people})
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("yes", r.stdout)
+        # Agents send by default (e2632c20): a yes never says a press is needed.
+        self.assertNotIn("press is still needed", r.stdout)
 
     def test_no_send_and_clay(self):
         r = self.run_could("text", "--channel", "slack", env={"CHEWBACCA_NO_SEND": "1"})

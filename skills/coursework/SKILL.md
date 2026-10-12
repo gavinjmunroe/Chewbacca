@@ -60,6 +60,19 @@ follow Google Docs, Sheets and Slides links, and export them (`/export/pdf`,
 `/export?format=xlsx`) into `~/coursework/slides/<CODE>/` before telling the
 student anything is missing.
 
+## A practice app covers the whole semester so far
+
+A student asking for exam practice usually doesn't know the earlier material
+either. On 2026-10-11 the BISC 101 app was built for Midterm 2 only (Ch 9 to
+11 from Labs 4 and 5) and the student said "put the entire bio semester in
+there I know none of it". Build every lecture deck posted so far into drills,
+chapter by chapter, with the nearest deadline first on the setlist, and pull
+the text from the decks themselves (pptx XML, binary .ppt text atoms, lab
+manual PDFs) so every item cites its slide. Before calling it done, open
+EVERY screen at 1440 and 390 in Chromium and WebKit and check for errors,
+blank screens and sideways scroll: the one bug left after per-drill tests
+(a rating row 58px too wide) only showed up that way.
+
 ## Lecture slides for one course
 
 "Pull the slides for <class>" means:

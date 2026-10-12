@@ -22,6 +22,13 @@ done
 [ "$took" -le 60 ] && echo "ok    both files in ${took}s" || { echo "FAIL  took ${took}s"; fail=1; }
 pgrep -f "print-to-pdf=$T" >/dev/null && { echo "FAIL  a Chrome print process was left running"; fail=1; } || echo "ok    no Chrome left running"
 python3 "$ROOT/bin/chewbacca-pdf" "$T/nope.md" >/dev/null 2>&1 && { echo "FAIL  a missing file exited 0"; fail=1; } || echo "ok    a missing file exits 1"
+python3 - "$ROOT" <<'PY' && echo "ok    inline code and bold render as tags, not raw marks" || { echo "FAIL  inline markdown printed raw"; fail=1; }
+import sys; sys.path.insert(0, sys.argv[1] + "/tools")
+import gtme_operator as op
+h = op.md_to_html("# T\n\n- run `recur` **now** <x>\n\nSee `scars` here", "T")
+assert "<code>recur</code>" in h and "<b>now</b>" in h and "<code>scars</code>" in h, h
+assert "`" not in h and "**" not in h and "&lt;x&gt;" in h, h
+PY
 G="$ROOT/.claude/hooks/use-the-kit-guard.sh"
 g() { jq -n --arg c "$1" '{tool_input:{command:$c}}' | bash "$G" >/dev/null 2>&1; echo $?; }
 [ "$(g 'chrome --headless=new --print-to-pdf=out.pdf file.html')" = 2 ] && echo "ok    a hand-rolled Chrome print is pointed at chewbacca pdf" || { echo "FAIL  hand-rolled print not refused"; fail=1; }

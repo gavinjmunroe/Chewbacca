@@ -1922,6 +1922,15 @@ def unmd(text: str) -> str:
     return re.sub(r"\\(.)", r"\1", text)
 
 
+def inline(text: str) -> str:
+    """Escape, then render `code` and **bold**. Before 2026-10-11 both printed
+    as literal backticks and asterisks, so a one-pager full of tool names went
+    out looking like raw markdown."""
+    esc = html.escape(text)
+    esc = re.sub(r"`([^`]+)`", r"<code>\1</code>", esc)
+    return re.sub(r"\*\*([^*]+)\*\*", r"<b>\1</b>", esc)
+
+
 def md_to_html(md: str, title: str) -> str:
     body, in_table, in_list = [], False, False
     for raw in md.splitlines():
@@ -1946,7 +1955,7 @@ def md_to_html(md: str, title: str) -> str:
                 body.append("<ul>")
                 in_list = True
             item = re.sub(r"^(- |\d+\. )", "", line)
-            body.append(f"<li>{html.escape(item)}</li>")
+            body.append(f"<li>{inline(item)}</li>")
             continue
         if in_list:
             body.append("</ul>")
@@ -1956,7 +1965,7 @@ def md_to_html(md: str, title: str) -> str:
         elif line.startswith("## "):
             body.append(f"<h2>{esc[3:]}</h2>")
         elif line.strip():
-            body.append(f"<p>{esc}</p>")
+            body.append(f"<p>{inline(line)}</p>")
     if in_table:
         body.append("</table>")
     if in_list:
@@ -1964,7 +1973,7 @@ def md_to_html(md: str, title: str) -> str:
     css = ("body{font-family:-apple-system,Helvetica,Arial,sans-serif;color:#1d1d1f;margin:40px;font-size:12px;"
            "background:#fff}h1{font-size:20px}h2{font-size:15px;margin-top:22px;border-bottom:1px solid #ddd}"
            "table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #eee;padding:5px;text-align:left}"
-           "p{color:#444}")
+           "p{color:#444}code{font-family:Menlo,monospace;font-size:11px;background:#f2f2f5;padding:0 3px;border-radius:3px}")
     return (f"<!doctype html><html><head><meta charset='utf-8'><title>{html.escape(title)}</title>"
             f"<style>{css}</style></head><body>{''.join(body)}</body></html>")
 

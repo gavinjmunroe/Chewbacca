@@ -275,6 +275,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_vendor_names_need_a_source: Vendor or tool names on a client site need a usage source; "X or Y or whatever" on a call is a research task (FF site, 10/10)
 - feedback_signed_in_but_403_is_chrome: 403 while he has signed-in tabs = Chrome stopped saving cookies (19h on 10/10); Cmd+Q and reopen, never "sign in"
 - reference_chewbacca_launch: `chewbacca launch` opens a named, briefed desktop tab (seed via -p --session-id, --desktop --resume under script); kickoff via send_message; LAUNCHED_BY marker
+- reference_chewbacca_one_pager: one-page "what Chewbacca has that no LLM does" list in ~/Downloads; render PDF from a no-blank-line copy to fit; README "No daemon" is stale
 - feedback_we_good_means_closeout_first: "we good?" = run closeout, answer once with what landed + whose files fail; a yes then no drew "Wtfffff" (10/10)
 - feedback_dev_set_must_contain_the_failure: check the dev set holds the failure before tuning; brain recall dev 80% fell to 43% sealed (10/10)
 - feedback_workers_never_wait_on_tail: a subagent waiting on `tail -f` of a backgrounded suite stalls forever; run long suites in the foreground (10/10)

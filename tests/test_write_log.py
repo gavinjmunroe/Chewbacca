@@ -457,5 +457,24 @@ class WriteLogSpeedTests(unittest.TestCase):
         self.assertNotIn('core.fsmonitor=true', calls[1])
 
 
+class WriteLogRuntimeTests(unittest.TestCase):
+    """2026-10-11: the Pre ran a shared checkout 87 commits behind, at 1.6 s."""
+
+    def test_setup_registers_the_pre_from_the_installed_copy(self):
+        setup = (ROOT / 'setup.sh').read_text()
+        self.assertIn('_register("PreToolUse", hooks_dir + "/write-log.sh"', setup)
+
+    def test_the_kit_runtime_wins_over_the_checkout(self):
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            tools = home / '.chewbacca/kit/current/tools'
+            tools.mkdir(parents=True)
+            marker = home / 'ran-kit'
+            (tools / 'write_log.py').write_text('open(%r, "w").close()\n' % str(marker))
+            subprocess.run(['bash', str(ROOT / '.claude/hooks/write-log.sh')], input='{}', text=True,
+                           capture_output=True, env=dict(os.environ, HOME=str(home)), timeout=30)
+            self.assertTrue(marker.exists(), 'write-log.sh ran the checkout, not the kit runtime')
+
+
 if __name__ == '__main__':
     unittest.main()

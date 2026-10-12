@@ -1820,6 +1820,13 @@ _register("PreToolUse", hooks_dir + "/destructive-guard.sh", timeout=5,
           matcher="Bash", status="Checking nothing unsaved gets thrown away...")
 # 2026-10-10: Erik's site draft went to Vercel; "never do anything on vercel
 # ever again". Railway is the host. See the hook's header.
+# write-log needs its Pre snapshot to see what a call changed. Registered here
+# from the installed copy, which runs the kit runtime's code. Left out, the
+# agent adapter added it as `python3.14 <checkout>/tools/shared_checks.py run
+# write-log.sh`, which ran the shared checkout's copy: on 2026-10-11 that
+# checkout was 87 commits behind and the Pre cost 1.6 s CPU against 0.37 s for
+# the Post running current code.
+_register("PreToolUse", hooks_dir + "/write-log.sh", matcher="Write|Edit|Bash|NotebookEdit")
 _register("PreToolUse", hooks_dir + "/vercel-guard.sh", timeout=5,
           matcher="Bash", status="Checking this deploys to Railway, not Vercel...")
 # 2026-10-11: two Togari fixes sat as PRs while Railway deploys main;

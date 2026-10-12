@@ -8,6 +8,12 @@ import runpy
 import shutil
 import sys
 roots = [Path(sys.argv[1])]
+# The kit runtime (origin/main) before a checkout: a shared checkout can sit
+# far behind, and on 2026-10-11 its write_log.py cost 1.6 s CPU per call to
+# 0.37 s for the runtime copy.
+kit = Path.home() / ".chewbacca/kit/current"
+if (kit / "tools/write_log.py").is_file():
+    roots.insert(0, kit)
 if os.environ.get("CHEWBACCA_ROOT"):
     roots.insert(0, Path(os.environ["CHEWBACCA_ROOT"]).expanduser())
 launchers = [Path.home() / ".local/bin/chewbacca"]

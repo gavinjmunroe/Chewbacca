@@ -118,6 +118,58 @@ class HisRenderer(unittest.TestCase):
         self.assertEqual(realm_status(self.repo), before, "the realm checkout was not touched")
 
 
+class TwoWaysIn(unittest.TestCase):
+    """install.tsx takes the fork's extension slot when the copied renderer
+    has one and falls back to his StoreContext.Provider when it doesn't, so
+    REALM_UI_SOURCE can flip between them with no edit to the layer."""
+
+    def test_install_takes_the_slot_and_keeps_the_provider_fallback(self):
+        install = (LAYER / "install.tsx").read_text()
+        self.assertIn('import.meta.glob("../src/extensions.ts"', install)
+        self.assertIn("register(GlassMount)", install)
+        self.assertIn(".Provider = GlassProvider", install)
+        self.assertIn('__realmGlassMount = register ? "slot" : "provider"', install)
+
+    def test_both_ways_mount_the_folder_chooser(self):
+        install = (LAYER / "install.tsx").read_text()
+        self.assertEqual(install.count("createElement(FolderPick"), 2)
+
+
+FORK = Path(os.environ.get("REALM_FORK_DIR") or Path.home() / "code" / "realm-fork").expanduser()
+
+
+@unittest.skipUnless((FORK / "apps" / "desktop" / "src" / "renderer").is_dir(), "no realm fork checkout")
+class TheFork(unittest.TestCase):
+    """Caleb's fork (github.com/calebnewtonusc/realm, branch chewbacca) still
+    carries the seams the layer uses there instead of fighting his code."""
+
+    src = FORK / "apps" / "desktop" / "src" / "renderer" / "src"
+
+    def test_the_slot_and_host_quiet_are_there(self):
+        ext = (self.src / "extensions.ts").read_text()
+        self.assertIn("Carlton Aikins", ext)
+        for name in ("export function registerExtension(", "export function setHostQuiet(", "export function useHostQuiet("):
+            self.assertIn(name, ext)
+        app = (self.src / "App.tsx").read_text()
+        self.assertIn("<Extensions />", app)
+        self.assertIn("lowPower || !windowActive || hostQuiet", app)
+        self.assertIn("data-frameless={frameless || undefined}", app)
+
+    def test_frameless_puts_his_window_chrome_away(self):
+        css = (self.src / "styles.css").read_text()
+        self.assertIn(".app[data-frameless] > .window-trail", css)
+        self.assertIn("frameless?: boolean;", (self.src / "env.d.ts").read_text())
+
+    def test_each_composer_names_its_session(self):
+        composer = (self.src / "panes" / "session" / "Composer.tsx").read_text()
+        self.assertIn('className="composer-input" data-session-id={session.id}', composer)
+
+    def test_the_layer_only_names_seams_the_fork_has(self):
+        layer = (LAYER / "GlassLayer.tsx").read_text()
+        self.assertIn('.composer-input[data-session-id=', layer)
+        self.assertIn("host.setQuiet?.(", layer)
+
+
 class Voice(unittest.TestCase):
     """The talk key reaches the focused agent through the real server.mjs,
     and only while a page has the glass and is listening."""

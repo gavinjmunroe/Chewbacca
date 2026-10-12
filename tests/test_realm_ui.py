@@ -64,6 +64,80 @@ check("vite aliases the paid icon pack to the free one",
 check("vite loads the bridge before the module entry",
       '<script src="/realm-bridge.js"></script><script type="module"' in config)
 
+# ── which checkout the interface builds from ────────────────────────────────
+# REALM_UI_SOURCE picks the renderer's checkout (Caleb's fork at
+# ~/code/realm-fork) without moving the engine; unset, it stays the engine's
+# ~/code/vendor/realm. Built here with a stand-in node and npm, so the copy,
+# the stamp and the record are the real code and only vite is faked.
+
+
+def _fake_realm(at: Path, marker: str) -> Path:
+    renderer = at / "apps" / "desktop" / "src" / "renderer"
+    (renderer / "src").mkdir(parents=True)
+    (renderer / "index.html").write_text('<script type="module" src="/src/main.tsx"></script>')
+    (renderer / "src" / "main.tsx").write_text(f"// {marker}\n")
+    (at / "apps" / "desktop" / "package.json").write_text(json.dumps({"dependencies": {"react": "^19"}}))
+    (at / "tsconfig.base.json").write_text("{}")
+    for name in ("contracts", "ui"):
+        (at / "packages" / name).mkdir(parents=True)
+        (at / "packages" / name / "package.json").write_text("{}")
+    return at
+
+
+_saved = {k: os.environ.get(k) for k in ("REALM_UI_SOURCE", "CHEWBACCA_REALM_DIR", "HOME", "CHEWBACCA_NODE",
+                                         "CHEWBACCA_NPM", "CHEWBACCA_REALM_UI_HOME")}
+try:
+    src_tmp = TMP / "sources"
+    os.environ.pop("REALM_UI_SOURCE", None)
+    os.environ.pop("CHEWBACCA_REALM_DIR", None)
+    os.environ["HOME"] = str(src_tmp / "home")
+    check("unset, the interface builds from ~/code/vendor/realm",
+          realm_ui.realm_dir() == src_tmp / "home" / "code" / "vendor" / "realm", realm_ui.realm_dir())
+    os.environ["CHEWBACCA_REALM_DIR"] = str(src_tmp / "engine")
+    check("unset, it follows the engine's checkout", realm_ui.realm_dir() == src_tmp / "engine", realm_ui.realm_dir())
+    os.environ["REALM_UI_SOURCE"] = "~/code/realm-fork"
+    check("REALM_UI_SOURCE wins over the engine's checkout, ~ expanded",
+          realm_ui.realm_dir() == src_tmp / "home" / "code" / "realm-fork", realm_ui.realm_dir())
+
+    vendor = _fake_realm(src_tmp / "vendor", "his")
+    fork = _fake_realm(src_tmp / "fork", "fork")
+    bin_dir = src_tmp / "bin"
+    bin_dir.mkdir()
+    fake_npm = bin_dir / "npm"
+    fake_npm.write_text("#!/bin/sh\nmkdir -p node_modules/vite/bin && : > node_modules/vite/bin/vite.js\n")
+    fake_node = bin_dir / "node"
+    # Stands in for `node vite.js build`: the "bundle" is the main.tsx it was handed.
+    fake_node.write_text("#!/bin/sh\nmkdir -p dist && cp apps/desktop/src/renderer/src/main.tsx dist/index.html\n")
+    for f in (fake_npm, fake_node):
+        f.chmod(0o755)
+    os.environ.update(CHEWBACCA_NODE=str(fake_node), CHEWBACCA_NPM=str(fake_npm),
+                      CHEWBACCA_REALM_UI_HOME=str(src_tmp / "ui"))
+    quiet = lambda *_: None  # noqa: E731
+
+    os.environ.pop("REALM_UI_SOURCE")
+    os.environ["CHEWBACCA_REALM_DIR"] = str(vendor)
+    rec = realm_ui.build(log=quiet)
+    check("the default build copies his checkout", "his" in (realm_ui.dist_dir() / "index.html").read_text())
+    check("the record names the checkout it came from", rec.get("source") == str(vendor), rec)
+    check("status says where the build came from", realm_ui.status()["source"] == str(vendor), realm_ui.status())
+
+    os.environ["REALM_UI_SOURCE"] = str(fork)
+    rec = realm_ui.build(log=quiet)
+    check("REALM_UI_SOURCE builds the fork, no --force needed",
+          "fork" in (realm_ui.dist_dir() / "index.html").read_text() and rec.get("source") == str(fork), rec)
+    check("the fork's own tree gets no file of ours", not (fork / "apps" / "desktop" / "src" / "renderer" / "glass").exists())
+
+    os.environ.pop("REALM_UI_SOURCE")
+    rec = realm_ui.build(log=quiet)
+    check("unset again, the next build is his again",
+          "his" in (realm_ui.dist_dir() / "index.html").read_text() and rec.get("source") == str(vendor), rec)
+finally:
+    for k, v in _saved.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
+
 # ── nothing built ───────────────────────────────────────────────────────────
 
 check("not built: not available", realm_app.available() is False)

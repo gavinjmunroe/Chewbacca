@@ -253,7 +253,23 @@ function useShown(): boolean {
   return shown;
 }
 
-export function GlassLayer({ store }: { store: StoreApi<AppState> }) {
+/** What the renderer it was built from offers a host (install.tsx). Caleb's
+ *  fork of Realm (github.com/calebnewtonusc/realm, branch chewbacca) has
+ *  each; Carlton's own checkout has none, and the layer works around that. */
+export type Host = {
+  /** Pause his looping decoration while his app is hidden under ours. */
+  setQuiet?: (quiet: boolean) => void;
+  /** Each composer names its session (data-session-id). */
+  namedComposers: boolean;
+};
+
+export function GlassLayer({
+  store,
+  host = { namedComposers: false },
+}: {
+  store: StoreApi<AppState>;
+  host?: Host;
+}) {
   const shown = useShown();
   const [mode, setMode] = useState<Mode>("tiles");
   const [focus, setFocus] = useState<string | null>(null);
@@ -368,7 +384,10 @@ export function GlassLayer({ store }: { store: StoreApi<AppState> }) {
   }, [shown]);
   useEffect(() => {
     document.documentElement.setAttribute("data-glass", mode);
-  }, [mode]);
+    // His app is drawn only in the workspace; under the tiles and the story
+    // it is hidden, and its loops have no one to run for.
+    host.setQuiet?.(mode !== "work");
+  }, [mode, host]);
 
   // What each session's Claude Code tab is really doing, keyed by the CLI's
   // session id. Asked for every session, not just the drawn nine, since the
@@ -717,11 +736,11 @@ export function GlassLayer({ store }: { store: StoreApi<AppState> }) {
       // The reply lives in his composer, in the transcript.
       if (modeRef.current === "tiles") grow(who, "work");
       else if (modeRef.current === "story") setMode("work");
-      fillWhenThere(".composer-input", insert, true);
+      fillWhenThere(composerOf(who, host), insert, true);
     };
     window.addEventListener("realm-glass-voice", onVoice);
     return () => window.removeEventListener("realm-glass-voice", onVoice);
-  }, [store, tiles, picked, grow]);
+  }, [store, tiles, picked, grow, host]);
 
   // New agent: his own new-space sheet (name, folder, agent) over his
   // workspace, with "Choose folder" answered on the glass (FolderPick.tsx).
@@ -801,10 +820,14 @@ export function GlassLayer({ store }: { store: StoreApi<AppState> }) {
   // Transcript and Reply on the story: his workspace, already mounted, so
   // this is a crossfade and never a load. Reply puts the caret in his
   // composer.
-  const openTranscript = useCallback((reply: boolean) => {
-    setMode("work");
-    if (reply) fillWhenThere(".composer-input", "", true);
-  }, []);
+  const openTranscript = useCallback(
+    (reply: boolean) => {
+      setMode("work");
+      if (reply && focusRef.current)
+        fillWhenThere(composerOf(focusRef.current, host), "", true);
+    },
+    [host],
+  );
   // The engine outranks the talk key: with no engine nothing else works.
   const notice = engineFault ?? voiceFault;
   // In the workspace the notice sits in the column beside his app, so his
@@ -856,6 +879,15 @@ export function GlassLayer({ store }: { store: StoreApi<AppState> }) {
     </div>,
     document.body,
   );
+}
+
+/** His composer for one session. Carlton's checkout doesn't say which
+ *  session a composer belongs to, so there it's the first one in the window,
+ *  which is the wrong one when two sessions sit side by side. */
+function composerOf(session: string, host: Host): string {
+  return host.namedComposers
+    ? `.composer-input[data-session-id="${CSS.escape(session)}"]`
+    : ".composer-input";
 }
 
 /** Put text into the first element matching `selector` once it exists,

@@ -67,6 +67,11 @@
     platform: "darwin",
     // HtmlMenu instead of NativeMenu: Menu.tsx draws its own when popupMenu is absent.
     htmlMenus: true,
+    // The glass frames the app itself. Caleb's fork of realm (branch
+    // chewbacca, src/App.tsx) reads this and puts the rail, sidebar, lead and
+    // trail away from inside; his own checkout ignores it, and glass.css
+    // hides them there instead.
+    frameless: true,
     zoomFactor: () => 1,
     onOpenSession: () => unsubscribe,
     onDaemonState: () => unsubscribe,

@@ -63,7 +63,13 @@ EXTRA_DEPS = {"zod": "^3.24.0", "ulid": "^2.3.0", "@hugeicons/react": "^1.0.0",
 
 
 def realm_dir() -> Path:
-    return Path(os.environ.get("CHEWBACCA_REALM_DIR") or Path.home() / "code" / "vendor" / "realm").expanduser()
+    """Where the renderer is copied from. REALM_UI_SOURCE picks another
+    checkout of his app for the interface alone, such as Caleb's fork at
+    ~/code/realm-fork (github.com/calebnewtonusc/realm, branch chewbacca); the
+    engine keeps running from CHEWBACCA_REALM_DIR either way (bin/realm-engine).
+    Unset, it is the engine's checkout, ~/code/vendor/realm."""
+    picked = os.environ.get("REALM_UI_SOURCE") or os.environ.get("CHEWBACCA_REALM_DIR")
+    return Path(picked or Path.home() / "code" / "vendor" / "realm").expanduser()
 
 
 def ui_home() -> Path:
@@ -142,14 +148,16 @@ def build(force: bool = False, log=print) -> dict:
     desktop = json.loads((repo / "apps" / "desktop" / "package.json").read_text())
     pkg = package_json(desktop)
     config = (HERE / "vite.config.mjs").read_text()
-    stamp = fingerprint(commit, json.dumps(pkg, sort_keys=True), config, *layer_texts())
+    # The source path is in the stamp, so switching checkouts rebuilds even
+    # when the fork's branch and his main sit on the same commit.
+    stamp = fingerprint(str(repo), commit, json.dumps(pkg, sort_keys=True), config, *layer_texts())
     record_path = build_dir() / "build.json"
     try:
         record = json.loads(record_path.read_text())
     except (OSError, ValueError):
         record = {}
     if not force and record.get("stamp") == stamp and (dist_dir() / "index.html").exists():
-        log(f"realm-ui: already built from realm {commit[:8]}")
+        log(f"realm-ui: already built from {repo} at {commit[:8]}")
         return record
 
     b = build_dir()
@@ -190,10 +198,10 @@ def build(force: bool = False, log=print) -> dict:
     done = subprocess.run([node(), str(b / "node_modules" / "vite" / "bin" / "vite.js"), "build", "--logLevel", "warn"], cwd=b)
     if done.returncode != 0 or not (dist_dir() / "index.html").exists():
         raise RuntimeError(f"vite build failed ({done.returncode})")
-    record = {"stamp": stamp, "realmCommit": commit, "built": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+    record = {"stamp": stamp, "realmCommit": commit, "source": str(repo), "built": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
               "seconds": round(time.time() - started, 1)}
     record_path.write_text(json.dumps(record) + "\n")
-    log(f"realm-ui: built realm {commit[:8]} in {record['seconds']}s")
+    log(f"realm-ui: built {repo} at {commit[:8]} in {record['seconds']}s")
     return record
 
 
@@ -335,5 +343,6 @@ def status() -> dict:
         record = json.loads((build_dir() / "build.json").read_text())
     except (OSError, ValueError):
         record = {}
-    return {"built": built(), "realmCommit": record.get("realmCommit", ""), "running": bool(live),
+    return {"built": built(), "realmCommit": record.get("realmCommit", ""), "source": record.get("source", ""),
+            "running": bool(live),
             "url": (live or {}).get("url", ""), "pid": (live or {}).get("pid")}

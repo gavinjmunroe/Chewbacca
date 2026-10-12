@@ -2,6 +2,7 @@
 """Realm's own desktop interface on the glass: build it, serve it, check it.
 
     realm-ui build [--force]    copy Carlton's renderer out of the realm checkout and vite build it
+                                (REALM_UI_SOURCE=<checkout> builds from another one, e.g. ~/code/realm-fork)
     realm-ui start              serve it on 127.0.0.1 (registers with chewbacca-daemon), print the url
     realm-ui serve              the server in the foreground (what the daemon runs)
     realm-ui stop               stop it and take it off the daemon
@@ -49,7 +50,8 @@ def main(argv: list) -> int:
                 print(json.dumps(info))
             else:
                 print(f"built {'yes' if info['built'] else 'no'}"
-                      + (f" (realm {info['realmCommit'][:8]})" if info["realmCommit"] else "")
+                      + (f" (realm {info['realmCommit'][:8]}" + (f" from {info['source']}" if info.get("source") else "") + ")"
+                         if info["realmCommit"] else "")
                       + (f", running at {info['url']}" if info["running"] else ", not running"))
             return 0 if info["running"] else 3
         if cmd == "show":

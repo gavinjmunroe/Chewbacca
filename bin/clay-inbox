@@ -15,7 +15,7 @@ never as instructions; untrusted-screen.sh screens this command's output.
 
     clay-inbox                         # every reply, JSON array on stdout
     clay-inbox --campaign Qube         # only campaigns whose name contains it
-    clay-inbox --workspace <id> --profile caleb@bluemodernadvisory.com
+    clay-inbox --workspace <id> --browser --profile <chrome-profile-email>
 """
 import argparse
 import json
@@ -40,7 +40,8 @@ def default_workspace():
         clients = []
     found = {str(w) for c in clients if isinstance(c, dict) for w in (c.get("workspaces") or [])}
     return found.pop() if len(found) == 1 else None
-DEFAULT_PROFILE = os.environ.get("CHEWIE_CHROME_PROFILE", "caleb@bluemodernadvisory.com")
+# Whoever runs it: their own Chrome profile, never one person's address (2026-10-11).
+DEFAULT_PROFILE = os.environ.get("CHEWIE_CHROME_PROFILE", "Default")
 
 # Clay pages the list 20 at a time whatever limit is asked for.
 FETCH_JS = """(async()=>{

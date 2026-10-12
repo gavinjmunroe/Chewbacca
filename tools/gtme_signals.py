@@ -24,7 +24,21 @@ import xml.etree.ElementTree as ElementTree
 
 SEARCH_URL = "https://efts.sec.gov/LATEST/search-index"
 ARCHIVE_URL = "https://www.sec.gov/Archives/edgar/data"
-DEFAULT_UA = "Chewbacca research caleb@bluemodernadvisory.com"
+# SEC asks for a contact address in the User-Agent. It was one person's work
+# email, hardcoded, so every Chewbacca user identified as him (2026-10-11).
+def _contact():
+    email = os.environ.get("CHEWBACCA_CONTACT_EMAIL", "").strip()
+    if not email:
+        try:
+            import subprocess
+            email = subprocess.run(["git", "config", "user.email"], capture_output=True, text=True,
+                                   timeout=5).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            email = ""
+    return email
+
+
+DEFAULT_UA = ("Chewbacca research " + _contact()).strip()
 # SEC allows 10 requests a second per client (sec.gov/os/accessing-edgar-data).
 # Five keeps half that headroom for anything else on this machine hitting EDGAR.
 MIN_INTERVAL = 0.2

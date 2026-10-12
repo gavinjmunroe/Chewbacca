@@ -507,6 +507,8 @@ if group "gtme"; then
   # the inbox read dragged a Clay tab onto his screen every run.
   check "gtme done names every owed reply and unread client message, from data" \
     python3 "$ROOT/tests/test_gtme_done.py"
+  check "shipped code works on anyone's machine: no home paths, personal mailboxes or client ids" \
+    bash "$ROOT/tests/portable_code.sh" "$ROOT"
   check "gtme-jev holds an email Jev flags or couldn't check, in one call per email" \
     python3 "$ROOT/tests/test_gtme_jev.py"
   check "resolve answers an address and a person's own record before anyone asks" \

@@ -83,8 +83,12 @@ class Solo(unittest.TestCase):
                     "No Mail Cafe,nomail.test,,,,,Austin,google-maps,\n"
                     "Local Trap,127.0.0.1,,,,,Austin,google-maps,\n")
         self.d = d
+        # Jev is a network call; each test says what it scored.
+        self._jev = gtme_solo.jev_says_yes
+        gtme_solo.jev_says_yes = lambda text: 0.95
 
     def tearDown(self):
+        gtme_solo.jev_says_yes = self._jev
         for k, v in self.old.items():
             if v is None:
                 os.environ.pop(k, None)
@@ -362,6 +366,20 @@ class Solo(unittest.TestCase):
         before = len(self.sends())
         self.run_cli("inbox", "--client", "Dana Co", "--json")
         self.assertEqual(len(self.sends()), before)
+
+    def test_a_yes_jev_doubts_or_cant_score_waits_for_a_person(self):
+        self.ready()
+        self.run_cli("autosend", "--client", "Dana Co", "--interested", "Want to grab a time this week?")
+        b = self.batch()
+        self.run_cli("send", "--client", "Dana Co", "--batch", b["id"], "--gap", "0")
+        sent = self.sent_threads()
+        for score in (0.4, None):
+            gtme_solo.jev_says_yes = lambda text, s=score: s
+            self.threads.write_text(json.dumps({
+                sent["maria@crumbcorner.test"]: [["maria@crumbcorner.test", f"Yes, I'm interested. ({score})"]]}))
+            before = len(self.sends())
+            self.run_cli("inbox", "--client", "Dana Co", "--json")
+            self.assertEqual(len(self.sends()), before, score)
 
     def test_a_yes_from_someone_we_never_emailed_waits_for_a_person(self):
         self.ready()

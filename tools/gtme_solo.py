@@ -751,6 +751,27 @@ def cmd_inbox(a) -> int:
     return 0
 
 
+# Guessed, never measured: Jev's yes probability must clear this before a
+# reply goes out with nobody reading it. Togari's auto-send bar is the model;
+# raise it if one wrong auto-answer ever reaches a church.
+AUTOSEND_THRESHOLD = 0.85
+
+
+def jev_says_yes(text: str):
+    """Jev's probability that a reply is a plain yes to talking, or None."""
+    sys.path.insert(0, str(op.ROOT / "bin" / "lib"))
+    try:
+        import jev  # noqa: E402
+    except ImportError:
+        return None
+    answers = jev.ask({"reply": text[:2000]}, {"yes": {"type": "noul", "instructions":
+        "This is a reply to a cold email offering to help with the sender's website and follow-up. "
+        "Is it a plain yes to talking or hearing more, with no question we'd have to answer first, "
+        "no request to stop, and no pointing us to someone else?"}}, decision="gtme-autosend")
+    ans = (answers or {}).get("yes")
+    return jev.probability(ans.get("noul")) if isinstance(ans, dict) else None
+
+
 def auto_answer(client: str, plan: dict, first: dict, tid: str, heads: dict, frm: str, text: str,
                 inbox: str) -> bool:
     """Send the person's own booking reply to an obvious yes, in the thread.
@@ -768,9 +789,13 @@ def auto_answer(client: str, plan: dict, first: dict, tid: str, heads: dict, frm
     if frm.lower() != (first.get("email") or "").lower():
         return False
     me = ((plan.get("sender") or {}).get("email") or "").lower()
-    # The regex reader has no score, so confidence and threshold are pinned
-    # equal: what decides is its re-read of the reply plus the draft checks.
-    check = gtme_reply.auto_sendable({"sentiment": "interested", "confidence": 1.0, "threshold": 1.0,
+    # The regex read found "interested"; Jev scores it. No score (no key, a
+    # timeout, a bad answer) means a person reads it: a guess never sends.
+    confidence = jev_says_yes(text)
+    if confidence is None:
+        return False
+    check = gtme_reply.auto_sendable({"sentiment": "interested", "confidence": confidence,
+                                      "threshold": plan.get("autosend_threshold", AUTOSEND_THRESHOLD),
                                       "draft": answer, "reply": text, "lead_id": first["email"],
                                       "campaign_id": client, "lead_email": first["email"], "sending_email": me})
     if not check["ok"]:

@@ -636,7 +636,7 @@ One agent turn has six beats. Each is decided from Realm's own session events
 | Beat      | Comes from                                    | Headline says                    | The figure shows                     |
 | --------- | --------------------------------------------- | -------------------------------- | ------------------------------------ |
 | You asked | `user_message`, nothing done yet              | "Starting on it"                 | nothing                              |
-| Reading   | Read, Grep, Glob, LS calls                    | "Reading orgs.ts"                | the files it opened, newest lit      |
+| Reading   | Read, Grep, Glob, LS calls                    | "Reading orgs.ts"                | the files it opened, newest lit, and under a search the one line its result said ("Found 2 files"), never a line we wrote |
 | Changing  | Edit, Write, MultiEdit                        | "Changing orgs.ts"               | that file, the changed lines lit     |
 | Proving   | a test or check command                       | "Running the tests"              | the command, then its verdict        |
 | Your call | `permission_request`, or a settled diff       | what it wants, or what it did    | the command it wants, or the hunks   |
@@ -657,8 +657,16 @@ Regions, each with one job:
    passed", "Checked: npx tsc ran clean", or "Not checked: nothing ran". A
    turn that changed code and proved nothing says so, plainly.
 6. **Your call** (bottom left): the one decision waiting on him, with the
-   press that answers it and what it does. A permission is "Allow: runs npm
-   test" and "Deny". A question it asked is "Answer it", which opens the
+   press that answers it and what it does. A permission is "Allow runs
+   exactly what's on the right" with Allow and Deny, and the figure draws the
+   request as the thing it is: a command as its lines, an edit as the file
+   with its lines out and in, a write as the file and what goes in it. One
+   typed view per tool kind (beats.mjs REQUESTS, Story.tsx REQUEST_VIEWS),
+   each only when every field of the input is drawn whole; anything else is
+   the raw agents.py line, and Allow waits until all of it is in view. Realm
+   says waiting_permission a moment before the request lands: that beat is
+   "It's asking for your OK" over the object of the beat it paused, never an
+   empty screen. A question it asked is "Answer it", which opens the
    transcript at its card. A settled diff is "Keep all 2 files" (writes
    nothing) beside the per-hunk Reject in the figure. With nothing waiting the
    region is not drawn.

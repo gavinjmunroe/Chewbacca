@@ -36,6 +36,8 @@ export const PHASES = Object.freeze([
 ]);
 
 const WORKING = Object.freeze(["reading", "changing", "proved"]);
+// What a turn waiting on him says when realm hasn't said what it wants yet.
+export const WAITING = "It's waiting on you";
 const LIVE = Object.freeze([...WORKING, "needs-you", "done", "failed"]);
 
 /** Every move a turn may make. A settled turn (done, failed) moves nowhere:
@@ -335,6 +337,19 @@ export const FOLD_CHARS = 90;
 // 1180 point realm surface; older ones are a count, "N earlier".
 export const FOLD_KEEP = 5;
 const clip = (s, n) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+// An answer's Markdown as the words it renders to. The 10/12 rehearsal with a
+// real Claude put "I added `slugify` to [src/text.js](src/text.js)." on its
+// tile, backticks and link target and all; the story's headline already
+// strips these (beats.mjs firstSentence).
+const plain = (s) =>
+  String(s ?? "")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/^\s*(#+|[-*>]|\d+\.)\s+/gm, "")
+    .replace(/(^|[^\w*])[*_]{1,3}([^*_]+?)[*_]{1,3}(?![\w*])/g, "$1$2")
+    .replace(/\s+/g, " ")
+    .trim();
 
 // ---------------------------------------------------------------- stepping
 
@@ -594,7 +609,7 @@ export function step(agent, stored) {
       if (turn.phase === "needs-you") return same(agent);
       const q =
         words(p.title) ||
-        (p.toolName ? `It wants to use ${p.toolName}` : "It's waiting on you");
+        (p.toolName ? `It wants to use ${p.toolName}` : WAITING);
       return go(agent, Turn.needsYou(turn.ask, q, turn, at));
     }
     case "permission_response":
@@ -620,7 +635,7 @@ export function step(agent, stored) {
       if (s === "waiting_permission")
         return turn.phase === "needs-you"
           ? same(agent)
-          : go(agent, Turn.needsYou(turn.ask, "It's waiting on you", turn, at));
+          : go(agent, Turn.needsYou(turn.ask, WAITING, turn, at));
       if (s === "error")
         return turn.phase === "failed"
           ? same(agent)
@@ -707,7 +722,7 @@ export function tileTurn(session, agent, truth, truthAsked) {
   if (agent?.turn) return agent.turn;
   const title = session?.title ?? "";
   const s = session?.status;
-  if (s === "waiting_permission") return Turn.needsYou(title, "It's waiting on you", Turn.asked(title));
+  if (s === "waiting_permission") return Turn.needsYou(title, WAITING, Turn.asked(title));
   if (s === "running") return Turn.asked(title, session.updatedAt ?? 0);
   if (s === "error") return Turn.failed(title, fault("agent-error"));
   if (session?.providerSessionId) {
@@ -739,8 +754,11 @@ const lineOf = (t) =>
       reading: (x) => `Reading ${x.what}`,
       changing: (x) => `${x.file.done ? "Changed" : "Changing"} ${base(x.file.path)}`,
       proved: (x) => x.tests.command,
-      "needs-you": (x) => x.question,
-      done: (x) => x.said.split(/(?<=[.!?])\s/)[0] || x.ask,
+      // The tile's word already says Needs you; the stand-in question says
+      // it again. Dropped, the tiles after a turn hold 44 words, under the
+      // 45 a block may (48 with it, realm-morning-verify.md, 10/12).
+      "needs-you": (x) => (x.question === WAITING ? "" : x.question),
+      done: (x) => plain(x.said).split(/(?<=[.!?])\s/)[0] || x.ask,
       failed: (x) => x.fault.what,
     }),
     FOLD_CHARS,

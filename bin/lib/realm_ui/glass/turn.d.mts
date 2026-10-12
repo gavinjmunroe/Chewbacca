@@ -134,6 +134,7 @@ export const FOLD_KEEP: number;
 export const MAX_TILES: number;
 export const WAIT_KEEP: number;
 
+export const WAITING: string;
 export function match<R>(turn: Turn, arms: Arms<R>): R;
 export function fault(name: FaultName, detail?: string, fix?: string): Fault;
 export function ok<T>(value: T): Result<T>;

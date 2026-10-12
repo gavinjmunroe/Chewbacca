@@ -64,13 +64,25 @@ type Stored = {
 };
 type ChangedFile = {
   path: string;
+  // One line of what a look found, when its result said it (beats.mjs foundLine).
+  found?: string;
   additions?: number | null;
   deletions?: number | null;
 };
-type PermissionView = { shown: string; exact: boolean };
+type Change = { before: string[]; after: string[]; all: boolean };
+// One shape per tool kind (beats.mjs REQUESTS). Every field of the input is
+// in it, or the request is raw.
+type Request =
+  | { kind: "command"; lines: string[]; notes: string[] }
+  | ({ kind: "edit"; path: string } & Change)
+  | { kind: "edits"; path: string; edits: Change[] }
+  | { kind: "write"; path: string; lines: string[] }
+  | { kind: "raw" };
+type PermissionView = { shown: string; exact: boolean; request: Request };
 type StoryShape = {
   asked: string;
   reads: string[];
+  found: Record<string, string>;
   edited: string[];
   permission: {
     requestId: string;
@@ -228,6 +240,9 @@ export function Story({
   // A turn is named by its checkpoint and the tree it left; a diff without
   // a checkpoint can't be told from the next one, so its Keep is never kept.
   const turn = st.agent.turn;
+  // The turn whose object the figure draws: while it waits on him for a
+  // request still on its way, the beat it paused (beats.mjs figure()).
+  const shownTurn = turn?.phase === "needs-you" ? turn.resume : turn;
   const changes = st.agent.changes;
   const keptKey =
     changes?.checkpointId && changes.afterTree
@@ -265,7 +280,10 @@ export function Story({
   useEffect(() => {
     setWantsInView(false);
     if (!requestId || fig !== "permission") return;
-    const el = figureRef.current?.querySelector(".story-wants");
+    // The whole card, head and body: the path of an edit sits in the head,
+    // and Allow on a request whose path is out of view is a request not
+    // shown in full (security review of the typed views, 10/12).
+    const el = figureRef.current?.querySelector('[data-kind="wants"]');
     if (!el || typeof IntersectionObserver === "undefined") return;
     const io = new IntersectionObserver(
       (entries) => setWantsInView(entries.some((e) => e.intersectionRatio >= 0.999)),
@@ -406,14 +424,14 @@ export function Story({
           {fig === "reads" && (
             <FileList
               label="Opened"
-              files={st.reads.map((path) => ({ path }))}
+              files={st.reads.map((path) => ({ path, found: st.found[path] }))}
               cwd={session.cwd}
               litLast
             />
           )}
           {(fig === "file" || fig === "command" || fig === "tests") &&
-            turn &&
-            match<ReactNode>(turn, {
+            shownTurn &&
+            match<ReactNode>(shownTurn, {
               asked: () => null,
               reading: (t) => (t.command ? <CommandView call={t.command} /> : null),
               changing: (t) => (
@@ -488,6 +506,7 @@ function FileList({
             >
               <span className="story-file">{base(f.path)}</span>
               {dir && <span className="glass-dir">{dir}</span>}
+              {f.found && <span className="story-found">{f.found}</span>}
               {f.additions != null && (
                 <span className="story-count">
                   <span data-tone="good">+{f.additions}</span>{" "}
@@ -502,17 +521,132 @@ function FileList({
   );
 }
 
-/** The whole request as agents.py shows it: the tool's real name and its
- *  input as JSON, newlines escaped so nothing hides on a second line.
- *  Wrapped, never scrolled sideways, so none of it sits out of sight. */
-function Wants({ view, tool }: { view: PermissionView; tool: string }) {
-  return (
-    <section className="glass-card" data-kind="wants">
+/** The whole request, drawn as the thing it is: a command as the command,
+ *  an edit as the file and its lines out and in, a write as the file and
+ *  what goes in it. One view per kind, and the record below must name every
+ *  kind (TypeScript refuses a missing one), so a new kind can't fall through
+ *  to a partial drawing. Anything the typed views can't draw whole is the
+ *  raw agents.py line: the real tool name and the input as JSON, newlines
+ *  escaped. Wrapped, never scrolled sideways, and Allow waits until all of
+ *  .story-wants is in view, so none of it sits out of sight. */
+const REQUEST_VIEWS: {
+  [K in Request["kind"]]: (r: Extract<Request, { kind: K }>, view: PermissionView, tool: string) => ReactNode;
+} = {
+  command: (r) => (
+    <>
+      <header className="glass-card-head">
+        {/* One word: the headline already says "It wants to run npm", and
+            the needs-you story was 45 words with "Wants to run" here. */}
+        <span className="glass-verb">Command</span>
+        {r.lines.length > 1 && <span className="glass-path">{r.lines.length} lines</span>}
+      </header>
+      <pre className="glass-code glass-term story-wants">
+        {r.lines.map((l, i) => (
+          <span key={i} className="glass-line">
+            {r.lines.length > 1 && <span className="glass-ln">{i + 1}</span>}
+            <span className="glass-prompt">{i === 0 ? "$ " : "  "}</span>
+            {l || " "}
+          </span>
+        ))}
+        {r.notes.map((n) => (
+          <span key={n} className="glass-line glass-request-note">
+            {n}
+          </span>
+        ))}
+      </pre>
+    </>
+  ),
+  edit: (r) => (
+    <>
+      <RequestHead verb="Wants to change" path={r.path} />
+      <pre className="glass-code story-wants">
+        <ChangeLines change={r} />
+      </pre>
+    </>
+  ),
+  edits: (r) => (
+    <>
+      <RequestHead verb={`Wants ${r.edits.length} changes in`} path={r.path} />
+      <pre className="glass-code story-wants">
+        {r.edits.map((c, i) => (
+          <ChangeLines key={i} change={c} label={`Change ${i + 1}`} />
+        ))}
+      </pre>
+    </>
+  ),
+  write: (r) => (
+    <>
+      <RequestHead verb="Wants to write" path={r.path} />
+      <pre className="glass-code story-wants">
+        {r.lines.map((l, i) => (
+          <span key={i} className="glass-line" data-diff="add">
+            <span className="glass-ln">{i + 1}</span>
+            <span className="glass-sign">+</span>
+            {l || " "}
+          </span>
+        ))}
+      </pre>
+    </>
+  ),
+  raw: (_r, view, tool) => (
+    <>
       <header className="glass-card-head">
         <span className="glass-verb">Wants to use</span>
         <span className="glass-path">{tool}</span>
       </header>
       <pre className="glass-code glass-term story-wants">{view.shown}</pre>
+    </>
+  ),
+};
+
+function RequestHead({ verb, path }: { verb: string; path: string }) {
+  // Verbatim: cut at the last slash, never rebuilt from its parts, so a
+  // doubled or trailing slash or a run of spaces reads as it will run.
+  const cut = path.lastIndexOf("/") + 1;
+  return (
+    <header className="glass-card-head">
+      <span className="glass-verb">{verb}</span>
+      {/* The whole path, wrapped: a file path cut with an ellipsis would be
+          a request not shown in full. */}
+      <span className="glass-path glass-path-whole">
+        {cut > 0 && <span className="glass-dir">{path.slice(0, cut)}</span>}
+        {path.slice(cut)}
+      </span>
+    </header>
+  );
+}
+
+function ChangeLines({ change, label }: { change: Change; label?: string }) {
+  return (
+    <>
+      {(label || change.all) && (
+        <span className="glass-line glass-request-note">
+          {[label, change.all ? "every match in the file" : ""].filter(Boolean).join(", ")}
+        </span>
+      )}
+      {change.before.map((l, i) => (
+        <span key={`o${i}`} className="glass-line" data-diff="del">
+          <span className="glass-sign">-</span>
+          {l || " "}
+        </span>
+      ))}
+      {change.after.map((l, i) => (
+        <span key={`n${i}`} className="glass-line" data-diff="add">
+          <span className="glass-sign">+</span>
+          {l || " "}
+        </span>
+      ))}
+    </>
+  );
+}
+
+function Wants({ view, tool }: { view: PermissionView; tool: string }) {
+  const raw: Request = { kind: "raw" };
+  const r = view.request && Object.hasOwn(REQUEST_VIEWS, view.request.kind) ? view.request : raw;
+  const draw = REQUEST_VIEWS[r.kind] as (r: Request, view: PermissionView, tool: string) => ReactNode;
+  return (
+    <section className="glass-card" data-kind="wants" data-request={r.kind}>
+      {draw(r, view, tool)}
     </section>
   );
 }

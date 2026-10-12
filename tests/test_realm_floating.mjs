@@ -132,3 +132,62 @@ test("no copy on the glass points at the sidebar the glass hides", () => {
     );
   }
 });
+
+// Day polish, 10/12. Measured on his default build in headless WebKit with
+// the fake agent (day-ide-report.md): 40 rl-orb-breathe loops ran under the
+// tiles with no agents, 44 under the story while needs-you, 43 under the
+// tiles after a turn, all inside a #root nobody could see.
+test("his hidden app's loops are paused while the tiles or the story cover it, and run again in the workspace", () => {
+  for (const mode of ["tiles", "story"])
+    for (const sel of [`:root[data-glass="${mode}"] #root *`, `:root[data-glass="${mode}"] #root *::before`, `:root[data-glass="${mode}"] #root *::after`])
+      assert.ok(css.includes(sel), sel);
+  const rule = /:root\[data-glass="tiles"\] #root \*,[\s\S]*?\{([^}]*)\}/.exec(css)?.[1] ?? "";
+  assert.match(rule, /animation-play-state:\s*paused\s*!important/);
+  assert.doesNotMatch(rule, /animation:\s*none/, "paused, not removed: his entrances resume where they were");
+  assert.ok(!css.includes(':root[data-glass="work"] #root *'), "never paused where he can see it");
+});
+
+// The 12:33am verify: in review the second file's diff ran off its card and
+// its Keep and Reject sat below the fold.
+test("every file's Keep and Reject stay on screen in the story's review", () => {
+  const block = (sel) => new RegExp(`${sel.replace(/[[\]().*"=>]/g, "\\$&")}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? "";
+  assert.match(block('.story-figure[data-figure="review"]'), /overflow:\s*hidden/, "the figure itself never scrolls a verb away");
+  assert.match(block('.story-figure[data-figure="review"] > .glass-card'), /min-height:\s*0/);
+  assert.match(block('.story-figure[data-figure="review"]'), /align-self:\s*stretch/, "a centered figure has no height to shrink against");
+  assert.match(block('.story-figure[data-figure="review"] .glass-hunk .glass-code'), /overflow-y:\s*auto/, "the lines give up height, inside themselves");
+  assert.match(block('.story-figure[data-figure="review"] .glass-hunk .glass-code'), /max-height:/, "a big hunk can't squeeze a small one to nothing");
+  const fixed = /\.story-figure\[data-figure="review"\] \.glass-card > \*,[\s\S]*?\.glass-hunk-actions\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+  assert.match(fixed, /flex:\s*none/, "heads and actions never shrink");
+});
+
+// The floating audit counted 48 words on the tiles after a turn: the needs-you
+// tile said "Needs you" and then "It's waiting on you".
+test("a tile waiting with nothing more to say says it once", () => {
+  const view = t.restingView(
+    [{ id: "a", title: "Build the toggle", status: "waiting_permission", cwd: "/r", agentKind: "fake" }],
+    {},
+    {},
+    true,
+  );
+  assert.equal(view.tiles[0].word, "Needs you");
+  assert.equal(view.tiles[0].line, "", "the stand-in question repeats the word");
+  const asked = t.Turn.needsYou("go", "Allow Bash?", t.Turn.asked("go"));
+  assert.equal(t.restingView([{ id: "b", title: "go", status: "running" }], { b: { ...t.emptyAgent(), turn: asked } }, {}, true).tiles[0].line, "Allow Bash?");
+});
+
+test("a done tile says the answer's first sentence as words, not Markdown", () => {
+  const done = t.Turn.done("add slugify", { said: "I added `slugify` to [src/text.js](src/text.js). Then more." });
+  const view = t.restingView([{ id: "d", title: "add slugify", status: "idle" }], { d: { ...t.emptyAgent(), turn: done } }, {}, true);
+  assert.equal(view.tiles[0].line, "I added slugify to src/text.js.");
+});
+
+// Opening every frame of the 10/12 rehearsal: the frame right after a beat
+// change showed no headline and no figure, both fading in from opacity 0.
+test("the headline never enters invisible, so a beat change can't flash an empty story", () => {
+  const rule = /\.story-headline\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+  const name = /animation:\s*([\w-]+)/.exec(rule)?.[1];
+  assert.ok(name, "the headline has an entrance");
+  const from = new RegExp(`@keyframes ${name}\\s*\\{\\s*from\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? "";
+  const opacity = Number(/opacity:\s*([\d.]+)/.exec(from)?.[1] ?? 1);
+  assert.ok(opacity >= 0.5, `the headline starts at opacity ${opacity}`);
+});

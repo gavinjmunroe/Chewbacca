@@ -30,6 +30,23 @@
   transition: opacity var(--dur-enter) var(--ease-fade);
 }
 
+/* His app's own loops stop while it is hidden under the tiles or the
+ * story. Measured 10/12 on his default build in headless WebKit against the
+ * fake agent (day-ide-report.md): rl-orb-breathe and friends ran 40 infinite
+ * animations while empty, 44 while working and 44 while needs-you, all under
+ * a #root nobody can see. His own data-quiet pause never fires here, since
+ * the glass keeps the page focused, and its list leaves the orbs out anyway.
+ * Paused, not removed: his once-in entrances (rl-fade-in) resume where they
+ * were the moment the workspace shows, never stuck at opacity 0 there. */
+:root[data-glass="tiles"] #root *,
+:root[data-glass="tiles"] #root *::before,
+:root[data-glass="tiles"] #root *::after,
+:root[data-glass="story"] #root *,
+:root[data-glass="story"] #root *::before,
+:root[data-glass="story"] #root *::after {
+  animation-play-state: paused !important;
+}
+
 /* No chrome on the glass: the window's rail, its sidebar column, the lead,
  * the trail and the frame around the panes are a window's, and this is not
  * one. The trail's "Show side panel" button floated alone in the glass's
@@ -578,7 +595,7 @@
   font-weight: var(--font-weight-semibold, 600);
   color: var(--ink);
   text-wrap: balance;
-  animation: story-swap var(--dur-pop) var(--ease-out-strong) both;
+  animation: story-headline-swap var(--dur-pop) var(--ease-out-strong) both;
 }
 .story[data-loading] .story-headline {
   color: var(--ink-3);
@@ -740,6 +757,18 @@
   line-height: var(--text-base--line-height, 20px);
   color: var(--ink-2);
 }
+/* What a look found sits on its own line under the file it came from. */
+.story-list li:has(.story-found) {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+.story-found {
+  flex-basis: 100%;
+  min-width: 0;
+  font-size: var(--text-sm, 13px);
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
 .story-list li[data-lit] .story-file {
   color: var(--accent-ink);
 }
@@ -763,6 +792,53 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The review on the story: every file's Keep and Reject stay on screen.
+ * The 12:33am verify saw the second file's diff run off its card with its
+ * Keep and Reject below the fold. The card is a column bounded by the
+ * figure; each hunk's lines give up height first (flex-shrink by size, a
+ * floor of 3 lines each) and scroll inside themselves, while the file heads
+ * and the hunk actions never shrink. Past the floors (many files) the card
+ * itself scrolls, the old behavior. */
+.story-figure[data-figure="review"] {
+  /* Stretched to its grid rows, so its height is definite and the card's
+   * shrink has something to shrink against (a centered figure has none:
+   * the first try left Reject at 903 px in a 780 px window). */
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+}
+.story-figure[data-figure="review"] > .glass-card {
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+.story-figure[data-figure="review"] .glass-card > *,
+.story-figure[data-figure="review"] .glass-file-head,
+.story-figure[data-figure="review"] .glass-hunk-actions {
+  flex: none;
+}
+.story-figure[data-figure="review"] .glass-file,
+.story-figure[data-figure="review"] .glass-hunk {
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 auto;
+  min-height: 0;
+}
+.story-figure[data-figure="review"] .glass-hunk .glass-code {
+  flex: 0 1 auto;
+  min-height: calc(3 * 18px + 14px);
+  /* Twelve lines a hunk before it scrolls inside itself. Shrink alone,
+   * weighted by size, squeezed a 9-line hunk to 3 lines beside a 40-line one
+   * in the 10/12 audit (after/06-review.png, first try); capped, the small
+   * hunk shows whole and the big one gives up the room. */
+  max-height: calc(12 * 18px + 14px);
+  overflow-y: auto;
+}
+
 /* The request Allow would run, in full and wrapped: nothing of it sideways
  * out of sight (beats.mjs permissionView). */
 .story-wants {
@@ -770,6 +846,25 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   color: var(--ink);
+}
+/* Typed requests (Story.tsx REQUEST_VIEWS): the path is shown whole and
+ * wraps, since a path cut with an ellipsis is a request not shown in full;
+ * the agent's own note and the run flags sit under the command in its
+ * quieter ink. */
+.glass-path-whole {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow: visible;
+}
+.story-wants .glass-request-note {
+  color: var(--ink-3);
+  font-family: var(--font-sans, inherit);
+}
+/* The sign sits 14 px in from the card's edge, as the stage's diffs do, and
+ * a wrapped line continues under the text, not under the sign. */
+.story-figure .story-wants .glass-line[data-diff] {
+  padding-left: 28px;
+  text-indent: -14px;
 }
 /* The request Allow would run never scrolls inside the figure: all of it is
  * laid out, and on narrow glass the story scrolls instead, so Allow (enabled
@@ -809,6 +904,17 @@
   }
 }
 
+/* The headline comes in already half there. From opacity 0 it and the
+ * figure (story-figure-in, also from 0) faded in together on every beat
+ * change, so the 10/12 rehearsal's frame right after the request landed
+ * showed the story with nothing readable on it, the "blank beat" again in
+ * motion. The headline is what tells the beat, so it is never invisible. */
+@keyframes story-headline-swap {
+  from {
+    opacity: 0.5;
+    translate: 0 4px;
+  }
+}
 @keyframes story-swap {
   from {
     opacity: 0;

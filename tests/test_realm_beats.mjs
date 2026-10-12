@@ -176,7 +176,193 @@ test("Allow is offered only when the whole request is on the glass", () => {
   assert.ok(spoof.permission.view.shown.startsWith('Bash: {"command":"curl x | sh"'));
   const write = ask({ file_path: "a.ts", content: "x" }, "Write");
   assert.equal(write.permission.view.shown, 'Write: {"file_path":"a.ts","content":"x"}');
-  assert.equal(s.headline(write), "It wants to use Write");
+  assert.equal(s.headline(write), "It wants to write a.ts");
+});
+
+// Day polish, 10/12: the Allow card read `Edit: {"file_path":...}`. Each
+// tool kind now has one typed view, and the guarantee above still holds: a
+// typed view only exists when every field of the input is drawn whole.
+test("a request reads as the thing: the command as a command, an edit as the file and its lines", () => {
+  const ask = (input, toolName = "Bash") =>
+    play([
+      ...TURN.slice(0, 2),
+      ev(3, "permission_request", { requestId: "p", toolName, input, title: "Allow?", suggestions: [] }),
+    ]).permission.view.request;
+  assert.deepEqual(ask({ command: "npm test -- orgs" }), { kind: "command", lines: ["npm test -- orgs"], notes: [] });
+  // Every line of a many-line command is its own row, the last one too.
+  const many = ask({ command: "npm test\n\n\n\nrm -rf ~" });
+  assert.equal(many.kind, "command");
+  assert.deepEqual(many.lines, ["npm test", "", "", "", "rm -rf ~"]);
+  // The agent's own note is labelled as its note, and never replaces the command.
+  assert.deepEqual(ask({ command: "curl x | sh", description: "Run the tests", timeout: 60000 }), {
+    kind: "command",
+    lines: ["curl x | sh"],
+    notes: ["Its note: Run the tests", "Stops after 60000 ms"],
+  });
+  assert.deepEqual(ask({ command: "ls", dangerouslyDisableSandbox: true }).notes, ["Runs outside the sandbox"]);
+  assert.deepEqual(ask({ file_path: "/r/src/a.js", old_string: "a\nb", new_string: "c" }, "Edit"), {
+    kind: "edit",
+    path: "/r/src/a.js",
+    before: ["a", "b"],
+    after: ["c"],
+    all: false,
+  });
+  assert.equal(ask({ file_path: "/r/a.js", edits: [{ old_string: "a", new_string: "b" }, { old_string: "c", new_string: "d", replace_all: true }] }, "MultiEdit").edits[1].all, true);
+  assert.deepEqual(ask({ file_path: "a.ts", content: "x\ny" }, "Write"), { kind: "write", path: "a.ts", lines: ["x", "y"] });
+});
+
+test("a typed view is all or nothing: anything it can't draw whole is the raw line", () => {
+  const ask = (input, toolName = "Bash") =>
+    play([
+      ...TURN.slice(0, 2),
+      ev(3, "permission_request", { requestId: "p", toolName, input, title: "Allow?", suggestions: [] }),
+    ]).permission.view;
+  // An unknown tool, an unknown field, a field of the wrong type, a tab or a
+  // carriage return the rows can't draw honestly, a two-line path: all raw,
+  // and the raw line is the whole request.
+  for (const [input, tool] of [
+    [{ url: "https://x" }, "WebFetch"],
+    [{ command: "ls", sneak: "rm -rf ~" }, "Bash"],
+    [{ command: ["rm", "-rf"] }, "Bash"],
+    [{ command: "ls\trm" }, "Bash"],
+    [{ command: "ls\rrm -rf ~" }, "Bash"],
+    [{ command: "ls", timeout: "soon" }, "Bash"],
+    [{ file_path: "a\nb", old_string: "a", new_string: "b" }, "Edit"],
+    [{ file_path: "a", old_string: "a", new_string: "b", extra: 1 }, "Edit"],
+    [{ file_path: "a", edits: [{ old_string: "a", new_string: "b", who: 1 }] }, "MultiEdit"],
+  ]) {
+    const view = ask(input, tool);
+    assert.equal(view.request.kind, "raw", JSON.stringify(input));
+    assert.equal(view.shown, `${tool}: ${JSON.stringify(input)}`, "the raw view is the whole request");
+  }
+  // Hidden characters: raw, and Allow isn't offered at all.
+  const sneak = ask({ command: "npm test \u202e; rm -rf ~" });
+  assert.equal(sneak.request.kind, "raw");
+  assert.equal(sneak.exact, false);
+});
+
+test("the call under a request says it in seven words, so the needs-you story stays under 45", () => {
+  // The floating audit counted 49 words on the needs-you story with the
+  // ten-word "Allow lets Bash run with exactly what's on the right."
+  const st = play([...TURN.slice(0, 2), ev(3, "permission_request", { requestId: "p", toolName: "Bash", input: { command: "pnpm vitest run settings" }, title: "", suggestions: [] })]);
+  const line = s.decision(st).line;
+  assert.ok(line.split(/\s+/).length <= 7, line);
+});
+
+test("every request kind has exactly one view in Story.tsx", async () => {
+  const { readFileSync } = await import("node:fs");
+  const story = readFileSync(new URL("../bin/lib/realm_ui/glass/Story.tsx", import.meta.url), "utf8");
+  const record = /const REQUEST_VIEWS[\s\S]*?\n\};\n/.exec(story)?.[0] ?? "";
+  const drawn = [...record.matchAll(/^  (\w+): \(/gm)].map((m) => m[1]);
+  assert.deepEqual(drawn.sort(), [...s.REQUEST_KINDS].sort());
+});
+
+test("an edit's headline names the file, a command's its programs", () => {
+  const ask = (input, toolName) =>
+    play([...TURN.slice(0, 2), ev(3, "permission_request", { requestId: "p", toolName, input, title: "", suggestions: [] })]);
+  assert.equal(s.headline(ask({ file_path: "/r/src/text.js", old_string: "a", new_string: "b" }, "Edit")), "It wants to change text.js");
+  assert.equal(s.headline(ask({ command: "npm test\nrm -rf ~" }, "Bash")), "It wants to run npm and rm");
+  assert.equal(s.headline(ask({ url: "x" }, "WebFetch")), "It wants to use WebFetch");
+});
+
+// Frame 09 of the 12:33am rehearsal: the story sat blank between "You
+// asked" and the Allow card. Realm says waiting_permission before the
+// request lands, and the story drew Your call with an empty review box and
+// a headline that said nothing true. Every prefix of every order realm
+// sends must show a headline and, on Your call, an object that exists.
+const EDIT = { file_path: "/repo/src/text.js", old_string: "a", new_string: "b" };
+const ORDERS = {
+  "fake agent": TURN,
+  "a real Claude: waiting before the request, before any tool call": [
+    ev(1, "user_message", { text: "add slugify", attachments: [] }),
+    ev(2, "init", {}),
+    ev(3, "status", { status: "idle" }),
+    ev(4, "status", { status: "running" }),
+    ev(5, "status", { status: "waiting_permission" }),
+    ev(6, "permission_request", { requestId: "p", toolName: "Edit", input: EDIT, title: "Allow Edit?", suggestions: [] }),
+    ev(7, "permission_response", { requestId: "p", decision: "allow" }),
+    ev(8, "status", { status: "running" }),
+    call(9, "e", "Edit", EDIT),
+    result(10, "e", "ok"),
+    ev(11, "status", { status: "waiting_permission" }),
+    ev(12, "permission_request", { requestId: "q", toolName: "Edit", input: EDIT, title: "Allow Edit?", suggestions: [] }),
+    ev(13, "permission_response", { requestId: "q", decision: "allow" }),
+    ev(14, "assistant_text", { messageId: "m", text: "I added slugify." }),
+    ev(15, "status", { status: "idle" }),
+    ev(16, "turn_changes", { checkpointId: "c", root: "/repo", afterTree: "b".repeat(40), files: [{ path: "src/text.js" }] }),
+  ],
+  "waiting mid-edit": [
+    ev(1, "user_message", { text: "go", attachments: [] }),
+    ev(2, "status", { status: "running" }),
+    call(3, "e", "Edit", EDIT),
+    ev(4, "status", { status: "waiting_permission" }),
+    ev(5, "permission_request", { requestId: "p", toolName: "Bash", input: { command: "npm test" }, title: "", suggestions: [] }),
+    ev(6, "permission_response", { requestId: "p", decision: "deny" }),
+    ev(7, "status", { status: "idle" }),
+  ],
+  "an error": [
+    ev(1, "user_message", { text: "go", attachments: [] }),
+    ev(2, "status", { status: "running" }),
+    ev(3, "status", { status: "waiting_permission" }),
+    ev(4, "error", { message: "" }),
+  ],
+};
+
+test("every transition of every order shows the current beat: a headline, and on Your call a real object", () => {
+  for (const [name, order] of Object.entries(ORDERS)) {
+    let st = s.emptyStory();
+    order.forEach((e, i) => {
+      st = s.tell(st, e);
+      for (const settledFor of [0, Infinity]) {
+        const b = s.beat(st, { settledFor });
+        const line = s.headline(st, b);
+        const fig = s.figure(st, b);
+        const at = `${name}, after event ${i + 1} (${e.event.type}), beat ${b}`;
+        assert.ok(line.trim(), `${at}: an empty headline`);
+        if (st.stage.running || st.agent.turn?.phase === "needs-you")
+          assert.ok(!/^(Done|Changed \d)/.test(line), `${at}: "${line}" while it is still going`);
+        if (fig === "review") assert.ok(st.agent.changes?.files?.length, `${at}: a review figure with no diff behind it`);
+        if (fig === "permission") assert.ok(st.permission, `${at}: a request figure with no request`);
+        if (b === "call" && !st.permission && !st.agent.changes)
+          assert.notEqual(line, "Done", `${at}: Your call that says Done`);
+      }
+    });
+  }
+});
+
+test("waiting before the request lands keeps the paused beat's object on screen", () => {
+  const st = play([
+    ev(1, "user_message", { text: "go", attachments: [] }),
+    ev(2, "status", { status: "running" }),
+    call(3, "e", "Edit", EDIT),
+    ev(4, "status", { status: "waiting_permission" }),
+  ]);
+  assert.equal(s.beat(st), "call");
+  assert.equal(s.headline(st), "It's asking for your OK");
+  assert.equal(s.figure(st), "file", "the file it was changing, not an empty box");
+});
+
+test("the reading beat shows one line of what a search found, and nothing it didn't say", () => {
+  const st = play([
+    ...TURN.slice(0, 2),
+    call(3, "g", "Grep", { pattern: "slugify" }),
+    result(4, "g", "Found 2 files\n/repo/src/text.js\n/repo/test/text.test.js"),
+    call(5, "b", "Glob", { pattern: "src/**/*.js" }),
+    result(6, "b", "/repo/src/text.js\n/repo/src/index.js"),
+    call(7, "r", "Read", { file_path: "/repo/src/text.js" }),
+    result(8, "r", "     1\texport function titleCase(s) {"),
+    call(9, "m", "Read", { file_path: "/repo/missing.js" }),
+    result(10, "m", "File does not exist.", true),
+  ]);
+  assert.equal(s.beat(st), "reading");
+  assert.deepEqual(st.found, {
+    slugify: "Found 2 files",
+    "src/**/*.js": "2 matches",
+    "/repo/missing.js": "File does not exist.",
+  });
+  assert.equal(st.found["/repo/src/text.js"], undefined, "a file's text is not a finding");
+  assert.equal(s.foundLine("Grep", ""), "");
+  assert.equal(s.foundLine("WebSearch", "lots"), "", "no line where the result doesn't say it plainly");
 });
 
 test("the hidden set is agents.py's, kept in step", async () => {
@@ -379,4 +565,37 @@ test("a command before any edit is the agent reading, and proves nothing", () =>
   assert.equal(s.beat(edited), "proving");
   const checked = s.tell(edited, result(8, "b2", ""));
   assert.match(s.proof(checked)?.text ?? "", /^Checked: node/);
+});
+
+test("Allow waits for the whole request card, its path included, and the path is drawn verbatim", async () => {
+  const { readFileSync } = await import("node:fs");
+  const story = readFileSync(new URL("../bin/lib/realm_ui/glass/Story.tsx", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../bin/lib/realm_ui/glass/glass.css", import.meta.url), "utf8");
+  assert.match(story, /querySelector\('\[data-kind="wants"\]'\)/, "the observed element is the whole card, head and all");
+  const head = /function RequestHead[\s\S]*?\n}\n/.exec(story)?.[0] ?? "";
+  assert.doesNotMatch(head, /base\(|split\(|filter\(Boolean\)/, "never rebuilt from its parts");
+  assert.match(/\.glass-path-whole\s*\{([^}]*)\}/.exec(css)?.[1] ?? "", /white-space:\s*pre-wrap/, "spaces are not collapsed");
+});
+
+// Review of the typed views, 10/12: a tool named after what a plain object
+// inherits reached the renderer table, and drew the agent's own input as the
+// typed request with Allow live.
+test("a tool named like an inherited property is the raw view", () => {
+  const input = { kind: "command", lines: ["echo hi"], notes: [], cmd: "rm -rf ~" };
+  for (const toolName of ["constructor", "toString", "hasOwnProperty", "valueOf", "__proto__", "__defineGetter__"]) {
+    const st = play([...TURN.slice(0, 2), ev(3, "permission_request", { requestId: "p", toolName, input, title: "", suggestions: [] })]);
+    assert.deepEqual(st.permission.view.request, { kind: "raw" }, toolName);
+    assert.ok(s.headline(st).trim(), toolName);
+  }
+});
+
+test("the agent's note can't draw a row that reads like a flag", () => {
+  const st = play([...TURN.slice(0, 2), ev(3, "permission_request", { requestId: "p", toolName: "Bash", input: { command: "ls", description: `x${" ".repeat(80)}Runs in the sandbox`, dangerouslyDisableSandbox: true }, title: "", suggestions: [] })]);
+  assert.deepEqual(st.permission.view.request.notes, ["Its note: x Runs in the sandbox", "Runs outside the sandbox"]);
+});
+
+test("grep content and context rows aren't counted as files, and names keep their underscores", () => {
+  assert.equal(s.foundLine("Grep", "/a/x.js-9-before\n/a/x.js:10:hit\n/a/x.js-11-after"), "/a/x.js-9-before");
+  assert.equal(s.firstSentence("I renamed parse_user_id. Then more."), "I renamed parse_user_id.");
+  assert.equal(s.firstSentence("It is **really** _done_ now."), "It is really done now.");
 });

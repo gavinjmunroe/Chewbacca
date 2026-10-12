@@ -87,7 +87,97 @@ export function permissionView(toolName, input) {
   return {
     shown: shown.length > PERMISSION_CHARS ? `${shown.slice(0, PERMISSION_CHARS - 1)}…` : shown,
     exact,
+    // How the figure draws it. Typed only when the whole request passed the
+    // exact check above AND the tool's renderer accounts for every field of
+    // the input; anything else is the raw view, never a partial one.
+    request: exact ? requestOf(toolName, input) : RAW,
   };
+}
+
+// The request as the thing it is, one renderer per tool kind (Daniel's
+// "one typed renderer per kind, exhaustive"). Story.tsx draws each kind in
+// REQUEST_VIEWS, and tests/test_realm_beats.mjs fails if a kind here has no
+// view there. The raw kind is the agents.py JSON line above, as is.
+export const REQUEST_KINDS = ["command", "edit", "edits", "write", "raw"];
+const RAW = Object.freeze({ kind: "raw" });
+
+// A field's text split into the lines it really has. Lines are drawn one
+// per row with their number, so a run of blank lines can't push a second
+// command out of sight unnoticed. Any other control or invisible character
+// (a tab, a carriage return, ESC, a bidi override) has no honest drawing,
+// and the JSON line escapes them, so it sends the request to the raw view.
+const linesOf = (text) => {
+  if (typeof text !== "string") return null;
+  const lines = text.split("\n");
+  return lines.every((l) => ![...l].some(hidden)) ? lines : null;
+};
+const isBool = (v) => v === undefined || typeof v === "boolean";
+// Every key the input carries must be one this kind draws: an unknown one
+// would be run without being shown.
+const only = (input, keys) => Object.keys(input).every((k) => keys.includes(k));
+
+function requestOf(toolName, input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return RAW;
+  // Own names only: a tool called "constructor" or "toString" must not reach
+  // what a plain object inherits (review of the typed views, 10/12).
+  if (!Object.hasOwn(REQUESTS, toolName)) return RAW;
+  const typed = REQUESTS[toolName](input);
+  return typed && REQUEST_KINDS.includes(typed.kind) ? typed : RAW;
+}
+
+const REQUESTS = {
+  Bash(input) {
+    if (!only(input, ["command", "description", "timeout", "run_in_background", "dangerouslyDisableSandbox"]))
+      return null;
+    const lines = linesOf(input.command);
+    if (!lines || !input.command.trim()) return null;
+    if (input.description !== undefined && !linesOf(input.description)) return null;
+    if (input.timeout !== undefined && !Number.isFinite(input.timeout)) return null;
+    if (!isBool(input.run_in_background) || !isBool(input.dangerouslyDisableSandbox)) return null;
+    // Every field it carries is on the glass: the agent's own note about
+    // it is labelled as the agent's, never stands in for the command.
+    const notes = [];
+    // Whitespace collapsed: a note padded to wrap can't draw a row of its own
+    // that reads like one of the flag lines below it.
+    if (input.description) notes.push(`Its note: ${input.description.replace(/\s+/g, " ").trim()}`);
+    if (input.timeout !== undefined) notes.push(`Stops after ${input.timeout} ms`);
+    if (input.run_in_background) notes.push("Runs in the background");
+    if (input.dangerouslyDisableSandbox) notes.push("Runs outside the sandbox");
+    if (input.run_in_background === false) notes.push("Runs in the foreground");
+    if (input.dangerouslyDisableSandbox === false) notes.push("Runs in the sandbox");
+    return { kind: "command", lines, notes };
+  },
+  Edit(input) {
+    if (!only(input, ["file_path", "old_string", "new_string", "replace_all"])) return null;
+    const path = linesOf(input.file_path);
+    const change = changeOf(input);
+    if (!path || path.length !== 1 || !path[0] || !change) return null;
+    return { kind: "edit", path: path[0], ...change };
+  },
+  MultiEdit(input) {
+    if (!only(input, ["file_path", "edits"]) || !Array.isArray(input.edits) || !input.edits.length) return null;
+    const path = linesOf(input.file_path);
+    if (!path || path.length !== 1 || !path[0]) return null;
+    const edits = input.edits.map((e) =>
+      e && typeof e === "object" && only(e, ["old_string", "new_string", "replace_all"]) ? changeOf(e) : null,
+    );
+    if (edits.some((e) => !e)) return null;
+    return { kind: "edits", path: path[0], edits };
+  },
+  Write(input) {
+    if (!only(input, ["file_path", "content"])) return null;
+    const path = linesOf(input.file_path);
+    const lines = linesOf(input.content);
+    if (!path || path.length !== 1 || !path[0] || !lines) return null;
+    return { kind: "write", path: path[0], lines };
+  },
+};
+
+function changeOf(e) {
+  const before = linesOf(e.old_string);
+  const after = linesOf(e.new_string);
+  if (!before || !after || !isBool(e.replace_all)) return null;
+  return { before, after, all: e.replace_all === true };
 }
 
 const safeJson = (v) => {
@@ -104,12 +194,48 @@ const base = (path) =>
     .filter(Boolean)
     .pop() ?? "";
 
+// The most of a found line the figure shows: one row of 13 px type in the
+// figure's column at 1180 px, about 80 characters. Guessed from the frames.
+const FOUND_CHARS = 80;
+
+/** One line of what a look found, from its result, or "" when the result
+ *  doesn't say it plainly. A search answers with its own summary ("Found 3
+ *  files", "No matches found") or a list, told as its count. A file's text
+ *  is not a finding, so a Read gives nothing unless it failed, and then its
+ *  error is the finding. Never written by us beyond a count. */
+export function foundLine(name, content, isError = false) {
+  const text = typeof content === "string" ? content : "";
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  if (!lines.length) return "";
+  const clip = (l) => {
+    const shown = [...l].filter((ch) => !hidden(ch)).join("");
+    return shown.length > FOUND_CHARS ? `${shown.slice(0, FOUND_CHARS - 1)}…` : shown;
+  };
+  if (isError) return clip(lines[0]);
+  if (name === "Grep" || name === "Glob") {
+    // Its own summary line, as it wrote it.
+    if (/^(found|no )/i.test(lines[0])) return clip(lines[0]);
+    // A bare list of paths: how many.
+    // (A content-mode line, path:12: or a -C context row path-12-, is not a
+    // file, so it isn't counted as one.)
+    if (lines.every((l) => (l.startsWith("/") || /^[\w.-]+\//.test(l)) && !/[:-]\d+[:-]/.test(l)))
+      return `${lines.length} ${lines.length === 1 ? "match" : "matches"}`;
+    return clip(lines[0]);
+  }
+  return "";
+}
+
 export function emptyStory() {
   return {
     stage: emptyStage(),
     asked: "",
     said: "",
     reads: [],
+    // What a look found, one line per target, only where the transcript
+    // says it in so many words (foundLine). `looking` maps a read call's id
+    // to its target until its result lands.
+    found: {},
+    looking: {},
     lastKind: null,
     // Every request still open, oldest first: Realm can hold several at once
     // (apps/server/scripts/live-review-check.ts keeps them in a map), and
@@ -171,7 +297,8 @@ function tellStory(story, stored) {
               -MAX_READS,
             )
           : story.reads;
-        return { ...story, stage, reads, lastKind: "read", started: true };
+        const looking = target && p.toolUseId ? { ...story.looking, [p.toolUseId]: { target, name } } : story.looking;
+        return { ...story, stage, reads, looking, lastKind: "read", started: true };
       }
       if (what.kind === "edit" || what.kind === "write") {
         const edited = story.edited.includes(what.path)
@@ -191,6 +318,13 @@ function tellStory(story, stored) {
       return stage === story.stage ? story : { ...story, stage };
     }
     case "tool_result": {
+      const look = story.looking[p.toolUseId];
+      if (look) {
+        const line = foundLine(look.name, p.content, Boolean(p.isError));
+        const { [p.toolUseId]: _, ...looking } = story.looking;
+        const found = line ? { ...story.found, [look.target]: line } : story.found;
+        return { ...story, stage, looking, found };
+      }
       const call = stage.calls[p.toolUseId];
       if (call && (call.kind === "tests" || call.kind === "command")) {
         const check = {
@@ -286,7 +420,8 @@ export function firstSentence(text) {
     .replace(/`([^`]*)`/g, "$1")
     .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
     .replace(/^\s*(#+|[-*>]|\d+\.)\s+/gm, "")
-    .replace(/[*_]{1,3}([^*_]+)[*_]{1,3}/g, "$1")
+    // Emphasis only at word edges: parse_user_id keeps its underscores.
+    .replace(/(^|[^\w*])[*_]{1,3}([^*_]+?)[*_]{1,3}(?![\w*])/g, "$1$2")
     .replace(/\s+/g, " ")
     .trim();
   if (!plain) return "";
@@ -374,10 +509,19 @@ export function headline(story, b = beat(story)) {
       return firstSentence(perm.title) || "It has a question for you";
     // The program's name only: a headline that cuts a command mid-way reads
     // as the whole of it. The figure shows the command in full.
+    const req = perm.view?.request ?? { kind: "raw" };
+    if (req.kind === "command") return `It wants to run ${programsOf(req.lines.join("\n"))}`;
+    if (req.kind === "edit" || req.kind === "edits") return `It wants to change ${base(req.path)}`;
+    if (req.kind === "write") return `It wants to write ${base(req.path)}`;
     if (perm.toolName === "Bash" && perm.command) return `It wants to run ${programsOf(perm.command)}`;
     if (perm.toolName) return `It wants to use ${perm.toolName}`;
-    return firstSentence(perm.title) || `It wants to use ${perm.toolName}`;
+    return firstSentence(perm.title) || "It wants your OK";
   }
+  // Realm says the turn is waiting on him a moment before the request
+  // itself lands (the 12:33am rehearsal, frame 09: status
+  // waiting_permission, then permission_request). That beat is his call
+  // already, with nothing to show yet; it is never "Done".
+  if (b === "call" && story.agent?.turn?.phase === "needs-you") return "It's asking for your OK";
   if (b === "failed")
     return firstSentence(story.failure) || "It stopped with an error";
   if (b === "reading") {
@@ -431,7 +575,10 @@ export function decision(story, { kept = false } = {}) {
     return {
       kind: "permission",
       requestId: perm.requestId,
-      line: `Allow lets ${perm.toolName} run with exactly what's on the right.`,
+      // Seven words: the needs-you story was 49 words with the ten-word
+      // line it had (realm-morning-verify.md, 10/12), over the 45 a block
+      // may hold on first view.
+      line: "Allow runs exactly what's on the right.",
       verbs: [
         { id: "allow", text: "Allow" },
         { id: "deny", text: "Deny" },
@@ -455,9 +602,15 @@ export function decision(story, { kept = false } = {}) {
 export function figure(story, b = beat(story)) {
   if (b === "call" && story.permission)
     return story.permission.question ? "none" : "permission";
-  if (b === "call") return "review";
+  // Your call with no request in hand is the diff to review, and only once
+  // realm has measured it: a review figure with no changes behind it draws
+  // an empty box (frame 09 of the 12:33am rehearsal).
   const agent = story.agent ?? emptyAgent();
-  const turn = agent.turn;
+  if (b === "call" && agent.changes?.files?.length) return "review";
+  // Waiting on him with the request not in hand yet: the figure stays on the
+  // object of the beat it paused, so that moment is never an empty screen.
+  const turn = agent.turn?.phase === "needs-you" ? agent.turn.resume : agent.turn;
+  if (b === "call" && turn?.phase === "asked") return "none";
   if (!turn) return "none";
   const changed = () =>
     agent.changes?.files?.length || story.edited.length ? "changed" : "none";

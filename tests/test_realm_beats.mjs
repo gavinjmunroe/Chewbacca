@@ -357,3 +357,26 @@ test("an event that changes nothing returns the same story, so nothing re-render
   const st = play(TURN.slice(0, 3));
   assert.equal(s.tell(st, ev(99, "rate_limit", {})), st);
 });
+
+test("a command before any edit is the agent reading, and proves nothing", () => {
+  // A real Claude opened the morning rehearsal (2026-10-11) with
+  // `ls -R src; cat ...`, told as "Proving" and "Checked: ls -R src ran clean".
+  const looking = play([
+    ev(1, "user_message", { text: "add slugify", attachments: [] }),
+    ev(2, "status", { status: "running" }),
+    call(3, "b1", "Bash", { command: "ls -R src test; cat src/text.js" }),
+  ]);
+  assert.equal(s.beat(looking), "reading");
+  assert.match(s.headline(looking), /^Looking around with ls/);
+  const ran = s.tell(looking, result(4, "b1", "src/text.js"));
+  assert.equal(s.proof(ran), null);
+  // After an edit, the same kind of command is a check again.
+  const edited = [
+    call(5, "e1", "Edit", { file_path: "/repo/src/text.js", old_string: "a", new_string: "b" }),
+    result(6, "e1", "ok"),
+    call(7, "b2", "Bash", { command: "node --check src/text.js" }),
+  ].reduce((st, e) => s.tell(st, e), ran);
+  assert.equal(s.beat(edited), "proving");
+  const checked = s.tell(edited, result(8, "b2", ""));
+  assert.match(s.proof(checked)?.text ?? "", /^Checked: node/);
+});

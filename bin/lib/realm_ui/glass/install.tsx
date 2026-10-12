@@ -13,6 +13,7 @@
 import { createElement, type ReactNode } from "react";
 import { StoreContext } from "../src/state/store";
 import { GlassLayer } from "./GlassLayer";
+import { FolderPick } from "./FolderPick";
 
 type ProviderProps = {
   value: Parameters<typeof GlassLayer>[0]["store"] | null;
@@ -28,6 +29,7 @@ function GlassProvider({ value, children }: ProviderProps) {
     value
       ? createElement(GlassLayer, { store: value, key: "chewbacca-glass" })
       : null,
+    createElement(FolderPick, { key: "chewbacca-glass-folder" }),
   );
 }
 

@@ -335,3 +335,13 @@ export function voiceIntent(said) {
   if ((m = /^(?:at|mention|attach)\s+(?:the\s+)?(?:file\s+)?(\S+)$/.exec(lower))) return { kind: "mention", name: tail(m[1]) };
   return { kind: "draft", text: String(said ?? "").trim() };
 }
+
+/** What to do when the focused agent isn't in the glass's session list:
+ *  "stay" (nothing to decide), "ask" (reload the list once: his store may
+ *  have just made it, as New agent does) or "tiles" (asked, still gone).
+ *  The morning rehearsal, 2026-10-11, fell back to the tiles the moment
+ *  Create opened a new agent, because the list hadn't heard of it yet. */
+export function lostFocus({ mode, focus, known, haveSessions, morphing, asked }) {
+  if (mode === "tiles" || !focus || !haveSessions || known || morphing) return "stay";
+  return asked === focus ? "tiles" : "ask";
+}

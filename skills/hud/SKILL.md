@@ -594,6 +594,18 @@ Rejected:
 4. **Layout toggles and saved layouts** (Cursor's top-right layout menu). The
    layout follows the agent; nobody arranges it.
 
+### Starting a new agent from the glass
+
+The tiles end with a New agent door. It opens Carlton's own new space sheet
+over his workspace, and his "Choose folder" is answered on the glass by
+`glass/FolderPick.tsx`: the repos his Claude Code tabs worked in lately, then
+the checkouts in ~/code, plus a field that takes any path the server confirms
+is a git checkout under $HOME (`GET /glass/folders`, `folders.mjs`). Create
+opens the new agent in his workspace and its first turn plays as the story.
+Until 2026-10-11 the bridge answered "Choose folder" with null, so the glass
+could only reopen old agents, never start one in a repo. Dropping a folder on
+his sheet still does nothing on the glass: a web view gets no file path.
+
 ## An agent turn told by the screen
 
 Caleb, 2026-10-11 8:29pm: "It needs to be a digestible UX! Vscode and the
@@ -731,7 +743,7 @@ each held by a test that failed on the code before it:
 | Region    | Owner                 | Grid area        | Modes              | Draws |
 | --------- | --------------------- | ---------------- | ------------------ | ----- |
 | notice    | Notice                | notice (layer)   | tiles, story, work | a fault no one agent owns (engine down, the talk key lost), with its one fix |
-| field     | TileField             | main (layer)     | tiles              | the agent tiles, one line each, and a count of the rest |
+| field     | TileField             | main (layer)     | tiles              | the agent tiles, one line each, a count of the rest, and the New agent door |
 | story     | Story                 | main (layer)     | story              | one agent's turn told by the screen, in the five regions below |
 | ask       | Story                 | ask (story)      | story              | what he asked, which agent, how long ago |
 | tell      | Story                 | tell (story)     | story              | the one headline, the beat line from the typed turn, what proved it |
@@ -740,6 +752,7 @@ each held by a test that failed on the code before it:
 | doors     | Story                 | doors (story)    | story              | Transcript and Reply, his full workspace one press away |
 | stage     | Stage                 | main (layer)     | work               | the focused agent's current beat as one card, the beats before it one line each |
 | workspace | Carlton's app (#root) | -                | work               | his conversation, composer and panes, untouched |
+| pick      | FolderPick            | -                | work               | Choose folder on the glass, over his new space sheet: his repos and a path field |
 | light     | Light                 | -                | tiles, story, work | the morph outline between a tile and the story, for 320 ms |
 <!-- regions:end -->
 

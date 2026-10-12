@@ -8,6 +8,7 @@
 //   POST /glass/voice    hud-listen hands a sentence to the page that has the glass
 //   GET  /glass/file     one text file under $HOME, read only, for the stage's file view
 //   GET  /glass/tabs     what each tile's Claude Code tab is really doing (tab_truth.mjs)
+//   GET  /glass/folders  checkouts a new agent can start in, or one typed path checked (folders.mjs)
 //   POST /glass/reject   put one hunk back, on a press: `git apply -R` of exactly that hunk
 //
 // Every route needs the pipe's own token in `X-Glass-Token` (the one in the
@@ -20,6 +21,7 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, normalize, sep } from "node:path";
 import { timingSafeEqual } from "node:crypto";
 import { idsFrom, tabTruth, transcriptFinder } from "./tab_truth.mjs";
+import { checkFolder, listFolders } from "./folders.mjs";
 
 // A file the stage will read. The stage shows a window of lines around a
 // change, so a file past this is one no person reads on the glass anyway.
@@ -223,6 +225,18 @@ export function handleGlass(
     for (const id of idsFrom(url.searchParams.get("ids")))
       tabs[id] = tabTruth(id, state.find, { now: at });
     json(res, 200, { tabs });
+    return true;
+  }
+  if (route === "GET /glass/folders") {
+    const typed = url.searchParams.get("path");
+    if (typed !== null) {
+      const folder = checkFolder(typed, { home });
+      return folder
+        ? json(res, 200, { folder })
+        : json(res, 404, { error: "not a git checkout under your home" }),
+        true;
+    }
+    json(res, 200, { folders: listFolders({ home }) });
     return true;
   }
   if (route === "GET /glass/file") {

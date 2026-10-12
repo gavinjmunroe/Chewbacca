@@ -11,7 +11,7 @@
 // and answers every IPC-only member the way Realm's own renderer already
 // treats a missing bridge (its env.d.ts marks most of them optional "like
 // every bridge: jsdom has none"): nothing picked, nothing listed, no native
-// menu. Nothing here can open a file dialog, read the clipboard, touch the
+// menu (folders excepted: see pickFolder). Nothing here can open a file dialog, read the clipboard, touch the
 // keychain or drive a browser view, because a page this server serves must
 // not be able to.
 //
@@ -55,7 +55,15 @@
     onScrollPhase: () => unsubscribe,
     // Quitting is the glass's job (Escape, voice, click-away), never the page's.
     quitAndStopAgents: nothing,
-    pickFolder: none,
+    // His "Choose folder" opens the system dialog in Electron. Here our
+    // layer draws its own chooser on the glass (glass/FolderPick.tsx), so a
+    // new agent can start in a repo; it lists only git checkouts under
+    // $HOME, checked by the server. Looked up per call: the layer mounts
+    // after this file runs.
+    pickFolder: () => {
+      const pick = window.__realmGlassPickFolder;
+      return typeof pick === "function" ? pick() : Promise.resolve(null);
+    },
     pickFiles: empty,
     pickThemeFile: none,
     pickIconImage: none,

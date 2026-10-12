@@ -44,7 +44,7 @@ import { rpc } from "../src/rpc/client";
 import type { AppState } from "../src/state/store";
 import { Spinner } from "../src/components/Spinner";
 import { Story } from "./Story";
-import { editRange, excerpt, voiceIntent } from "./model.mjs";
+import { editRange, excerpt, lostFocus, voiceIntent } from "./model.mjs";
 import {
   atRest,
   emptyAgent,
@@ -722,13 +722,81 @@ export function GlassLayer({ store }: { store: StoreApi<AppState> }) {
     return () => window.removeEventListener("realm-glass-voice", onVoice);
   }, [store, tiles, picked, grow]);
 
+  // New agent: his own new-space sheet (name, folder, agent) over his
+  // workspace, with "Choose folder" answered on the glass (FolderPick.tsx).
+  // His store opens the new session in his focused pane, which the
+  // subscription above follows; the first turn then plays as the story.
+  // Closing the sheet without making one goes back to the tiles.
+  const newFrom = useRef<{ before: string | null; sheet: boolean } | null>(
+    null,
+  );
+  const startNew = useCallback(() => {
+    const st = store.getState() as unknown as {
+      openSheet: (sheet: { kind: string }) => void;
+    };
+    newFrom.current = { before: focusRef.current, sheet: false };
+    setMode("work");
+    st.openSheet({ kind: "new-space" });
+  }, [store]);
+  useEffect(
+    () =>
+      store.subscribe((s) => {
+        const pending = newFrom.current;
+        if (!pending) return;
+        const open = Boolean((s as unknown as { sheet?: unknown }).sheet);
+        if (open) {
+          pending.sheet = true;
+          return;
+        }
+        if (!pending.sheet) return;
+        // His sheet closes BEFORE he opens the session it made, so whether
+        // one was made is only known once his engine has answered the open;
+        // ENGINE_ANSWER_MS is the budget every engine call gets here.
+        pending.sheet = false;
+        window.setTimeout(() => {
+          if (newFrom.current !== pending) return;
+          if (focusRef.current === pending.before) {
+            newFrom.current = null;
+            setMode("tiles");
+          }
+        }, ENGINE_ANSWER_MS);
+      }),
+    [store],
+  );
+  const newRunning =
+    newFrom.current !== null &&
+    focus !== null &&
+    focus !== newFrom.current.before &&
+    sessions[focus]?.status === "running";
+  useEffect(() => {
+    if (!newRunning) return;
+    newFrom.current = null;
+    setMode("story");
+  }, [newRunning]);
+
   const focused = focus ? sessions[focus] : null;
   // The agent on the glass went away (deleted, or gone from his list on a
   // refresh): back to the tiles, never a blank glass only Escape leaves.
   const haveSessions = Object.keys(sessions).length > 0;
+  // A session his store just made (New agent) isn't in this list yet, so a
+  // focus the list doesn't know is asked about once before it counts as
+  // gone: the morning rehearsal, 2026-10-11, fell back to the tiles the
+  // moment Create opened the new agent.
+  const askedFor = useRef<string | null>(null);
   useEffect(() => {
-    if (mode !== "tiles" && focus && haveSessions && !focused && !morphing.current) setMode("tiles");
-  }, [mode, focus, focused, haveSessions]);
+    const next = lostFocus({
+      mode,
+      focus,
+      known: Boolean(focused),
+      haveSessions,
+      morphing: morphing.current,
+      asked: askedFor.current,
+    });
+    if (next === "ask") {
+      askedFor.current = focus;
+      load();
+    } else if (next === "tiles") setMode("tiles");
+  }, [mode, focus, focused, haveSessions, sessions, load]);
   // Transcript and Reply on the story: his workspace, already mounted, so
   // this is a crossfade and never a load. Reply puts the caret in his
   // composer.
@@ -770,6 +838,7 @@ export function GlassLayer({ store }: { store: StoreApi<AppState> }) {
           tileRefs={tileRefs.current}
           onPick={setPicked}
           onGrow={grow}
+          onNew={startNew}
         />
       )}
       {mode === "story" && focused && (
@@ -886,9 +955,36 @@ function TileField(props: {
   tileRefs: Map<string, HTMLElement>;
   onPick: (i: number) => void;
   onGrow: (id: string) => void;
+  onNew: () => void;
 }) {
-  const { leaving, resting, sessions, known, picked, tileRefs, onPick, onGrow } =
-    props;
+  const {
+    leaving,
+    resting,
+    sessions,
+    known,
+    picked,
+    tileRefs,
+    onPick,
+    onGrow,
+    onNew,
+  } = props;
+  // The one way to start an agent from the tiles. Without it the glass could
+  // only reopen old agents: the morning rehearsal, 2026-10-11, had no press
+  // that began new work in a repo.
+  const door = (
+    <button
+      type="button"
+      className="glass-tile glass-tile-new"
+      onClick={onNew}
+      aria-label="New agent: pick a repo, then ask"
+    >
+      <span className="glass-tile-head">
+        <Icon name="add" size={16} />
+        <span className="glass-tile-state">New agent</span>
+      </span>
+      <span className="glass-tile-title">Pick a repo, then ask</span>
+    </button>
+  );
   const tiles = resting.tiles;
   // A press on the empty glass takes the surface down, as a click off it
   // does; Escape is the keyboard's way to the same place.
@@ -906,7 +1002,9 @@ function TileField(props: {
         // Until the list has come back there is nothing true to say here;
         // with the engine down the notice says why.
         known && !Object.keys(sessions).length ? (
-          <p className="glass-quiet">No agents yet. Command K starts one.</p>
+          <div className="glass-tiles" role="list" aria-label="Agents">
+            {door}
+          </div>
         ) : null
       ) : (
         <div className="glass-tiles" role="list" aria-label="Agents">
@@ -954,6 +1052,7 @@ function TileField(props: {
               </button>
             );
           })}
+          {door}
         </div>
       )}
       {resting.moreAgents > 0 && (

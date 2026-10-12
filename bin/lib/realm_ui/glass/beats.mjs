@@ -266,8 +266,11 @@ export function beat(story, { kept = false, settledFor = Infinity } = {}) {
   };
   return match(turn, {
     asked: () => "asked",
-    // A shell command is a check on the work, told as proving.
-    reading: (t) => (t.command ? "proving" : "reading"),
+    // A shell command after an edit is a check on the work, told as
+    // proving. Before any edit it's the agent looking around: the morning
+    // rehearsal, 2026-10-11, told a real Claude's opening `ls -R src; cat`
+    // as "Proving" and "Checked: ls -R src ran clean".
+    reading: (t) => (t.command && story.edited.length ? "proving" : "reading"),
     changing: () => "changing",
     proved: () => "proving",
     "needs-you": () => "call",
@@ -317,7 +320,8 @@ export function proof(story) {
       };
     return { tone: "good", text: "Proved: the tests passed" };
   }
-  const checks = after.filter((c) => c.kind === "command");
+  // A command before any edit checked nothing the agent did.
+  const checks = story.edited.length ? after.filter((c) => c.kind === "command") : [];
   const failed = checks.filter((c) => c.error);
   if (failed.length)
     return {
@@ -379,7 +383,9 @@ export function headline(story, b = beat(story)) {
   if (b === "reading") {
     const last = story.reads[story.reads.length - 1];
     const name = base(last) || last;
-    return name ? `Reading ${name}` : "Reading";
+    if (name) return `Reading ${name}`;
+    const cmd = st.command?.command;
+    return cmd ? `Looking around with ${firstWords(cmd)}` : "Reading";
   }
   if (b === "changing") {
     const path = st.file?.path ?? story.edited[story.edited.length - 1];

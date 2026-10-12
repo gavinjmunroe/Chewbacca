@@ -30,7 +30,7 @@ export const REGIONS = Object.freeze([
     grid: "layer",
     area: "main",
     modes: ["tiles"],
-    draws: "the agent tiles, one line each, and a count of the rest",
+    draws: "the agent tiles, one line each, a count of the rest, and the New agent door",
   },
   {
     id: "story",
@@ -95,6 +95,14 @@ export const REGIONS = Object.freeze([
     area: null,
     modes: ["work"],
     draws: "his conversation, composer and panes, untouched",
+  },
+  {
+    id: "pick",
+    owner: "FolderPick",
+    grid: null,
+    area: null,
+    modes: ["work"],
+    draws: "Choose folder on the glass, over his new space sheet: his repos and a path field",
   },
   {
     id: "light",

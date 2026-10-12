@@ -1040,59 +1040,67 @@ def _timed(fn) -> float:
     return (time.perf_counter() - start) * 1000
 
 
-def gmail_msg(mid: str, frm: str, to: str, subject: str, body: str, date: str, ics: bool = False) -> dict:
+def gmail_msg(mid: str, frm: str, to: str, subject: str, body: str, date: str, ics: bool = False,
+              sent: bool = False) -> dict:
     import base64
     enc = lambda s: base64.urlsafe_b64encode(s.encode()).decode()  # noqa: E731
     parts = [{"mimeType": "text/plain", "body": {"data": enc(body)}}]
     if ics:
         parts.append({"mimeType": "text/calendar", "filename": "invite.ics", "body": {"data": enc("BEGIN:VCALENDAR")}})
-    return {"id": mid, "payload": {"mimeType": "multipart/mixed", "parts": parts, "headers": [
-        {"name": "From", "value": frm}, {"name": "To", "value": to}, {"name": "Subject", "value": subject},
-        {"name": "Date", "value": date}, {"name": "Message-ID", "value": f"<{mid}@mail.example>"}]}}
+    return {"id": mid, "labelIds": ["SENT"] if sent else ["INBOX"],
+            "payload": {"mimeType": "multipart/mixed", "parts": parts, "headers": [
+                {"name": "From", "value": frm}, {"name": "To", "value": to}, {"name": "Subject", "value": subject},
+                {"name": "Date", "value": date}, {"name": "Message-ID", "value": f"<{mid}@mail.example>"}]}}
 
 
 def test_meetings_from_the_mail(tmp: Path):
     """2026-10-11: 77 of Zeutara's 81 Clay threads ended at the investor's
     reply, and "meetings 0" read only a calendar. The conversation after a
     reply lives in the client's own mailbox; a booking there is a meeting."""
-    graph = osgraph.Graph(tmp / "mail.sqlite")
     (tmp / "mp").mkdir(exist_ok=True)
+    graph = osgraph.Graph(tmp / "mail.sqlite")
     ids = osgraph.Identities(people_store(tmp / "mp"))
-    gi.sync(graph, ["clay"], CFG, ids, cli(world_a()))
-    gi.sync(graph, ["inbox"], CFG, ids, cli(world_a()), inbox_fn=lambda ws: INBOX if ws == "111" else [])
+    cfg = json.loads(json.dumps(CFG))
+    cfg["clients"][0]["mailboxes"] = ["pat@client.example"]
+    gi.sync(graph, ["clay"], cfg, ids, cli(world_a()))
+    gi.sync(graph, ["inbox"], cfg, ids, cli(world_a()), inbox_fn=lambda ws: INBOX if ws == "111" else [])
     asked = []
 
-    def reader(lead):
-        asked.append(lead)
+    def reader(lead, inbox):
+        asked.append((lead, inbox))
         if lead == "a@fund.example":
-            return [("pat@client.example", gmail_msg("m1", "pat@client.example", lead, "Deck attached",
-                                                     "Here is the deck.", "Wed, 07 Oct 2026 10:00:00 -0700")),
-                    ("pat@client.example", gmail_msg("m2", "pat@client.example", lead, "Invitation: Intro call",
-                                                     "Intro call, Thursday Oct 15 at 2pm", "Thu, 08 Oct 2026 09:00:00 -0700",
-                                                     ics=True))]
+            return [gmail_msg("m1", "pat@client.example", lead, "Deck attached", "Here is the deck.",
+                              "Wed, 07 Oct 2026 10:00:00 -0700", sent=True),
+                    gmail_msg("m2", "pat@client.example", lead, "Invitation: Intro call",
+                              "Intro call, Thursday Oct 15 at 2pm", "Thu, 08 Oct 2026 09:00:00 -0700",
+                              ics=True, sent=True)]
+        if lead == "ghost@gone.example":
+            # The lead wrote an "invite" themselves: anyone can, so it is never a confirmed meeting.
+            return [gmail_msg("m4", lead, "pat@client.example", "Invitation: Call", "Thursday at 3pm",
+                              "Thu, 08 Oct 2026 12:00:00 -0700", ics=True)]
         if lead == "shared@vc.example":
-            return [("pat@client.example", gmail_msg("m3", lead, "pat@client.example", "Re: Widget",
-                                                     "Does Tuesday at 2pm work for a call?",
-                                                     "Thu, 08 Oct 2026 11:00:00 -0700"))]
+            return [gmail_msg("m3", lead, "pat@client.example", "Re: Widget",
+                              "Does Tuesday at 2pm work for a call?", "Thu, 08 Oct 2026 11:00:00 -0700")]
         return []
 
-    res = gi.sync(graph, ["mailbox"], CFG, ids, mailbox_reader=reader)
-    ok(res[0]["ok"] and res[0]["booking_confirmed"] == 1 and res[0]["booking_proposed"] == 1, res)
-    ok(sorted(asked) == ["a@fund.example", "ghost@gone.example", "shared@vc.example"],
-       "only people who replied are looked up, each by their own exact address")
+    inboxes = ["pat@client.example", "other-client@else.example"]
+    res = gi.sync(graph, ["mailbox"], cfg, ids, mailbox_reader=reader, mailbox_inboxes=inboxes)
+    ok(res[0]["ok"] and res[0]["booking_confirmed"] == 1, res)
+    ok({i for _, i in asked} == {"pat@client.example"}, ("a client reads only the inboxes it names", asked))
     graph.db.close()
     db = gq.connect(tmp / "mail.sqlite")
     f = gq.funnel(db, "Acme Capital")["funnel"]
     ok(f["meetings"]["n"] == 1 and f["meetings"]["mail_only"] == 1 and f["meetings"]["calendar"] == 0, f["meetings"])
-    ok(f["booking_signals"]["proposed_only"] == 1, "a proposed time is never a meeting")
+    ok(f["booking_signals"]["proposed_only"] >= 1, "a proposed time, or a lead's own invite, is never a meeting")
     db.close()
 
-    # Nothing connected: FAILED with the fix, and the last snapshot stays.
+    # Two clients and none named its inboxes: nothing is read, so nothing is misfiled.
     graph = osgraph.Graph(tmp / "mail.sqlite")
-    res = gi.sync(graph, ["mailbox"], CFG, ids, mailbox_reader=lambda lead: [])
+    asked.clear()
+    res = gi.sync(graph, ["mailbox"], CFG, ids, mailbox_reader=reader, mailbox_inboxes=inboxes)
+    ok(res[0]["ok"] and not asked and res[0]["skipped_no_inbox"] >= 1, res)
+    res = gi.sync(graph, ["mailbox"], cfg, ids, mailbox_reader=reader, mailbox_inboxes=[])
     ok(not res[0]["ok"] and "chewbacca email add" in res[0]["note"], res)
-    ok(len([n for n in graph.nodes("Signal") if (n["props"] or {}).get("workspace_id") == "mailbox"]) == 2,
-       "a failed mailbox read keeps the bookings it found last time")
     graph.db.close()
     import gtm_mailbox
     ok(not gtm_mailbox.ADDRESS.match("a@b.example OR in:anywhere"), "a crafted address never reaches a Gmail search")

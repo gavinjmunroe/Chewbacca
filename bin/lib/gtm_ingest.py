@@ -1581,7 +1581,8 @@ def default_calendar_readers() -> dict:
 
 def sync(graph: Graph, sources: list[str], cfg: dict | None = None, ids: Identities | None = None,
          cli: ClayCLI | None = None, inbox_fn=None, calendar_fn=None, log=print,
-         calendar_readers: dict | None = None, mailbox_reader=None) -> list[dict]:
+         calendar_readers: dict | None = None, mailbox_reader=None,
+         mailbox_inboxes: list[str] | None = None) -> list[dict]:
     """Run the named ingesters. Each one that cannot read its source, or that
     fails for ANY reason, records FAILED with the reason and leaves its
     previous snapshot in place. The first version caught only the expected
@@ -1638,7 +1639,7 @@ def sync(graph: Graph, sources: list[str], cfg: dict | None = None, ids: Identit
         source = "gtm-mailbox"
         try:
             import gtm_mailbox  # noqa: PLC0415  it imports this module
-            report = gtm_mailbox.sync_mailbox(graph, mailbox_reader or gtm_mailbox.gmail_reader)
+            report = gtm_mailbox.sync_mailbox(graph, cfg, mailbox_reader, mailbox_inboxes)
             record_sync(graph, source, "mailbox", True, "", report)
             results.append({"source": source, "ok": True, **report})
         except Exception as err:  # noqa: BLE001  recorded, never swallowed

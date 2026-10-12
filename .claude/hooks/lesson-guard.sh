@@ -138,8 +138,18 @@ for toks in segments(cmd):
     m = SCAFFOLD.match(line)
     if not m:
         continue
-    args = [t for t in toks[len(m.group(0).split()):] if not t.startswith("-")]
+    rest = toks[len(m.group(0).split()):]
+    args = [t for t in rest if not t.startswith("-")]
     target = Path(args[0]).name if args else here.name
+    # The folder the project lives in. gh repo create names a repo, not a
+    # folder, unless it is pointed at one with --source.
+    source = next((t.split("=", 1)[1] for t in rest if t.startswith("--source=")), None)
+    if source is None and "--source" in rest[:-1]:
+        source = rest[rest.index("--source") + 1]
+    if m.group(0).startswith("gh repo create"):
+        project = str((here / Path(source).expanduser()).resolve()) if source else "gh:" + target.lower()
+    else:
+        project = str((here / Path(args[0]).expanduser()).resolve()) if args else str(here.resolve())
     where = str(Path(os.environ["LG_CWD"] or ".").resolve())
     # Scratch and test trees are throwaway by design.
     if re.match(r"^/(?:private/)?(?:tmp|var/folders)/", where) or "scratch" in where:
@@ -150,8 +160,9 @@ for toks in segments(cmd):
     # week rerun unchanged, and 2 of them were the second refusal for one
     # project: `git init` in ~/code/design-quiz2, then `gh repo create
     # calebnewtonusc/design-quiz2 --source=.`, each keyed on its own command
-    # line. Both name the same project, so the key is the project name.
-    key = hashlib.sha256(f"{session}|{target.lower()}".encode()).hexdigest()[:24]
+    # line. Both point at one folder, so the key is that folder, resolved (a
+    # bare name collided `git init .` in two folders, review 10/12).
+    key = hashlib.sha256(f"{session}|{project}".encode()).hexdigest()[:24]
     state = Path(os.environ.get("CHEWBACCA_HOME") or home / ".chewbacca") / "state" / "lesson-guard"
     try:
         state.mkdir(parents=True, exist_ok=True)

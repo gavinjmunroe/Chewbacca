@@ -68,4 +68,8 @@ check("skill call counted for its plugin", use["vercel"]["skill_calls"] == 1)
 check("plugin mcp call counted for its plugin", use["playwright"]["mcp_calls"] == 1)
 check("unused plugin shows zero", use["expo"]["skill_calls"] + use["expo"]["mcp_calls"] == 0)
 
+check("a first turn over the cap fails", cb.over_cap({"first_turn_tokens": 3010}, 3000))
+check("at or under the cap passes", not cb.over_cap({"first_turn_tokens": 3000}, 3000))
+check("no cap never fails", not cb.over_cap({"first_turn_tokens": 10**9}, None))
+
 sys.exit(1 if failed else 0)

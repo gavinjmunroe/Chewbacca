@@ -40,18 +40,28 @@ import os, re, shlex, subprocess, time
 cmd, sid, cwd = os.environ["DG_CMD"], os.environ["DG_SID"], os.environ["DG_CWD"]
 
 # Split into simple commands. Heredoc bodies are data, unless a shell or an
-# eval reads them: `bash <<EOF` runs its body (security review, 2026-10-11).
+# eval reads them: 'bash <<EOF' runs its body (security review, 2026-10-11).
+# The opener line itself always stays: 'cat <<EOF; git reset --hard' runs the
+# reset, and the old regex dropped everything after the tag.
 SHELLS = ("bash", "sh", "zsh", "dash", "ksh", "fish", "eval", "source", ".", "xargs")
-shell_bodies = []
-
-def strip_heredoc(m):
-    opener = re.split(r"&&|\|\||;|\|", m.group(0).split("<<", 1)[0])[-1].split()
-    if opener and os.path.basename(opener[0]) in SHELLS:
-        shell_bodies.append(m.group(0))
-    return ""
-
-body = re.sub(r"^[^\n]*<<-?\s*['\"]?(\w+)['\"]?.*?\n\1\s*$", strip_heredoc, cmd, flags=re.S | re.M)
-body = body + "\n" + "\n".join(b.split("\n", 1)[1] if "\n" in b else b for b in shell_bodies)
+lines, kept, i = cmd.split("\n"), [], 0
+while i < len(lines):
+    line = lines[i]
+    kept.append(line)
+    i += 1
+    for tag in re.findall(r"<<-?\s*['\"]?([A-Za-z_]\w*)['\"]?", line):
+        opener = re.split(r"&&|\|\||;|\|", line.split("<<", 1)[0])[-1].split()
+        runs = bool(opener) and os.path.basename(opener[0]) in SHELLS
+        while i < len(lines) and lines[i].strip() != tag:
+            if runs:
+                kept.append(lines[i])
+            i += 1
+        i += 1
+body = "\n".join(kept)
+# A subshell, `cd -`, pushd/popd or a command substitution makes the working
+# directory after a piece unknowable from the text, so every directory the
+# command names is judged, not just the tracked one.
+uncertain = bool(re.search(r"[()\x60]|\bpopd\b|\bcd\s+-(\s|$)", body))
 segments = re.split(r"&&|\|\||;|\n|\|", body)
 
 SAFE = ["git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null",
@@ -235,9 +245,11 @@ for seg in segments:
     # This call accounts for at most one phrase in its own text; any other
     # phrase in the piece ($(...), an alias) is hidden.
     hidden += max(0, found - (1 if destroys and PHRASE.search(" ".join(a)) else 0))
-    if destroys and repo_dirty(here, untracked=(verb == "clean")):
-        print(f"`git {' '.join(a)}` would throw away uncommitted work in {here}, and other tabs share this checkout.")
-        raise SystemExit
+    if destroys:
+        for d in ([here] + sorted(targets - {here}) if uncertain else [here]):
+            if repo_dirty(d, untracked=(verb == "clean")):
+                print(f"`git {' '.join(a)}` would throw away uncommitted work in {d}, and other tabs share this checkout.")
+                raise SystemExit
 # A phrase no parsed git call accounts for: something the parser can't see
 # runs it (eval, sh -c, $x). Judge the cwd and every directory the text names.
 if hidden:

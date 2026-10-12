@@ -84,6 +84,11 @@ t "GIT_WORK_TREE prefix"        2 "$T/clean" "GIT_WORK_TREE=$T/dirty GIT_DIR=$T/
 t "--work-tree space form"      2 "$T/clean" "git --git-dir=$T/dirty/.git --work-tree $T/dirty reset --hard"
 t "sh -c with -C"               2 "$T/clean" "sh -c 'git -C $T/dirty reset --hard'"
 t "eval with cd"                2 "$T/clean" "eval 'cd $T/dirty; git reset --hard'"
+t "command after a heredoc tag" 2 "$T/dirty" "cat <<EOF; git reset --hard
+x
+EOF"
+t "subshell cd does not leak"   2 "$T/dirty" "( cd $T/clean ); git reset --hard"
+t "cd - is unknowable"          2 "$T/dirty" "cd $T/clean; cd -; git reset --hard"
 touch "$T/clean/untracked.txt"
 t "clean -f, untracked only"    2 "$T/clean" "git clean -f"
 rm -f "$T/clean/untracked.txt"

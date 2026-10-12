@@ -63,8 +63,17 @@ away when nobody decides where it lives. Route every correction, once:
   silently drifts, this path is wrong on a fresh machine) becomes a **test next
   to the implementation**. Not a paragraph. A paragraph does not fail CI.
 
-If a correction produces neither, it was not a lesson, it was a typo. Fix it and
-move on. If it produces both, write both.
+- **The move that would have been right** becomes the **default path**: a
+  tool, a first step or a default that produces the good behavior without
+  anyone remembering to. A test catches the bad move after it's made; the
+  default stops it being the easiest move. Caleb, 2026-10-11, after an agent
+  asked him for a zip code one lookup away: "reengineer the way in which it
+  tries to be good". The fix was `chewbacca resolve`, which makes looking a
+  fact up one call, cheaper than asking, and a flag that runs it on the
+  question the agent asked.
+
+If a correction produces none of these, it was not a lesson, it was a typo. Fix
+it and move on. Most real ones produce a test and a default.
 
 The failure this prevents: the same class of bug caught three times in review,
 explained well each time, never written down anywhere, because "I'll remember"

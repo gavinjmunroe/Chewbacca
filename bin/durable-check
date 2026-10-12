@@ -292,6 +292,9 @@ recurring error. Writing the lesson into prose does not stop it next time
 Before ending the turn, do one of:
   * land a gate or a test: a hook that refuses it, a test that fails on it, or
     a fix to the tool's core so it can't happen. Cite the dated incident.
+    And change how it tries to be good, not only what it refuses: the tool,
+    default or first step that now produces the right move on its own (Caleb,
+    2026-10-11: "reengineer the way in which it tries to be good").
   * if code can't catch it, record why, from this session:
         chewbacca lessons why "<which lesson>: <why code can't catch it>"
 

@@ -505,6 +505,8 @@ if group "gtme"; then
     python3 "$ROOT/tests/test_gtme_solo.py"
   check "gtme-jev holds an email Jev flags or couldn't check, in one call per email" \
     python3 "$ROOT/tests/test_gtme_jev.py"
+  check "resolve answers an address and a person's own record before anyone asks" \
+    python3 "$ROOT/tests/test_resolve.py"
   check "no code pins a model confidence at 1.0, Jev scores it" \
     python3 "$ROOT/tests/test_no_pinned_confidence.py"
   check "outbound waiting on him shows in needs-you, sent and expired batches don't" \

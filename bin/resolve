@@ -1,0 +1,6 @@
+#!/usr/bin/env python3
+"""Answer a fact question from every source on hand before asking a person, from a checkout or a symlinked install."""
+from pathlib import Path
+import runpy
+
+runpy.run_path(str(Path(__file__).resolve().parent.parent / "tools" / "resolve.py"), run_name="__main__")

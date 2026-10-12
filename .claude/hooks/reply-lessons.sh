@@ -50,7 +50,7 @@ my @rules = (
   [qr/\b(?:go|time to|(?:you|u)\s+should(?:\s+probably)?|i${q}?d)\s+(?:go\s+)?(?:study|start studying|hit the books)\b|\bgive\s+the\s+next\s+(?:hour|few hours|\d+ hours?)\s+to\s+(?:BISC|ACAD|WRIT|MPGU|studying|school|class)/i,
    "tells him to go study, unasked. Caleb, 2026-10-10: \"mind your own business\" (feedback_no_unasked_study_nudges).", 1],
   [qr/\b(?:what(?:${q}s| is)|send me|need)\s+(?:the\s+|his\s+|her\s+|their\s+|ur\s+|your\s+)?(?:city|zip|zip code|full address|street address|phone number|website|domain)\b/i,
-   "asks a person for a fact a lookup finds. Caleb, 2026-10-11: \"Never ask humans things that you don't need a human for\" after a zip code request for 2849 Summerdale Dr, \"1 search online away\". Look it up (chewbacca api google-maps, Contacts, the brain) and only ask what no source has."],
+   "asks a person for a fact a lookup finds. Caleb, 2026-10-11: \"Never ask humans things that you don't need a human for\" after a zip code request for 2849 Summerdale Dr, \"1 search online away\". Look it up first: `chewbacca resolve \"<question>\" --about <who>`. Only ask what no source has.", 0, 1],
   [qr/\b(?:photos?|pics?|pictures?|a scan|scans)\s+of\s+(?:ur|your)\s+(?:paper\s+|handwritten\s+)?draft|\bsend\s+(?:me\s+)?(?:ur|your)\s+(?:paper|handwritten)\s+draft/i,
    "asks for his paper draft. He hand-writes first and has Claude draft from his picks to compare; never ask for the paper draft (feedback_paper_draft_first_then_compare, 2026-10-09: \"Bro just do it\")."],
 );
@@ -81,8 +81,24 @@ for my $r (@rules) {
   if ($m =~ $r->[0]) {
     my $dir = $ENV{CHEWBACCA_HOME} || "$ENV{HOME}/.chewbacca";
     mkdir $dir unless -d $dir;
+    my $found = "";
+    # The rule that catches an ask also answers it: the sentence that asked
+    # goes through resolve, so the next reply starts with the fact instead of
+    # waiting on a person. Caleb, 2026-10-11: reengineer the way it tries to
+    # be good, not only avoid the bad.
+    if ($r->[3] && !$ENV{REPLY_LESSONS_NO_RESOLVE}) {
+      my $re = $r->[0];
+      my ($asked) = $m =~ /([^.?!\n]*(?:$re)[^.?!\n]*[.?!]?)/;
+      my $bin = $ENV{CHEWBACCA_RESOLVE_BIN} || "$ENV{HOME}/.local/bin/chewbacca";
+      if ($asked && -x $bin) {
+        $asked =~ s/[`"\\\$]//g;
+        my $ctx = substr($m, 0, 2000); $ctx =~ s/[`"\\\$]//g;
+        my $out = `perl -e 'alarm 15; exec \@ARGV' "$bin" resolve "$asked" --context "$ctx" 2>/dev/null`;
+        $found = "\nresolve already found:\n$out" if $out =~ /\S/;
+      }
+    }
     if (open(my $fh, ">>:encoding(UTF-8)", "$dir/voice-flags.pending")) {
-      print $fh "reply-lessons: your last reply $r->[1]\n"; close $fh;
+      print $fh "reply-lessons: your last reply $r->[1]$found\n"; close $fh;
     }
     exit 0;
   }

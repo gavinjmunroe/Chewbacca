@@ -10,6 +10,10 @@ set -u
 HOOK="$(cd "$(dirname "$0")/.." && pwd)/.claude/hooks/reply-lessons.sh"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 export CHEWBACCA_LOG_DIR="$T/logs" CHEWBACCA_HOME="$T/home"
+# resolve is faked: it answers the 10-11 zip question the way the real one does.
+printf '#!/bin/sh\necho "2849 Summerdale Dr, Hurst, TX 76054"\necho "  from US Census geocoder"\n' > "$T/resolve"
+chmod +x "$T/resolve"
+export CHEWBACCA_RESOLVE_BIN="$T/resolve"
 fail=0
 transcript() {  # what he typed last
   jq -nc --arg t "$1" '{type:"user", message:{content:$t}, timestamp:"2026-10-10T23:40:00Z"}' > "$T/t.jsonl"
@@ -37,6 +41,8 @@ transcript "where are we on WP1"
 expect 2 "the 10-09 paper draft ask, verbatim" "My work all lives in second-brain, and it's pushed. Still waiting on photos of ur paper draft."
 expect 0 "a refusal already happened this prompt" "u'll see it" true
 expect 2 "the 10-11 zip code ask, verbatim" "What's the city and zip for 2849 Summerdale? Footer needs the full address"
+grep -q "Hurst, TX 76054" "$T/home/voice-flags.pending" 2>/dev/null \
+  || { echo "FAIL: the ask rule didn't carry resolve's answer forward"; fail=1; }
 expect 0 "an ordinary report" "Pushed 3 commits to main, tests pass, the site is live."
 
 start=$(perl -MTime::HiRes=time -e 'printf "%d", time*1000')

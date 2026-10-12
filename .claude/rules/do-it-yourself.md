@@ -54,6 +54,13 @@ timid:
    bare `open` or `open -na`. A Brightspace or Clay tab he has nothing to do in
    should never take focus, because his typing lands in the page the agent is
    driving (2026-10-10).
+A fact is never one of these. An address, a zip, a phone, a site, someone's
+role or email: run `chewbacca resolve "<question>" --about <who>` first. It
+reads Contacts, the people store, the brain's fact stores, the US Census
+geocoder and Google Maps in a few seconds. Ask only what it comes back empty
+on, and say what it checked (2026-10-11: "Never ask humans things that you
+don't need a human for", about a zip one search away).
+
 3. **A decision only they can make**, where the options differ in a way you
    cannot resolve from the request, the code, or the repo.
 

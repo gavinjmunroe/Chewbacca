@@ -620,7 +620,9 @@ class AgentSendsByDefault(unittest.TestCase):
             with mock.patch.dict(os.environ, {"CHEWBACCA_SEND_APPROVALS": os.path.join(tmp, "a"),
                                               "CHEWBACCA_SEND_CODE_SHOW": "off",
                                               "CHEWBACCA_VERDICT_LOG": os.path.join(tmp, "v.tsv")}):
-                self.assertEqual(sa.take("imessage", "+15555550100", "hi", chain=[]), "agent")
+                # env={}: the suite sets CHEWBACCA_NO_SEND, which the send policy
+                # rightly holds before take() reaches the mode (9c56bbc4).
+                self.assertEqual(sa.take("imessage", "+15555550100", "hi", chain=[], env={}), "agent")
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 

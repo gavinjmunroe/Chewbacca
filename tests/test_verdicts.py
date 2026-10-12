@@ -328,7 +328,9 @@ class SendRows(Base):
             ok = mock.Mock(return_value=subprocess.CompletedProcess([], 0, '{"success": true}', ''))
             email_reader.send('a@b.co', 's', 'body', runner=ok)
             ok.assert_called_once()
-        self.assertEqual([r['decision'] for r in read_rows(self.log)], ['dry-run', 'sent'])
+        # The send policy's own answer is a row of its own (4985d2bc); this is the sink's.
+        sink = [r for r in read_rows(self.log) if not r['name'].startswith('send-policy')]
+        self.assertEqual([r['decision'] for r in sink], ['dry-run', 'sent'])
 
     def test_node_send_paths_write_a_held_row(self):
         script = ('const v = require(%s); v.sendRow("people send imessage", "held", "+15550100", '

@@ -12,6 +12,11 @@ import re, sys, pathlib
 root = pathlib.Path(sys.argv[1])
 text = (root / "setup.sh").read_text()
 names = set(re.findall(r'_register\("Stop", hooks_dir \+ "/([\w.-]+\.sh)"', text))
+# Hooks registered as a dict under "Stop" (vibe-guard): every hook file whose
+# name appears within the Stop block of the settings that setup.sh writes.
+# 2026-10-11 10:26pm: vibe-guard was registered that way, missed by the first
+# version of this test, and asked for a reply "instead" when a tab closed.
+names |= set(re.findall(r'"command": hooks_dir \+ "/([\w.-]+-guard\.sh)"', text))
 print("\n".join(sorted(names)))
 PY
 )
@@ -19,8 +24,8 @@ PY
 while read -r hook; do
   f="$ROOT/.claude/hooks/$hook"
   [ -f "$f" ] || continue
-  # Only what the model is told (echo/printf lines), never the comments.
-  if grep -E '^\s*(echo|printf)' "$f" | grep -qiE 'rewrite the reply|resend the reply|then resend|rewrite the reply itself|say the same things'; then
+    # Everything the model is told, echo lines and heredocs alike, never comments.
+  if grep -vE '^\s*#' "$f" | grep -qiE 'rewrite the reply|resend the reply|then resend|rewrite the reply itself|say the same things|did not pass instead|was changed instead|stop again'; then
     echo "FAIL  $hook asks for the reply to be rewritten or resent"; fail=1
   fi
 done <<<"$STOP_HOOKS"

@@ -106,8 +106,9 @@ and did not pass:
 
 $(printf '%s\n' "$FAST" | awk '/^  (FAIL|\?\?\?\?)/{keep=1; print; next} /^  [A-Z?]/{keep=0} keep && /^          /' | head -20)
 
-Say what did not pass instead. "gates: not run on this commit" means the suite
-has not passed on this exact commit; run the full closeout before claiming it.
+The reply is already on his screen, so do NOT repeat or rewrite it. Add one
+short line saying what did not pass. "gates: not run on this commit" means the
+suite has not passed on this exact commit.
 MSG
       exit 2
     fi
@@ -196,9 +197,9 @@ Editing a file and then describing what the edit does is a prediction. On
 disproved, and several more while the code path being described was not even
 executing.
 
-Run the thing and report what it printed: the build, the test, a grep of the
-shipped bundle for the symbol, a screenshot of the moment being described.
-Or drop the claim and say what was changed instead.
+The reply is already on his screen, so do NOT repeat or rewrite it. Run the
+thing (the build, the test, a grep of the shipped bundle, a screenshot) and add
+one short line with what it printed, or one line taking the claim back.
 MSG
     exit 2
   fi
@@ -261,8 +262,9 @@ vibe-guard: this reply tells the user the work is done, and nothing ran after
 the last file was written.
 
 A file changed and no build, test, run or read came after it, so the reply is
-describing what the edit should do rather than what it did. Run the check that
-applies and report what it printed. If no check applies to this change, say so
-plainly and stop again.
+describing what the edit should do rather than what it did. The reply is
+already on his screen, so do NOT repeat or rewrite it: run the check that
+applies and add one short line with what it printed, or one line saying no
+check applies.
 MSG
 exit 2

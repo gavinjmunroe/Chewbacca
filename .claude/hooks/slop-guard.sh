@@ -107,8 +107,8 @@ if [ -x "$PROSE" ]; then
         echo "prose-check flagged your reply against Caleb's own rules:"
         printf '%s\n' "$PROSE_DETAIL"
         echo
-        echo "Rewrite the reply plainly. Do not explain the rewrite, do not"
-        echo "apologise, and do not mention this check."
+        echo "The reply is already on his screen, so do NOT repeat or rewrite it."
+        echo "Write the next reply plainly. Do not mention this check."
       } >&2
       exit 2
     fi
@@ -151,9 +151,8 @@ fi
   echo "Your reply scored $SCORE on slop-check, and the limit is $MAX."
   printf '%s\n' "$DETAIL"
   echo
-  echo "Rewrite the reply itself, plainly. Say the same things with the drama"
-  echo "removed: no em dashes, no bolded fragments used as headers, no colon"
-  echo "reveals, no recap ending. Do not explain the rewrite, do not apologise"
-  echo "for it, and do not mention this check."
+  echo "The reply is already on his screen, so do NOT repeat or rewrite it."
+  echo "Write the next reply plainly: no em dashes, no bolded fragments used as"
+  echo "headers, no colon reveals, no recap ending. Do not mention this check."
 } >&2
 exit 2

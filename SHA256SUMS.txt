@@ -53,7 +53,7 @@ cc50c2a07f59b11f165690ad20f5103c45f3150f6faa47bec4663f3027666e71  .claude/hooks/
 91af3f7e22ed498e8a9116e5910c433cc54e3548c3bed477fd18ad23c5b10603  .claude/hooks/skill-gate.sh
 a176571c1fc0376648f87d4e84c994142242275bf1fbbd53c0358609a3375137  .claude/hooks/skill-route-shadow.sh
 bf92bb486d869372255f8350f7feb8e39fcd1fa9510d75be5aa54e9d1022a726  .claude/hooks/skill-route.sh
-799041308a6cf3aa473ca9bb068557aa20d54ad39d9cfc1aa61b480b72af426e  .claude/hooks/slop-guard.sh
+84c734c22d4b9c898f1a9b9901c6e8e9fcc62f83758e8da798cfc4bebee8ad91  .claude/hooks/slop-guard.sh
 0aeb3e7c5d08db6e967001ddd1fc845791f500c5186c3616f9f99d49367c2695  .claude/hooks/stale-read-guard.sh
 6a02b63a1166d249ab763f5cfad1c996f96e0c9773a5ff39d290ffb1692d2c74  .claude/hooks/statusline.sh
 98df0d1ca79cd7597b482ce66f5619f9bbf2ac41897be0d9c0751b24e27a4af2  .claude/hooks/stop-check.sh
@@ -68,7 +68,7 @@ f892df995c4d12be40168af03d8fa9885b7a8713e5f5243ed3ebf783a83c60e5  .claude/hooks/
 1bfd28d5e182ce896d0639c69955f73b9ba5c0ff27ea5f18c45761cfdfb88ea2  .claude/hooks/use-the-kit-guard.sh
 3369382daf04ba6aaa49e65680d51279f1ac826cfc04a82a5affe41d8443be4b  .claude/hooks/ux-guard.sh
 2a4decde156b0a72105a06537ae058603bef7a72359f849e20467e27ac6fd901  .claude/hooks/vercel-guard.sh
-d49d56136e63af40233f5ebc00def54a91ece887dbdd848040409b98274874f2  .claude/hooks/vibe-guard.sh
+9b34e33178561029acc8e248a128abe6a19330d95f75b7630d97ecc828eb003e  .claude/hooks/vibe-guard.sh
 0215c7122d134acfee5d86ada6e4e72b68793ff2271163e8b54d91a8f41c41a8  .claude/hooks/voice-guard.sh
 3afe78e28a3262de7ebc2367f1f27e7c5790ac12da69c3034b961a04c108e76a  .claude/hooks/voice-remind.sh
 f408b11e44e0352fcb1b87bee6ec3c77024708a7a186a3ddb5ba324a2379feec  .claude/hooks/wait-loop-guard.sh

@@ -91,6 +91,23 @@ class DaemonTests(unittest.TestCase):
             proc.wait(timeout=10)
         self.assertEqual(len(hits.read_text().split()), 1, "a clean exit was restarted")
 
+    def test_reregistering_clears_a_crash_backoff(self):
+        # 2026-10-11: realm-ui sat out a 300 s backoff after an orphan held its port.
+        hits = self.tmp / "hits.txt"
+        self.cli("register", "svc", "--keepalive", "--", "/bin/sh", "-c", f"echo x >> '{hits}'; exit 1")
+        proc = subprocess.Popen([NODE, str(DAEMON), "run"], env=self.env,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            time.sleep(6)
+            before = len(hits.read_text().split())
+            time.sleep(1.1)
+            self.cli("register", "svc", "--keepalive", "--", "/bin/sh", "-c", f"echo y >> '{hits}'; sleep 30")
+            time.sleep(7)
+        finally:
+            proc.send_signal(signal.SIGTERM)
+            proc.wait(timeout=10)
+        self.assertIn("y", hits.read_text().split(), f"re-registered service waited out its backoff ({before} runs before)")
+
     def test_unregistered_service_stops(self):
         self.cli("register", "sleeper", "--keepalive", "--", "/bin/sleep", "300")
         proc = subprocess.Popen([NODE, str(DAEMON), "run"], env=self.env,

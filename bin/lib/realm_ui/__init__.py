@@ -239,13 +239,26 @@ def service_argv() -> list:
     return ["/usr/bin/python3", cli, "serve"]
 
 
-def start(register: bool = True, spawn=subprocess.Popen) -> dict:
+def _daemon_owns_it() -> bool:
+    """Whether chewbacca-daemon is loaded to run the service it was just handed."""
+    try:
+        import daemon_register  # noqa: PLC0415
+        return daemon_register._loaded()  # noqa: SLF001
+    except (ImportError, OSError):
+        return False
+
+
+def start(register: bool = True, spawn=subprocess.Popen, daemon_owns=None) -> dict:
     """Make sure the server is up and return its state.
 
-    Registers it with chewbacca-daemon as a keepalive service, so it comes
-    back after a crash or a login without a LaunchAgent of its own, and also
-    starts it now, because the daemon picks new services up on its own beat.
-    The fixed port makes a second copy exit at once."""
+    Registers it with chewbacca-daemon as a keepalive service and lets the
+    daemon start it, so there is exactly one owner. When the daemon is loaded
+    nothing is spawned here: on 2026-10-11 this function also spawned its own
+    detached copy, that copy held the port, the daemon's service died on
+    EADDRINUSE every five minutes, and the orphan kept serving code from a
+    kit snapshot hours old because nothing that restarts on a kit update
+    owned it. Only without a loaded daemon (a test, a fresh machine) does it
+    spawn the server itself."""
     live = running()
     if live:
         return live
@@ -254,15 +267,19 @@ def start(register: bool = True, spawn=subprocess.Popen) -> dict:
     if not node():
         raise RuntimeError("node is not on PATH")
     ui_home().mkdir(parents=True, exist_ok=True)
+    registered = False
     if register:
         try:
             import daemon_register  # noqa: PLC0415  only when registering
             daemon_register.register(SERVICE, service_argv(), keepalive=True, ensure_daemon=False)
+            registered = True
         except (ImportError, ValueError, OSError):
             pass
     log_path = ui_home() / "server.log"
-    with open(log_path, "a", encoding="utf-8") as log:
-        spawn(serve_argv(), stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)
+    owned = registered and (daemon_owns() if daemon_owns else _daemon_owns_it())
+    if not owned:
+        with open(log_path, "a", encoding="utf-8") as log:
+            spawn(serve_argv(), stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)
     deadline = time.time() + READY_TIMEOUT_S
     while time.time() < deadline:
         live = running()

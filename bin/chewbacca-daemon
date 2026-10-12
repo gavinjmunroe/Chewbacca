@@ -110,7 +110,9 @@ function loadServices() {
   const out = [];
   for (const f of names) {
     const svc = readJSON(path.join(SERVICES, f), null);
-    if (svc && !validate(svc) && `${svc.name}.json` === f) out.push(svc);
+    if (!svc || validate(svc) || `${svc.name}.json` !== f) continue;
+    try { svc._mtime = fs.statSync(path.join(SERVICES, f)).mtimeMs; } catch { svc._mtime = 0; }
+    out.push(svc);
   }
   return out;
 }
@@ -439,6 +441,11 @@ function run() {
     }
     for (const svc of services) {
       const st = state[svc.name] || (state[svc.name] = { firstSeen: now });
+      // A service registered again (its file rewritten) is wanted now: drop a
+      // crash backoff left from before. On 2026-10-11 realm-ui sat in a
+      // 300 s backoff after an orphan copy held its port.
+      if (svc._mtime && st.seenMtime && svc._mtime > st.seenMtime && !st.pid) { st.retryAt = 0; st.backoff = undefined; }
+      st.seenMtime = svc._mtime;
       try { if (due(svc, st, now, boot)) start(svc, st, children, boot); }
       catch (e) { log(`${svc.name}: ${e.message}`); }
     }

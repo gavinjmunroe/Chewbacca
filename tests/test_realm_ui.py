@@ -75,6 +75,35 @@ try:
 except RuntimeError as err:
     check("not built: start refuses and says how to build", "realm-ui build" in str(err), str(err))
 
+# ── one owner ───────────────────────────────────────────────────────────────
+# 2026-10-11: start() spawned its own server beside the daemon's service; the
+# orphan held the port and pinned hours-old code. With the daemon loaded,
+# start() must spawn nothing and leave the server to the daemon.
+spawned = []
+import daemon_register as _dr  # noqa: E402
+_real_register = _dr.register
+_dr.register = lambda *a, **k: "registered"
+_real_built, _real_node, _real_running = realm_ui.built, realm_ui.node, realm_ui.running
+realm_ui.built, realm_ui.node = (lambda: True), (lambda: "/usr/bin/true")
+_calls = {"n": 0}
+
+
+def _fake_running():
+    _calls["n"] += 1
+    return {"url": "http://127.0.0.1:1/"} if _calls["n"] > 1 else None
+
+
+realm_ui.running = _fake_running
+try:
+    realm_ui.start(register=True, spawn=lambda *a, **k: spawned.append(a), daemon_owns=lambda: True)
+    check("one owner: with the daemon loaded, start spawns no server of its own", spawned == [], spawned)
+    _calls["n"] = 0
+    realm_ui.start(register=True, spawn=lambda *a, **k: spawned.append(a), daemon_owns=lambda: False)
+    check("one owner: with no daemon, start spawns the server itself", len(spawned) == 1, spawned)
+finally:
+    _dr.register = _real_register
+    realm_ui.built, realm_ui.node, realm_ui.running = _real_built, _real_node, _real_running
+
 # ── built ──────────────────────────────────────────────────────────────────
 
 dist = realm_ui.dist_dir()

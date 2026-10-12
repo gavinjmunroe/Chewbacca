@@ -3029,6 +3029,13 @@ if command -v brew &>/dev/null; then
   _daemon register guard-fp --at 09:00 --nice 10 -- /usr/bin/python3 "$_svc_root/tools/hookd_replay.py" fp --weekly &&
     log "guard false-positive report scheduled for Sundays" || warn "could not schedule the guard false-positive report"
 
+  # The recall gate (reengineer-flat-plan step 14): once a day the shipped
+  # retriever answers the sealed set, and the memory indexes stop loading whole
+  # only while its recall@5 holds at the 55.4% the trade was judged on. The
+  # next session start applies the answer (kit-autopull, tools/recall_gate.py).
+  _daemon register recall-gate --at 06:30 --nice 10 -- /usr/bin/python3 "$_svc_root/tools/recall_gate.py" check &&
+    log "recall gate checked daily" || warn "could not schedule the recall gate"
+
   # Install the one LaunchAgent last, and fold in any per-job agent an older
   # install left behind, so Login Items ends with a single Chewbacca row.
   "$_mr_node" "$SCRIPT_DIR/bin/chewbacca-daemon" install 2>&1 | while IFS= read -r _line; do log "$_line"; done

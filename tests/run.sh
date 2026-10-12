@@ -1399,6 +1399,7 @@ fi
 # ── hooks ─────────────────────────────────────────────────────────────────────
 if group "hooks"; then
   check "brain-recall speaks only over the cosine bar" bash "$ROOT/tests/brain_recall.sh"
+  check "the memory indexes stop loading whole only while recall holds its sealed floor" /usr/bin/python3 "$ROOT/tests/test_recall_gate.py"
   check "brain index is incremental and a slow model load no longer silences recall" python3 "$ROOT/tests/test_brain_index.py"
   check "brain-rerank falls back to stage one on any model failure and caches only the ranking" python3 "$ROOT/tests/test_brain_rerank.py"
   check "a long hub folder cannot fill brain's top 5 for an unrelated question" python3 "$ROOT/tests/test_brain_hubs.py"

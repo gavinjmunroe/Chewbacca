@@ -107,8 +107,21 @@ if not shutil.which("brain"):
     SHADOW["gate"] = "no-brain"
     raise SystemExit(0)
 
+# Three notes a prompt while the memory indexes load whole. Five once
+# tools/recall_gate.py has turned them off (reengineer-flat-plan step 14:
+# "brain-recall supplies the top 5"), since recall is then the only way a note
+# arrives. The sealed set the gate reads scores recall at 5.
+K = 3
 try:
-    out = subprocess.run(["brain", "ask", prompt[:2000], "--k", "3", "--width", "160"],
+    with open(os.path.join(os.path.expanduser(os.environ.get("CHEWBACCA_HOME") or "~/.chewbacca"),
+                           "state", "context-mode.json")) as fh:
+        if json.load(fh).get("mode") == "recall":
+            K = 5
+except Exception:
+    pass
+SHADOW["k"] = K
+try:
+    out = subprocess.run(["brain", "ask", prompt[:2000], "--k", str(K), "--width", "160"],
                          capture_output=True, text=True, timeout=2.5).stdout
 except Exception:
     SHADOW["gate"] = "brain-failed"
@@ -130,7 +143,7 @@ for m in re.finditer(r"^\[\d+\] (\S+?)(?:#[^\n]*?)? cos=([\d.]+)( \[stale\])?\n\
         # Team memory is indexed by its own ~ path; only brain files are relative.
         where = path if path.startswith(("~/", "/")) else f"~/second-brain/{path}"
         hits.append(f"  {where}  (cos {cos:.2f}{', stale' if stale else ''})\n    {text[:140]}")
-SHADOW["candidates"] = sorted(SHADOW["candidates"], key=lambda c: -c["score"])[:3]
+SHADOW["candidates"] = sorted(SHADOW["candidates"], key=lambda c: -c["score"])[:K]
 if hits:
     print("Second brain, matched by meaning. Read the file before answering if it bears on this:")
     print("\n".join(hits))

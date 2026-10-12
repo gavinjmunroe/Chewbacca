@@ -203,9 +203,22 @@ def install(home, root):
     return target
 
 
-def install_claude(root):
+def install_claude(root, mode=None):
+    """Write the shared-context block into CLAUDE.md.
+
+    In recall mode (tools/recall_gate.py) the block stops asking for
+    memory/MEMORY.md, because the host no longer loads it and brain-recall
+    brings matching notes in per prompt. mode=None asks the gate.
+    """
+    if mode is None:
+        try:
+            import recall_gate
+            mode = recall_gate.mode()
+        except Exception:  # no gate: the index loads whole, as before
+            mode = 'whole'
     command = 'python3 ' + shlex.quote(str(Path(__file__).resolve())) + ' read --brain-dir ' + shlex.quote(str(root))
-    sources = ', '.join('`' + name + '`' for name in source_names(root))
+    names = [n for n in source_names(root) if not (mode == 'recall' and n.endswith('MEMORY.md'))]
+    sources = ', '.join('`' + name + '`' for name in names)
     block = f'''{CLAUDE_BEGIN}
 ## Shared personal context
 

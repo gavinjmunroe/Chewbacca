@@ -200,8 +200,12 @@ def main() -> None:
     # tokens. The cap starts there and drops as each cut in
     # docs/plans/context-budget.md lands, so growth fails doctor instead of
     # going unnoticed.
-    ap.add_argument("--max", type=int, help="exit 1 when the first turn is over this many tokens")
+    ap.add_argument("--max", type=cap_arg,
+                    help="exit 1 when the first turn is over this many tokens; auto picks the cap for "
+                         "the memory-index mode tools/recall_gate.py set")
     args = ap.parse_args()
+    if args.max == "auto":
+        args.max = auto_cap()
 
     if args.command == "usage":
         out = usage(args.n)
@@ -230,6 +234,26 @@ def main() -> None:
     if over_cap(out, args.max):
         print(f"\nover the cap: {out['first_turn_tokens']:,} > {args.max:,} tokens on the first turn")
         sys.exit(1)
+
+
+# The cap per memory-index mode (reengineer-flat-plan step 14). Whole: the
+# 131,426-token first turn measured 2026-10-11. Recall: that, less the two
+# indexes recall stands in for, 9,762 + 6,542 = 16,304 tokens on 2026-10-12
+# (session 378e4bfd). The stub left in their place is under 200.
+CAPS = {"whole": 131_426, "recall": 131_426 - 16_304}
+
+
+def cap_arg(value):
+    return "auto" if value == "auto" else int(value)
+
+
+def auto_cap():
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
+    try:
+        import recall_gate
+        return CAPS[recall_gate.mode()]
+    except Exception:  # no gate: hold the whole-index line
+        return CAPS["whole"]
 
 
 def over_cap(out, cap):

@@ -194,6 +194,15 @@ if [ -f "$_ti_dst" ] && [ -f "$_ti_tool" ] && [ -f "$REPO/team/memory/MEMORY.md"
   python3 -I "$_ti_tool" write --src "$REPO/team/memory/MEMORY.md" --dst "$_ti_dst" >/dev/null 2>&1 ||
     note "team index: rebuild failed"
 fi
+# Recall mode (reengineer-flat-plan step 14): when tools/recall_gate.py's last
+# sealed check passed, the team index becomes a stub and the host stops loading
+# memory/MEMORY.md; otherwise both load whole. Reads one stamp, writes only
+# what it owns, and changes nothing while the gate holds its last answer.
+_rg_tool="${CHEWBACCA_KIT_RUNTIME:-$HOME/.chewbacca/kit}/current/tools/recall_gate.py"
+[ -f "$_rg_tool" ] || _rg_tool="$REPO/tools/recall_gate.py"
+if [ -f "$_ti_dst" ] && [ -f "$_rg_tool" ]; then
+  python3 -I "$_rg_tool" apply --src "$REPO/team/memory/MEMORY.md" >/dev/null 2>&1 || note "recall gate: apply failed"
+fi
 
 # ── Throttle ──────────────────────────────────────────────────────────────────
 # A fetch is a network round trip and SessionStart runs on every new session.

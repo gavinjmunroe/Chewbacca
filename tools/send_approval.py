@@ -23,7 +23,10 @@ What counts as a press, checked in this order:
 3. CHEWBACCA_SEND_CODE set to the six-digit code this module put on the
    person's screen for this exact message. The person reads it out only if
    they want it sent.
-4. `send` typed at a real terminal that no agent's process tree owns.
+4. `send` typed at a real terminal that no agent's process tree owns: the
+   process tree runs up to a terminal app (checked by its real path), and this
+   process's terminal is the one that app opened, so a pty made on the way
+   (`script`, a reparented pipe) is no press.
 
 Otherwise take() puts a code on the person's screen (a HUD toast, or a macOS
 notification when the HUD is down; neither takes focus) and refuses.
@@ -78,6 +81,18 @@ AGENT = re.compile(r"(^|/)(claude|codex)(\s|$)|claude-code|@anthropic-ai/|/Claud
 # The HUD app's executable, as proc_pidpath reported it on 2026-10-12. Read
 # from the kernel, not from argv, which `exec -a` sets to anything.
 KYBER_EXE = "/Applications/Kyber.app/Contents/MacOS/Kyber"
+# Apps a person types into, by their real executable path. Terminal lives
+# under /System/Applications/Utilities on this Mac; VS Code's and Cursor's
+# terminals run under their Code Helper inside the app bundle; sshd is a
+# person on another machine. Missing one only means that terminal gets the
+# six-digit code instead of the prompt.
+TERMINAL_HOST = re.compile(r"^/(System/)?Applications/(Utilities/)?(Terminal|iTerm|Ghostty|Warp|kitty|Alacritty"
+                           r"|WezTerm|Visual Studio Code|Cursor)\.app/|^/usr/sbin/sshd$")
+# Wrong codes burn a pending code after MAX_CODE_TRIES; this many burns in an
+# hour stops new codes being drawn, so guessing can't just ask for a fresh
+# code each time. 3 x 3 guesses an hour against 10^6 codes. Guessed, never
+# measured: a person mistyping a code three times, three times, is rare.
+MAX_BURNS_PER_HOUR = 3
 
 
 class NoApproval(Exception):
@@ -172,29 +187,35 @@ def _take_token(channel, to, text, subject):
 
 
 def ancestry(pid=None, ps_out=None):
-    """(pid, command line) from this process up to launchd, or None when ps
-    fails. A process reparented to launchd ends the chain there."""
+    """(pid, command line, controlling tty) from this process up to launchd,
+    or None when ps fails. A process reparented to launchd ends the chain
+    there."""
     if ps_out is None:
         try:
-            ps_out = subprocess.run(["/bin/ps", "-axo", "pid=,ppid=,command="],
+            ps_out = subprocess.run(["/bin/ps", "-axo", "pid=,ppid=,tty=,command="],
                                     capture_output=True, text=True, timeout=5).stdout
         except (OSError, subprocess.SubprocessError):
             return None
     procs = {}
     for line in ps_out.splitlines():
-        parts = line.strip().split(None, 2)
-        if len(parts) >= 2 and parts[0].isdigit() and parts[1].isdigit():
-            procs[int(parts[0])] = (int(parts[1]), parts[2] if len(parts) > 2 else "")
+        parts = line.strip().split(None, 3)
+        if len(parts) >= 3 and parts[0].isdigit() and parts[1].isdigit():
+            procs[int(parts[0])] = (int(parts[1]), parts[3] if len(parts) > 3 else "", parts[2])
     pid = os.getpid() if pid is None else pid
     if pid not in procs:
         return None
     chain, seen = [], set()
     while pid in procs and pid not in seen and pid > 1:
         seen.add(pid)
-        ppid, cmd = procs[pid]
-        chain.append((pid, cmd))
+        ppid, cmd, tty = procs[pid]
+        chain.append((pid, cmd, tty))
         pid = ppid
     return chain
+
+
+def _tty(item):
+    tty = item[2] if len(item) > 2 else None
+    return None if tty in (None, "", "??", "-") else tty
 
 
 def exe_path(pid):
@@ -211,13 +232,29 @@ def exe_path(pid):
 
 def agent_above(chain):
     # Fail closed: no process tree means we can't rule an agent out.
-    return chain is None or any(AGENT.search(cmd) for _pid, cmd in chain)
+    return chain is None or any(AGENT.search(item[1]) for item in chain)
 
 
 def hud_press(chain, exe=exe_path):
     if chain is None or agent_above(chain):
         return False
-    return any(exe(pid) == KYBER_EXE for pid, _cmd in chain)
+    return any(exe(item[0]) == KYBER_EXE for item in chain)
+
+
+def terminal_owned(chain, exe=exe_path):
+    """True when a terminal app is above us and our terminal is the one it
+    opened: the process just under that app has the same controlling tty as
+    this one. A pty made in between (`script`, `expect`) is a different tty,
+    and a chain cut off at launchd has no terminal app in it."""
+    if not chain or agent_above(chain):
+        return False
+    own = _tty(chain[0])
+    if not own:
+        return False
+    for i, item in enumerate(chain):
+        if i and TERMINAL_HOST.search(exe(item[0]) or ""):
+            return _tty(chain[i - 1]) == own
+    return False
 
 
 def _code_hash(code, salt):
@@ -251,6 +288,8 @@ def _check_code(channel, to, text, subject, given):
         return "code"
     pend["tries"] = int(pend.get("tries") or 0) + 1
     if pend["tries"] >= MAX_CODE_TRIES:
+        _write_private(os.path.join(_dir("burned"), "%d-%d.json" % (time.time() * 1000, os.getpid())),
+                       {"at": time.time(), "channel": channel})
         raise NoApproval("Wrong send code three times, so that code is gone. Nothing was sent.")
     # Put back only while claimed, so a guess racing this one finds no file
     # and is refused rather than spending a try nobody counted.
@@ -308,6 +347,13 @@ def _request_code(channel, to, text, subject, show):
             "No press for this send yet. A six-digit send code for it is on the person's screen; if they "
             "want it sent they'll read it to you, then run the same command with CHEWBACCA_SEND_CODE=<code>. "
             "Nothing was sent.")
+    burned = _dir("burned")
+    recent = [n for n in os.listdir(burned) if (_read(os.path.join(burned, n)) or {}).get("at", 0) > time.time() - 3600]
+    if len(recent) >= MAX_BURNS_PER_HOUR:
+        _log("refused", channel, to, reason="too many wrong codes")
+        raise NoApproval(
+            "Too many wrong send codes in the last hour, so no new code is shown for a while. Send it from a "
+            "terminal or the HUD. Nothing was sent.")
     code = "%06d" % secrets.randbelow(1000000)
     salt = secrets.token_hex(16)
     if not show(code, _what(channel, to, text, subject)):
@@ -331,12 +377,23 @@ def tty_press(channel, to, text, subject=""):
         fd = os.open("/dev/tty", os.O_RDWR | os.O_NOCTTY)
     except OSError:
         return None
-    with os.fdopen(fd, "r+", buffering=1) as tty:
-        tty.write("\nSend this %s message to %s?\n%s  %s\nType send to send it, anything else cancels: "
-                  % (channel, to, ("  Subject: %s\n" % subject) if subject else "", str(text)[:400]))
-        tty.flush()
-        answer = tty.readline()
-    return answer.strip().lower() == "send"
+    # Raw reads and writes: a text-mode "r+" file on a tty raises "not
+    # seekable" on 3.9.
+    prompt = "\nSend this %s message to %s?\n%s  %s\nType send to send it, anything else cancels: " % (
+        channel, to, ("  Subject: %s\n" % subject) if subject else "", str(text)[:400])
+    answer = b""
+    try:
+        os.write(fd, prompt.encode("utf-8", "replace"))
+        while len(answer) < 64:
+            ch = os.read(fd, 1)
+            if not ch or ch == b"\n":
+                break
+            answer += ch
+    except OSError:
+        return None
+    finally:
+        os.close(fd)
+    return answer.decode("utf-8", "replace").strip().lower() == "send"
 
 
 def take(channel, to, text, subject="", show=None, tty=None, env=None, chain=False, exe=exe_path):
@@ -361,7 +418,7 @@ def take(channel, to, text, subject="", show=None, tty=None, env=None, chain=Fal
             raise
         _log("take", channel, to, press)
         return press
-    if not agent_above(chain):
+    if terminal_owned(chain, exe):
         typed = (tty or tty_press)(channel, to, text, subject)
         if typed:
             _log("take", channel, to, "tty")
@@ -406,7 +463,9 @@ def main(argv=None):
     if a.cmd == "status":
         print(json.dumps(status(), indent=2))
         return 0
-    text = sys.stdin.read()
+    # Bytes, decoded once: text mode would turn \r\n into \n, and the
+    # approval minted for the raw text would never match.
+    text = sys.stdin.buffer.read().decode("utf-8", "replace")
     try:
         print(take(a.channel, a.to, text, a.subject))
         return 0

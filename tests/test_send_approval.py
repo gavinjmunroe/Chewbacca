@@ -20,6 +20,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -29,7 +30,15 @@ sys.path.insert(0, str(ROOT / "mac" / "lib"))
 import send_approval as sa  # noqa: E402
 
 AGENT_CHAIN = [(301, "/bin/zsh"), (300, "claude"), (299, "/bin/bash")]
-PERSON_CHAIN = [(401, "/bin/zsh"), (400, "/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal")]
+# A person at Terminal: this process and the shell Terminal opened share ttys005.
+TERMINAL_PID = 400
+TERMINAL_EXE = "/System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal"
+PERSON_CHAIN = [(402, "python3 tools/send_approval.py take", "ttys005"), (401, "-zsh", "ttys005"),
+                (TERMINAL_PID, "/System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal", "??")]
+
+
+def terminal_exe(pid):
+    return TERMINAL_EXE if pid == TERMINAL_PID else "/bin/zsh"
 # The home panel's Send: Kyber runs `kyber-surfaces home --send <id>`
 # (hud/Sources/KyberKit/Home.swift), which runs people texts drafts send.
 KYBER_PID = 500
@@ -69,6 +78,11 @@ class TakeTests(Sandbox):
     def test_a_minted_token_approves_once(self):
         sa.mint("whatsapp", "1@s.whatsapp.net", "hi", "kit_confirm")
         self.assertEqual(sa.take("whatsapp", "1@s.whatsapp.net", "hi", chain=AGENT_CHAIN), "kit_confirm")
+        # The same through the CLI Node uses, with a \r\n the text must keep.
+        sa.mint("whatsapp", "1@s.whatsapp.net", "a\r\nb\rc", "kit_confirm")
+        r = subprocess.run([sys.executable, str(ROOT / "tools/send_approval.py"), "take", "--channel=whatsapp",
+                            "--to=1@s.whatsapp.net"], input=b"a\r\nb\rc", capture_output=True)
+        self.assertEqual((r.returncode, r.stdout.strip()), (0, b"kit_confirm"), r.stderr)
         with self.assertRaises(sa.NoApproval):
             sa.take("whatsapp", "1@s.whatsapp.net", "hi", chain=AGENT_CHAIN)
 
@@ -128,9 +142,76 @@ class TakeTests(Sandbox):
             sa.take("email", "a@b.co", "x", env={"CHEWBACCA_SEND_CODE": real}, chain=AGENT_CHAIN)
 
     def test_send_typed_at_a_persons_terminal_approves(self):
-        self.assertEqual(sa.take("imessage", "+1", "hi", tty=lambda *a: True, chain=PERSON_CHAIN), "tty")
+        self.assertEqual(sa.take("imessage", "+1", "hi", tty=lambda *a: True, chain=PERSON_CHAIN,
+                                 exe=terminal_exe), "tty")
         with self.assertRaises(sa.NoApproval):
-            sa.take("imessage", "+1", "hi", tty=lambda *a: False, chain=PERSON_CHAIN)
+            sa.take("imessage", "+1", "hi", tty=lambda *a: False, chain=PERSON_CHAIN, exe=terminal_exe)
+
+    def test_a_pty_an_agent_made_is_no_terminal(self):
+        # The review's escape, 2026-10-12: `( (printf 'send\n') | script -q
+        # /dev/null people send mom hi & )`. The subshell exits, script is
+        # reparented to launchd, and its new pty answers the prompt.
+        reparented = [(5, "python3 tools/send_approval.py take", "ttys009"), (4, "node /k/bin/people send mom hi", "ttys009"),
+                      (3, "script -q /dev/null people send mom hi", "??")]
+        # The same pty trick run from inside a real Terminal window.
+        nested = [(5, "python3 tools/send_approval.py take", "ttys009"), (4, "script -q /dev/null people", "ttys005"),
+                  (401, "-zsh", "ttys005"), (TERMINAL_PID, "Terminal", "??")]
+        for chain in (reparented, nested):
+            with self.assertRaises(sa.NoApproval):
+                sa.take("imessage", "+1", "hi", show=lambda *a: False,
+                        tty=mock.Mock(side_effect=AssertionError("a made-up pty was asked")), chain=chain,
+                        exe=terminal_exe)
+
+    def test_the_prompt_reads_a_real_tty(self):
+        # 3.9's text-mode "r+" on a tty raised "not seekable" on every prompt.
+        import pty
+        pid, master = pty.fork()
+        if pid == 0:
+            try:
+                os._exit(0 if sa.tty_press("imessage", "+1", "hi") else 1)
+            except BaseException:
+                os._exit(2)
+        import select
+        seen, status, wrote = b"", None, False
+        # 10 s is far past the prompt's ~10 ms; it only stops a broken prompt
+        # hanging the suite. The master is read the whole time: macOS holds a
+        # tty's last close until its output (the echoed "send") is drained.
+        deadline = time.time() + 10
+        while status is None and time.time() < deadline:
+            if select.select([master], [], [], 0.2)[0]:
+                try:
+                    seen += os.read(master, 1024)
+                except OSError:
+                    pass
+            if not wrote and b"cancels" in seen:
+                os.write(master, b"send\n")
+                wrote = True
+            done, st = os.waitpid(pid, os.WNOHANG)
+            if done:
+                status = st
+        if status is None:
+            os.kill(pid, 9)
+            os.waitpid(pid, 0)
+        os.close(master)
+        self.assertIsNotNone(status, seen)
+        self.assertEqual(os.WEXITSTATUS(status), 0, seen)
+
+    def test_burned_codes_stop_new_ones(self):
+        got, show = self.shown()
+        for n in range(sa.MAX_BURNS_PER_HOUR):
+            text = "x%d" % n
+            with self.assertRaises(sa.NoApproval):
+                sa.take("email", "a@b.co", text, show=show, chain=AGENT_CHAIN)
+            real = got[-1][0]
+            wrong = "000000" if real != "000000" else "111111"
+            for _ in range(sa.MAX_CODE_TRIES):
+                with self.assertRaises(sa.NoApproval):
+                    sa.take("email", "a@b.co", text, env={"CHEWBACCA_SEND_CODE": wrong}, chain=AGENT_CHAIN)
+        drawn = len(got)
+        with self.assertRaises(sa.NoApproval) as e:
+            sa.take("email", "a@b.co", "fresh", show=show, chain=AGENT_CHAIN)
+        self.assertIn("Too many wrong send codes", str(e.exception))
+        self.assertEqual(len(got), drawn)
 
     def no_tty(self):
         return mock.Mock(side_effect=AssertionError("tty offered"))
@@ -202,17 +283,17 @@ class TakeTests(Sandbox):
                     tty=mock.Mock(side_effect=AssertionError("tty offered")), chain=None)
 
     def test_agents_are_recognized_from_ps(self):
-        ps = "\n".join(["  1     0 /sbin/launchd",
-                        " 50     1 /Applications/Visual Studio Code.app/Contents/MacOS/Electron",
-                        " 60    50 /Users/x/.vscode/extensions/anthropic.claude-code-2.1/resources/native-binary/claude --flag",
-                        " 70    60 /bin/zsh -c people send x hi",
-                        " 80     1 node /opt/homebrew/bin/codex exec",
-                        " 90    80 /bin/bash"])
+        ps = "\n".join(["  1     0 ??       /sbin/launchd",
+                        " 50     1 ??       /Applications/Visual Studio Code.app/Contents/MacOS/Electron",
+                        " 60    50 ??       /Users/x/.vscode/extensions/anthropic.claude-code-2.1/resources/native-binary/claude --flag",
+                        " 70    60 ttys004  /bin/zsh -c people send x hi",
+                        " 80     1 ??       node /opt/homebrew/bin/codex exec",
+                        " 90    80 ??       /bin/bash"])
         self.assertTrue(sa.agent_above(sa.ancestry(70, ps)))
         self.assertTrue(sa.agent_above(sa.ancestry(90, ps)))
         self.assertFalse(sa.agent_above(sa.ancestry(50, ps)))
         self.assertIsNone(sa.ancestry(12345, ps))
-        self.assertEqual([pid for pid, _ in sa.ancestry(70, ps)], [70, 60, 50])
+        self.assertEqual([item[0] for item in sa.ancestry(70, ps)], [70, 60, 50])
 
     def test_this_shell_is_an_agent(self):
         # This suite runs from an agent tab or a test runner; either way the

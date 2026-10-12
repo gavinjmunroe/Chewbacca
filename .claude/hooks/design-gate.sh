@@ -114,6 +114,14 @@ else
   done
 fi
 
+# A standalone page with no server (no package.json) renders straight from
+# disk. Until 2026-10-11 such a page meant "no URL" and was never looked at:
+# the guitar study app shipped twice from file:// without one render.
+if [ -z "$URL" ] && [ ! -f "$ROOT/package.json" ]; then
+  PAGE=$(printf '%s\n' "$EDITED" | grep -E '\.html?$' | head -1)
+  [ -n "$PAGE" ] && URL="file://$PAGE"
+fi
+
 touch "$GUARD"
 
 if [ -z "$URL" ]; then

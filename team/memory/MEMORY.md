@@ -143,6 +143,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 
 ## Lessons
 
+- feedback_practice_tool_is_a_session: study/practice tools are a one-thing-at-a-time session around the real object, never tabs over cards; interface-first.sh refuses a UI page before the interface skill (10/11)
 - feedback_never_read_course_ai_policies: never look up, store, quote or gate on a course AI policy; the student's call, and it turned USC students away (10/11); tests/no_ai_policy_gate.sh enforces
 - feedback_3d_means_nalana: any 3D or render work starts in Nalana (live Blender + MCP), and every 3D subagent brief names it; a logo took ~12 blind headless renders (10/11)
 - feedback_a_plan_is_prose_and_prose_does_not_fail: Writing a good plan is not following it; a phase that must happen before building...

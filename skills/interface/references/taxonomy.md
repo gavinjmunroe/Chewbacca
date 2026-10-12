@@ -49,6 +49,7 @@ requires shadcn and never building a primitive from scratch. A name in
 | **Detail** | Header with actions, tabbed body, related list | The question is "tell me about this one" |
 | **Split / master-detail** | List on the left, detail on the right | Scanning and inspecting in one motion |
 | **Wizard** | Progress, one step per screen, back and next | A task with required order |
+| **Practice session** | A short home list of what to practise with progress on each, then one item full screen: the thing itself (an instrument, a card, a problem), one big control, a self-rating that moves progress | Someone drills, studies or rehearses. Never tabs over a grid of cards and tables: that is a reference sheet, which is the re-reading condition |
 | **Settings** | Sidebar of sections, grouped forms, save bar | Changing configuration |
 | **Feed** | Composer, infinite stream, filters | Time-ordered activity |
 | **Console / REPL** | Input, scrollback, status line | Live interaction with a system |

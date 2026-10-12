@@ -932,6 +932,10 @@ if group "installer"; then
   check  "skill-gate enforces graph-engineering once per prompt" \
     bash "$ROOT/tests/skill_gate.sh"
 
+  # A whole UI page waits for the interface skill (flat card grid, 2026-10-11).
+  check  "interface-first refuses a UI page written before the skill" \
+    bash "$ROOT/tests/interface_first.sh" "$ROOT"
+
   # closeout fans out by group; a regex that finds none falls back to a
   # 9 to 14 minute sequential run (BACKLOG 116).
   check  "closeout finds every suite group to fan out" \

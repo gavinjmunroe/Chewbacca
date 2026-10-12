@@ -269,7 +269,7 @@ li .m{color:var(--faint);font-family:var(--mono);font-size:11px;white-space:nowr
 .note{margin-top:8px;color:var(--faint);font-size:11px}
 </style></head><body>
 <header><h1>This week</h1><span class="range" id="range"></span><span class="hint">drag a card by its title. double-click a title to reset the layout.</span></header>
-<div id="board"></div>
+<div id="board"><div class="empty" id="loading">Reading your week...</div></div>
 <script>
 const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const KEY="chewbacca.week.layout";
@@ -325,6 +325,8 @@ function place(){
 function render(d){
   document.getElementById("range").textContent=d.week.start+" to "+d.week.end;
   const board=document.getElementById("board");
+  const ld=document.getElementById("loading");if(ld)ld.remove();
+  if(d.error){board.innerHTML='<div class="empty">'+esc(d.error)+"</div>";return}
   cards(d).forEach(([id,title,sub,html])=>{
     let el=document.getElementById("card-"+id);
     if(!el){el=document.createElement("section");el.className="card";el.id="card-"+id;el.innerHTML="<h2><span></span><small></small></h2><div class='body'></div>";board.appendChild(el);wire(el)}

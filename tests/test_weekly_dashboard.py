@@ -111,6 +111,20 @@ def main():
         stale = snapshot(env)
         check("last week's email counts are marked stale", stale["emails"]["current"] is False, str(stale["emails"]))
 
+
+        # The home-folder scan once walked Library and the cloud mounts and took
+        # over two minutes on a real machine, freezing the server it ran in.
+        fake_home = tmp / "home"
+        (fake_home / "Library" / "Mobile" / "libkit").mkdir(parents=True)
+        (fake_home / "Library" / "Mobile" / "libkit" / ".kit").write_text("")
+        (fake_home / "dev" / "devkit").mkdir(parents=True)
+        (fake_home / "dev" / "devkit" / ".kit").write_text("")
+        out = subprocess.run(["node", str(ROOT / "bin" / "lib" / "chewbacca-hud.js"), "--json"], capture_output=True,
+                             text=True, env=dict(env, HOME=str(fake_home)))
+        kits = json.loads(out.stdout).get("kits", [])
+        check("the kit scan finds kits under dev", "devkit" in kits, str(kits))
+        check("the kit scan never walks Library", "libkit" not in kits, str(kits))
+
     print("\nall passed" if not failures else f"\n{failures} failed")
     return 1 if failures else 0
 

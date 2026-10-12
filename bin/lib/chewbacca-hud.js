@@ -13,7 +13,7 @@ const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
-const { execFileSync } = require("node:child_process");
+const { execFileSync, execFile, spawn } = require("node:child_process");
 const weekly = require("./weekly-dashboard");
 
 let DatabaseSync;
@@ -118,6 +118,8 @@ function pulse(db, days = 21) {
 // Kits carry a .kit marker and a DEADLINES.md with dated rows. Reading the
 // markdown rather than a database is deliberate: the kit is the source of
 // truth for its own dates and it is the file the human edits.
+const SKIP_HOME = new Set(["Library", "Applications", "Movies", "Music", "Pictures", "Public"]);
+
 function kits() {
   const home = os.homedir();
   const found = [];
@@ -137,7 +139,12 @@ function kits() {
       if (
         !e.isDirectory() ||
         e.name.startsWith(".") ||
-        e.name === "node_modules"
+        e.name === "node_modules" ||
+        // Walking the home folder three deep went through Library and the
+        // Google Drive and OneDrive mounts, and listing a cloud folder makes
+        // the sync client fetch it: the scan took over two minutes and held
+        // the whole server for the duration.
+        (dir === home && SKIP_HOME.has(e.name))
       )
         continue;
       walk(path.join(dir, e.name), depth + 1);
@@ -668,16 +675,52 @@ load();
 setInterval(load, 30000);
 </script></body></html>`;
 
+// Slow lookups run in a child process and are served from the last good copy.
+// The numbers come from Reminders, launchd, git and the filesystem, any of
+// which can stall for many seconds on a locked screen; run in this thread
+// they froze every other request with them.
+const CACHE_TTL = 20000;
+const stateCache = { at: 0, body: null, pending: null };
+const weekCache = { at: 0, body: null, pending: null };
+function refresh(cache, args, script) {
+  if (cache.pending) return cache.pending;
+  cache.pending = new Promise((resolve) => {
+    execFile(
+      process.execPath,
+      script ? args : [__filename, ...args],
+      { timeout: 240000, maxBuffer: 8 * 1024 * 1024, env: process.env },
+      (err, out) => {
+        if (!err && out) {
+          cache.body = out;
+          cache.at = Date.now();
+        }
+        cache.pending = null;
+        resolve();
+      },
+    );
+  });
+  return cache.pending;
+}
+function serveCached(res, cache, args, script = false) {
+  const respond = () => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(cache.body || JSON.stringify({ error: "this could not be read yet; try again in a moment" }));
+  };
+  if (!cache.body) refresh(cache, args, script).then(respond);
+  else {
+    if (Date.now() - cache.at > CACHE_TTL) refresh(cache, args, script);
+    respond();
+  }
+}
+
 function serve({ port = 7474, host = "127.0.0.1", onReady }) {
   const server = http.createServer((req, res) => {
     if (req.url.startsWith("/api/state")) {
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify(snapshot()));
+      serveCached(res, stateCache, ["--json"]);
       return;
     }
     if (req.url.startsWith("/api/week")) {
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify(weekly.weekSnapshot()));
+      serveCached(res, weekCache, [path.join(__dirname, "weekly-dashboard.js"), "--json"], true);
       return;
     }
     if (req.url === "/week" || req.url.startsWith("/week?")) {
@@ -692,6 +735,13 @@ function serve({ port = 7474, host = "127.0.0.1", onReady }) {
     }
     res.writeHead(404, { "content-type": "text/plain" });
     res.end("not found");
+  });
+  // A second `chewbacca open` finds the first still serving. That is the
+  // normal case, so it opens the window onto the running one instead of
+  // dying on the port.
+  server.on("error", (e) => {
+    if (e.code === "EADDRINUSE") onReady(server);
+    else throw e;
   });
   server.listen(port, host, () => onReady(server));
   return server;
@@ -710,16 +760,24 @@ if (require.main === module) {
         const week = process.argv.includes("--week");
         const url = `http://localhost:${port}${week ? "/week" : ""}`;
         console.log(`  chewbacca is open at ${url}`);
-        try {
-          // The week view is a window you arrange, so it gets its own
-          // chrome-less window where Chrome is installed, not a browser tab.
-          if (week && fs.existsSync("/Applications/Google Chrome.app")) {
-            execFileSync("open", ["-na", "Google Chrome", "--args", `--app=${url}`, "--window-size=1180,820"]);
-          } else {
-            execFileSync("open", [url]);
+        // Detached and not waited on: `open` can sit for many seconds on a
+        // locked or sleeping screen, and waiting for it here froze the server
+        // it was opening a window onto.
+        const launch = (cmd, args) => {
+          try {
+            const child = spawn(cmd, args, { detached: true, stdio: "ignore" });
+            child.on("error", () => {});
+            child.unref();
+          } catch {
+            /* headless, the URL above is the whole answer */
           }
-        } catch {
-          /* headless, the URL above is the whole answer */
+        };
+        // The week view is a window you arrange, so it gets its own
+        // chrome-less window where Chrome is installed, not a browser tab.
+        if (week && fs.existsSync("/Applications/Google Chrome.app")) {
+          launch("open", ["-na", "Google Chrome", "--args", `--app=${url}`, "--window-size=1180,820"]);
+        } else {
+          launch("open", [url]);
         }
       },
     });

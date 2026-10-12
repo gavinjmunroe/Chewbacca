@@ -113,7 +113,16 @@ pub fn decide(head: &str, payload: &[u8]) -> Verdict {
     if tool_name(payload) != Some("Bash") {
         return Verdict::Run;
     }
-    if spelled_around(payload) || words.iter().any(|w| contains_ci(payload, w.as_bytes())) {
+    // Quotes, backslashes, braces and commas the shell removes or expands:
+    // o''pen, o"p"en, op\en and {o,}pen all run open, and the guards that
+    // shlex-split saw "open" where the raw JSON did not (security review of
+    // 005ecc09). Matching on the text with them removed only adds runs.
+    let bare: Vec<u8> = payload.iter().copied()
+        .filter(|b| !matches!(b, b'\'' | b'"' | b'\\' | b'{' | b'}' | b','))
+        .collect();
+    if spelled_around(payload)
+        || words.iter().any(|w| contains_ci(payload, w.as_bytes()) || contains_ci(&bare, w.as_bytes()))
+    {
         Verdict::Run
     } else {
         Verdict::Skip
@@ -221,6 +230,9 @@ mod tests {
         assert_eq!(decide(head, b"{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"\\u006fpen x\"}}"), Verdict::Run);
         assert_eq!(decide(head, &bash("$'\\x6fpen' x")), Verdict::Run);
         assert_eq!(decide(head, &bash("ls -la")), Verdict::Skip);
+        for split in ["o''pen -a x", "o\"p\"en -a x", "op\\en -a x", "{o,}pen -a x"] {
+            assert_eq!(decide(head, &bash(split)), Verdict::Run, "{split}");
+        }
     }
 
     #[test]

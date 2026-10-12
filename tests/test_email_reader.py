@@ -134,6 +134,7 @@ def build_store(root):
 def run(args, root, extra_env=None):
     env = {**os.environ, "CHEWBACCA_MAIL_ROOT": str(root), "CHEWBACCA_EMAIL_ME": ""}
     env.update(extra_env or {})
+    env = {k: v for k, v in env.items() if v is not None}
     p = subprocess.run([sys.executable, str(READER), *args], capture_output=True, text=True, env=env)
     return p
 
@@ -208,7 +209,15 @@ with tempfile.TemporaryDirectory() as tmp:
     fake = tmp / "mac"
     fake.write_text(f"#!/bin/sh\nprintf '%s\\n' \"$@\" >> '{log}'\necho '{{\"success\": true}}'\n")
     fake.chmod(0o755)
-    env = {"CHEWBACCA_MAC_BIN": str(fake)}
+    # tests/run.sh exports CHEWBACCA_NO_SEND=1, and send() refuses under it
+    # since 41ac5668, which turned the three fake-mac checks below red in the
+    # suite. The fake never sends, so these runs drop the flag; the held run
+    # proves the flag still stops a send before it reaches mac.
+    env = {"CHEWBACCA_MAC_BIN": str(fake), "CHEWBACCA_NO_SEND": None}
+
+    p = run(["send", "--to", "sagar@example.test", "--text", "body"], root, {**env, "CHEWBACCA_NO_SEND": "1"})
+    res = json.loads(p.stdout or "{}")
+    check("CHEWBACCA_NO_SEND holds a send before it reaches mac", p.returncode != 0 and res.get("ok") is False and "NO_SEND" in res.get("error", "") and not log.exists(), (p.stdout, log.exists()))
 
     p = run(["send", "--to", "sagar@example.test", "--subject", "Hi", "--text", "body", "--dry-run"], root, env)
     res = json.loads(p.stdout or "{}")

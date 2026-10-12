@@ -1060,6 +1060,8 @@ if group "installer"; then
     /usr/bin/python3 "$ROOT/tests/test_send_paths.py"
   check  "hookd skips a guard only when the guard could not act, and falls back without the binary" \
     /usr/bin/python3 "$ROOT/tests/test_hookd.py"
+  check  "a gated guard acts only on calls its gate words run, replayed over 800 real calls" \
+    /usr/bin/python3 "$ROOT/tests/test_hookd_replay.py"
 
   check  "committed checksums describe the committed tree" \
     python3 "$ROOT/tools/committed_checksums.py"

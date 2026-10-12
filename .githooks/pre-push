@@ -80,6 +80,11 @@ touched '(\.py$|^bin/|^tools/|^mac/|^hud/scripts/)' && run "no undefined names" 
 touched '\.md$' && run "doc links resolve" python3 tools/linkcheck.py
 touched '^(setup\.sh|\.claude/hooks/)' && run "every hook is registered" bash tests/hooks_registered.sh
 touched '^(setup\.sh|\.claude/hooks/)' && run "setup hook registration" python3 tests/test_setup_hooks.py
+# A guard that learns a new refusal without the gate word for it is skipped
+# by hookd in silence; the replay over real calls is the only thing that sees
+# it. Unchanged guards are remembered, so this costs one guard's replay.
+touched '^(\.claude/hooks/|crates/hookd/|tools/hookd_replay\.py|tests/fixtures/hookd-replay/)' && \
+  run "gated guards act only where their gate runs" /usr/bin/python3 tests/test_hookd_replay.py
 # Six team notes reached main with no index line on 2026-10-10 and the
 # team_memory test sat red for a day: only the full suite ran it.
 touched '^team/memory/' && run "team memory index matches its files" bash tests/team_memory.sh

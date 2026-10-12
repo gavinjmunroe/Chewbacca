@@ -86,6 +86,8 @@ impl Watch {
             if let Some(i) = carry.rfind('\n') {
                 carry.drain(..=i);
             }
+            // Guessed, never tuned: the whole barrier came back in under
+            // 10 ms (2026-10-11), so a few polls at most.
             std::thread::sleep(Duration::from_micros(500));
         }
         let _ = std::fs::remove_file(&path);

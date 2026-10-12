@@ -208,11 +208,15 @@ fn others_exact(log: &Path, sid: &str, since: f64) -> BTreeSet<String> {
     let mut claimed = BTreeSet::new();
     let Ok(mut f) = std::fs::File::open(log) else { return claimed };
     let Ok(len) = f.metadata().map(|m| m.len()) else { return claimed };
-    // Rows land in time order to within a call's length; five minutes of
-    // margin before `since` covers a slow observation.
+    // Rows land in time order to within one record() run, since each is
+    // stamped at the start of a run that holds the lock while it writes.
+    // The slowest run seen was 9.3 s (seeding the brain, 2026-10-11); five
+    // minutes is that 30 times over.
     let stop = since - 300.0;
     let mut end = len;
     let mut tail: Vec<u8> = Vec::new();
+    // About 1,700 rows a read at the 150 bytes a row the live log averaged
+    // on 2026-10-11 (38 MB, 251,254 rows). Guessed, never tuned.
     const CHUNK: u64 = 256 << 10;
     loop {
         let start = end.saturating_sub(CHUNK);

@@ -1777,6 +1777,41 @@
       "verified": false
     },
     {
+      "name": "campaign-variant-test",
+      "kind": "write",
+      "gate": "write:campaign-draft",
+      "args": [
+        "campaign"
+      ],
+      "summary": "Turn a DRAFT campaign's one sequence into an even two-variant test (clones the sequence as variant B; edit B with campaign-sequence, subjectLinked/bodyLinked false). Refused on any campaign that is not a draft.",
+      "surfaces": [
+        {
+          "type": "cli",
+          "argv": [
+            "campaigns",
+            "variants",
+            "start-test",
+            "{campaign}"
+          ]
+        }
+      ],
+      "evidence": {
+        "source": "cli",
+        "command": "clay campaigns variants start-test <campaignId>",
+        "cli_version": "1.9.1",
+        "help": "clay plugin 2.32.0 skills/campaigns/SKILL.md"
+      },
+      "readback": {
+        "op": "campaign",
+        "args": {
+          "campaign": "campaign"
+        },
+        "expect": "manual"
+      },
+      "confidence": "high: documented; Sagar's 2 variants of 3 messages per offer (2026-10-04) needs it",
+      "verified": false
+    },
+    {
       "name": "campaign-status",
       "kind": "write",
       "gate": "write:campaign-state",

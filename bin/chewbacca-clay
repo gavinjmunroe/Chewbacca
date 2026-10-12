@@ -1089,7 +1089,7 @@ function isStart(op, args) {
 // A START goes only to a draft too: on a draft it is a launch, the one action
 // its grade covers; on a paused or stopped campaign Clay would resume it.
 function draftOnly(op, args) {
-  if (!["campaign-update", "campaign-sequence"].includes(op.name) && !isStart(op, args)) return null;
+  if (!["campaign-update", "campaign-sequence", "campaign-variant-test"].includes(op.name) && !isStart(op, args)) return null;
   let status;
   if (FIXTURES) {
     status = process.env.CHEWBACCA_CLAY_TEST_CAMPAIGN_STATUS || "draft";

@@ -339,6 +339,13 @@ def test_campaign_build_ops_touch_drafts_only():
         code, out, _ = run({}, {}, "campaign-sequence", "campaign=cam_x", 'input={"ops":[{"op":"deleteStep"}]}',
                            "--allow-writes", env_extra=approve)
         ok(code == 3 and "only a draft" in out["reason"], "campaign-sequence refuses a live campaign")
+        # 2026-10-12: Sagar's two variants per offer; starting a test clones the
+        # sequence, so it touches drafts only, like every other build op.
+        code, out, _ = run({}, {}, "campaign-variant-test", "campaign=cam_x", "--allow-writes", env_extra=approve)
+        ok(code == 3 and "only a draft" in out["reason"], "campaign-variant-test refuses a live campaign")
+        code, out, _ = run({}, {}, "campaign-variant-test", "campaign=cam_x", "--dry-run")
+        ok(code == 0 and out["request"]["argv"][1:4] == ["campaigns", "variants", "start-test"],
+           f"campaign-variant-test dry run shows the CLI call: {out}")
 
 
 def test_a_relabelled_write_is_still_gated():

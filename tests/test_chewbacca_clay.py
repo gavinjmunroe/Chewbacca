@@ -253,6 +253,17 @@ def test_write_gate():
     reply = ("reply", "campaign_id=1", 'reply_data={"email_stats_id":"s1","email_body":"x"}')
     code, out, _ = run(fail, {}, *reply, "--allow-writes", env_extra={"CHEWBACCA_CLAY_TTY_ANSWER": "reply"})
     ok(code == 1 and len(out["tried"]) == 1, "a failed write is sent once and never retried on another surface")
+    # 2026-10-11, Caleb: "clay replies NEVER need human confirmation".
+    code, out, _ = run({"api-anything/inboxReply.json": SENT}, {}, *reply, "--allow-writes")
+    ok(code == 0 and out["ok"] is True, ("a reply goes out with nobody typing", out))
+    for body, why in (("Here is the deck: [NEED: link]", "placeholder"), ("Hi {{first_name}}", "placeholder"),
+                      ("Thanks \u2014 talk soon", "long dash"), ("", "empty")):
+        unfinished = ("reply", "campaign_id=1", "reply_data=" + json.dumps({"email_stats_id": "s1", "email_body": body}))
+        code, out, _ = run({"api-anything/inboxReply.json": SENT}, {}, *unfinished, "--allow-writes")
+        ok(code == 3 and why in out["reason"], (f"an unfinished reply is refused: {why}", out))
+    code, out, _ = run({"api-anything/inboxReply.json": SENT}, {}, *reply, "--allow-writes",
+                       env_extra={"CHEWBACCA_NO_SEND": "1"})
+    ok(code == 3 and "NO_SEND" in out["reason"], "CHEWBACCA_NO_SEND=1 still stops a reply")
     # Slots go into an authenticated api.clay.com URL: a path or query in a value is refused.
     for bad in ("table=../../workspaces/9/x", "table=t_1?x=y", "table=t_1/rows", "ws=1000001/../9", "limit=5;rm"):
         k = bad.split("=")[0]
@@ -539,7 +550,8 @@ def test_approved_request_is_the_sent_request():
     # add-leads also needs a passing grade before it sends; its send path is
     # tested in tests/test_launch_guard_grade.py.
     cases.pop("add-leads")
-    cases["reply"] = ["campaign_id=1", 'reply_data={"email_stats_id":"s1","email_body":"x"}']
+    # reply shows no prompt since 2026-10-11 (it needs no confirmation), so it
+    # has no prompt to compare; its send is tested in the write-gate test.
     cases["blocklist-add"] = ["emailOrDomain=blocked.example"]
     reg = json.loads((LIB / "registry.json").read_text())
     ops = {o["name"]: o for o in reg["ops"]}
@@ -622,6 +634,8 @@ def walk_gate(reg_path=None):
             if mutates:
                 ok(code == 3 and out["class"] == "refused" and "allow-writes" in out["reason"],
                    f"{op['name']} via {s['type']} ran without the gate: {p.stdout[:200]}")
+                if op["name"] == "reply":
+                    continue  # needs no confirmation since 2026-10-11; its gate is tested above
                 code, out, _ = run({}, {}, op["name"], *argv, "--surface", s["type"], "--allow-writes", env_extra=extra)
                 ok(code == 3 and "did not approve" in out["reason"], f"{op['name']} via {s['type']} ran with nobody at the terminal")
                 code, out, _ = run({}, {}, op["name"], *argv, "--surface", s["type"], "--allow-writes",

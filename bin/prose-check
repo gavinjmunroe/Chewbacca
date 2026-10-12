@@ -30,7 +30,11 @@ RULES = [
     # "realm" the figure of speech, never Realm the product: Carlton's agent
     # engine is named that, and on 2026-10-10 six replies about it were
     # refused and rewritten around the name. A capital R is the proper noun.
-    ("banned-word", r"\brealm(?:s)?\b|(?i:\bthe realm of\b)", "Banned word."),
+    # A name inside a path or identifier (realm-engine, realm_ui, a report
+    # file) is not the figure of speech either: on 2026-10-11 three replies
+    # naming bin/realm-engine and realm-morning-report.md were refused and
+    # Caleb saw each one twice.
+    ("banned-word", r"(?<![-_/.\w])realms?(?![-_/.\w])|(?i:\bthe realm of\b)", "Banned word."),
     ("em-dash", r"—", "Em dash. Use a colon, period, or comma."),
     ("ing-clause", r", (?:highlighting|underscoring|showcasing|demonstrating|reflecting|emphasizing|showing) (?:the|his|her|their|its|a|an)\b",
      "Superficial -ing clause."),
@@ -139,6 +143,17 @@ def kickers(text):
                 out.append(last)
     return out
 
+def without_code(text):
+    """Blank out fenced blocks and inline code, keeping every newline so line
+    numbers still point at the right place. Code, commands and file paths are
+    not prose: on 2026-10-11 a paste-ready prompt in a ``` block was refused
+    for a path in it, and the rewrite reached Caleb as a duplicate reply."""
+    def blank(m):
+        return re.sub(r"[^\n]", " ", m.group(0))
+    text = re.sub(r"^(```|~~~).*?^\1[ \t]*$", blank, text, flags=re.M | re.S)
+    return re.sub(r"`[^`\n]+`", blank, text)
+
+
 def main(paths, chat=False):
     bad = 0
     for p in paths:
@@ -152,6 +167,7 @@ def main(paths, chat=False):
             m = re.search(r"^# ", text, re.M)
             if m:
                 text = text[m.start():]
+        text = without_code(text)
         found = []
         for label, rx, why in (RULES + CHAT_RULES if chat else RULES):
             for m in re.finditer(rx, text, re.M):

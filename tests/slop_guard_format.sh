@@ -51,6 +51,17 @@ else
   echo "FAIL  Realm handling in prose-check"; fail=1
 fi
 
+# 2026-10-11: three replies naming bin/realm-engine and realm-morning-report.md
+# were refused, and a paste-ready prompt in a code block too, so Caleb saw each
+# reply twice. Paths, identifiers and code are not prose.
+printf 'Read ~/.chewbacca/overnight/realm-morning-report.md and bin/realm-engine.\n\n```\nDo NOT touch bin/realm-engine. Then do the em \xe2\x80\x94 dash thing.\n```\n\nAlso `realm_ui start`.\n' >"$TMP/realm-paths.md"
+paths_out=$(prose-check --chat "$TMP/realm-paths.md" 2>&1 || true)
+if grep -q clean <<<"$paths_out"; then
+  echo "ok    paths, identifiers and code blocks are never flagged as prose"
+else
+  echo "FAIL  prose-check flagged code or a path: $paths_out"; fail=1
+fi
+
 EM=$(printf 'Prayer. Amen.\n\nThis is wrong \xe2\x80\x94 very wrong.')
 code=$(run "$EM" p2)
 if [ "$code" = 2 ]; then

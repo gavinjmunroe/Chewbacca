@@ -36,6 +36,7 @@ expect 0 "a study answer to his study question" "Right, nothing's due till Tue. 
 transcript "where are we on WP1"
 expect 2 "the 10-09 paper draft ask, verbatim" "My work all lives in second-brain, and it's pushed. Still waiting on photos of ur paper draft."
 expect 0 "a refusal already happened this prompt" "u'll see it" true
+expect 2 "the 10-11 zip code ask, verbatim" "What's the city and zip for 2849 Summerdale? Footer needs the full address"
 expect 0 "an ordinary report" "Pushed 3 commits to main, tests pass, the site is live."
 
 start=$(perl -MTime::HiRes=time -e 'printf "%d", time*1000')

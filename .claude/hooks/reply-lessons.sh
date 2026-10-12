@@ -49,6 +49,8 @@ my @rules = (
    "guesses whether he has started studying, from another tab. Caleb, 2026-10-10: \"mind your own business that's rude af to assume I wasn't doing my work\" (feedback_no_unasked_study_nudges). Answer what he asked.", 1],
   [qr/\b(?:go|time to|(?:you|u)\s+should(?:\s+probably)?|i${q}?d)\s+(?:go\s+)?(?:study|start studying|hit the books)\b|\bgive\s+the\s+next\s+(?:hour|few hours|\d+ hours?)\s+to\s+(?:BISC|ACAD|WRIT|MPGU|studying|school|class)/i,
    "tells him to go study, unasked. Caleb, 2026-10-10: \"mind your own business\" (feedback_no_unasked_study_nudges).", 1],
+  [qr/\b(?:what(?:${q}s| is)|send me|need)\s+(?:the\s+|his\s+|her\s+|their\s+|ur\s+|your\s+)?(?:city|zip|zip code|full address|street address|phone number|website|domain)\b/i,
+   "asks a person for a fact a lookup finds. Caleb, 2026-10-11: \"Never ask humans things that you don't need a human for\" after a zip code request for 2849 Summerdale Dr, \"1 search online away\". Look it up (chewbacca api google-maps, Contacts, the brain) and only ask what no source has."],
   [qr/\b(?:photos?|pics?|pictures?|a scan|scans)\s+of\s+(?:ur|your)\s+(?:paper\s+|handwritten\s+)?draft|\bsend\s+(?:me\s+)?(?:ur|your)\s+(?:paper|handwritten)\s+draft/i,
    "asks for his paper draft. He hand-writes first and has Claude draft from his picks to compare; never ask for the paper draft (feedback_paper_draft_first_then_compare, 2026-10-09: \"Bro just do it\")."],
 );

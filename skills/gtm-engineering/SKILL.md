@@ -100,6 +100,13 @@ with nothing team-specific in the kit:
 - `chewbacca gtme autosend --interested "..."` answers a plain yes from the
   person emailed, in the thread. Questions wait.
 
+- Judgment goes to Jev, never a pinned score (Caleb, 2026-10-11: "ALWAYS RMR
+  WE HV JEEV"). Set `"jev_checks": true` in the plan and every email in a
+  batch gets one Jev call: is the opener specific and respectful, and does it
+  break any ruling that carries a `jev` question in DECISIONS.json. Anything
+  flagged or unscored is held for a person (`tools/gtme_jev.py`). The
+  auto-answer to a yes needs Jev at 0.85 or higher.
+
 Code lives once, in the kit. The team repo holds only its rulings, copy,
 lists and ledger (`ops/README.md` in gavinjmunroe/firm-foundation is the model).
 

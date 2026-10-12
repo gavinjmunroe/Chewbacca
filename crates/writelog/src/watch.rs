@@ -57,6 +57,7 @@ const FILE_EVENTS: u32 = 0x10;
 // Mount, Unmount: the journal can't say what changed, so readers rescan.
 const RESCAN: u32 = 0x01 | 0x02 | 0x04 | 0x08 | 0x20 | 0x40 | 0x80;
 const HISTORY_DONE: u32 = 0x10;
+const ROOT_CHANGED: u32 = 0x20;
 
 /// A new journal past this size. Guessed, never measured: a line is about
 /// 100 bytes, so 64 MB is ~650,000 events, weeks of brain writes, and the
@@ -132,6 +133,11 @@ extern "C" fn on_events(_s: *const c_void, _info: *mut c_void, n: usize, paths: 
                     out.push_str(&format!("{}\tb\t{}\n", ids[i], token));
                 }
                 continue;
+            }
+            // A watched root that is gone (a test's temp dir, a moved brain)
+            // ends the watcher; the daemon starts the next one on what exists.
+            if flags[i] & ROOT_CHANGED != 0 && w.roots.iter().any(|r| !Path::new(r).is_dir()) {
+                std::process::exit(0);
             }
             if flags[i] & RESCAN != 0 || path.contains(['\t', '\n', '\r']) {
                 // A path TSV can't hold, or a drop: rescan whatever root it is in.

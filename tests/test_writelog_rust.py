@@ -109,7 +109,9 @@ class JournalParity(unittest.TestCase):
         self.git('add', '.')
         self.commit('seed')
         self.watcher = Watcher(self.base, self.brain)
-        self.addCleanup(self.watcher.stop)
+        # Late-bound: a test that restarts the watcher replaces self.watcher,
+        # and the replacement must be the one stopped.
+        self.addCleanup(lambda: self.watcher.stop())
         self.calls = 0
 
     def git(self, *args):
@@ -256,6 +258,28 @@ class CrateTests(unittest.TestCase):
                                 env=dict(os.environ, CARGO_TARGET_DIR=str(TARGET)), capture_output=True, text=True,
                                 timeout=600)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+
+@unittest.skipIf(BIN is None, 'no cargo on this machine')
+class WatcherLifetime(unittest.TestCase):
+    def test_the_watcher_exits_when_its_root_is_gone(self):
+        # 2026-10-11: six test and scratch watchers outlived their temp
+        # brains, each holding an FSEvents stream on a directory that no
+        # longer existed.
+        folder = Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, folder, True)
+        brain = folder / 'brain'
+        brain.mkdir()
+        subprocess.run(['git', 'init', '-q'], cwd=brain, check=True)
+        env = dict(os.environ, CHEWBACCA_WATCH_DIR=str(folder / 'watch'))
+        watcher = Watcher(env, brain)
+        self.addCleanup(watcher.stop)
+        shutil.rmtree(brain)
+        for _ in range(100):
+            if watcher.proc.poll() is not None:
+                break
+            time.sleep(0.05)
+        self.assertIsNotNone(watcher.proc.poll(), 'the watcher kept running on a deleted root')
 
 
 def hook_cpu(env, cwd, runs=3):

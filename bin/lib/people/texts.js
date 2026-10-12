@@ -892,41 +892,66 @@ function cmdTexts(argv) {
   // sent until a person names one by number, which is the approval.
   if (sub === "drafts") {
     const file = path.join(DIR, "drafts.json");
-    const load = () => {
-      try {
-        return JSON.parse(fs.readFileSync(file, "utf8"));
-      } catch {
-        return [];
+    const counterFile = file.replace(/\.json$/, ".next");
+    // The queue lives in the shared state file (bin/lib/statedb.js), and every
+    // change reads it inside one transaction. It was a JSON file each tab read,
+    // changed and wrote back whole: on 2026-10-12, 10 tabs adding 50 drafts at
+    // once lost 19 to 22 of them. drafts.json stays as a mirror for readers.
+    fs.mkdirSync(DIR, { recursive: true });
+    const statedb = require("../statedb");
+    const sdb = statedb.connect(statedb.pathFor(DIR, "people"));
+    const LIST = "people.drafts";
+    const NEXT = "people.drafts.next";
+    const open = () => {
+      let list = statedb.getDoc(sdb, LIST);
+      let next = statedb.getDoc(sdb, NEXT);
+      // First open after the move: take what the JSON files held.
+      if (list === undefined) {
+        try {
+          list = JSON.parse(fs.readFileSync(file, "utf8"));
+        } catch {}
+        if (!Array.isArray(list)) list = [];
       }
+      if (next === undefined) {
+        try {
+          next = Number(fs.readFileSync(counterFile, "utf8")) || 0;
+        } catch {
+          next = 0;
+        }
+      }
+      // A draft keeps the number it was given. They used to be positions, so
+      // a drop in one tab renumbered every later draft under another tab: on
+      // 2026-10-09 a tab dropped "#42", its own stale Mac mini draft, and
+      // deleted a Maggie reply a second tab had added two seconds earlier.
+      // Pin them the first time they are seen, so the list he reads is the
+      // list every later drop and send resolves against.
+      const numbered = list.filter((x) => Number.isInteger(x.n));
+      let top = numbered.length ? Math.max(...numbered.map((x) => x.n)) : 0;
+      list.forEach((x, i) => {
+        if (!Number.isInteger(x.n)) x.n = numbered.length ? ++top : i + 1;
+      });
+      top = Math.max(top, list.length ? Math.max(...list.map((x) => x.n)) : 0);
+      // The highest number ever handed out, so a dropped last draft's number
+      // is never reused for a new one a stale tab could then hit. An empty
+      // queue starts again at 1, so numbers stay short.
+      if (list.length) top = Math.max(top, next);
+      return { list, top, next };
     };
-    const save = (list) => {
-      fs.writeFileSync(file + ".tmp", JSON.stringify(list, null, 2));
-      fs.renameSync(file + ".tmp", file);
-    };
-    // A draft keeps the number it was given. They used to be positions, so
-    // a drop in one tab renumbered every later draft under another tab: on
-    // 2026-10-09 a tab dropped "#42", its own stale Mac mini draft, and
-    // deleted a Maggie reply a second tab had added two seconds earlier.
-    const list = load();
-    const numbered = list.filter((x) => Number.isInteger(x.n));
-    let top = numbered.length ? Math.max(...numbered.map((x) => x.n)) : 0;
-    list.forEach((x, i) => {
-      if (!Number.isInteger(x.n)) x.n = numbered.length ? ++top : i + 1;
-    });
-    // Pin them the first time they are seen, so the list he reads is the
-    // list every later drop and send resolves against.
-    if (numbered.length < list.length) save(list);
-    top = Math.max(top, list.length ? Math.max(...list.map((x) => x.n)) : 0);
-    // The highest number ever handed out, so a dropped last draft's number
-    // is never reused for a new one a stale tab could then hit.
-    const counter = file.replace(/\.json$/, ".next");
-    // An empty queue starts again at 1, so numbers stay short.
-    try {
-      if (list.length)
-        top = Math.max(top, Number(fs.readFileSync(counter, "utf8")) || 0);
-    } catch {}
-    const pick = (n) => {
-      const i = list.findIndex((x) => x.n === Number(n));
+    // Read, change and write back in one transaction. fn may change st.list
+    // and st.next; everything it returns comes back out.
+    const mutate = (fn) =>
+      statedb.write(sdb, () => {
+        const st = open();
+        const out = fn(st);
+        statedb.putDoc(sdb, LIST, st.list);
+        statedb.putDoc(sdb, NEXT, st.next);
+        statedb.mirror(file, JSON.stringify(st.list, null, 2));
+        return out;
+      });
+    // Opening also pins numbers and moves the JSON files in, so it writes.
+    const snapshot = mutate((st) => st);
+    const pick = (n, from = snapshot.list) => {
+      const i = from.findIndex((x) => x.n === Number(n));
       if (i < 0) die(`no draft ${n}; run: people texts drafts`);
       return i;
     };
@@ -970,29 +995,28 @@ function cmdTexts(argv) {
         if (!to)
           die(`Couldn't read the chat id for "${who}". Nothing drafted.`);
       }
-      list.push({
-        who,
-        text,
-        why: flags.why || "",
-        group: Boolean(flags.group),
-        to,
-        via: flags.via ? String(flags.via) : "",
-        at: nowISO(),
-        n: top + 1,
+      const n = mutate((st) => {
+        st.list.push({
+          who,
+          text,
+          why: flags.why || "",
+          group: Boolean(flags.group),
+          to,
+          via: flags.via ? String(flags.via) : "",
+          at: nowISO(),
+          n: st.top + 1,
+        });
+        st.next = st.top + 1;
+        return st.next;
       });
-      save(list);
-      fs.writeFileSync(counter, String(top + 1));
-      return say(`${c.grn("drafted")} #${top + 1} to ${c.b(who)}`);
+      return say(`${c.grn("drafted")} #${n} to ${c.b(who)}`);
     }
     if (verb === "drop") {
-      const i = pick(rest[1]);
-      const [gone] = list.splice(i, 1);
-      save(list);
+      const gone = mutate((st) => st.list.splice(pick(rest[1], st.list), 1)[0]);
       return say(`${c.dim("dropped")} #${gone.n} to ${gone.who}`);
     }
     if (verb === "send") {
-      const i = pick(rest[1]);
-      const dr = list[i];
+      const dr = snapshot.list[pick(rest[1])];
       const { cmdSend } = require("./send");
       const argv = [dr.who, dr.text];
       if (dr.group) argv.push("--room");
@@ -1002,24 +1026,25 @@ function cmdTexts(argv) {
       if (dr.via) argv.push("--via", dr.via);
       if (flags["dry-run"]) argv.push("--dry-run");
       cmdSend(argv);
+      // Take it off the queue only if it's still there. findIndex's -1 used
+      // to reach splice(-1, 1), which dropped the LAST draft, someone else's,
+      // when another tab had already dropped this one.
       if (!flags["dry-run"]) {
-        const now = load();
-        now.splice(
-          now.findIndex((x) => x.at === dr.at && x.who === dr.who),
-          1,
-        );
-        save(now);
+        mutate((st) => {
+          const i = st.list.findIndex((x) => x.n === dr.n && x.at === dr.at && x.who === dr.who);
+          if (i >= 0) st.list.splice(i, 1);
+        });
       }
       return;
     }
-    if (!list.length)
+    if (!snapshot.list.length)
       return say(
         c.dim(
           '  no drafts waiting. Add one: people texts drafts add <who> "text"',
         ),
       );
     say("");
-    list.forEach((dr) => {
+    snapshot.list.forEach((dr) => {
       say(
         `  ${c.b(`#${dr.n}`)} ${c.cyn(printable(dr.who))}${dr.group ? c.dim(" group") : ""}${dr.via ? c.dim(` ${printable(dr.via)}`) : ""} ${c.dim(dr.at.slice(5, 16))}`,
       );
@@ -1029,7 +1054,7 @@ function cmdTexts(argv) {
     // Say it before he picks numbers, not after the first send fails.
     if (
       !process.env.CHEWBACCA_NO_SEND &&
-      list.some((dr) => !dr.via || dr.via === "imessage")
+      snapshot.list.some((dr) => !dr.via || dr.via === "imessage")
     ) {
       const blocked = require("./send").messagesBlocked();
       if (blocked)

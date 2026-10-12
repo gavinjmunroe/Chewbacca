@@ -83,6 +83,24 @@ def connect():
         db.close()
 
 
+def _wal(db):
+    # WAL stays set on the file once set, and switching to it is the one step
+    # sqlite's busy wait skips: 10 tabs registering on a fresh board at once,
+    # one died on "database is locked" in 3 of 6 runs (tests/test_state_stress.py,
+    # 2026-10-12). Read the mode first and retry the switch until another
+    # opener has made it.
+    deadline = time.time() + 3
+    while True:
+        try:
+            if db.execute('PRAGMA journal_mode').fetchone()[0] != 'wal':
+                db.execute('PRAGMA journal_mode=WAL')
+            return
+        except sqlite3.OperationalError:
+            if time.time() > deadline:
+                raise
+            time.sleep(0.02)
+
+
 def _open():
     path = database_path()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -99,7 +117,7 @@ def _open():
             os.chmod(sidecar, 0o600)
     try:
         db.row_factory = sqlite3.Row
-        db.execute('PRAGMA journal_mode=WAL')
+        _wal(db)
         db.execute('''CREATE TABLE IF NOT EXISTS sessions (
             id TEXT PRIMARY KEY, runtime TEXT, model TEXT, cwd TEXT, repo TEXT,
             first_task TEXT, last_task TEXT, note TEXT,

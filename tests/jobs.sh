@@ -89,9 +89,12 @@ ids=$("$J" submit --heavy --title short2 -- sleep 60 | cut -d' ' -f1)
 JOBS_LOAD=40 "$J" tick >/dev/null
 "$J" tick >/dev/null
 check "a load-paused job resumes first" "$(status "$idl")" running
-python3 - "$JOBS_DIR/$idl/job.json" <<'PY'
-import json,sys,time
-p=sys.argv[1]; j=json.load(open(p)); j["turn"]=time.time()-1000; json.dump(j,open(p,"w"))
+# The row in the state file is the truth (job.json is its mirror), so the
+# test winds the clock back there.
+python3 - "$JOBS_DIR/.state.sqlite" "$idl" <<'PY'
+import json,sqlite3,sys,time
+db=sqlite3.connect(sys.argv[1]); j=json.loads(db.execute("SELECT body FROM jobs WHERE id=?",(sys.argv[2],)).fetchone()[0])
+j["turn"]=time.time()-1000; db.execute("UPDATE jobs SET body=? WHERE id=?",(json.dumps(j),sys.argv[2])); db.commit()
 PY
 JOBS_LOAD=40 "$J" tick >/dev/null
 JOBS_SLICE=900 "$J" tick >/dev/null

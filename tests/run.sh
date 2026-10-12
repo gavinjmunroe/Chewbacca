@@ -921,6 +921,8 @@ if group "installer"; then
     bash "$ROOT/tests/orphan_reap.sh"
   check  "jobs queue admits, pauses and resumes heavy work against the machine" \
     bash "$ROOT/tests/jobs.sh"
+  check  "ten tabs writing jobs, drafts, the tab board and the ledger at once lose nothing" \
+    /usr/bin/python3 "$ROOT/tests/test_state_stress.py"
   check  "chewbacca ig shapes posts from Instagram's posts query" \
     bash "$ROOT/tests/chewbacca_ig.sh"
   check  "chewbacca x reads posts and the paging cursor from a timeline page" \

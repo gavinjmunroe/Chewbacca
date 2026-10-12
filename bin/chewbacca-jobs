@@ -45,7 +45,9 @@ THE BUDGET.
   net    downloads, API crawls: up to 4 at once, nice 10.
   light  everything else: no limit.
 
-State lives in ~/.chewbacca/jobs/<id>/ (job.json, out.log). A job's supervisor
+State lives in one SQLite file (bin/lib/statedb.py), and every change is a
+read-modify-write inside one transaction. ~/.chewbacca/jobs/<id>/ keeps out.log
+and a job.json mirror for readers. A job's supervisor
 is `chewbacca-jobs _run <id>`, so a tab closing never orphans it, and orphan-reap leaves
 it alone.
 """
@@ -59,6 +61,9 @@ import subprocess
 import sys
 import time
 import uuid
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent / "lib"))
+import statedb  # noqa: E402
 
 DIR = pathlib.Path(os.environ.get("JOBS_DIR", pathlib.Path.home() / ".chewbacca" / "jobs"))
 CORES = int(os.environ.get("JOBS_CORES") or os.cpu_count() or 8)
@@ -90,32 +95,77 @@ def mem_free_pct():
         return 50.0
 
 
-def room_for_heavy():
-    return load1() < 1.3 * CORES and mem_free_pct() >= 20
+def room_for_heavy(load=None, mem=None):
+    return (load1() if load is None else load) < 1.3 * CORES and (mem_free_pct() if mem is None else mem) >= 20
 
 
-def must_pause():
-    return load1() > 2.5 * CORES or mem_free_pct() < 10
+def must_pause(load=None, mem=None):
+    return (load1() if load is None else load) > 2.5 * CORES or (mem_free_pct() if mem is None else mem) < 10
 
 
 # ------------------------------------------------------------------ store
+#
+# 2026-10-12: each command read job.json, changed its copy and wrote it back,
+# so a kill that landed while a tick held an older copy came back as paused
+# (1 of 20 kills, 2 of 3 runs of the 10-tab stress test). Now every command
+# that changes a job reads it inside write() and the tick holds write() from
+# its first read to its last save.
+
+_DB = None
+
+
+def db():
+    global _DB
+    if _DB is None:
+        _DB = statedb.connect(statedb.path_for(DIR, "jobs"))
+        _import(_DB)
+    return _DB
+
+
+def _import(conn):
+    # Jobs written as job.json alone: the queue before this file, or a
+    # supervisor still running old code. Only folders the table lacks are
+    # parsed (1,534 folders here on 10/12).
+    known = {r[0] for r in conn.execute("SELECT id FROM jobs")}
+    try:
+        names = [n for n in os.listdir(DIR) if n not in known and not n.startswith(".")]
+    except OSError:
+        return
+    rows = []
+    for n in names:
+        try:
+            j = json.loads((DIR / n / "job.json").read_text())
+        except (OSError, ValueError):
+            continue
+        if isinstance(j, dict) and j.get("id") == n:
+            rows.append((n, json.dumps(j)))
+    if rows:
+        conn.executemany("INSERT OR IGNORE INTO jobs (id, body) VALUES (?, ?)", rows)
+
 
 def jobs():
-    out = []
-    for f in sorted(DIR.glob("*/job.json")):
-        try:
-            out.append(json.loads(f.read_text()))
-        except ValueError:
-            pass
-    return out
+    return [json.loads(r[0]) for r in db().execute("SELECT body FROM jobs ORDER BY id")]
+
+
+def get(job_id):
+    r = db().execute("SELECT body FROM jobs WHERE id = ?", (job_id,)).fetchone()
+    if r is None:
+        sys.exit(f"no job {job_id}")
+    return json.loads(r[0])
 
 
 def save(j):
+    """Call inside write(). The row is the truth; job.json is its mirror."""
     p = DIR / j["id"] / "job.json"
     p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_suffix(".tmp")
-    tmp.write_text(json.dumps(j, indent=1))
-    tmp.replace(p)
+    # The mirror's mtime as written, so a later write by old code shows up.
+    stamp = statedb.mirror(p, json.dumps(j, indent=1))
+    db().execute("INSERT OR REPLACE INTO jobs (id, body, mirror_ns) VALUES (?, ?, ?)",
+                 (j["id"], json.dumps(j), stamp))
+
+
+def write():
+    return statedb.write(db())
 
 
 def alive(pid):
@@ -154,26 +204,29 @@ def submit(argv):
     if not argv or argv[0] != "--" or len(argv) < 2:
         sys.exit("usage: chewbacca jobs submit [--heavy|--build|--net] [--title T] [--after ID]... -- <command...>")
     for dep in after:
-        if not (DIR / dep / "job.json").exists():
+        if db().execute("SELECT 1 FROM jobs WHERE id = ?", (dep,)).fetchone() is None:
             sys.exit(f"no job {dep} to run after")
     cmd = argv[1:]
     j = {"id": time.strftime("%m%d-%H%M%S-") + uuid.uuid4().hex[:4], "cmd": cmd, "cwd": os.getcwd(),
          "class": cls, "title": title or " ".join(cmd)[:80], "status": "queued",
          "owner": os.environ.get("CLAUDE_SESSION_ID") or os.environ.get("TERM_SESSION_ID") or "",
          "created": time.time(), "pid": None, "exit": None, "after": after}
-    save(j)
+    with write():
+        save(j)
     tick(quiet=True)
-    j = json.loads((DIR / j["id"] / "job.json").read_text())
+    j = get(j["id"])
     print(f"{j['id']}  {j['status']}  {j['class']}  {j['title']}")
 
 
-def start(j):
+def start(j, started=None):
     # The supervisor runs in its own session, so closing the tab that
     # submitted the job doesn't take it down, and the whole job can be
     # paused, resumed or killed as one process group.
     p = subprocess.Popen([sys.executable, os.path.abspath(__file__), "_run", j["id"]],
                          stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          start_new_session=True, cwd=j["cwd"] if os.path.isdir(j["cwd"]) else None)
+    if started is not None:
+        started.append(p.pid)
     j.update(status="running", pid=p.pid, started=time.time(), turn=time.time(), ran=0)
     save(j)
 
@@ -205,23 +258,43 @@ def resume(j, now):
 
 
 def _run(job_id):
-    j = json.loads((DIR / job_id / "job.json").read_text())
+    j = get(job_id)
     with open(DIR / job_id / "out.log", "ab") as log:
         code = subprocess.call(["nice", "-n", str(NICE[j["class"]])] + j["cmd"],
                                stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
-    j = json.loads((DIR / job_id / "job.json").read_text())
-    if j["status"] != "killed":
-        j.update(status="done" if code == 0 else "failed", exit=code, ended=time.time())
-        save(j)
+    with write():
+        j = get(job_id)
+        if j["status"] != "killed":
+            j.update(status="done" if code == 0 else "failed", exit=code, ended=time.time())
+            save(j)
     tick(quiet=True)  # a slot just opened
 
 
 def tick(quiet=False):
     # One tick at a time: launchd, a submit and a finishing job can all tick
-    # together, and two of them must never start the same queued job.
+    # together, and two of them must never start the same queued job. The
+    # flock also keeps out a tick still running the code from before the
+    # state file, which knows only the flock (review, 10/12). The transaction
+    # keeps a kill or a finishing job from landing between the tick's read
+    # and its writes.
+    #
+    # The machine is read before the transaction: memory_pressure can take up
+    # to its 10 s timeout, and a finishing job or a kill waiting on the lock
+    # behind three of those could run out its whole wait (review, 10/12).
+    load, mem = load1(), mem_free_pct()
+    machine = {"room": room_for_heavy(load, mem), "pause": must_pause(load, mem)}
+    started = []
     with open(DIR / ".tick.lock", "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        _tick()
+        try:
+            with write():
+                _tick(machine, started)
+        except BaseException:
+            # The rows went back to queued, so the supervisors this tick
+            # started must not live on, or the next tick runs them again.
+            for pid in started:
+                signal_group({"pid": pid}, signal.SIGKILL)
+            raise
     if not quiet:
         list_jobs([])
 
@@ -256,7 +329,30 @@ def blocked(j, by_id):
     return any(dep in by_id and by_id[dep]["status"] not in ENDED for dep in j.get("after") or [])
 
 
-def _tick():
+def _adopt_old_writes():
+    """A supervisor or tick still running the code from before this table
+    writes job.json alone, and two of them running a queued job twice is the
+    risk. This code records the mtime of each job.json it writes, so a live
+    job whose job.json changed since was written by old code, and that write
+    is the newer one. Only matters while old processes outlive a kit update;
+    a stat of the few live jobs otherwise."""
+    for body, seen in db().execute("SELECT body, mirror_ns FROM jobs").fetchall():
+        j = json.loads(body)
+        if j["status"] in ENDED:
+            continue
+        p = DIR / j["id"] / "job.json"
+        try:
+            if p.stat().st_mtime_ns == seen:
+                continue
+            mirror = json.loads(p.read_text())
+        except (OSError, ValueError):
+            continue
+        if isinstance(mirror, dict) and mirror.get("id") == j["id"]:
+            save(mirror)
+
+
+def _tick(machine, started):
+    _adopt_old_writes()
     all_jobs = jobs()
     by_id = {j["id"]: j for j in all_jobs}
     ready = lambda j: not (j["status"] == "queued" and blocked(j, by_id))
@@ -272,9 +368,9 @@ def _tick():
     # keeps one CPU-heavy thing running at a time.
     building = [j for j in all_jobs if j["class"] == "build" and j["status"] == "running"]
     waiting = [j for j in all_jobs if j["status"] == "queued" and j["class"] == "build" and ready(j)]
-    if waiting and not building and room_for_heavy():
+    if waiting and not building and machine["room"]:
         nxt = next_build(waiting, all_jobs)
-        start(nxt)
+        start(nxt, started)
         building = [nxt]
     # Heavy jobs: one runs at a time, and they take turns. Pause everything
     # for a running build or a swamped Mac; otherwise, once the running job's
@@ -285,10 +381,10 @@ def _tick():
     # first; after that, the least-run job goes next.
     waiting = sorted((j for j in all_jobs if j["class"] == "heavy" and j["status"] in ("paused", "queued") and ready(j)),
                      key=lambda j: (not (j.get("note") in CUT_OFF and j.get("turn_used", 0) < SLICE), ran(j, now), j["created"]))
-    if building or must_pause():
+    if building or machine["pause"]:
         for j in running:
             hold(j, "yielded to a build" if building else "machine busy", now)
-    elif room_for_heavy():
+    elif machine["room"]:
         current = running[0] if running else None
         nxt = waiting[0] if waiting else None
         if current and nxt and now - (current.get("turn") or current.get("started") or now) >= SLICE \
@@ -299,7 +395,7 @@ def _tick():
             if nxt["status"] == "paused":
                 resume(nxt, now)
             else:
-                start(nxt)
+                start(nxt, started)
     running_net = sum(1 for j in all_jobs if j["class"] == "net" and j["status"] == "running")
     for j in sorted((j for j in all_jobs if j["status"] == "queued"), key=lambda j: j["created"]):
         if j["class"] in ("build", "heavy") or not ready(j):
@@ -307,10 +403,10 @@ def _tick():
         if j["class"] == "net":
             if running_net >= MAX_NET:
                 continue
-            start(j)
+            start(j, started)
             running_net += 1
         else:
-            start(j)
+            start(j, started)
 
 
 def list_jobs(argv):
@@ -330,11 +426,12 @@ def log(argv):
 
 
 def kill(argv):
-    j = json.loads((DIR / argv[0] / "job.json").read_text())
-    if j["status"] == "paused":
-        signal_group(j, signal.SIGCONT)
-    j.update(status="killed", ended=time.time())
-    save(j)
+    with write():
+        j = get(argv[0])
+        if j["status"] == "paused":
+            signal_group(j, signal.SIGCONT)
+        j.update(status="killed", ended=time.time())
+        save(j)
     signal_group(j, signal.SIGTERM)
     print(f"{j['id']} killed")
 

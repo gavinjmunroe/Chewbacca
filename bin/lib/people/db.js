@@ -34,13 +34,16 @@ function db() {
   if (_db) return _db;
   fs.mkdirSync(DIR, { recursive: true });
   _db = new DatabaseSync(DB_PATH);
-  _db.exec("PRAGMA foreign_keys = ON");
-  _db.exec("PRAGMA journal_mode = WAL");
   // Without this, ANY contention throws SQLITE_BUSY on the spot instead of
   // waiting. WAL lets readers and a writer coexist, but two writers still take
   // turns, and a long `events scan` plus the user running `people show` in
   // another terminal is two writers. A multi-hour scan died on exactly that.
+  // It goes before journal_mode, which takes a lock of its own: set after it,
+  // 10 tabs running `people texts drafts` at once threw "database is locked"
+  // on 1 of 60 calls in 5 of 8 runs (2026-10-12).
   _db.exec("PRAGMA busy_timeout = 15000");
+  _db.exec("PRAGMA foreign_keys = ON");
+  _db.exec("PRAGMA journal_mode = WAL");
   _db.exec(SCHEMA);
   migrate(_db);
   seed(_db);

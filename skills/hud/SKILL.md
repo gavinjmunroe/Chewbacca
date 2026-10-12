@@ -750,7 +750,7 @@ each held by a test that failed on the code before it:
 | call      | Story                 | call (story)     | story              | the one decision waiting on him, or the fault that stopped the story, with its press |
 | figure    | Story                 | figure (story)   | story              | one object for the beat: the turn's file, command or tests, the request, the hunks |
 | doors     | Story                 | doors (story)    | story              | Transcript and Reply, his full workspace one press away |
-| stage     | Stage                 | main (layer)     | work               | the focused agent's current beat as one card, the beats before it one line each |
+| stage     | Stage                 | main (layer)     | work               | the one live object beside his transcript: the command, the file being written, the check, or the fault |
 | workspace | Carlton's app (#root) | -                | work               | his conversation, composer and panes, untouched |
 | pick      | FolderPick            | -                | work               | Choose folder on the glass, over his new space sheet: his repos and a path field |
 | light     | Light                 | -                | tiles, story, work | the morph outline between a tile and the story, for 320 ms |

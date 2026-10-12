@@ -165,6 +165,7 @@ export function focusView(agent: Agent | undefined): {
   trail: readonly string[];
   trailEarlier: number;
 };
+export function stageObject(turn: Turn | null): "command" | "file" | "tests" | "fault" | null;
 export const Turn: {
   asked(ask: string, at?: number): Turn;
   reading(ask: string, what: string, at?: number, command?: CommandBeat | null): Turn;

@@ -784,6 +784,30 @@ export function focusView(agent) {
   });
 }
 
+/** What the stage beside his transcript draws for a turn: the one live
+ *  object his transcript only lists as a row (the command running, the file
+ *  being written, the check that ran), or the fault that stopped it. Every
+ *  other phase draws nothing there, because his transcript already says it:
+ *  needs-you is his own permission card with its Allow and Deny, done is his
+ *  own "Edited N files" card with Review, asked is his own message. Floating
+ *  audit, headless WebKit, 2026-10-12: the stage drew "Needs you / It's
+ *  waiting on you" beside his permission card, a second diff of the whole
+ *  turn that ran 157 px off the bottom of the glass beside his Review card,
+ *  and the trail of earlier beats as bare text on the desktop with no
+ *  surface under it. */
+export const stageObject = (turn) =>
+  turn
+    ? match(turn, {
+        asked: () => null,
+        reading: (t) => (t.command ? "command" : null),
+        changing: () => "file",
+        proved: () => "tests",
+        "needs-you": () => null,
+        done: () => null,
+        failed: () => "fault",
+      })
+    : null;
+
 /** True when nothing on the resting view is working or waiting on him: the
  *  glass then has no reason to move or to ask often (GlassLayer.tsx polls
  *  at TRUTH_REST_MS instead of TRUTH_BEAT_MS). */

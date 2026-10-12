@@ -30,12 +30,16 @@
   transition: opacity var(--dur-enter) var(--ease-fade);
 }
 
-/* No chrome on the glass: the window's rail, its sidebar column, the lead
- * and the frame around the panes are a window's, and this is not one. */
+/* No chrome on the glass: the window's rail, its sidebar column, the lead,
+ * the trail and the frame around the panes are a window's, and this is not
+ * one. The trail's "Show side panel" button floated alone in the glass's
+ * top right corner, off his app, over the desktop (floating audit,
+ * 2026-10-12); the stage is the side column here. */
 :root[data-glass] .app-rail,
 :root[data-glass] .app > .sidebar,
 :root[data-glass] .sidebar-shade,
 :root[data-glass] .window-lead,
+:root[data-glass] .window-trail,
 :root[data-glass] .side-pane-toggle {
   display: none !important;
 }
@@ -279,23 +283,6 @@
   gap: 4px 10px;
   padding: 10px 14px;
   font-size: var(--text-sm, 13px);
-}
-
-/* ── the trail: beats already told, one line each ─────────────────────── */
-.glass-trail {
-  flex: none;
-  margin: 0;
-  padding: 0 4px;
-  list-style: none;
-  display: grid;
-  gap: 4px;
-  font-size: var(--text-sm, 13px);
-  color: var(--ink-3);
-}
-.glass-trail li {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 /* ── the light morph ───────────────────────────────────────────────────── */

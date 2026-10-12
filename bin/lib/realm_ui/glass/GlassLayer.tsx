@@ -51,6 +51,7 @@ import {
   pace,
   fault,
   focusView,
+  stageObject,
   match,
   restingView,
   reviewOf,
@@ -1058,7 +1059,7 @@ function TileField(props: {
       {resting.moreAgents > 0 && (
         <p className="glass-more">
           {resting.moreAgents} more{" "}
-          {resting.moreAgents === 1 ? "agent" : "agents"} in the sidebar
+          {resting.moreAgents === 1 ? "agent" : "agents"}
           {resting.moreWaiting > 0 && `, ${resting.moreWaiting} waiting on you`}
         </p>
       )}
@@ -1079,8 +1080,9 @@ type Hunked = {
 };
 
 /** The column beside the conversation. It draws from the agent's typed turn
- *  only, one card for the beat it is on, the beats before it one line each;
- *  with nothing on it, it is not drawn. Owns the stage region. */
+ *  only: the one live object of the beat it is on, or the fault that stopped
+ *  it; with nothing on it, it is not drawn and his app takes the width back.
+ *  Owns the stage region. */
 function Stage({
   session,
   agent,
@@ -1125,43 +1127,24 @@ function Stage({
     };
   }, [session.id, session.lastEventSeq, hasTurn, attempt, onSeed]);
 
-  const view = focusView(agent);
-  const turn = view.turn;
+  const turn = focusView(agent).turn;
+  // Only the live object his transcript lists as a row, or the fault that
+  // stopped the turn (stageObject in turn.mjs says why nothing else).
   const card: ReactNode =
     history && !turn ? (
       <Card kind="fault">
         <FaultBody fault={history} onRetry={() => setAttempt((n) => n + 1)} />
       </Card>
-    ) : !turn ? null : (
+    ) : !turn || !stageObject(turn) ? null : (
       match<ReactNode>(turn, {
         asked: () => null,
-        reading: (t) =>
-          t.command ? <CommandView call={t.command} /> : null,
+        reading: (t) => (t.command ? <CommandView call={t.command} /> : null),
         changing: (t) => (
           <FileView key={`f:${t.file.path}`} call={t.file} cwd={session.cwd} />
         ),
-        proved: (t) => (
-          <TestsView call={t.tests} />
-        ),
-        "needs-you": (t) => (
-          <Card kind="needs">
-            <header className="glass-card-head">
-              <span className="glass-verb">Needs you</span>
-              <span className="glass-path">{t.question}</span>
-            </header>
-          </Card>
-        ),
-        done: (t) => (
-          <>
-            {t.tests && <TestsView call={t.tests} />}
-            {agent?.changes && agent.changes.files.length > 0 && (
-              <Review
-                key={agent.changes.root + agent.changes.files.map((f) => f.path).join()}
-                changes={agent.changes}
-              />
-            )}
-          </>
-        ),
+        proved: (t) => <TestsView call={t.tests} />,
+        "needs-you": () => null,
+        done: () => null,
         failed: (t) => (
           <Card kind="fault">
             <FaultBody fault={t.fault} />
@@ -1169,8 +1152,7 @@ function Stage({
         ),
       })
     );
-  const trail = turn ? view.trail : [];
-  const drawn = Boolean(card) || trail.length > 0;
+  const drawn = Boolean(card);
   useEffect(() => {
     const root = document.documentElement;
     if (drawn) root.setAttribute("data-glass-stage", "");
@@ -1180,16 +1162,6 @@ function Stage({
   if (!drawn) return null;
   return (
     <aside className="glass-stage" data-region="stage" aria-label="What the agent is doing">
-      {trail.length > 0 && (
-        <ol className="glass-trail" aria-label="Earlier in this turn">
-          {view.trailEarlier > 0 && (
-            <li className="glass-trail-more">{view.trailEarlier} earlier</li>
-          )}
-          {[...trail].reverse().map((line, i) => (
-            <li key={i}>{line}</li>
-          ))}
-        </ol>
-      )}
       {card}
     </aside>
   );

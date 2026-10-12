@@ -86,7 +86,7 @@ export const REGIONS = Object.freeze([
     grid: "layer",
     area: "main",
     modes: ["work"],
-    draws: "the focused agent's current beat as one card, the beats before it one line each",
+    draws: "the one live object beside his transcript: the command, the file being written, the check, or the fault",
   },
   {
     id: "workspace",

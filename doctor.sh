@@ -394,7 +394,10 @@ if [ -z "$CLAUDE_MD" ]; then
   bad "no CLAUDE.md found" "run setup.sh or install.sh"
 else
   ok "CLAUDE.md found at $CLAUDE_MD"
-  IMPORTS="$(grep -c '^@' "$CLAUDE_MD" 2>/dev/null || echo 0)"
+  # grep -c prints 0 AND exits 1 on no match, so `|| echo 0` made "0\n0"
+  # and the -eq below errored into a false pass (stranger test, 2026-10-12).
+  IMPORTS="$(grep -c '^@' "$CLAUDE_MD" 2>/dev/null || true)"
+  IMPORTS="${IMPORTS:-0}"
   if [ "$IMPORTS" -eq 0 ]; then
     bad "CLAUDE.md has no @ imports, so the rules files load nothing" \
       "this is the bug that made all 18 rules inert; reinstall from the current kit"

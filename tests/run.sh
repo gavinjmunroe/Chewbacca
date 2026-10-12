@@ -869,6 +869,8 @@ if group "installer"; then
     bash "$ROOT/tests/railway_domain_guard.sh"
   check  "vercel-guard refuses Vercel deploys and allows teardown" \
     bash "$ROOT/tests/vercel_guard.sh"
+  check  "pr-guard refuses a pull request on a BMA or Amber repo" \
+    bash "$ROOT/tests/pr_guard.sh"
   # 2026-10-11, the repeats ranked in docs/plans/REPEAT-MISTAKES.md.
   check  "lesson-guard refuses a foreground suite, headless blender and a blind new repo" \
     bash "$ROOT/tests/lesson_guard.sh"

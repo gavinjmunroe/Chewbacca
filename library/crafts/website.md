@@ -157,6 +157,7 @@ overrides this; restraint applies to colour and claims, not to the craft.
 
 **Spectacle is held by taste.** Caleb, the same night: "Be tasteful. Lemma had
 the most tasteful site ever." What made it tasteful is checkable:
+
 - one visual language, with every figure drawn from the same vocabulary and
   stroke family
 - one accent with one meaning, on a calm ground
@@ -231,6 +232,7 @@ over:
 
 **Steal like an artist, and write it down.** Gavin's method, from his
 `reference/STEAL.md`:
+
 - Before building, study the practitioners: an Awwwards juror's criteria (art
   direction, directed motion, 60fps) and The Pudding's scrollytelling rules
   (one step, one visible change; reversible; never hijack the scroll).
@@ -251,6 +253,7 @@ absolutely no sense to a yc company looking at this ... and it makes no
 sense to a USC student". The captions had narrated the animation ("Your
 neighborhood. 232", "One lit window") when they should have answered the
 reader. Before writing a caption:
+
 - Name each reader and the moment they arrive (here, a founder replying
   "more info" to a DM, and a student who heard about the club).
 - List the questions they have, in order.
@@ -365,6 +368,31 @@ page. Each rule names the measurement that would have caught it.
    reads as a leftover even when its copy is right. Give it the same sky,
    type and sharpness, one clear action and a deliberate layout; a missing
    link stays a visible, finished-looking state, never a gap.
+5. **Nothing over the film covers the thing it's about.** On usctts.com/way
+   (2026-10-11) caption clouds placed by eye at 1440 sat on the typewriter
+   at Caleb's window, twice: "Never block important things when they should
+   be shown!", then "Bro ur literally covering the typewriter lmao check all
+   placements". A camera that moves through a stage brings the subject into
+   any fixed corner. Map where the subject is in every frame (TTS-Dev
+   `scripts/caption-room.py`), place each overlay from that map at the
+   reader's own window size, and let it step aside as the camera arrives.
+   Check: read the film's own pixels under every overlay at 1100, 1280,
+   1440, 1680, 1920, 390 and 430 wide, at each stage's start, middle and
+   end, in Chromium and WebKit; subject pixels over 2% fail.
+6. **The texture adds life, never takes it.** "It seems to be making things
+   less vibrant, if anything it should be making them more", "looks like
+   it's on a dusty screen", "The clouds look dead inside" (2026-10-11). A
+   pastel render reads as dust, and grey grain laid over it greys it more.
+   Blend grain soft-light, grade the film (saturate 1.28 and contrast 1.08
+   held the grass and sand true; 1.4 went neon), and take rendered white
+   props most of the way to white with sky colour in their shade. Check:
+   mean saturation on screen never drops below the raw frame's.
+7. **A prop takes the shape he describes, not the literal words.** "Flat
+   bottom, flat front" meant gentle bumps, not a front cut flat: "I didn't
+   mean the clouds are literally flat... It looks like you chopped the
+   block". A set of props is a set of shapes: "Each cloud should be a
+   slightly diff shape! Some taller, some rounder, some wider". Render a
+   preview of every variant and look at it before wiring any in.
 
 ## Done means
 

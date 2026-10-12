@@ -68,6 +68,27 @@ class AttributionGuard(unittest.TestCase):
         self.assertFalse(denied(self.bash('git commit -m "feat: add thing"')[1]))
         self.assertFalse(denied(self.bash('git commit -m "feat: pair\n\nCo-Authored-By: Gavin <g@x.com>"')[1]))
 
+    def test_prose_and_human_named_claude_pass(self):
+        # Review of 8e082d45: the first pattern refused all three.
+        for cmd in ('git commit -m "docs: the guard refuses Generated with Claude Code trailers"',
+                    'git commit -m "feat: x\n\nCo-authored-by: Claude Dupont <claude@dupont.fr>"',
+                    'git commit -m x; echo "Co-Authored-By: Claude" > notes.txt'):
+            self.assertFalse(denied(self.bash(cmd)[1]), cmd)
+
+    def test_a_script_mentioning_gh_pr_is_not_a_pr(self):
+        cmd = "python3 - <<'EOF'\nx = self.bash(f\"gh pr create --body 'Generated with [Claude Code](u)'\")\nEOF"
+        self.assertFalse(denied(self.bash(cmd)[1]))
+
+    def test_relative_and_home_message_files_resolve(self):
+        d = tempfile.mkdtemp()
+        (Path(d) / "msg.txt").write_text(f"fix: y\n\n{TRAILER}\n")
+        self.assertTrue(denied(self.bash("git commit -F msg.txt", cwd=d)[1]))
+        home = tempfile.mkdtemp()
+        (Path(home) / "m.txt").write_text(f"fix: y\n\n{TRAILER}\n")
+        rc, out = hook("attribution-guard.sh", {"tool_name": "Bash", "cwd": "/",
+                                                "tool_input": {"command": "git commit -F ~/m.txt"}}, {"HOME": home})
+        self.assertTrue(denied(out))
+
     def test_mention_outside_a_commit_passes(self):
         self.assertFalse(denied(self.bash(f'grep -r "{TRAILER}" .')[1]))
 
@@ -130,6 +151,20 @@ class CommitMsg(unittest.TestCase):
         self.assertEqual(self.commit(["skills/x/SKILL.md"], "fix: skill wording"), 0)
         self.assertEqual(self.commit(["setup.sh", "SHA256SUMS.txt"], "fix: link a tool onto PATH"), 0)
 
+    def test_prose_and_human_named_claude_pass(self):
+        self.assertEqual(self.commit(["README.md"], "docs: commit-msg refuses Generated with Claude Code lines"), 0)
+        self.assertEqual(self.commit(["README.md"], "feat: pair\n\nCo-authored-by: Claude Dupont <claude@dupont.fr>"), 0)
+        self.assertNotEqual(self.commit(["README.md"], "docs: x\n\nGenerated with [Claude Code](https://claude.com/claude-code)"), 0)
+        self.assertNotEqual(self.commit(["README.md"], "docs: x\n\nCo-Authored-By: GPT-5 Codex <codex@openai.com>"), 0)
+
+    def test_amend_counts_the_whole_commit(self):
+        # Review of 8e082d45: an amend only staged the new change against HEAD.
+        self.assertEqual(self.commit(["README.md"], "docs: base"), 0)
+        self.assertEqual(self.commit(["bin/x.sh", "tests/x.sh"], "fix: x"), 0)
+        (self.repo / "bin/x.sh").write_text("changed\n")
+        self.git("add", "bin/x.sh")
+        self.assertEqual(self.git("commit", "-q", "--amend", "--no-edit").returncode, 0)
+
     def test_bypass_with_reason_and_non_fix(self):
         env = dict(self.env, NO_TEST_OK="mode bit only")
         self.assertEqual(self.commit(["bin/x"], "fix: mode bit", env=env), 0)
@@ -170,6 +205,37 @@ class LandRunsCommitMsg(unittest.TestCase):
         self.assertIn("no test", p.stdout + p.stderr)
         log = run("git", "log", "--oneline", "origin/main", cwd=shared).stdout
         self.assertNotIn("x is 2", log)
+        shutil.rmtree(t, ignore_errors=True)
+
+
+class LandShaChecksAttribution(unittest.TestCase):
+    def test_land_sha_refuses_a_trailer_made_with_no_verify(self):
+        t = Path(tempfile.mkdtemp())
+        env = dict(os.environ, HOME=str(t / "home"), CHEWBACCA_HOME=str(t / "home/.chewbacca"),
+                   GIT_CONFIG_NOSYSTEM="1", GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
+                   GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
+        (t / "home").mkdir()
+
+        def run(*a, cwd):
+            return subprocess.run(list(a), cwd=cwd, capture_output=True, text=True, env=env)
+        run("git", "init", "-q", "--bare", "-b", "main", str(t / "origin.git"), cwd=t)
+        run("git", "clone", "-q", str(t / "origin.git"), str(t / "seed"), cwd=t)
+        seed = t / "seed"
+        (seed / "tools").mkdir()
+        (seed / ".githooks").mkdir()
+        shutil.copy(ROOT / "tools" / "checksums.py", seed / "tools" / "checksums.py")
+        shutil.copy(COMMIT_MSG, seed / ".githooks" / "commit-msg")
+        (seed / "a.txt").write_text("a\n")
+        run("git", "checkout", "-q", "-b", "main", cwd=seed)
+        run("git", "add", "-A", cwd=seed)
+        run("git", "commit", "-qm", "init", cwd=seed)
+        run("git", "push", "-q", "origin", "main", cwd=seed)
+        (seed / "a.txt").write_text("b\n")
+        run("git", "commit", "-q", "--no-verify", "-am", f"docs: b\n\n{TRAILER}", cwd=seed)
+        sha = run("git", "rev-parse", "HEAD", cwd=seed).stdout.strip()
+        p = run(sys.executable, "-I", str(ROOT / "bin" / "chewbacca-land"), sha, cwd=seed)
+        self.assertNotEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn("AI attribution", p.stdout + p.stderr)
         shutil.rmtree(t, ignore_errors=True)
 
 

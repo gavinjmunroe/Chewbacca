@@ -17,23 +17,51 @@
 #        NO_TEST_OK="mode bit only" git commit ...
 #
 # `chewbacca land --paths` commits with --no-verify, so it runs this file
-# itself before committing. Cherry-picks keep the original's verdict.
+# itself before committing. land <sha> runs it with COMMIT_MSG_CHECKS=attribution
+# on each commit it carries.
 set -uo pipefail
 msg_file="${1:-}"
 [ -f "$msg_file" ] || exit 0
 # Comment lines are what git strips before saving the message.
 msg="$(grep -v '^#' "$msg_file")"
 
-if printf '%s' "$msg" | grep -iqE 'co-authored-by:.*(claude|anthropic|copilot|chatgpt|openai|codex|gemini|cursor)|noreply@anthropic\.com|generated with \[?claude'; then
+# The trailer as tools write it: a model's address (noreply@anthropic.com and
+# kin) or a model's name and version, and the markdown "Generated with
+# [Claude Code](...)" line. Prose about the trailer and a human co-author
+# named Claude both pass (review of 8e082d45: the broad first pattern refused
+# its own commit message).
+ATTR='co-authored-by:[^<]*<[^>]*(anthropic\.com|openai\.com|cursor\.(com|sh)|copilot)[^>]*>|co-authored-by:[[:space:]]*(claude|chatgpt|gpt|codex|gemini|copilot)([ -](opus|sonnet|haiku|fable|code|pro|flash|[0-9][0-9.]*))+[[:space:]]*<|generated with \[claude'
+if printf '%s' "$msg" | grep -iqE "$ATTR"; then
   echo "commit-msg: this message carries AI attribution. git.md: never commit Co-Authored-By lines, no AI attribution. Drop the trailer and commit again." >&2
   exit 1
 fi
+
+# land <sha> checks attribution only: the fix half already ran when the
+# commit was made, and a NO_TEST_OK given then isn't in land's environment.
+[ "${COMMIT_MSG_CHECKS:-all}" = "attribution" ] && exit 0
 
 subject="$(printf '%s\n' "$msg" | sed -n '/[^[:space:]]/{p;q;}')"
 case "$subject" in fix:*|fix\(*) ;; *) exit 0 ;; esac
 [ -n "${NO_TEST_OK:-}" ] && exit 0
 
-staged="$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null)"
+# A rebase rewrites commits whose verdict was given when they were made.
+gitdir="$(git rev-parse --git-dir 2>/dev/null)"
+[ -n "$gitdir" ] && { [ -d "$gitdir/rebase-merge" ] || [ -d "$gitdir/rebase-apply" ]; } && exit 0
+# An amend replaces HEAD, so the commit is everything since HEAD's parent.
+# Git doesn't tell this hook it's an amend; the parent git's argv does.
+# (Review of 8e082d45: a fix: with its test, amended to touch the code
+# again, was refused because only the new change was staged against HEAD.)
+base=HEAD
+if ps -o args= -p "$PPID" 2>/dev/null | grep -qE '(^|[[:space:]])--amend([[:space:]]|$)'; then
+  if git rev-parse -q --verify HEAD^ >/dev/null 2>&1; then base=HEAD^; else base=""; fi
+fi
+# No HEAD yet (the first commit) means the whole index is the commit.
+[ -n "$base" ] && ! git rev-parse -q --verify "$base" >/dev/null 2>&1 && base=""
+if [ -n "$base" ]; then
+  staged="$(git diff --cached --name-only --diff-filter=ACMR "$base" 2>/dev/null)"
+else
+  staged="$(git ls-files 2>/dev/null)"
+fi
 [ -n "$staged" ] || exit 0
 # A test file anywhere in the commit counts. The names match the suite's own
 # layout: tests/, hud/Tests/, *_test.*, test_*, *.test.*, *.spec.*.

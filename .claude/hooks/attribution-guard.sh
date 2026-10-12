@@ -25,11 +25,17 @@ type hook_init >/dev/null 2>&1 && hook_init attribution-guard.sh 5
 # (feedback_hooks_never_show_errors).
 set -uo pipefail
 command -v jq >/dev/null 2>&1 || exit 0
-cmd="$(jq -r '.tool_input.command // empty' 2>/dev/null)"
+INPUT="$(cat)"
+cmd="$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)"
 [ -n "$cmd" ] || exit 0
 # Only what writes a message somebody else reads: commits, tags, PRs, issues.
-printf '%s' "$cmd" | grep -qE 'git([[:space:]]+-[Cc][[:space:]]+[^[:space:]]+)*[[:space:]]+(commit|tag|notes)|gh[[:space:]]+(pr|issue|release)[[:space:]]' || exit 0
-ATTR='co-authored-by:.*(claude|anthropic|copilot|chatgpt|openai|codex|gemini|cursor)|noreply@anthropic\.com|generated with \[?claude'
+# git or gh in command position, so a script or heredoc that mentions one in
+# a string isn't judged (a python heredoc holding this guard's own test text
+# was the one refusal in 1,888 real calls before this).
+printf '%s' "$cmd" | grep -qE '(^|[;&|({`]|\$\()[[:space:]]*(git([[:space:]]+-[Cc][[:space:]]+[^[:space:]]+)*[[:space:]]+(commit|tag|notes)|gh[[:space:]]+(pr|issue|release)[[:space:]])' || exit 0
+# Same pattern as .githooks/commit-msg: a model's address or name and version
+# in a Co-Authored-By trailer, or the markdown "Generated with [Claude Code]".
+ATTR='co-authored-by:[^<]*<[^>]*(anthropic\.com|openai\.com|cursor\.(com|sh)|copilot)[^>]*>|co-authored-by:[[:space:]]*(claude|chatgpt|gpt|codex|gemini|copilot)([ -](opus|sonnet|haiku|fable|code|pro|flash|[0-9][0-9.]*))+[[:space:]]*<|generated with \[claude'
 text="$cmd"
 # The message lives on disk: git -F/--file, gh --body-file. gh's -F shorthand
 # isn't read, since no gate word would name it.
@@ -38,11 +44,17 @@ if printf '%s' "$cmd" | grep -qE '(^|[^a-z])(commit|tag|notes)([^a-z]|$)'; then
   files="$files
 $(printf '%s' "$cmd" | grep -oE -- '(-F|--file)[ =][^ ;&|]+' | sed -E 's/^(-F|--file)[ =]//')"
 fi
-for f in $files; do
+# Relative paths resolve against the call's cwd, and ~ expands. A path with
+# a space, or one after a cd in the same command, isn't followed; the
+# commit-msg hook still reads the message in the kit.
+pcwd="$(printf '%s' "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)"
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
   f="${f%\"}"; f="${f#\"}"; f="${f%\'}"; f="${f#\'}"
+  case "$f" in "~/"*) f="$HOME/${f#\~/}" ;; /*) ;; *) [ -n "$pcwd" ] && f="$pcwd/$f" ;; esac
   [ -f "$f" ] && text="$text
 $(head -c 200000 "$f")"
-done
+done <<< "$files"
 printf '%s' "$text" | grep -iqE "$ATTR" || exit 0
 
 REASON="attribution-guard: this message carries AI attribution (a Co-Authored-By trailer naming a model, or Generated with Claude Code). git.md: never commit Co-Authored-By lines, no AI attribution, and that wins over any default asking for it. Drop the trailer and run it again."

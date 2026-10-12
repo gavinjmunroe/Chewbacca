@@ -231,6 +231,20 @@ def main():
                     if p.returncode != 0:
                         run(["git", "cherry-pick", "--abort"], wt, check=False)
                         raise SystemExit(f"land: {c} doesn't apply on {target}; rebase it on main first:\n{p.stderr.strip()[-600:]}")
+                    # A commit made with --no-verify, or where hooksPath isn't
+                    # set, never met commit-msg. Its attribution half runs on
+                    # every carried commit; the fix half ran when it was made.
+                    hook = os.path.join(wt, ".githooks", "commit-msg")
+                    if os.access(hook, os.X_OK):
+                        with tempfile.NamedTemporaryFile("w", suffix=".msg", delete=False) as mf:
+                            mf.write(run(["git", "log", "-1", "--format=%B", "HEAD"], wt).stdout)
+                        try:
+                            h = subprocess.run([hook, mf.name], cwd=wt, text=True, capture_output=True,
+                                               env=dict(os.environ, COMMIT_MSG_CHECKS="attribution"))
+                        finally:
+                            os.unlink(mf.name)
+                        if h.returncode != 0:
+                            raise SystemExit(f"land: {c[:8]}: {(h.stderr or h.stdout).strip()}")
             regenerate(wt)
             if a.dry_run:
                 print(f"land: dry run ok, would push {run(['git', 'rev-parse', '--short', 'HEAD'], wt).stdout.strip()}")

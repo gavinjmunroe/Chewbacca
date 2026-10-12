@@ -310,6 +310,23 @@ check, so a draft that fails never reaches him. When he wrote the words
 himself, `--voice-ok` lets them through. When he says a draft doesn't sound
 like him, add the phrase to `config/voice/never-his.txt` with the date.
 
+### A text that pushes back: read their side of the thread first
+
+When the draft argues, negotiates or calls someone out, read at least two
+weeks of the thread (`people texts <name>`, scroll past today) before the
+first draft, and list every claim the other person already made on the
+topic. Each line of the draft either answers one of those claims or is cut.
+On 2026-10-12 three drafts to Sagar about pay asked questions he had already
+answered on 10/7 ("He's not paying us right now... he'll start giving us deal
+flow"), accused him of conflating projects a week after he'd accused Caleb of
+"conflation of all your other projects", and claimed a role his own 10/10
+roles page didn't give. Caleb: "ur text sounds ignorant bc of things he's
+texted what we've said today and before".
+
+Never put a shorthand in the draft that only the agent's notes explain. "I
+said yes to Jonah being my #1" came from a memory file, and Caleb asked "#1
+what?". Spell out what was said, when, and about what, or cut it.
+
 ## Sending
 
 To send, use `people send`, and only when the user asked for a specific

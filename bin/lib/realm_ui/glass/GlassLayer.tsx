@@ -44,6 +44,7 @@ import { rpc } from "../src/rpc/client";
 import type { AppState } from "../src/state/store";
 import { Spinner } from "../src/components/Spinner";
 import { Story } from "./Story";
+import { NO_PICK, SEED_EVENTS, opening, tileKey, tilesReady, toSeed } from "./nav.mjs";
 import { editRange, excerpt, lostFocus, reviewDecided, voiceIntent } from "./model.mjs";
 import {
   atRest,
@@ -214,7 +215,7 @@ function focusedSession(s: AppState): string | null {
   return item && item.kind === "session" ? item.refId : null;
 }
 
-function useShown(): boolean {
+function useShown(): { shown: boolean; opens: number } {
   // Inside Kyber the page is kept loaded off the glass between openings, so
   // only Kyber can say it is shown: it calls window.__realmGlassShown(true|
   // false) as it attaches and detaches the page (AppPane.swift). Until then
@@ -231,6 +232,10 @@ function useShown(): boolean {
   const [shown, setShown] = useState(
     () => !inKyber && document.visibilityState === "visible",
   );
+  // Counts every time Kyber says the page is shown, even when it already
+  // was: a surface drawn again over a page that never left still opens on
+  // the tiles (10/12 3:38pm, it reopened on the story of the last agent).
+  const [opens, setOpens] = useState(0);
   useEffect(() => {
     const w = window as unknown as { __realmGlassShown?: (v: boolean) => void };
     // What Kyber last said, so a page attached a frame before its window
@@ -239,6 +244,7 @@ function useShown(): boolean {
     w.__realmGlassShown = (v) => {
       kyberSays = Boolean(v);
       setShown(kyberSays && document.visibilityState !== "hidden");
+      if (kyberSays) setOpens((n) => n + 1);
     };
     const vis = () => {
       if (document.visibilityState === "hidden") setShown(false);
@@ -250,7 +256,7 @@ function useShown(): boolean {
       delete w.__realmGlassShown;
     };
   }, [inKyber]);
-  return shown;
+  return { shown, opens };
 }
 
 /** What the renderer it was built from offers a host (install.tsx). Caleb's
@@ -270,10 +276,15 @@ export function GlassLayer({
   store: StoreApi<AppState>;
   host?: Host;
 }) {
-  const shown = useShown();
+  const { shown, opens } = useShown();
   const [mode, setMode] = useState<Mode>("tiles");
   const [focus, setFocus] = useState<string | null>(null);
-  const [picked, setPicked] = useState(0);
+  // Nothing is picked until he picks: Return and the talk key reach only a
+  // tile he chose (nav.mjs NO_PICK).
+  // Held as the agent's id, never a slot: the tiles reorder on every tab
+  // poll and live event, and a slot would hand Return or the talk key to
+  // whichever agent moved into it (review of the 10/12 fix).
+  const [pickedId, setPickedId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<Record<string, Session>>({});
   // One typed agent per session (turn.mjs), stepped from realm's events.
   // Each holds its current turn and a few one-line folds, never history.
@@ -375,19 +386,59 @@ export function GlassLayer({
     return () => window.clearInterval(t);
   }, [booted, shown, load]);
 
-  // Opening "show my agents" lands on the tiles, every time.
+  // Opening "show my agents" lands on the tiles, every time, with nothing
+  // focused and nothing picked (nav.mjs opening()).
   useEffect(() => {
     if (!shown) return;
-    setMode("tiles");
+    const first = opening();
+    setMode(first.mode);
+    setFocus(first.focus);
+    setPickedId(null);
     setLight(null);
     morphing.current = false;
-  }, [shown]);
+  }, [shown, opens]);
   useEffect(() => {
     document.documentElement.setAttribute("data-glass", mode);
     // His app is drawn only in the workspace; under the tiles and the story
     // it is hidden, and its loops have no one to run for.
     host.setQuiet?.(mode !== "work");
   }, [mode, host]);
+
+  // Realm's own sessions say only "ended" or "idle" in the list; their last
+  // events say whether the turn died, and why. Read once per event seq.
+  const seeded = useRef(new Set<string>());
+  useEffect(() => {
+    if (!booted) return;
+    const want = toSeed(Object.values(sessions), agents, seeded.current);
+    for (const s of want) {
+      // Marked while in flight so a re-render doesn't ask twice; unmarked on
+      // a failed read so the next list asks again.
+      const key = `${s.id}:${s.lastEventSeq}`;
+      seeded.current.add(key);
+      void (
+        settle(
+          rpc().call("sessions.events", {
+            id: s.id,
+            afterSeq: Math.max(0, (s.lastEventSeq ?? 0) - SEED_EVENTS),
+            limit: SEED_EVENTS,
+          }),
+          "engine-down",
+          ENGINE_ANSWER_MS,
+        )
+      ).then((r) => {
+        // A failed read leaves the tile on realm's word until the next try.
+        if (!r.ok) {
+          seeded.current.delete(key);
+          return;
+        }
+        let a = emptyAgent();
+        for (const ev of r.value as Stored[]) a = step(a, ev);
+        if (a.turn)
+          // Never over anything a live event already stepped.
+          setAgents((prev) => (prev[s.id] ? prev : { ...prev, [s.id]: a }));
+      });
+    }
+  }, [booted, sessions, agents]);
 
   // What each session's Claude Code tab is really doing, keyed by the CLI's
   // session id. Asked for every session, not just the drawn nine, since the
@@ -462,6 +513,11 @@ export function GlassLayer({
   }, [booted, shown, mode, providerIds]);
 
   const tiles = resting.tiles;
+  const picked = pickedId ? tiles.findIndex((t) => t.id === pickedId) : NO_PICK;
+  const pick = useCallback(
+    (i: number) => setPickedId(i >= 0 ? (resting.tiles[i]?.id ?? null) : null),
+    [resting],
+  );
 
   // His palette, his sidebar or a click in his panes can move focus to
   // another session while the workspace is up; the stage follows it.
@@ -530,8 +586,8 @@ export function GlassLayer({
         )
       ).then((r) => {
         if (!r.ok) setEngineFault(r.fault);
-        else if (r.value === false)
-          setEngineFault(fault("engine-down", "it couldn't open that session"));
+        // false is his store saying the session has no pane item of its own,
+        // which every imported tab says and which still opens (10/12).
       });
       const from = rectOf(tileRefs.current.get(id)) ?? {
         left: window.innerWidth / 2 - 130,
@@ -568,8 +624,8 @@ export function GlassLayer({
   const shrink = useCallback(() => {
     if (morphing.current) return;
     const id = focusRef.current;
-    const i = tiles.findIndex((t) => t.id === id);
-    if (i >= 0) setPicked(i);
+    // Back on the tiles, the agent he came from is the picked one.
+    if (id) setPickedId(id);
     if (reduceMotion()) {
       setMode("tiles");
       return;
@@ -633,28 +689,16 @@ export function GlassLayer({
         t.closest?.("input,textarea,[contenteditable]")
       )
         return;
-      const cols = 3;
-      const n = tiles.length;
-      if (!n) return;
-      const move = (
-        {
-          ArrowRight: 1,
-          ArrowLeft: -1,
-          ArrowDown: cols,
-          ArrowUp: -cols,
-        } as Record<string, number>
-      )[e.key];
-      if (move) {
-        e.preventDefault();
-        setPicked((p) => Math.min(n - 1, Math.max(0, p + move)));
-      } else if (e.key === "Enter" && tiles[picked]) {
-        e.preventDefault();
-        grow(tiles[picked].id);
-      }
+      const k = tileKey(picked, tiles.length, e.key);
+      if (!k.handled) return;
+      e.preventDefault();
+      pick(k.picked);
+      const tile = tiles[k.picked];
+      if (k.open && tile) grow(tile.id);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [mode, tiles, picked, grow]);
+  }, [mode, tiles, picked, grow, pick]);
 
   // Voice from the HUD talk key, through realm-ui's /glass/events.
   useEffect(() => {
@@ -842,8 +886,48 @@ export function GlassLayer({
       setAgents((prev) => (prev[id]?.turn ? prev : { ...prev, [id]: agent })),
     [],
   );
+  const ready = tilesReady({
+    listed,
+    // Only an engine that can't list counts; a pane it couldn't open doesn't
+    // hide the tiles.
+    faulted: Boolean(engineFault),
+    needTruth: Boolean(providerIds),
+    truthAsked,
+  });
+  // Back to every agent from the story or the workspace: the nav's first
+  // button, and what Escape does from the story.
+  const toAll = useCallback(() => {
+    if (modeRef.current === "tiles") return;
+    shrink();
+  }, [shrink]);
+  // Another agent from the nav: straight to its story, no trip through the
+  // tiles.
+  const switchTo = useCallback(
+    (id: string) => {
+      const s = sessions[id];
+      if (!s) return;
+      setFocus(id);
+      setMode("story");
+      void (
+        settle(store.getState().revealSession(id, s.spaceId), "engine-down", ENGINE_ANSWER_MS)
+      ).then((r) => {
+        if (!r.ok) setEngineFault(r.fault);
+      });
+    },
+    [sessions, store],
+  );
   return createPortal(
     <div className="glass-layer" data-mode={mode}>
+      <Nav
+        mode={mode}
+        resting={resting}
+        sessions={sessions}
+        ready={ready}
+        focus={focus}
+        onAll={toAll}
+        onPick={switchTo}
+        onNew={startNew}
+      />
       {notice && (
         <Notice
           fault={notice}
@@ -857,10 +941,10 @@ export function GlassLayer({
           leaving={mode !== "tiles"}
           resting={resting}
           sessions={sessions}
-          known={listed && !engineFault}
+          known={ready}
           picked={picked}
           tileRefs={tileRefs.current}
-          onPick={setPicked}
+          onPick={pick}
           onGrow={grow}
           onNew={startNew}
         />
@@ -870,6 +954,12 @@ export function GlassLayer({
           key={focused.id}
           session={focused}
           onTranscript={openTranscript}
+          onNew={startNew}
+          settledOutsideAt={(() => {
+            const pid = focused.providerSessionId;
+            const tr = pid ? truths[pid] : null;
+            return tr && (tr.state === "done" || tr.state === "stopped") ? (tr.lastAt ?? 0) : 0;
+          })()}
         />
       )}
       {mode === "work" && focused && (
@@ -964,6 +1054,95 @@ function Notice({ fault, onRetry }: { fault: Fault; onRetry?: () => void }) {
   );
 }
 
+/** The way around, always on the glass, sized to be found at a glance.
+ *  On the tiles it is the bar over them: how many agents, New agent, Close.
+ *  On an agent it is the column on the left: All agents, New agent, every
+ *  agent on the tiles as one row each (the open one marked), and Close.
+ *  Owns the nav region. Before 10/12 the only ways out were Escape, a small
+ *  x over his desktop icons, and grey Transcript and Reply words. */
+function Nav(props: {
+  mode: Mode;
+  resting: Resting;
+  sessions: Record<string, Session>;
+  ready: boolean;
+  focus: string | null;
+  onAll: () => void;
+  onPick: (id: string) => void;
+  onNew: () => void;
+}) {
+  const { mode, resting, sessions, ready, focus, onAll, onPick, onNew } = props;
+  const total = resting.tiles.length + resting.moreAgents;
+  const close = (
+    <button type="button" className="glass-nav-close" onClick={dismissGlass} aria-label="Close the glass (Escape)">
+      <span>Close</span>
+      <kbd>esc</kbd>
+    </button>
+  );
+  const newAgent = (
+    <button type="button" className="glass-nav-new" onClick={onNew}>
+      <Icon name="add" size={16} />
+      New agent
+    </button>
+  );
+  const bar = mode === "tiles";
+  return (
+    <nav
+      className="glass-nav"
+      data-region="nav"
+      data-shape={bar ? "bar" : "column"}
+      aria-label="Agents"
+    >
+      {bar ? (
+        <>
+          <span className="glass-nav-title">
+            Agents
+            {ready && total > 0 && <span className="glass-nav-count">{total}</span>}
+          </span>
+          <span className="glass-nav-hint">Pick one to open it</span>
+        </>
+      ) : (
+        <button type="button" className="glass-nav-all" onClick={onAll}>
+          <Icon name="chevronLeft" size={16} />
+          All agents
+          {total > 0 && <span className="glass-nav-count">{total}</span>}
+        </button>
+      )}
+      {newAgent}
+      {!bar && (
+        <ul className="glass-nav-list" aria-label="Switch agent">
+          {(ready ? resting.tiles : []).map((t) => {
+            const s = sessions[t.id];
+            const meta = AGENT_META[s?.agentKind as keyof typeof AGENT_META];
+            const here = t.id === focus;
+            return (
+              <li key={t.id}>
+                <button
+                  type="button"
+                  className="glass-nav-row"
+                  data-tone={t.tone}
+                  aria-current={here ? "true" : undefined}
+                  onClick={() => (here ? undefined : onPick(t.id))}
+                >
+                  <span className="glass-nav-row-head">
+                    {t.tone === "running" ? <Spinner size={10} /> : <span className="glass-dot" />}
+                    <span className="glass-nav-row-word">{t.word}</span>
+                    <span className="glass-nav-row-age">{age(t.turn.at || s?.updatedAt)}</span>
+                  </span>
+                  <span className="glass-nav-row-title">{t.title}</span>
+                  <span className="glass-nav-row-meta">
+                    {meta?.label ?? s?.agentKind} · {base(s?.cwd ?? "")}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {close}
+    </nav>
+  );
+}
+
 export function FaultBody({ fault, onRetry }: { fault: Fault; onRetry?: () => void }) {
   return (
     <>
@@ -1001,9 +1180,10 @@ function TileField(props: {
     onGrow,
     onNew,
   } = props;
-  // The one way to start an agent from the tiles. Without it the glass could
-  // only reopen old agents: the morning rehearsal, 2026-10-11, had no press
-  // that began new work in a repo.
+  // With no agents yet the field is the door to the first one. With agents,
+  // New agent is the nav bar's (Nav), one press from every state, so the
+  // field doesn't say it twice. Without a door at all the glass could only
+  // reopen old agents (the morning rehearsal, 2026-10-11).
   const door = (
     <button
       type="button"
@@ -1031,13 +1211,15 @@ function TileField(props: {
       data-leaving={leaving || undefined}
       onMouseDown={onGround}
     >
-      {!tiles.length ? (
+      {!tiles.length || !known ? (
         // Until the list has come back there is nothing true to say here;
         // with the engine down the notice says why.
         known && !Object.keys(sessions).length ? (
           <div className="glass-tiles" role="list" aria-label="Agents">
             {door}
           </div>
+        ) : !known ? (
+          <p className="glass-quiet">Reading your agents</p>
         ) : null
       ) : (
         <div className="glass-tiles" role="list" aria-label="Agents">
@@ -1085,7 +1267,6 @@ function TileField(props: {
               </button>
             );
           })}
-          {door}
         </div>
       )}
       {resting.moreAgents > 0 && (

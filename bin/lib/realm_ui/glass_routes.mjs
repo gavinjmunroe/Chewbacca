@@ -317,6 +317,12 @@ export function handleGlass(
         ) {
           return json(res, 409, { error: "the agents glass isn't up" });
         }
+        // The tiles with nothing picked: no agent to hand it to, so the
+        // assistant takes it. Before, a sentence went to whichever tile was
+        // first and opened it (the dead Gemini session, 10/12).
+        if (!f.sessionId) {
+          return json(res, 409, { error: "no agent is picked on the glass" });
+        }
         for (const send of state.listeners) send({ type: "voice", text });
         return json(res, 200, {
           ok: true,

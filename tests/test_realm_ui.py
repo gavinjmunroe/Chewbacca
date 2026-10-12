@@ -199,6 +199,8 @@ check("the daemon runs `realm-ui serve`, never a worktree's server.mjs", svc[-1]
 
 # ── the surface ─────────────────────────────────────────────────────────────
 
+# 1180 ran under the desktop icons on his 1246-point display (10/12 3:38pm).
+check("the realm surface leaves the desktop icon column clear", realm_app.RealmApp.width <= 1000)
 app = realm_app.RealmApp(start=lambda: {"url": "http://127.0.0.1:47317/"})
 lines = app.layout()
 check("it is a glance, so a click off it takes it down", lines[0] == "glance realm", lines)

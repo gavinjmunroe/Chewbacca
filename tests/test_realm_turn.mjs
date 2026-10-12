@@ -259,7 +259,8 @@ test("an agent error becomes a failed turn carrying realm's own fix when it name
     }),
   ]);
   assert.equal(a.turn.phase, "failed");
-  assert.equal(a.turn.fault.name, "agent-error");
+  // realm says it's an auth failure: the named signed-out state, its fix kept.
+  assert.equal(a.turn.fault.name, "signed-out");
   assert.equal(a.turn.fault.fix, "Run claude login.");
   assert.equal(a.turn.fault.detail, "401 Unauthorized");
 });

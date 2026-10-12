@@ -500,8 +500,40 @@ const programsOf = (command) => {
 
 const filesWord = (n) => `${n} ${n === 1 ? "file" : "files"}`;
 
-/** The one sentence the glass leads with. */
-export function headline(story, b = beat(story)) {
+/** Where a failed turn stopped: the beat it was on when the error came.
+ *  Read from what the turn got done, since a failed turn keeps no phase of
+ *  its own: a check after an edit, an edit, a read or a command, or nothing
+ *  at all (the Gemini "Hello" of 10/10 died before it read a thing). */
+export function failedAt(story) {
+  const checkedAfter = story.edited.length && story.checks.some((c) => c.at >= story.lastEditAt);
+  if (checkedAfter) return "proving";
+  if (story.edited.length) return "changing";
+  if (story.reads.length || story.checks.length) return "reading";
+  return "asked";
+}
+
+// The most words a provider's own first sentence may have to lead the story
+// as its headline. "Usage limit reached." (3) does; Gemini's 17-word "needs
+// you to sign in: This client is no longer supported ..." did, and was the
+// three-line headline of 10/12. Six is guessed.
+const FAILED_HEADLINE_WORDS = 6;
+
+const FAILED_WORDS = {
+  asked: "Failed before it started",
+  reading: "Failed while reading",
+  changing: "Failed while changing files",
+  proving: "Failed while checking",
+};
+
+/** The fault a failed turn carries, or null. */
+const failedFault = (story) => {
+  const t = story.agent?.turn;
+  return t?.phase === "failed" ? t.fault : null;
+};
+
+/** The one sentence the glass leads with. `who` is the agent's name
+ *  (Claude, Gemini), for a failure that is about the agent itself. */
+export function headline(story, b = beat(story), { who = "" } = {}) {
   const st = story.stage;
   const perm = story.permission;
   if (b === "call" && perm) {
@@ -522,8 +554,16 @@ export function headline(story, b = beat(story)) {
   // waiting_permission, then permission_request). That beat is his call
   // already, with nothing to show yet; it is never "Done".
   if (b === "call" && story.agent?.turn?.phase === "needs-you") return "It's asking for your OK";
-  if (b === "failed")
-    return firstSentence(story.failure) || "It stopped with an error";
+  // A named state, never the provider's raw words: on 10/12 the glass led
+  // with a three-line "Gemini needs you to sign in: This client is no
+  // longer supported ..." The raw words are the call's small print.
+  if (b === "failed") {
+    if (failedFault(story)?.name === "signed-out") return `${who || "This agent"} can't sign in`;
+    // A short first sentence is its own name ("Usage limit reached.");
+    // anything longer is small print.
+    const first = firstSentence(story.failure);
+    return first && first.split(/\s+/).length <= FAILED_HEADLINE_WORDS ? first : "It stopped with an error";
+  }
   if (b === "reading") {
     const last = story.reads[story.reads.length - 1];
     const name = base(last) || last;
@@ -548,8 +588,33 @@ export function headline(story, b = beat(story)) {
   return n ? `Changed ${filesWord(n)}` : "Done";
 }
 
-/** The one decision waiting on the person, or null. */
-export function decision(story, { kept = false } = {}) {
+/** The one decision waiting on the person, or null. A failed turn's call is
+ *  what it is and the one thing to do, with the system's own words under it. */
+export function decision(story, { kept = false, who = "" } = {}) {
+  const f = failedFault(story);
+  if (f && !story.permission) {
+    const name = who || "this agent";
+    const signedOut = f.name === "signed-out";
+    return {
+      kind: "failed",
+      // Claude's own login dying can't be answered with "use Claude".
+      line: signedOut
+        ? who === "Claude"
+          ? "Claude's login is dead. Sign Claude in again, then ask again."
+          : `${name}'s login is dead. Use Claude for this, or sign ${name} in again.`
+        : `${f.what} ${f.fix}`,
+      detail: f.detail,
+      verbs: signedOut
+        ? [
+            { id: "new", text: who === "Claude" ? "New agent" : "New agent with Claude" },
+            { id: "answer", text: "See the full error" },
+          ]
+        : [
+            { id: "answer", text: "See the full error" },
+            { id: "new", text: "New agent" },
+          ],
+    };
+  }
   const perm = story.permission;
   if (perm) {
     if (perm.question)
@@ -625,10 +690,21 @@ export function figure(story, b = beat(story)) {
   });
 }
 
-/** The beat line's state per word: read, lit or ahead. */
-export function beatLine(b) {
+/** The beat line's state per word: read, lit or ahead. A failed turn reads
+ *  up to the beat it died on, which is drawn as the failure, and nothing
+ *  past it: on 10/12 every beat sat grey ahead of a turn that never read a
+ *  thing, and a red "Failed" wrapped onto a line of its own as a bare bar. */
+export function beatLine(b, story = null) {
   if (b === "quiet") return [];
-  const at = b === "failed" ? BEATS.length : BEATS.indexOf(b);
+  if (b === "failed") {
+    const where = story ? failedAt(story) : "asked";
+    const at = BEATS.indexOf(where);
+    return [
+      ...BEATS.slice(0, at).map((id) => ({ id, word: BEAT_WORDS[id], state: "read" })),
+      { id: "failed", word: FAILED_WORDS[where], state: "failed" },
+    ];
+  }
+  const at = BEATS.indexOf(b);
   return BEATS.map((id, i) => ({
     id,
     word: BEAT_WORDS[id],

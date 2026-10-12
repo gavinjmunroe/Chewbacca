@@ -112,6 +112,15 @@ export const FAULTS = Object.freeze({
     fix: "Open it, read the error, and ask again.",
     retry: false,
   }),
+  // The provider refused the agent's own sign-in. On 2026-10-12 the first
+  // live open of the glass led with Gemini's "Gemini needs you to sign in:
+  // This client is no longer supported for Gemini Code Assist for
+  // individuals..." as a three-line headline; this is that, named.
+  "signed-out": Object.freeze({
+    what: "Its sign-in is dead.",
+    fix: "Start a new agent with Claude, or sign it in again.",
+    retry: false,
+  }),
   "voice-dropped": Object.freeze({
     what: "The talk key lost its line to this page.",
     fix: "It reconnects by itself. Say it again in a few seconds.",
@@ -136,6 +145,26 @@ export function fault(name, detail = "", fix = "") {
       .slice(0, 200),
   });
 }
+
+// What a provider says when its login, key or client was refused. Matched on
+// the error's own words because realm's error event carries no code for it
+// (the Gemini session of 10/10: "Gemini needs you to sign in: This client is
+// no longer supported ...").
+// Only auth phrasings: a bare "log in" or "no longer supported" also matched
+// "Failed to write log in /tmp/realm" and "Model x is no longer supported"
+// (review of the 10/12 fix), so each alternative names the account.
+export const SIGNED_OUT =
+  /(?:needs? you to (?:sign|log) ?in|please (?:re-?)?(?:sign|log) ?in|(?:run|use) \/?login\b|not (?:signed|logged) in|(?:signed|logged) out\b|sign-?in (?:required|expired|failed)|not authenticated|\bunauthori[sz]ed\b|authentication (?:failed|required)|invalid api key|api key (?:is )?(?:missing|invalid|expired)|credentials? (?:have |has )?(?:expired|invalid|missing)|client is no longer supported|(?:oauth |access |auth )token (?:has )?expired|re-?authenticate)/i;
+
+/** The fault an agent's error is: signed-out when the provider refused its
+ *  login (realm's own `failure: "auth"`, or the words say so), agent-error
+ *  for anything else. The raw words stay as `detail`. */
+export const errorFault = (message, fix = "", failure = "") =>
+  fault(
+    failure === "auth" || SIGNED_OUT.test(String(message ?? "")) ? "signed-out" : "agent-error",
+    message,
+    fix,
+  );
 
 /** A Result, Rust's: `{ ok: true, value }` or `{ ok: false, fault }`. */
 export const ok = (value) => Object.freeze({ ok: true, value });
@@ -298,7 +327,7 @@ export const word = (turn) =>
         : "Testing",
     "needs-you": () => "Needs you",
     done: (t) => (t.stopped ? "Stopped" : "Done"),
-    failed: () => "Failed",
+    failed: (t) => (t.fault.name === "signed-out" ? "Signed out" : "Failed"),
   });
 
 /** The tone a tile is painted in. */
@@ -623,7 +652,7 @@ export function step(agent, stored) {
     case "error":
       return go(
         agent,
-        Turn.failed(turn.ask, fault("agent-error", p.message, p.fix?.hint), at),
+        Turn.failed(turn.ask, errorFault(p.message, p.fix?.hint, p.failure), at),
         { inflight: Object.freeze({}) },
       );
     case "status": {
@@ -641,7 +670,7 @@ export function step(agent, stored) {
           ? same(agent)
           : go(
               agent,
-              Turn.failed(turn.ask, fault("agent-error", p.message), at),
+              Turn.failed(turn.ask, errorFault(p.message), at),
               { inflight: Object.freeze({}) },
             );
       // idle or ended: the engine says the turn settled, once it has begun.
@@ -719,6 +748,20 @@ export function turnFromTruth(truth, title = "") {
  *  nine tiles, 2026-10-11 8:25pm), so the tile waits for the first answer
  *  (49 ms for twelve tabs cold, realm-tiles-truth-report.md) instead. */
 export function tileTurn(session, agent, truth, truthAsked) {
+  // Realm's copy of an imported tab stops where the import did, so a turn it
+  // never saw settle reads as still going. The tab's transcript outranks it:
+  // on 10/12 opening the 5h-old TTS Logo tab turned its row to "Starting".
+  // Only when the tab wrote after realm's last word on it: a turn realm is
+  // running live is newer than any transcript poll.
+  if (
+    agent?.turn &&
+    session?.providerSessionId &&
+    truth &&
+    truth.state !== "running" &&
+    isRunning(agent.turn) &&
+    (truth.lastAt ?? 0) > (agent.turn.at || 0)
+  )
+    return turnFromTruth(truth, session?.title ?? "");
   if (agent?.turn) return agent.turn;
   const title = session?.title ?? "";
   const s = session?.status;
@@ -743,9 +786,22 @@ export const MAX_TILES = 9;
 // of the 1180 point surface at the tile's 13 px; the rest are a count. Guessed.
 export const WAIT_KEEP = 3;
 
-const rank = (t) => {
+// How long a failed turn stays near the front of the tiles. Past it a
+// failure is history and sorts behind real work. On 2026-10-12 a 2-day-old
+// Gemini "Hello" that died on sign-in sat first, ahead of sixteen tabs with
+// real work, and was what the glass opened into. 30 minutes is guessed:
+// long enough to come back to a turn that just broke, never measured.
+export const FRESH_FAIL_MS = 30 * 60_000;
+
+/** Where a tile sorts: waiting on him, then working, then a failure from the
+ *  last FRESH_FAIL_MS, then everything settled, newest first, and last any
+ *  failure older than that or of unknown age (realm's bare "error" status). */
+const rank = (t, now) => {
   const k = tone(t);
-  return k === "needs" ? 0 : k === "failed" ? 1 : k === "running" ? 2 : 3;
+  if (k === "needs") return 0;
+  if (k === "running") return 1;
+  if (k === "failed") return t.at && now - t.at < FRESH_FAIL_MS ? 2 : 4;
+  return 3;
 };
 const lineOf = (t) =>
   clip(
@@ -767,7 +823,7 @@ const lineOf = (t) =>
 /** What the glass holds at rest, for any number of agents and turns: at most
  *  MAX_TILES tiles of one line each, at most WAIT_KEEP things waiting on him,
  *  and counts for the rest. `agents` maps session id to step()'s state. */
-export function restingView(sessions, agents = {}, truths = {}, asked = false) {
+export function restingView(sessions, agents = {}, truths = {}, asked = false, now = Date.now()) {
   const drawn = [];
   for (const s of sessions) {
     const pid = s.providerSessionId;
@@ -777,7 +833,7 @@ export function restingView(sessions, agents = {}, truths = {}, asked = false) {
     const t = tileTurn(s, agents[s.id], truth, asked && Boolean(pid) && pid in truths);
     if (t) drawn.push({ s, t });
   }
-  drawn.sort((a, b) => rank(a.t) - rank(b.t) || (b.t.at || b.s.updatedAt || 0) - (a.t.at || a.s.updatedAt || 0));
+  drawn.sort((a, b) => rank(a.t, now) - rank(b.t, now) || (b.t.at || b.s.updatedAt || 0) - (a.t.at || a.s.updatedAt || 0));
   const waiting = drawn.filter((d) => d.t.phase === "needs-you");
   return Object.freeze({
     tiles: drawn.slice(0, MAX_TILES).map(({ s, t }) =>

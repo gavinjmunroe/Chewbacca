@@ -745,19 +745,98 @@ each held by a test that failed on the code before it:
    must when every agent is at rest. The measured numbers sit next to each
    constant in GlassLayer.tsx.
 
+### Getting around
+
+Caleb's first live open, 2026-10-12 3:38pm, after every headless rehearsal
+had passed: "Bro wtf is this ux I can't navigate anything???" The glass
+opened straight into a 2-day-old Gemini session that had died on sign-in,
+its raw error as a three-line headline, and the only ways out were Escape,
+a small x over his desktop icons and two grey words in a corner. The
+rehearsals had tested a fake agent on an empty engine, so none of them met
+an old dead session or a desktop. This is the spec that answers it; the
+rules live in `bin/lib/realm_ui/glass/nav.mjs` and are held by
+`tests/test_realm_nav.mjs`.
+
+Taken from the places that already make this obvious. The uselemma.ai
+replica keeps one header on screen at all times with one primary action on
+the right and a quiet secondary beside it. Claude's desktop app and
+Carlton's own Realm window keep the session list in a left column, with New
+at its top and the open session marked in it, so switching is one press and
+never a trip back through a home screen. VS Code's agent panel keeps "new
+session" and the history in the panel's own header.
+
+What opens first:
+
+- **Always the tiles.** Every time the glass is shown, even when the page
+  never left (Kyber reattaching a kept page), it opens on the tiles with
+  nothing focused and nothing picked (`opening()`). Never the agent that was
+  up last.
+- **Nothing is picked until he picks.** Return opens only a tile he moved
+  to with the arrows or the pointer (`tileKey`), and the talk key reaches
+  no agent from the tiles until one is picked (`/glass/voice` refuses with
+  no session). A stale tile can't be opened by a stray key.
+- **No tile is drawn until every tab's state is in** (`tilesReady`). Drawn
+  early, the only drawable tile was realm's one native session, the dead
+  Gemini one, alone and first. "Reading your agents" holds the field for
+  the ~50 ms it takes.
+- **Newest real work first.** Waiting on him, then working, then a failure
+  from the last 30 minutes, then everything settled by age, and last any
+  failure older than that (`FRESH_FAIL_MS` in turn.mjs).
+
+What's always visible:
+
+- **On the tiles, a bar over them:** Agents with the count, New agent
+  (the one primary action), Close with its `esc` key drawn on it.
+- **On an agent (story or transcript), a column on the left:** All agents
+  as the first and largest button, New agent under it, then every agent
+  on the tiles as one row each (state, title, age, agent and repo) with the
+  open one marked, and Close at the bottom. Pressing a row switches straight
+  to that agent's story.
+- **On the story, the doors are buttons:** Open transcript, and Reply as
+  the primary. Never grey words.
+
+Where the exits are: All agents (or Escape) from the story goes to the
+tiles; Escape from the transcript goes to the story; Close (or Escape on
+the tiles, or a press on empty glass) takes the glass down. Every one of
+them is a button on screen; the keys are shortcuts, never the only way.
+
+A failed turn is a named state, never the provider's words as a headline:
+"Gemini can't sign in" over the beat line, and the call says what to do
+("Gemini's login is dead. Use Claude for this, or sign Gemini in again.")
+with New agent with Claude and See the full error as its presses, and the
+raw error small and grey under it. The beat line reads up to the beat it
+died on, drawn as "Failed before it started" (or while reading, changing,
+checking) in red, and nothing past it. The tile and the nav row say
+"Signed out" for an agent whose provider refused its login.
+
+The panel never collides with the desktop: the realm surface is 1000
+points wide, centred, which on his 1246-point display leaves 123 points on
+each side, clear of the icon column macOS keeps on the right, and every
+panel is 96% opaque so nothing behind it reads through. With no figure for
+the beat the story is one column, never a telling huddled left of an empty
+two thirds.
+
+How it is proved: a headless WebKit run seeded with a read-only copy of his
+real realm database (the dead Gemini session and every old tab included),
+over a test backdrop with a column of desktop icons on the right edge, at
+1246 x 900 at 2x and at 1440 x 900. The first frame must be the tiles, and
+from every state the way back to all agents must be on screen and one
+press. Then every frame is opened and looked at.
+
 ### One owner per region
 
 <!-- regions:begin -->
 | Region    | Owner                 | Grid area        | Modes              | Draws |
 | --------- | --------------------- | ---------------- | ------------------ | ----- |
 | notice    | Notice                | notice (layer)   | tiles, story, work | a fault no one agent owns (engine down, the talk key lost), with its one fix |
-| field     | TileField             | main (layer)     | tiles              | the agent tiles, one line each, a count of the rest, and the New agent door |
+| nav       | Nav                   | nav (layer)      | tiles, story, work | the way around, always on screen: All agents, New agent, every agent to switch to, Close |
+| field     | TileField             | main (layer)     | tiles              | the agent tiles, one line each, a count of the rest, and the New agent door when there are none |
 | story     | Story                 | main (layer)     | story              | one agent's turn told by the screen, in the five regions below |
 | ask       | Story                 | ask (story)      | story              | what he asked, which agent, how long ago |
 | tell      | Story                 | tell (story)     | story              | the one headline, the beat line from the typed turn, what proved it |
 | call      | Story                 | call (story)     | story              | the one decision waiting on him, or the fault that stopped the story, with its press |
 | figure    | Story                 | figure (story)   | story              | one object for the beat: the turn's file, command or tests, the request, the hunks |
-| doors     | Story                 | doors (story)    | story              | Transcript and Reply, his full workspace one press away |
+| doors     | Story                 | doors (story)    | story              | Open transcript and Reply as buttons, his full workspace one press away |
 | stage     | Stage                 | main (layer)     | work               | the one live object beside his transcript: the command, the file being written, the check, or the fault |
 | workspace | Carlton's app (#root) | -                | work               | his conversation, composer and panes, untouched |
 | pick      | FolderPick            | -                | work               | Choose folder on the glass, over his new space sheet: his repos and a path field |

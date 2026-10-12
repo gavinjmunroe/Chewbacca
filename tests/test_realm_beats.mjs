@@ -494,9 +494,11 @@ test("the beat line reads past beats, lights the current one, and dims what is a
     s.beatLine("changing").map((b) => b.state),
     ["read", "read", "lit", "ahead", "ahead", "ahead"],
   );
-  assert.equal(
-    s.beatLine("failed").every((b) => b.state === "read"),
-    true,
+  // A failed turn reads up to where it died and stops there (10/12: all
+  // five grey for a turn that died before reading). No story: before start.
+  assert.deepEqual(
+    s.beatLine("failed").map((b) => [b.id, b.state]),
+    [["failed", "failed"]],
   );
 });
 

@@ -21,6 +21,7 @@ export type FaultName =
   | "tab-unreadable"
   | "stalled"
   | "agent-error"
+  | "signed-out"
   | "voice-dropped";
 
 export type Fault = {
@@ -156,7 +157,11 @@ export function restingView(
   agents?: Record<string, Agent>,
   truths?: Record<string, Truth | null>,
   asked?: boolean,
+  now?: number,
 ): Resting;
+export const FRESH_FAIL_MS: number;
+export const SIGNED_OUT: RegExp;
+export function errorFault(message: unknown, fix?: string, failure?: string): Fault;
 export function pace(gapMs: number): { push(fn: () => void): void; cancel(): void };
 export function atRest(resting: Resting): boolean;
 export function focusView(agent: Agent | undefined): {

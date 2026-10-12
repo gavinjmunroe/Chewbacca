@@ -34,7 +34,7 @@ function areasFor(grid, mode) {
         rule(/\.glass-layer \{([^}]*)\}/);
   return [...(block ?? "").matchAll(/"([^"]+)"/g)].flatMap((m) => m[1].split(/\s+/)).filter((a) => a !== ".");
 }
-const CLASS = { notice: "glass-notice", field: "glass-field", stage: "glass-stage", story: "story" };
+const CLASS = { nav: "glass-nav", notice: "glass-notice", field: "glass-field", stage: "glass-stage", story: "story" };
 const classOf = (r) => CLASS[r.id] ?? `story-${r.id}`;
 
 test("every region is drawn by exactly one component, at its own root", () => {

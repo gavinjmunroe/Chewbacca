@@ -8,8 +8,12 @@
  */
 
 :root[data-glass] {
-  --pane-alpha: 84%;
-  --glass-stage-w: min(46vw, 560px);
+  /* 96%, not his 84%: on 10/12 his desktop folder icons and their labels
+   * read through the story at 84% and the panel looked like a tinted sheet
+   * over his wallpaper (live-test/first-live-1538.png). */
+  --pane-alpha: 96%;
+  --glass-stage-w: min(40vw, 480px);
+  --glass-nav-w: 232px;
   --glass-gap: 12px;
   background: transparent;
 }
@@ -84,9 +88,13 @@
     opacity var(--dur-enter) var(--ease-fade),
     width var(--dur-base) var(--ease-out-strong);
 }
+:root[data-glass="work"] #root {
+  margin-left: calc(var(--glass-nav-w) + var(--glass-gap));
+  width: calc(100% - var(--glass-nav-w) - var(--glass-gap));
+}
 :root[data-glass="work"][data-glass-stage] #root,
 :root[data-glass="work"][data-glass-notice] #root {
-  width: calc(100% - var(--glass-stage-w) - var(--glass-gap));
+  width: calc(100% - var(--glass-nav-w) - var(--glass-stage-w) - 2 * var(--glass-gap));
 }
 
 /* One owner per region (skills/hud/SKILL.md, "One owner per region"): the
@@ -103,12 +111,13 @@
   display: grid;
   grid-template:
     "notice" auto
+    "nav" auto
     "main" minmax(0, 1fr) / minmax(0, 1fr);
 }
 .glass-layer[data-mode="work"] {
   grid-template:
-    ". notice" auto
-    ". main" minmax(0, 1fr) / minmax(0, 1fr) var(--glass-stage-w);
+    "nav . notice" auto
+    "nav . main" minmax(0, 1fr) / var(--glass-nav-w) minmax(0, 1fr) var(--glass-stage-w);
   column-gap: var(--glass-gap);
 }
 .glass-layer[data-mode="tiles"] {
@@ -120,9 +129,10 @@
   grid-area: main;
   min-height: 0;
   display: grid;
-  align-content: center;
-  place-items: center;
-  padding: 24px;
+  align-content: start;
+  justify-items: center;
+  padding: 16px 24px 24px;
+  overflow-y: auto;
   animation: glass-in var(--dur-slow) var(--ease-out-strong) both;
 }
 .glass-field[data-leaving] {
@@ -526,6 +536,10 @@
 }
 .glass-layer[data-mode="story"] {
   pointer-events: auto;
+  grid-template:
+    "nav notice" auto
+    "nav main" minmax(0, 1fr) / var(--glass-nav-w) minmax(0, 1fr);
+  column-gap: var(--glass-gap);
 }
 .story {
   grid-area: main;
@@ -646,10 +660,15 @@
 .story[data-beat="call"] .story-beats li[data-state="lit"] .story-beat-dot {
   background: var(--orange);
 }
-.story-beats li[data-tone="bad"],
-.story-beats li[data-tone="bad"] .story-beat-dot {
+/* Where a failed turn died: its words in red, its dot red. Never a fill:
+ * on 10/12 a red background on the whole word drew a bare red bar. */
+.story-beats li[data-state="failed"] {
   color: var(--red);
+  font-weight: var(--font-weight-semibold, 600);
+}
+.story-beats li[data-state="failed"] .story-beat-dot {
   background: var(--red);
+  opacity: 1;
 }
 /* The one live-work signal: the lit beat's dot breathes while the agent
  * works. Everything else on the glass is still. */
@@ -885,8 +904,85 @@
   gap: 4px;
   margin-right: -8px;
 }
-.story-doors .glass-word {
-  color: var(--ink-2);
+.story-doors {
+  gap: 8px;
+  margin-right: 0;
+}
+
+/* No figure for the beat: one column, so the telling doesn't huddle in the
+ * left five elevenths with the rest of the panel empty (10/12 3:38pm). */
+.story[data-figureless] {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-areas: "ask" "tell" "call" "doors";
+}
+/* The telling sits under what he asked and the call right under it, read
+ * top to bottom, never the headline floating mid-panel over a void. */
+.story[data-figureless] .story-tell {
+  align-self: start;
+  margin-top: 28px;
+}
+.story[data-figureless] .story-call {
+  align-self: start;
+}
+.story[data-figureless] .story-tell,
+.story[data-figureless] .story-call {
+  max-width: 640px;
+}
+
+/* A failed turn's call: the named state and the one thing to do, then the
+ * system's own words small and quiet under it. */
+.story-call[data-kind="failed"] {
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--red) 60%, transparent);
+}
+.story-call-detail {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs, 12px);
+  line-height: 16px;
+  color: var(--ink-3);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* A door is a button you can see: a hairline and a fill, at least 32 px
+ * tall. Grey words alone in a corner were the only way to the transcript
+ * on 10/12. */
+.glass-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 6px 14px;
+  border-radius: var(--radius-control, 8px);
+  font-size: var(--text-sm, 13px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 var(--hairline-w, 1px) var(--line-strong, var(--line));
+  cursor: pointer;
+  transition:
+    background-color var(--dur-hover) var(--ease-fade),
+    scale var(--dur-press) var(--ease-out-strong);
+}
+.glass-button[data-primary] {
+  color: var(--accent-ink);
+  background: var(--accent-tint, var(--surface));
+  box-shadow: inset 0 0 0 var(--hairline-w, 1px) color-mix(in srgb, var(--accent) 55%, transparent);
+}
+@media (hover: hover) and (pointer: fine) {
+  .glass-button:hover {
+    background: var(--hover);
+  }
+}
+.glass-button:active {
+  scale: 0.97;
+}
+.glass-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* Narrow glass: one column, the figure under the telling. */
@@ -1100,4 +1196,188 @@
 }
 .glass-tile-new .glass-tile-title {
   color: var(--ink-2);
+}
+
+/* ── the nav: the way around, in every mode ──────────────────────────────
+ * One owner (Nav in GlassLayer.tsx), one area. On the tiles it is the bar
+ * over them; on an agent it is the column on the left. Always on screen,
+ * never only a key: on 10/12 the only ways out were Escape, a small x over
+ * his desktop icons, and grey words in a corner. */
+.glass-nav {
+  grid-area: nav;
+  pointer-events: auto;
+  display: flex;
+  gap: 8px;
+  border-radius: var(--radius-window, 16px);
+  background: var(--pane-ground);
+  box-shadow:
+    inset 0 0 0 var(--hairline-w, 1px) var(--card-ring, var(--line)),
+    var(--shadow-overlay);
+  animation: glass-in var(--dur-slow) var(--ease-out-strong) both;
+}
+.glass-nav[data-shape="bar"] {
+  justify-self: center;
+  align-items: center;
+  width: min(100% - 48px, 924px);
+  margin: 24px 24px 0;
+  padding: 10px 10px 10px 18px;
+}
+.glass-nav[data-shape="column"] {
+  flex-direction: column;
+  min-height: 0;
+  padding: 12px;
+}
+.glass-nav-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-base, 14px);
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--ink);
+}
+.glass-nav-count {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill, 999px);
+  background: var(--hover);
+  font-size: var(--text-xs, 12px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--ink-2);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.glass-nav-hint {
+  margin-right: auto;
+  font-size: var(--text-sm, 13px);
+  color: var(--ink-3);
+}
+.glass-nav-all,
+.glass-nav-new,
+.glass-nav-close {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border-radius: var(--radius-control, 8px);
+  font-size: var(--text-sm, 13px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--ink);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-hover) var(--ease-fade),
+    scale var(--dur-press) var(--ease-out-strong);
+}
+.glass-nav-all {
+  font-size: var(--text-base, 14px);
+  font-weight: var(--font-weight-semibold, 600);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 var(--hairline-w, 1px) var(--line-strong, var(--line));
+}
+.glass-nav-all .glass-nav-count {
+  margin-left: auto;
+}
+.glass-nav-new {
+  color: var(--accent-ink);
+  background: var(--accent-tint, var(--surface));
+  box-shadow: inset 0 0 0 var(--hairline-w, 1px) color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.glass-nav-close {
+  color: var(--ink-2);
+}
+.glass-nav[data-shape="column"] .glass-nav-close {
+  margin-top: auto;
+}
+.glass-nav-close kbd {
+  padding: 0 5px;
+  border-radius: var(--radius-sm, 4px);
+  box-shadow: inset 0 0 0 var(--hairline-w, 1px) var(--line);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs, 11px);
+  color: var(--ink-3);
+}
+@media (hover: hover) and (pointer: fine) {
+  .glass-nav-all:hover,
+  .glass-nav-new:hover,
+  .glass-nav-close:hover,
+  .glass-nav-row:hover {
+    background: var(--hover);
+  }
+}
+.glass-nav-all:active,
+.glass-nav-new:active,
+.glass-nav-close:active,
+.glass-nav-row:active {
+  scale: 0.97;
+}
+.glass-nav-all:focus-visible,
+.glass-nav-new:focus-visible,
+.glass-nav-close:focus-visible,
+.glass-nav-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.glass-nav-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.glass-nav-row {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: var(--radius-control, 8px);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-hover) var(--ease-fade),
+    scale var(--dur-press) var(--ease-out-strong);
+}
+.glass-nav-row[aria-current] {
+  background: var(--hover-2, var(--hover));
+  box-shadow: inset 2px 0 0 var(--accent);
+  cursor: default;
+}
+.glass-nav-row-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs, 12px);
+  color: var(--ink-3);
+}
+.glass-nav-row[data-tone="running"] .glass-nav-row-head {
+  color: var(--accent-ink);
+}
+.glass-nav-row[data-tone="needs"] .glass-nav-row-head {
+  color: var(--orange);
+}
+.glass-nav-row[data-tone="failed"] .glass-nav-row-head {
+  color: var(--red);
+}
+.glass-nav-row-age {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.glass-nav-row-title {
+  font-size: var(--text-sm, 13px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.glass-nav-row-meta {
+  font-size: var(--text-xs, 12px);
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

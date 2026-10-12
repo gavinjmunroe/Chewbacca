@@ -103,9 +103,14 @@ type Call = {
   kind: string;
   requestId?: string;
   line: string;
+  detail?: string;
   verbs: { id: string; text: string }[];
 } | null;
 
+// A pasted screenshot is stored as Claude Code's own marker, "[Image:
+// original 2048x2048, displayed at ...]"; it reads as the image it was.
+const askedText = (text: string) =>
+  text.replace(/\[Image: [^\]]*\]/g, "(an image)").replace(/\s+/g, " ").trim();
 const base = (path: string) => path.split("/").filter(Boolean).pop() ?? path;
 const dirOf = (path: string, cwd: string) => {
   const rel = path.startsWith(`${cwd}/`) ? path.slice(cwd.length + 1) : path;
@@ -154,9 +159,16 @@ async function turnEvents(id: string, lastEventSeq: number): Promise<Stored[]> {
 export function Story({
   session,
   onTranscript,
+  onNew,
+  settledOutsideAt = 0,
 }: {
   session: Session;
   onTranscript: (reply: boolean) => void;
+  onNew: () => void;
+  /** When the tab's own transcript says its turn ended (an imported Claude
+   *  Code tab realm stopped following), or 0. Newer than realm's last word on
+   *  the turn, it outranks realm's copy (turn.mjs tileTurn, the same rule). */
+  settledOutsideAt?: number;
 }) {
   const [story, setStory] = useState(emptyStory);
   const [loadFault, setLoadFault] = useState<Fault | null>(null);
@@ -257,7 +269,11 @@ export function Story({
   const settledFor = !settledAt
     ? Infinity
     : Date.now() - (settleSeen.current || settledAt);
-  const b = beat(story, { kept: settledKept, settledFor }) as string;
+  const told = beat(story, { kept: settledKept, settledFor }) as string;
+  // Realm's copy of an imported tab can stop mid-turn; the tab itself
+  // finished. Told as Done, never "Starting on it" for a 5h-old tab (10/12).
+  const b =
+    turn && isRunning(turn) && settledOutsideAt > (turn.at || 0) ? "done" : told;
   // One re-render when the hold for a late diff runs out.
   useEffect(() => {
     if (!settledAt) return;
@@ -267,12 +283,13 @@ export function Story({
     return () => window.clearTimeout(t);
   }, [settledAt]);
 
-  const line = useMemo(() => headline(story, b), [story, b]);
-  const beats = beatLine(b);
-  const proved = proof(story);
-  const call = decision(story, { kept: settledKept }) as Call;
-  const fig = figure(story, b);
   const meta = AGENT_META[session.agentKind as keyof typeof AGENT_META];
+  const who = meta?.label ?? "";
+  const line = useMemo(() => headline(story, b, { who }), [story, b, who]);
+  const beats = beatLine(b, story);
+  const proved = proof(story);
+  const call = decision(story, { kept: settledKept, who }) as Call;
+  const fig = figure(story, b);
 
   // Allow is pressable only while the whole request is on screen: none of it
   // below a fold or past the figure's edge.
@@ -302,6 +319,7 @@ export function Story({
         return setKeptHere(keptKey);
       }
       if (id === "answer") return onTranscript(false);
+      if (id === "new") return onNew();
       // Only the request still on the glass is answered: one that was
       // answered or settled meanwhile is gone from the story already.
       const pending = (story as unknown as StoryShape).permission;
@@ -324,7 +342,7 @@ export function Story({
           .catch(() => onTranscript(false));
       }
     },
-    [call, onTranscript, session.id, story, keptKey, wantsInView],
+    [call, onTranscript, onNew, session.id, story, keptKey, wantsInView],
   );
 
   return (
@@ -334,11 +352,12 @@ export function Story({
       data-beat={b}
       data-working={(turn && isRunning(turn)) || undefined}
       data-loading={!loaded || undefined}
+      data-figureless={fig === "none" || undefined}
       aria-label={`${session.title}: ${line}`}
     >
       <header className="story-ask" data-region="ask">
         <span className="story-label">{st.asked ? "You asked" : "Ready"}</span>
-        <p className="story-asked">{st.asked || session.title || "Untitled"}</p>
+        <p className="story-asked">{askedText(st.asked) || session.title || "Untitled"}</p>
         <span className="story-meta">
           {meta?.label ?? session.agentKind} · {base(session.cwd)}
           {session.updatedAt ? ` · ${ago(session.updatedAt)}` : ""}
@@ -351,19 +370,12 @@ export function Story({
         </h1>
         {beats.length > 0 && (
         <ol className="story-beats" aria-label="Where the turn is">
-          {beats.map((x: { id: string; word: string; state: string }) => {
-            const failedHere = b === "failed" && x.id === "done";
-            return (
-              <li
-                key={x.id}
-                data-state={failedHere ? "lit" : x.state}
-                data-tone={failedHere ? "bad" : undefined}
-              >
-                <span className="story-beat-dot" aria-hidden="true" />
-                {failedHere ? "Failed" : x.word}
-              </li>
-            );
-          })}
+          {beats.map((x: { id: string; word: string; state: string }) => (
+            <li key={x.id} data-state={x.state}>
+              <span className="story-beat-dot" aria-hidden="true" />
+              {x.word}
+            </li>
+          ))}
         </ol>
         )}
         {proved && (
@@ -387,6 +399,7 @@ export function Story({
           ) : call ? (
           <>
           <p className="story-call-line">{call.line}</p>
+          {call.detail && <p className="story-call-detail">{call.detail}</p>}
           <div className="story-call-verbs">
             {call.verbs.map((v) => (
               <button
@@ -465,14 +478,15 @@ export function Story({
       <nav className="story-doors" data-region="doors" aria-label="The transcript">
         <button
           type="button"
-          className="glass-word"
+          className="glass-button"
           onClick={() => onTranscript(false)}
         >
-          Transcript
+          Open transcript
         </button>
         <button
           type="button"
-          className="glass-word"
+          className="glass-button"
+          data-primary
           onClick={() => onTranscript(true)}
         >
           Reply

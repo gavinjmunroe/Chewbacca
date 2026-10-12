@@ -492,6 +492,37 @@ test("voice reaches the page only while it is shown and listening, and fresh", a
   }
 });
 
+test("voice reaches no agent from the tiles until one is picked", async () => {
+  // 10/12 3:38pm: a sentence on the tiles went to the first tile, the dead
+  // Gemini session, and opened it.
+  const { server, call } = await serve(repo());
+  try {
+    await call("/glass/focus", {
+      method: "POST",
+      body: { shown: true, mode: "tiles", sessionId: null, title: "" },
+    });
+    const stream = await call("/glass/events");
+    const reader = stream.body.getReader();
+    await reader.read(); // hello
+    assert.equal(
+      (await call("/glass/voice", { method: "POST", body: { text: "hi" } })).status,
+      409,
+      "nothing picked",
+    );
+    await call("/glass/focus", {
+      method: "POST",
+      body: { shown: true, mode: "tiles", sessionId: "s1", title: "Fix the rail" },
+    });
+    assert.equal(
+      (await call("/glass/voice", { method: "POST", body: { text: "hi" } })).status,
+      200,
+    );
+    await reader.cancel();
+  } finally {
+    server.close();
+  }
+});
+
 test("the file view reads text under home only", async () => {
   const dir = repo();
   const { server, call } = await serve(dir);

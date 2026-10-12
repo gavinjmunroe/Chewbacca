@@ -25,12 +25,20 @@ export const REGIONS = Object.freeze([
     draws: "a fault no one agent owns (engine down, the talk key lost), with its one fix",
   },
   {
+    id: "nav",
+    owner: "Nav",
+    grid: "layer",
+    area: "nav",
+    modes: ["tiles", "story", "work"],
+    draws: "the way around, always on screen: All agents, New agent, every agent to switch to, Close",
+  },
+  {
     id: "field",
     owner: "TileField",
     grid: "layer",
     area: "main",
     modes: ["tiles"],
-    draws: "the agent tiles, one line each, a count of the rest, and the New agent door",
+    draws: "the agent tiles, one line each, a count of the rest, and the New agent door when there are none",
   },
   {
     id: "story",
@@ -78,7 +86,7 @@ export const REGIONS = Object.freeze([
     grid: "story",
     area: "doors",
     modes: ["story"],
-    draws: "Transcript and Reply, his full workspace one press away",
+    draws: "Open transcript and Reply as buttons, his full workspace one press away",
   },
   {
     id: "stage",

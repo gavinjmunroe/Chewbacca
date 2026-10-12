@@ -18,12 +18,13 @@ from __future__ import annotations
 
 from . import Bind, Context, Provider, SurfaceError, comp
 
-# Realm's window refuses to go narrower than 900 points (apps/desktop/src/main/
-# index.ts minWidth at 59afd9e4). 1180 is that plus its side pane at a
-# comfortable width, and fits the 1512-point default of a 14-inch MacBook Pro
-# with the glass's margins; guessed from those two numbers, not measured on
-# a smaller display.
-WIDTH = 1180
+# 1000 points, centred. At 1180 the surface ran under the desktop icons on
+# Caleb's 1246-point-wide display (10/12 3:38pm, live-test/first-live-1538.png:
+# Archive, Forge bros, sagar-demo, Capsule and Screenshots cut by its right
+# edge, their labels starting about 1147 points in). 1000 leaves 123 points
+# each side there, 24 clear of those labels, and still holds the nav column
+# (232) beside a story or Carlton's transcript. Measured on that one display.
+WIDTH = 1000
 
 
 class RealmApp(Provider):

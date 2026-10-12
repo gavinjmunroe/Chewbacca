@@ -1817,6 +1817,12 @@ if group "hud"; then
     python3 "$ROOT/tests/test_realm_glass.py"
   check  "the stage follows the agent: a file while editing, a command while running, tests when run, then hunks to Keep or Reject" \
     node --test "$ROOT/tests/test_realm_glass.mjs"
+  # The rest of the glass layer's tests were never in the suite: the 10/12
+  # navigation fix found them run only by hand.
+  check  "the agents glass opens on the tiles, never a dead session, with a way back from every state, a named failure and one owner per region" \
+    node --test "$ROOT/tests/test_realm_nav.mjs" "$ROOT/tests/test_realm_turn.mjs" "$ROOT/tests/test_realm_beats.mjs" \
+      "$ROOT/tests/test_realm_regions.mjs" "$ROOT/tests/test_realm_new_agent.mjs" "$ROOT/tests/test_realm_folders.mjs" \
+      "$ROOT/tests/test_realm_floating.mjs" "$ROOT/tests/test_realm_bridges.mjs"
   check  "engines run only remixable, local, spec-declared reads, and oss labels every license" \
     python3 "$ROOT/tests/test_surface_engines.py"
   check  "code is read only, refuses a path with a control, format or bidi character, and runs no repo filter" \

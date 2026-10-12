@@ -503,6 +503,10 @@ if group "gtme"; then
   # follow-ups, replies sorted. A fake gws; nothing reaches Gmail or the network.
   check "gtme own-inbox path finds, freezes, sends only an approved batch, sorts replies" \
     python3 "$ROOT/tests/test_gtme_solo.py"
+  # 2026-10-11: decks a client sent sat unread a day, deck asks waited two, and
+  # the inbox read dragged a Clay tab onto his screen every run.
+  check "gtme done names every owed reply and unread client message, from data" \
+    python3 "$ROOT/tests/test_gtme_done.py"
   check "gtme-jev holds an email Jev flags or couldn't check, in one call per email" \
     python3 "$ROOT/tests/test_gtme_jev.py"
   check "resolve answers an address and a person's own record before anyone asks" \

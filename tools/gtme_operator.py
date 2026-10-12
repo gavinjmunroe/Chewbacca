@@ -2204,6 +2204,9 @@ def cmd_why(a, t: Teacher) -> int:
 
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "done":
+        import gtme_done
+        return gtme_done.main(argv[1:])
     if argv and argv[0] in ("sender", "find", "batch", "send", "inbox", "reply", "today", "package", "costs",
                             "autosend", "share", "copy", "week"):
         import gtme_solo

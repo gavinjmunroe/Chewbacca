@@ -352,6 +352,7 @@ if group "coursework"; then
   expect "check finds the deliberate gap" "no attendance budget" "${C[@]}" check
   exits  "check exits non-zero when the ledger has gaps" 1 "${C[@]}" check
   check  "assumed-done is opt-in per semester" bash "$ROOT/tests/coursework_assume_done.sh" "$ROOT"
+  check  "a deliverable written as a multi-line flow map still shows in due" bash "$ROOT/tests/coursework_flow_maps.sh" "$ROOT"
   check  "never reads or gates on a course AI policy" bash "$ROOT/tests/no_ai_policy_gate.sh" "$ROOT"
 fi
 

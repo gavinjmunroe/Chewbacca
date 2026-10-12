@@ -50,6 +50,25 @@ the syllabus from the slides folder for meetings, grading and dates.
 It works on a stranger's Mac as is: Chrome plus a Brightspace sign-in. No api
 engine, no `pip install`, no profile to name.
 
+## Anything on Brightspace: one command each, never a browser
+
+Never open Brightspace, a browser tab or `chewie web` for it. Every read is
+one call, and a lapsed session renews itself from Chrome:
+
+- What's due, dropboxes AND quizzes, with submitted or grade: `brightspace due --days 7`
+- Grades, announcements, quizzes, discussions, content for one course:
+  `chewbacca api call brightspace <grades|announcements|quizzes|discussions|content> orgUnitId=<id>`
+  (ids from `chewbacca api call brightspace myCourses`)
+- Anything else: `brightspace get /le/1.75/<ou>/<path>`
+
+A quiz's questions 403 until the student opens an attempt, so no tool can
+read them first. Ask them to paste the questions; never start an attempt.
+On 2026-10-11 a quiz check took six tool calls across four tools (grep,
+`chewie web`, MCP, the ledger) before `brightspace` answered in one, and
+`coursework due` had silently dropped the whole BISC ledger (21 multi-line
+flow-map items parsed as the string "{"), which is why the quiz never
+surfaced in the session briefing.
+
 ## When a course shows no files
 
 A zero file count means the pull looked in one place. ACAD 185 keeps every
@@ -89,8 +108,9 @@ BISC chapter notes, while the full set was one command away.
 
 On a 403 or `BLOCKED:`, run `brightspace whoami` first. If it says Chrome
 stopped saving cookies, the student is signed in and only needs to quit and
-reopen Chrome. Only a real sign-out opens Brightspace, and that's the one page
-they see. Never open a tab to "renew" anything.
+reopen Chrome. A real sign-out opens nothing: say `BLOCKED: Brightspace needs
+a sign-in in Chrome` and they do it when they choose. Never open a tab to
+"renew" anything.
 
 ## The ledger
 

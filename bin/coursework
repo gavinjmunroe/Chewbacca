@@ -60,6 +60,7 @@ function parseYaml(text, file) {
     const indent = stripped.length - stripped.trimStart().length;
     rows.push({ indent, text: stripped.trim(), line: i + 1 });
   }
+  joinFlowRows(rows, file);
   const [value] = parseBlock(
     rows,
     0,
@@ -68,6 +69,48 @@ function parseYaml(text, file) {
     file,
   );
   return value;
+}
+
+// A flow map or list written across lines ("- {" then one key per line, then
+// "}") is joined back into one row before parsing. Without this, BISC 101's
+// 21 deliverables, every one written that way, each parsed as the string "{"
+// and silently vanished from `due`, `week` and the session briefing, so
+// weekly Quiz #5 (closes Mon 9am, no late attempts) was found only by hand on
+// 2026-10-11.
+function flowDepth(text) {
+  let depth = 0;
+  let quote = null;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quote) {
+      if (ch === quote && text[i - 1] !== "\\") quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      // An apostrophe inside a bare word ("Mrs. O'Neil") is not a quote.
+      if (ch === "'" && /\w/.test(text[i - 1] || "")) continue;
+      quote = ch;
+    } else if (ch === "{" || ch === "[") depth++;
+    else if (ch === "}" || ch === "]") depth--;
+  }
+  return depth;
+}
+
+function joinFlowRows(rows, file) {
+  for (let i = 0; i < rows.length; i++) {
+    let depth = flowDepth(rows[i].text);
+    if (depth <= 0) continue;
+    let j = i + 1;
+    while (depth > 0 && j < rows.length) {
+      const next = rows[j].text;
+      const sep = /[{[,]$/.test(rows[i].text) || /^[}\]]/.test(next) ? " " : ", ";
+      rows[i].text += sep + next;
+      depth += flowDepth(next);
+      j++;
+    }
+    if (depth > 0) throw err(file, rows[i].line, "a { or [ here is never closed");
+    rows.splice(i + 1, j - i - 1);
+  }
 }
 
 function stripComment(s) {
@@ -831,6 +874,11 @@ function cmdCheck() {
     const where = path.basename(course._file || "?");
     const name = course.code || course.title || where;
     if (!course.code) note(`${where}: no course code`);
+    // An item that parsed to a string or a number is dropped by `due`. Say so
+    // loudly rather than reporting a clean course with nothing in it.
+    const items = course.deliverables || course.assignments || [];
+    const lost = Array.isArray(items) ? items.filter((d) => !d || typeof d !== "object").length : 0;
+    if (lost) note(`${name}: ${lost} deliverable(s) did not parse as maps, so nothing shows them`);
     if (!normalizeMeets(course.meets).length)
       note(`${name}: no meeting times, so "today" and "week" will not show it`);
     // "None" and "not looked up yet" are different facts and used to warn

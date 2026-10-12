@@ -1789,6 +1789,10 @@ _register("PreToolUse", hooks_dir + "/vercel-guard.sh", timeout=5,
 # Karthik: never PR on BMA or Amber, push to main. See the hook's header.
 _register("PreToolUse", hooks_dir + "/pr-guard.sh", timeout=5,
           matcher="Bash", status="Checking BMA and Amber work goes straight to main...")
+# 2026-10-11: a post tagged a client for decks he had DM'd the day before.
+# A post that tags a client waits for a fresh, clean gtme done. See the hook.
+_register("PreToolUse", hooks_dir + "/client-ask-guard.sh", timeout=5,
+          matcher="Bash", status="Checking the client has nothing unanswered first...")
 # 2026-10-11: generated prose went into a team Google Doc and a teammate
 # called it "the slop version". Long Doc writes now pass slop-check --essay
 # first. See the hook's header.

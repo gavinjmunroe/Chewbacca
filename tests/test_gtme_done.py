@@ -83,7 +83,7 @@ with tempfile.TemporaryDirectory() as d:
     json.dump(T, open(inbox, "w"))
     slack = os.path.join(d, "slack.json")
     json.dump({"D1": dm[:4]}, open(slack, "w"))
-    env = dict(os.environ, CHEWBACCA_GTM_CLIENTS=cfg)
+    env = dict(os.environ, CHEWBACCA_GTM_CLIENTS=cfg, CHEWBACCA_STATE_DIR=d)
     run = lambda *a: subprocess.run([sys.executable, os.path.join(ROOT, "tools", "gtme_operator.py"), "done", *a],
                                     capture_output=True, text=True, env=env)
     p = run("--client", "Acme", "--inbox", inbox, "--slack", slack)
@@ -93,6 +93,8 @@ with tempfile.TemporaryDirectory() as d:
     json.dump([T[1], T[2], T[-1]], open(inbox, "w"))
     p = run("--client", "Acme", "--inbox", inbox, "--slack", slack)
     check("nothing open exits 0 and says done", p.returncode == 0 and "Done:" in p.stdout)
+    r = json.load(open(os.path.join(d, "gtme-done", "acme.json")))
+    check("each run leaves a receipt the client-ask guard reads", r["open"] == 0 and r["client_unanswered"] == 0)
     p = run("--client", "Acme", "--inbox", os.path.join(d, "missing.json"), "--slack", slack)
     check("an unreadable source is not run, never clean (exit 2)", p.returncode == 2 and "not run" in p.stdout and "Done:" not in p.stdout)
 

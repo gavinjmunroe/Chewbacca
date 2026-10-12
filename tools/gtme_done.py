@@ -110,6 +110,22 @@ def read_jsonl(path):
         return []
 
 
+def receipt_path(client):
+    base = os.path.expanduser(os.environ.get("CHEWBACCA_STATE_DIR", "~/.chewbacca/state"))
+    return os.path.join(base, "gtme-done", "".join(c if c.isalnum() else "-" for c in client.lower()) + ".json")
+
+
+def write_receipt(client, report, open_items):
+    """What the last run found, read by client-ask-guard.sh before a post that
+    asks the client for something."""
+    import time
+    path = receipt_path(client)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        json.dump({"at": int(time.time()), "open": open_items, "not_run": len(report["not_run"]),
+                   "client_unanswered": len(report["client_unanswered"] or [])}, f)
+
+
 def client_unanswered(messages, client_user, me):
     """Messages and files from the client after our last message, oldest first.
     `messages` is one conversation's history, any order."""
@@ -211,6 +227,7 @@ def main(argv=None):
         report["skipped"] = ["client messages: no client_slack {user, me, conversations} for this client in clients.json"]
 
     open_items = len(report["replies_owed"] or []) + len(report["client_unanswered"] or [])
+    write_receipt(a.client, report, open_items)
     if a.json:
         print(json.dumps(report, indent=1))
     else:

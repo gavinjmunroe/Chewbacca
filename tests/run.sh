@@ -509,6 +509,8 @@ if group "gtme"; then
     python3 "$ROOT/tests/test_gtme_done.py"
   check "shipped code works on anyone's machine: no home paths, personal mailboxes or client ids" \
     bash "$ROOT/tests/portable_code.sh" "$ROOT"
+  check "a post tagging a client waits for a fresh, clean gtme done" \
+    bash "$ROOT/tests/client_ask_guard.sh"
   check "gtme-jev holds an email Jev flags or couldn't check, in one call per email" \
     python3 "$ROOT/tests/test_gtme_jev.py"
   check "resolve answers an address and a person's own record before anyone asks" \

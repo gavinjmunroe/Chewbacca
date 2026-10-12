@@ -7,7 +7,7 @@ b9b8f16866a8894bc088331065eb4cc6aa80fe0df2c86c915f10e95833e59f1a  .claude/hooks/
 25f5c8bf4b70229fa7b02115256a7ed742c5cc5cb5743650a9f87f86a97b18ee  .claude/hooks/brain-sync.sh
 266509fe7ac9f31bc190a80ef4417888e681b57bd51ce3f14092896e8318742a  .claude/hooks/browser-ux-guard.sh
 17c4fd1f57b4e8b47a0aec13542ee45c4ee71150849becfe18063cf702c3db18  .claude/hooks/chat-approval.sh
-56c083cb8995c5935bf68c7ea1c2de6210473c429009b5520fe624888f4cb1d8  .claude/hooks/chatdb-guard.sh
+9aa8aa78a0ac14a20983fd05610bfb9db4eee17fdceea1824ab5594d6eb36697  .claude/hooks/chatdb-guard.sh
 087dc7c3bee9b5ff422d01452337d10e3b84cf31c40d7328a1dee5afd536fe8b  .claude/hooks/clay-native-guard.sh
 d02147af3d0573e3970975d37c0c951d045f165fa9582fdffc25f1ee5ac3431f  .claude/hooks/clay-reply-guard.sh
 8c13ef2b650c5fc1d76a3629bdf8d236923ed9b95c8839170aa5ec626fc86cbd  .claude/hooks/client-ask-guard.sh

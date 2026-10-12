@@ -51,7 +51,44 @@ printf '%s' "$cmd" | grep -qE '^[[:space:]]*(cd [^&;]*(&&|;)[[:space:]]*)?([A-Z_
 # ones. A heredoc that names Library/Messages/chat.db or the people store is a
 # read, whatever it's fed to (security review, 2026-10-10).
 if printf '%s' "$cmd" | grep -qE 'Library/Messages/chat\.db|\.chewbacca/people/people\.db'; then writes_file=0; fi
-if [ "$writes_file" = 0 ] && printf '%s' "$cmd" | grep -q 'chat\.db' \
+# A plain sqlite3 count is not reading a thread. 2026-10-12, the weekly
+# false-positive report (hookd_replay.py fp) ranked this guard first: one of
+# its three got-past refusals that week was `select count(*),
+# sum(is_from_me) from message where date > ...`, a volume check, and the
+# agent typed RAW_MESSAGES_OK=1 on its next call. So the chat.db thread rule
+# lets through only one bare sqlite3 call (no cd, pipe, second command,
+# redirect, substitution or dot command) with exactly one SELECT whose every
+# output column is count, sum, avg, total, min or max, and whose text names no
+# column that holds words and selects no *. A hand-built "who is waiting"
+# query returns chat ids, not counts, so it is still refused. This only
+# narrows the chat.db rule; the people.db rule below is untouched.
+counts_only=0
+if printf '%s' "$cmd" | grep -qE '^[[:space:]]*sqlite3[[:space:]]' \
+  && ! printf '%s' "$cmd" | grep -qiE '(^|[^a-z_])(text|body|attributedbody|subject|group_concat|json_group_array|json_group_object|payload_data|message_summary_info)([^a-z_]|$)' \
+  && ! printf '%s' "$cmd" | grep -qiE 'select[[:space:]]+(distinct[[:space:]]+)?\*|[a-z_]\.\*|,[[:space:]]*\*' \
+  && ! printf '%s' "$cmd" | grep -qE '<|`|\$\(|[|;&]|(^|[[:space:]"'"'"'])\.[a-z]'; then
+  counts_only="$(printf '%s' "$cmd" | /usr/bin/python3 -I -c '
+import re, sys
+c = sys.stdin.read()
+if len(re.findall(r"\bselect\b", c, re.I)) != 1:
+    print(0); sys.exit()
+m = re.search(r"\bselect\s+(.*?)\s+from\b", c, re.I | re.S)
+if not m:
+    print(0); sys.exit()
+items, depth, cur = [], 0, ""
+for ch in m.group(1):
+    depth += ch == "("
+    depth -= ch == ")"
+    if ch == "," and depth == 0:
+        items.append(cur); cur = ""
+    else:
+        cur += ch
+items.append(cur)
+agg = re.compile(r"(count|sum|avg|total|min|max)\s*\((?:[^()]|\([^()]*\))*\)(\s+(as\s+)?\w+)?", re.I)
+print(1 if all(agg.fullmatch(i.strip()) for i in items) else 0)
+' 2>/dev/null || echo 0)"
+fi
+if [ "$writes_file" = 0 ] && [ "$counts_only" = 0 ] && printf '%s' "$cmd" | grep -q 'chat\.db' \
   && printf '%s' "$cmd" | grep -qiE 'is_from_me|chat_message_join'; then thread_read=1; fi
 if [ "$writes_file" = 0 ] && printf '%s' "$cmd" | grep -q 'people\.db' \
   && printf '%s' "$cmd" | grep -qiE 'from[[:space:]]+messages([^_a-z]|$)' \

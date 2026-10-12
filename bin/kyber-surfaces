@@ -293,6 +293,12 @@ class Daemon:
         try:
             body = json.loads(self.state_path.read_text())
         except (OSError, json.JSONDecodeError):
+            # A first start ever puts the launcher rail up, so every surface is
+            # one press away while the glass is still being figured out
+            # (Caleb, 2026-10-11: "a side bar with the diff hud surfaces to
+            # choose from would be nice"). After that the saved state rules,
+            # and the rail has no close, so it stays.
+            self.open_surface("apps", None)
             return
         self.space = str(body.get("space") or "")
         self.space_sets = {k: v for k, v in (body.get("spaces") or {}).items() if isinstance(v, dict)}

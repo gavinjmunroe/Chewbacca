@@ -87,4 +87,34 @@ function take(channel, to, text, subject = "") {
   };
 }
 
-module.exports = { binding, mintPressed, take, PY };
+const POLICY_PY = path.join(__dirname, "..", "..", "tools", "send_policy.py");
+
+// The send policy's answer for a text (config/send-policy.cedar):
+// { decision: "allow" | "deny" | "unavailable", rules: [{ id, reason }] }.
+// "unavailable" only when the policy can't be asked at all (no module, or no
+// binary built); the caller's inline checks then stand alone. Anything else
+// that goes wrong is a deny.
+function policy(facts) {
+  if (!fs.existsSync(POLICY_PY))
+    return { decision: "unavailable", rules: [], errors: [`${POLICY_PY} is missing`] };
+  const r = spawnSync("python3", [POLICY_PY, "ask"], {
+    input: JSON.stringify({ action: "text", facts }),
+    encoding: "utf8",
+    // The binary answers in 8 ms; python3 starting is most of this. Guessed,
+    // never measured at load: long enough for a busy Mac, short of a hang.
+    timeout: 20000,
+  });
+  try {
+    const got = JSON.parse(r.stdout);
+    if (["allow", "deny", "unavailable"].includes(got.decision)) return got;
+  } catch {
+    /* falls through to a deny */
+  }
+  return {
+    decision: "deny",
+    rules: [],
+    errors: [String(r.stderr || r.error?.message || `send policy exited ${r.status}`).trim()],
+  };
+}
+
+module.exports = { binding, mintPressed, take, policy, PY, POLICY_PY };

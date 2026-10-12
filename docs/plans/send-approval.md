@@ -80,6 +80,35 @@ directly (`mac messages send`, `wacli send`, an osascript to Messages). A guard
 on those needs an own-handles allowlist first, since "text me" is a raw
 `mac messages send` to Caleb's own number.
 
+## Send policy as code (reengineer step 13, 2026-10-12)
+
+The press says a person wanted this one message. The policy says whether
+anything may go at all: who, when and how much. Those rules now live in one
+file, `config/send-policy.cedar` (Cedar, typed by
+`config/send-policy.cedarschema`), read by `crates/sendpolicy` and asked
+through `tools/send_policy.py`.
+
+- `chewbacca send-policy could text|cold|clay ...` answers "could this send
+  right now" and names the rule that says no. `chewbacca send-policy rules`
+  lists them. Exit 0 yes, 3 no, 4 can't say (no binary built).
+- In the file: NO_SEND, quiet hours, an address that isn't provably theirs,
+  an unverified email sender, cold email weekends, the daily cap ramp,
+  suppressions and repeats, and the Clay gates (allow-writes, Caleb's ok,
+  a finished reply, draft only, a passing grade).
+- Asking it: `send_approval.take()` asks before it spends any press, so every
+  sink that takes an approval is covered; `people send` asks with the person,
+  quiet hours and address facts.
+- Not asking it yet: `gtme send` and the Clay front door (GTM lane, launch
+  week). Their rules are in the file, and `tests/test_send_policy.py` holds
+  the file to `gtme_solo.RAMP` and `DAILY_CAP` and to the Clay gate order, so
+  the file can't drift from the code that still decides.
+- No binary (no cargo, no network) means the policy says "unavailable" and
+  every sink's inline checks stand exactly as before. A broken policy, a
+  misspelled field or a fact of the wrong type is a no: Cedar skips a policy
+  that errors, so the reader denies on any error and validates strictly.
+- The inline quiet-hours and owned-address checks in people send stay as a
+  backstop; either one saying no is a no.
+
 ## Migration order
 
 1. One module per runtime, `send_approval.py` and `send-approval.js`, with

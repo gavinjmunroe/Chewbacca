@@ -1357,6 +1357,25 @@ if [ -z "${CHEWBACCA_SUITE:-}" ] && command -v cargo >/dev/null 2>&1 && [ -f "$S
   fi
 fi
 
+# chewbacca-sendpolicy (crates/sendpolicy) reads config/send-policy.cedar, the
+# one file of rules about who, when and how much a send may go. Cedar is a
+# crate, so the first build needs the network (2 min wall on 2026-10-12,
+# M-series, release, at load 26). No cargo, no network, no binary: every sink
+# keeps its inline checks exactly as before, and `chewbacca send-policy`
+# says it can't answer.
+if [ -z "${CHEWBACCA_SUITE:-}" ] && command -v cargo >/dev/null 2>&1 && [ -f "$SCRIPT_DIR/crates/sendpolicy/Cargo.toml" ]; then
+  if CARGO_TARGET_DIR="$HOME/.chewbacca/build/sendpolicy" cargo build --quiet --release --locked \
+       --manifest-path "$SCRIPT_DIR/crates/sendpolicy/Cargo.toml" 2>/dev/null &&
+     [ "$("$HOME/.chewbacca/build/sendpolicy/release/chewbacca-sendpolicy" --probe 2>/dev/null)" = "chewbacca-sendpolicy 1" ]; then
+    mkdir -p "$HOME/.local/bin"
+    install -m 755 "$HOME/.chewbacca/build/sendpolicy/release/chewbacca-sendpolicy" "$HOME/.local/bin/chewbacca-sendpolicy.new" &&
+      mv -f "$HOME/.local/bin/chewbacca-sendpolicy.new" "$HOME/.local/bin/chewbacca-sendpolicy"
+    log "chewbacca-sendpolicy built to ~/.local/bin/chewbacca-sendpolicy"
+  else
+    warn "chewbacca-sendpolicy did not build; each send path keeps its own checks, as before."
+  fi
+fi
+
 # Merge drivers for SHA256SUMS.txt and the README counts block. On 2026-10-09
 # about ten tabs pushed main and nearly every merge stopped on those two
 # generated files. .gitattributes names the drivers; git config holds the

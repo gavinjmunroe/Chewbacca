@@ -96,6 +96,29 @@ rm -f "$QH"
 out="$("$P" send "sendy solo" "day one" --to 15550102@s.whatsapp.net 2>&1)"
 grep -q "CHEWBACCA_NO_SEND" <<<"$out" || fail "with no quiet hours the send did not reach the dispatch gate"
 
+# people send asks config/send-policy.cedar (tools/send_policy.py) before it
+# sends. A stub policy stands in for the Cedar binary here: a rule only the
+# policy knows refuses the send, and a quiet-hours no from the policy holds
+# even with no quiet-hours.json for the inline backstop to read. Before
+# 2026-10-12 people send never asked, and both went through to dispatch.
+STUB="$(mktemp -d)/chewbacca-sendpolicy"
+printf '#!/bin/sh\ncat >/dev/null\necho %s\nexit 3\n' \
+  "'{\"decision\":\"deny\",\"rules\":[{\"id\":\"test-rule\",\"reason\":\"a rule only the policy has\"}],\"errors\":[]}'" >"$STUB"
+chmod +x "$STUB"
+out="$(CHEWBACCA_SENDPOLICY="$STUB" "$P" send "sendy solo" "x" --to 15550102@s.whatsapp.net 2>&1)" &&
+  fail "a send the policy refused went through"
+grep -q "The send policy says no: a rule only the policy has (test-rule)" <<<"$out" ||
+  fail "people send did not ask the send policy"
+grep -q "CHEWBACCA_NO_SEND" <<<"$out" && fail "a send the policy refused reached the dispatcher"
+printf '#!/bin/sh\ncat >/dev/null\necho %s\nexit 3\n' \
+  "'{\"decision\":\"deny\",\"rules\":[{\"id\":\"quiet-hours\",\"reason\":\"quiet\"}],\"errors\":[]}'" >"$STUB"
+out="$(CHEWBACCA_SENDPOLICY="$STUB" "$P" send "sendy solo" "x" --to 15550102@s.whatsapp.net 2>&1)" &&
+  fail "a policy quiet-hours no went through"
+grep -q "quiet hours. Nothing was sent" <<<"$out" || fail "the policy's quiet-hours no was not named"
+# No binary at all: the inline checks stand alone, exactly as before.
+out="$(CHEWBACCA_SENDPOLICY=/nonexistent/chewbacca-sendpolicy "$P" send "sendy solo" "x" --to 15550102@s.whatsapp.net 2>&1)"
+grep -q "CHEWBACCA_NO_SEND" <<<"$out" || fail "with no policy binary the send did not reach the dispatch gate"
+
 out="$(node -e '
   const { quietFor } = require(process.argv[1]);
   const r = [{ name: "Sagar Tiwari", tz: "America/Los_Angeles", after: "23:00",

@@ -510,6 +510,27 @@ function cmdSend(argv) {
     (resolvePerson(null, handle, { strict: true }) === person.id ||
       handle === fromCard(person, app));
   const where = `${c.b(P(name))} ${c.dim(`via ${app}, ${P(to)}${owned ? "" : ", not a saved contact"}`)}`;
+  // config/send-policy.cedar decides who and when; quietFor and the owned
+  // check below stay as a backstop for a Mac where the policy isn't built,
+  // and either one saying no is a no. no-send is left to dispatch, which
+  // holds the send and writes its row the same way it always has.
+  const verdict = approval.policy({
+    channel: app,
+    name,
+    direct: true,
+    after_hours: Boolean(flags["after-hours"]),
+    address_owned: owned,
+    to_confirmed: String(flags.to || "") === to,
+  });
+  const said = new Set((verdict.rules || []).map((r) => r.id));
+  const policyOther =
+    verdict.decision === "deny" &&
+    ((verdict.errors || []).length ||
+      [...said].some((id) => !["no-send", "quiet-hours", "unowned-address"].includes(id)));
+  const policyLine = `The send policy says no: ${[
+    ...(verdict.rules || []).map((r) => `${r.reason} (${r.id})`),
+    ...(verdict.errors || []),
+  ].join("; ")}.`;
   const quiet = quietFor(name);
   const quietLine = quiet
     ? `It's ${quiet.local} for ${P(name)}, inside the hours they asked not to get a direct text (${P(quiet.rule.source || "quiet-hours.json")}).`
@@ -524,15 +545,24 @@ function cmdSend(argv) {
           `  ${quietLine} A send now is refused; queue it in people texts drafts.`,
         ),
       );
+    if (said.has("quiet-hours") && !quiet)
+      say(c.dim(`  The send policy puts this inside ${P(name)}'s quiet hours. A send now is refused.`));
+    if (policyOther) say(c.dim(`  ${P(policyLine)} A send now is refused.`));
     approvalLine(flags, app, to, text);
     return;
   }
+  if (policyOther) die(`${P(policyLine)} Nothing was sent.`);
+  if (said.has("quiet-hours") && !quiet)
+    die(
+      `The send policy puts this inside ${P(name)}'s quiet hours. Nothing was sent.\n` +
+        `  Queue it: people texts drafts add "${P(who)}" "..."   or post it in the group chat.`,
+    );
   if (quiet && !flags["after-hours"])
     die(
       `${quietLine} Nothing was sent.\n` +
         `  Queue it: people texts drafts add "${P(who)}" "..."   or post it in the group chat.`,
     );
-  if (!owned && String(flags.to || "") !== to)
+  if (said.has("unowned-address") || (!owned && String(flags.to || "") !== to))
     die(
       `${P(name)} isn't a saved contact, so ${P(to)} is unconfirmed. Nothing was sent.\n` +
         `  If that address is right, add --to ${P(to)}   or save them: people add "${P(name)}"`,

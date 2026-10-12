@@ -28,6 +28,9 @@ What counts as a press, checked in this order:
    process's terminal is the one that app opened, so a pty made on the way
    (`script`, a reparented pipe) is no press.
 
+Before any of those, take() asks config/send-policy.cedar (tools/send_policy.py)
+and refuses whatever a rule there forbids, CHEWBACCA_NO_SEND included.
+
 Otherwise take() puts a code on the person's screen (a HUD toast, or a macOS
 notification when the HUD is down; neither takes focus) and refuses.
 
@@ -444,11 +447,27 @@ def tty_press(channel, to, text, subject=""):
     return answer.decode("utf-8", "replace").strip().lower() == "send"
 
 
+def _policy_refusal(channel, env):
+    here = os.path.dirname(os.path.realpath(__file__))
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import send_policy
+    return send_policy.why_not(send_policy.ask_raw("text", send_policy.text_context(channel, env=env)))
+
+
 def take(channel, to, text, subject="", show=None, tty=None, env=None, chain=False, exe=exe_path):
     """Consume the approval for this exact message, or raise NoApproval.
     Returns which press approved it: a minted token's press, hud, code or tty."""
     channel, to, text, subject = str(channel), str(to), str(text), str(subject or "")
     env = os.environ if env is None else env
+    # The rules (config/send-policy.cedar) come before any press: a send the
+    # policy refuses is refused even with a token in hand, and the token stays
+    # unspent. No binary built here means no answer, and the sink's own inline
+    # checks stand exactly as before.
+    refused = _policy_refusal(channel, env)
+    if refused:
+        _log("refused", channel, to, reason="send policy")
+        raise NoApproval(refused)
     if mode() != "press":
         _log("take", channel, to, "agent")
         return "agent"

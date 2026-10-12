@@ -394,6 +394,10 @@ context)
   shift
   python3 "$ROOT/tools/context_cost.py" "$@"
   ;;
+send-policy)
+  shift
+  exec python3 "$ROOT/tools/send_policy.py" "$@"
+  ;;
 lessons)
   shift
   python3 "$ROOT/tools/lessons_audit.py" "$@"

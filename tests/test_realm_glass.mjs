@@ -527,3 +527,19 @@ test("the file view never shows keys, tokens or keychains, even under home", asy
     server.close();
   }
 });
+
+// 2026-10-11: typing @ on the glass took Carlton's whole page down, because
+// his mention picker reads `computerAccess.rows` and the bridge answered null.
+// Every bridge namespace his store reads a shape from must answer that shape.
+test("the bridge answers his access shapes, so @ never crashes the page", async () => {
+  const { readFileSync } = await import("node:fs");
+  const vm = await import("node:vm");
+  const src = readFileSync(new URL("../bin/lib/realm_ui/bridge.js", import.meta.url), "utf8");
+  const win = { __realmUiToken: "t", addEventListener() {} };
+  win.window = win;
+  vm.runInNewContext(src, { window: win, document: { hasFocus: () => true }, Object, Promise, Number });
+  for (const call of [win.realm.computerAccess.status(), win.realm.computerAccess.request("x"), win.realm.macAccess.status()]) {
+    const shape = await call;
+    assert.ok(shape && Array.isArray(shape.rows), JSON.stringify(shape));
+  }
+});

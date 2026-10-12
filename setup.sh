@@ -1305,6 +1305,17 @@ if [ -z "${CHEWBACCA_SUITE:-}" ] && command -v cargo >/dev/null 2>&1 && [ -f "$S
     mkdir -p "$HOME/.local/bin"
     install -m 755 "$HOME/.chewbacca/build/writelog/release/chewbacca-writelog" "$HOME/.local/bin/chewbacca-writelog.new" &&
       mv -f "$HOME/.local/bin/chewbacca-writelog.new" "$HOME/.local/bin/chewbacca-writelog"
+    # The kit's own main checkout (not a runtime snapshot, which is a
+    # worktree) is the other repo most calls run in, so it is watched too.
+    WL_COMMON="$(git -C "$SCRIPT_DIR" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+    WL_KIT="${WL_COMMON%/.git}"
+    if [ -n "$WL_COMMON" ] && [ "$WL_KIT" != "$WL_COMMON" ] && [ -d "$WL_KIT/.git" ]; then
+      mkdir -p "$HOME/.chewbacca/watch" && chmod 700 "$HOME/.chewbacca/watch"
+      grep -qxF "$WL_KIT" "$HOME/.chewbacca/watch/roots" 2>/dev/null || printf '%s\n' "$WL_KIT" >> "$HOME/.chewbacca/watch/roots"
+    fi
+    # A running watcher keeps the old binary and roots; the daemon starts
+    # the new one within its 10 s keepalive backoff.
+    pkill -f "^$HOME/.local/bin/chewbacca-writelog serve" 2>/dev/null || true
     if [ "$(uname)" = "Darwin" ]; then
       python3 - "$SCRIPT_DIR" "$HOME/.local/bin/chewbacca-writelog" <<'PY' || warn "writelog watcher not registered; write-log keeps using git status."
 import sys

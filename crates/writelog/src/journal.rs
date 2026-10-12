@@ -361,7 +361,17 @@ fn advance(st: &mut RepoState, journal: &Path, repo: &str, trusted: bool, skip: 
                     }
                     continue;
                 }
-                if rel == ".git" || rel.split('/').any(|c| c == ".git") {
+                if rel == ".git" {
+                    continue;
+                }
+                if rel.split('/').any(|c| c == ".git") {
+                    // A nested repository's own `.git` appearing or going
+                    // away decides whether status lists its files or one
+                    // `dir/`. What happens inside that .git (its objects, its
+                    // index) changes nothing this repo's status reports.
+                    if rel.ends_with("/.git") {
+                        full = true;
+                    }
                     continue;
                 }
                 // A .gitignore edit changes which files status reports at

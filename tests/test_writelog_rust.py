@@ -282,6 +282,71 @@ class WatcherLifetime(unittest.TestCase):
         self.assertIsNotNone(watcher.proc.poll(), 'the watcher kept running on a deleted root')
 
 
+@unittest.skipIf(BIN is None, 'no cargo on this machine')
+class KitCheckoutWatched(unittest.TestCase):
+    def test_a_repo_listed_in_roots_is_watched_and_logs_what_python_does(self):
+        # 2026-10-11: with the brain watched, a call whose cwd was the kit
+        # checkout still paid 0.06 s for two statuses of it.
+        folder = Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, folder, True)
+        kit = folder / 'kit'
+        (kit / 'tools').mkdir(parents=True)
+        run = lambda *a: subprocess.run(['git', *a], cwd=kit, capture_output=True, check=True)
+        run('init', '-q')
+        (kit / '.gitignore').write_text('.worktrees/\n')
+        (kit / 'tools/a.py').write_text('a')
+        run('add', '.')
+        run('-c', 'user.name=t', '-c', 'user.email=t@t.invalid', 'commit', '-q', '-m', 'seed')
+        (kit / '.worktrees/wt').mkdir(parents=True)
+        subprocess.run(['git', 'init', '-q'], cwd=kit / '.worktrees/wt', check=True)
+        watch = folder / 'watch'
+        watch.mkdir()
+        (watch / 'roots').write_text(f'{kit}\n')
+        env = dict(os.environ, HOME=str(folder / 'home'), CHEWBACCA_HOME=str(folder / 'shared'),
+                   CHEWBACCA_WATCH_DIR=str(watch), TMPDIR=str(folder))
+        env.pop('PERSONAL_CONTEXT_DIR', None)
+        env.pop('PUBLIC_CONTEXT_DIR', None)
+        proc = subprocess.Popen([str(BIN), 'serve'], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.addCleanup(lambda: (proc.terminate(), proc.wait(5)))
+        for _ in range(200):
+            status = subprocess.run([str(BIN), 'status'], env=env, capture_output=True, text=True)
+            if status.returncode == 0:
+                break
+            time.sleep(0.02)
+        self.assertIn(f'watching {kit}', status.stdout)
+        logs = {}
+        for who in ('rust', 'python'):
+            e = dict(env, CHEWBACCA_WRITE_LOG=str(folder / f'{who}.tsv'), CHEWBACCA_SESSION_STATE=str(folder / f'{who}-state'),
+                     CHEWBACCA_WRITELOG_BIN=str(BIN), CHEWBACCA_WRITELOG_MODE=who)
+            logs[who] = e
+        decoy = kit / 'tools/decoy'
+        decoy.mkdir()
+        (decoy / '.git').write_text('not a repository\n')
+        for n, action in enumerate([lambda: (kit / 'tools/a.py').write_text('edited'),
+                                    lambda: (kit / '.worktrees/wt/x.md').write_text('another repo'),
+                                    lambda: (kit / 'tools/b.py').write_text('new'),
+                                    # A stray .git file doesn't make a repo: git lists this write.
+                                    lambda: (decoy / 'hidden.py').write_text('still seen')]):
+            for event in ('PreToolUse', 'PostToolUse'):
+                if event == 'PostToolUse':
+                    action()
+                for who in (('rust', 'python') if event == 'PreToolUse' else ('python', 'rust')):
+                    payload = {'hook_event_name': event, 'session_id': 'kit', 'tool_name': 'Bash',
+                               'tool_use_id': f'kit-{n}', 'cwd': str(kit), 'tool_input': {'command': 'ls'}}
+                    r = subprocess.run(['bash', str(HOOK)], input=json.dumps(payload), text=True, capture_output=True,
+                                       cwd=str(kit), env=logs[who], timeout=20)
+                    self.assertEqual(r.returncode, 0, r.stderr)
+                    if who == 'rust' and event == 'PreToolUse':
+                        snap = next((folder / 'rust-state').glob('*.rw.json'))
+                        self.assertEqual(json.loads(snap.read_text())['mode'], 'journal')
+        rows = lambda who: sorted(l.split('\t')[1:] for l in (folder / f'{who}.tsv').read_text().splitlines())
+        self.assertEqual(rows('rust'), rows('python'))
+        # a.py, b.py and the decoy's file; nothing from the nested worktree.
+        # Events inside nested repos still go to git, which knows whether the
+        # outer index tracks anything there (security review, 2026-10-11).
+        self.assertEqual([r[1].rsplit('/', 1)[1] for r in rows('python')], ['a.py', 'b.py', 'hidden.py'])
+
+
 def hook_cpu(env, cwd, runs=3):
     """Best-of-N CPU of the hook, Pre plus Post, children included."""
     best = None

@@ -87,9 +87,20 @@ fn watch_dir() -> PathBuf {
 
 /// Roots to watch: the ones named, else the context repos write_log.py
 /// watches on every call (PERSONAL_CONTEXT_DIR and PUBLIC_CONTEXT_DIR, else
-/// ~/.claude/d1-config.sh). Only a repo whose .git is a directory there.
+/// ~/.claude/d1-config.sh) plus one repo a line in `<watch dir>/roots`.
+/// setup puts the kit's own checkout there: with the brain watched, its
+/// status was what was left, 0.03 s of CPU per event at load 15 (2026-10-11).
+/// Only a repo whose .git is a directory there.
 fn roots(named: Vec<String>) -> Vec<String> {
-    let dirs = if named.is_empty() { record::context_roots() } else { named };
+    let dirs = if named.is_empty() {
+        let mut dirs = record::context_roots();
+        if let Ok(text) = std::fs::read_to_string(watch_dir().join("roots")) {
+            dirs.extend(text.lines().map(str::trim).filter(|l| l.starts_with('/')).map(String::from));
+        }
+        dirs
+    } else {
+        named
+    };
     let mut out: Vec<String> = Vec::new();
     for d in dirs {
         let Some(top) = gitio::toplevel(&d) else { continue };

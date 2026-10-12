@@ -203,7 +203,11 @@ if [ -n "$STATE_FILE" ]; then
   # every other tab's edit moved it and the same warning re-fired: 4 times in a
   # row on 2026-10-09 against one file that was already committed and pushed,
   # while 15 other tabs kept the checkout changing.
-  _MINE_STATUS="$(printf '%s' "$MINE_PATHS" | while IFS= read -r _mp; do [ -n "$_mp" ] || continue; git status --porcelain -- "$REPO_ROOT/$_mp" 2>/dev/null; [ -f "$REPO_ROOT/$_mp" ] && git hash-object -- "$REPO_ROOT/$_mp" 2>/dev/null; done)"
+  # Paths and their status letters, never the file contents. With a content
+  # hash, a background agent appending to its audit files re-armed the warning
+  # on every turn and woke this tab 8 times in a row, 2026-10-11 ~7pm. A new
+  # file, a commit or a push still moves the fingerprint.
+  _MINE_STATUS="$(printf '%s' "$MINE_PATHS" | while IFS= read -r _mp; do [ -n "$_mp" ] || continue; git status --porcelain -- "$REPO_ROOT/$_mp" 2>/dev/null; done)"
   FINGERPRINT="$(printf '%s' "$_MINE_STATUS" | shasum 2>/dev/null | cut -d' ' -f1)|$NO_UPSTREAM|$MINE_COUNT"
   [ "$(cat "$STATE_FILE" 2>/dev/null)" = "$FINGERPRINT" ] && exit 0
   printf '%s' "$FINGERPRINT" > "$STATE_FILE" 2>/dev/null || true

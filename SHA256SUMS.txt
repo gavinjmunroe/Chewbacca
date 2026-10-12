@@ -54,7 +54,7 @@ bf92bb486d869372255f8350f7feb8e39fcd1fa9510d75be5aa54e9d1022a726  .claude/hooks/
 eb8e8f5b01b200afd455808647e7c339ecb0b29506ecdde2fc2664747ba13342  .claude/hooks/slop-guard.sh
 0aeb3e7c5d08db6e967001ddd1fc845791f500c5186c3616f9f99d49367c2695  .claude/hooks/stale-read-guard.sh
 6a02b63a1166d249ab763f5cfad1c996f96e0c9773a5ff39d290ffb1692d2c74  .claude/hooks/statusline.sh
-703579e2a68171f52ef0e54e799e53b6b41b15f273820bcc6fd9bb4680b3ba4c  .claude/hooks/stop-check.sh
+98df0d1ca79cd7597b482ce66f5619f9bbf2ac41897be0d9c0751b24e27a4af2  .claude/hooks/stop-check.sh
 14dcd53cb15ff6362ffa87a6244fda8caba0b483c0ad413da00b250689620776  .claude/hooks/submit-guard.sh
 e6b07704d0cf9d3c759a2d459f087e70670d7a694469b2cbc2e7ec78dfddd083  .claude/hooks/suite-rerun-guard.sh
 8a7c99a4f345d25c642e621534e14e4344ce0638cde3cef346be88a4ed2412a7  .claude/hooks/tab-rescue.sh

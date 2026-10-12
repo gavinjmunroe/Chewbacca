@@ -50,9 +50,15 @@ rm -rf "$T/home/.chewbacca"; keep me >/dev/null
 echo three > b.txt
 out="$(keep me)"
 [ -z "$out" ] && ok "another tab's edit: no repeat of the same warning" || no "re-fired because another session's file changed"
+# Mid-flight: the same file edited again stays quiet. A content hash re-fired
+# this on every turn while a background agent appended to its files (10-11).
 echo more >> a.txt
 out="$(keep me)"
-says "$out" "never -A" && ok "own file changed: warns again" || no "went quiet after this session's own file changed"
+[ -z "$out" ] && ok "own file edited again mid-flight: quiet" || no "re-fired on every append to the same file"
+printf '%s\tme\t%s/c.txt\n' "$(date +%s)" "$R" >> "$LOG"; echo new > c.txt
+out="$(keep me)"
+says "$out" "never -A" && ok "a new own file: warns again" || no "went quiet after this session touched a new file"
+rm -f c.txt
 
 # An untracked file belongs to whoever created it. DIRTY_COUNT counts it and
 # `git add -A` stages it, so attribution has to see it too. The first version of

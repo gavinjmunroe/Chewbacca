@@ -38,6 +38,14 @@ def validate(svc: dict) -> Optional[str]:
         return "every needs whole seconds, at least 5"
     if "at" in svc and not (svc["at"] and all(SLOT.match(t) for t in svc["at"])):
         return "at needs HH:MM times"
+    if svc.get("swap") not in (None, "overlap", "stop-start"):
+        return "swap is overlap or stop-start"
+    if svc.get("swap") == "overlap" and not svc.get("keepalive"):
+        return "swap overlap needs keepalive"
+    if "listen" in svc and not (isinstance(svc["listen"], int) and 0 < svc["listen"] < 65536):
+        return "listen needs a port"
+    if "health" in svc and not (isinstance(svc["health"].get("http"), str) and svc["health"]["http"].startswith("/") and "listen" in svc):
+        return "health needs an http path starting with / and listen"
     if "app" in svc:
         return None if str(svc["app"]).endswith(".app") else "app needs a .app path"
     if not svc.get("argv") or not all(isinstance(a, str) for a in svc["argv"]):
@@ -55,7 +63,8 @@ def _node() -> Optional[str]:
 def register(name: str, argv: Optional[List[str]] = None, every: Optional[int] = None,
              keepalive: bool = False, at: Optional[List[str]] = None, app: Optional[str] = None,
              env: Optional[Dict[str, str]] = None, nice: Optional[int] = None,
-             legacy_label: Optional[str] = None, ensure_daemon: bool = True) -> str:
+             legacy_label: Optional[str] = None, ensure_daemon: bool = True,
+             swap: Optional[str] = None, listen: Optional[int] = None, health_http: Optional[str] = None) -> str:
     svc = {"name": name}
     if app:
         svc["app"] = app
@@ -71,6 +80,12 @@ def register(name: str, argv: Optional[List[str]] = None, every: Optional[int] =
         svc["env"] = dict(env)
     if nice is not None:
         svc["nice"] = int(nice)
+    if swap:
+        svc["swap"] = swap
+    if listen is not None:
+        svc["listen"] = int(listen)
+    if health_http:
+        svc["health"] = {"http": health_http}
     bad = validate(svc)
     if bad:
         raise ValueError("chewbacca-daemon would skip {}: {}".format(name, bad))

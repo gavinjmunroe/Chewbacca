@@ -34,9 +34,23 @@ function daemon(args) {
   return execFileSync(process.argv[0], [bin, ...args], { encoding: "utf8" });
 }
 
+// A path inside a kit snapshot, rewritten through kit/current, so the service
+// follows kit moves. Registering the resolved snapshot path pinned it to one
+// generation, and the daemon never swaps a pinned service.
+function viaCurrentKit(file) {
+  const kit = path.join(HOME, ".chewbacca", "kit");
+  let snaps;
+  try { snaps = fs.realpathSync(path.join(kit, "snapshots")); } catch { return file; }
+  const rel = path.relative(snaps, file);
+  if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return file;
+  return path.join(kit, "current", ...rel.split(path.sep).slice(1));
+}
+
 function installAgent(port) {
-  daemon(["register", "people-dashboard", "--keepalive", "--",
-    process.argv[0], fs.realpathSync(process.argv[1]), "dashboard", "--port", String(port), "--no-open"]);
+  // --swap overlap: on a kit move the new copy binds beside the old one and
+  // the old one stops once / answers (reengineer step 10).
+  daemon(["register", "people-dashboard", "--keepalive", "--swap", "overlap", "--listen", String(port), "--health-http", "/", "--",
+    process.argv[0], viaCurrentKit(fs.realpathSync(process.argv[1])), "dashboard", "--port", String(port), "--no-open"]);
   for (const label of [AGENT_LABEL, "com.calebnewton.people-dashboard"]) {
     try { execFileSync("launchctl", ["bootout", `gui/${process.getuid()}/${label}`], { stdio: "ignore" }); } catch {}
     const old = path.join(HOME, "Library", "LaunchAgents", label + ".plist");
@@ -89,5 +103,6 @@ function cmdDashboard(argv) {
 }
 
 module.exports = {
+  viaCurrentKit,
   cmdDashboard,
 };

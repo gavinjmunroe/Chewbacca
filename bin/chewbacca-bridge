@@ -306,9 +306,45 @@ def ensure_dirs() -> None:
         os.chmod(d, 0o700)
 
 
-def run_job(path: pathlib.Path) -> None:
+def claim(path: pathlib.Path):
+    """Take a job so no other serve loop runs it too. On a kit move the daemon
+    starts the new bridge beside the old one (reengineer step 10), and both
+    globbed the same inbox: a rename is atomic, so exactly one of them wins."""
+    claimed = path.with_name(f".{path.stem}.{os.getpid()}.claim")
+    try:
+        path.rename(claimed)
+    except FileNotFoundError:
+        return None
+    return claimed
+
+
+def reclaim_orphans() -> None:
+    """Put back a job whose claimer died mid-run. The daemon stops the old
+    bridge 3 s after the new one starts, whether or not it is mid-job, and
+    SIGTERM skips run_job's cleanup. Before claims existed the job file sat in
+    the inbox and the next bridge ran it, so a re-run is what callers expect."""
+    for claimed in INBOX.glob(".*.claim"):
+        parts = claimed.name.split(".")
+        # .<id>.<pid>.claim
+        if len(parts) != 4 or not parts[2].isdigit():
+            continue
+        try:
+            os.kill(int(parts[2]), 0)
+            continue
+        except ProcessLookupError:
+            pass
+        except PermissionError:
+            continue
+        try:
+            claimed.rename(INBOX / f"{parts[1]}.json")
+            log(f"reclaimed {parts[1]} from dead pid {parts[2]}")
+        except FileNotFoundError:
+            pass
+
+
+def run_job(path: pathlib.Path, job_id: str = "") -> None:
     started = time.monotonic()
-    job_id = path.stem
+    job_id = job_id or path.stem
     result = {"id": job_id, "rc": 1, "stdout": "", "stderr": ""}
     try:
         st = path.stat()
@@ -344,8 +380,11 @@ def serve() -> int:
     ensure_dirs()
     log("serve: up")
     while True:
+        reclaim_orphans()
         for path in sorted(INBOX.glob("*.json")):
-            run_job(path)
+            claimed = claim(path)
+            if claimed:
+                run_job(claimed, path.stem)
         for old in OUTBOX.glob("*.json"):
             if time.time() - old.stat().st_mtime > 3600:
                 old.unlink(missing_ok=True)
@@ -374,6 +413,15 @@ def call(tool: str, args: list[str], timeout: float = 700.0) -> int:
     return 125
 
 
+def via_current_kit(file: pathlib.Path) -> pathlib.Path:
+    kit = pathlib.Path.home() / ".chewbacca" / "kit"
+    try:
+        rel = file.relative_to((kit / "snapshots").resolve())
+    except (ValueError, OSError):
+        return file
+    return kit / "current" / pathlib.Path(*rel.parts[1:])
+
+
 def _daemon():
     sys.path.insert(0, str(HERE / "lib"))
     import daemon_register
@@ -384,8 +432,11 @@ def install() -> int:
     # One Login Items row for all of Chewbacca: the bridge is a service of
     # chewbacca-daemon now, not its own LaunchAgent (Caleb, 2026-10-11).
     reg = _daemon()
-    print(reg.register("bridge", [shutil.which("python3") or "/usr/bin/python3", str(pathlib.Path(__file__).resolve()), "serve"],
-                       keepalive=True, env={"PATH": PATH}, legacy_label=LABEL))
+    # Registered through kit/current, never the resolved snapshot path: a
+    # service pinned to one snapshot is never swapped onto a new kit. --swap
+    # overlap is safe because claim() keeps two loops off the same job.
+    print(reg.register("bridge", [shutil.which("python3") or "/usr/bin/python3", str(via_current_kit(pathlib.Path(__file__).resolve())), "serve"],
+                       keepalive=True, env={"PATH": PATH}, legacy_label=LABEL, swap="overlap"))
     for _ in range(30):
         if call("ping", [], timeout=2) == 0:
             print("chewbacca-bridge: running")

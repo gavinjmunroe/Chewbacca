@@ -89,7 +89,12 @@ voice listener current" is a lookup, not an investigation.
 3. Record generation per service and show stale ones in `status`. Add a
    doctor check that fails when any service is stale for more than one tick
    after a move.
-4. Blue/green swap for keepalive services: realm-ui, bridge, people-dashboard.
+4. Done 2026-10-12 (reengineer step 10): keepalive services outlive the
+   daemon's restart on a kit move, and the new daemon adopts and swaps them.
+   bridge and people-dashboard overlap (`--swap overlap`; the dashboard's
+   port is shared through bin/lib/listen_exec.py). realm-ui swaps
+   stop-start, since its server binds its own port and lives in the HUD
+   lane. Every swap is a line in ~/.chewbacca/daemon/swaps.jsonl.
 5. HUD lane, not tonight: register the voice listener, speaker, room-capture
    and agent engine as daemon services instead of Kyber children. Kyber
    watches the generation file for the rest.

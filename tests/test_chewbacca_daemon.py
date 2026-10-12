@@ -284,12 +284,8 @@ SHA_B = "b" * 40
 
 
 @unittest.skipUnless(NODE, "node not installed")
-class GenerationTests(unittest.TestCase):
-    """Reengineer step 9: every service knows the kit snapshot it runs from.
-
-    On 2026-10-11 room-capture, hud-speak and the origin-guard server ran from
-    snapshots already pruned, and only reading ps by hand showed it.
-    """
+class KitSandbox(unittest.TestCase):
+    """A daemon dir, a kit link and two snapshots, A and B, in a temp dir."""
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp()).resolve()
@@ -339,6 +335,16 @@ class GenerationTests(unittest.TestCase):
         p = subprocess.Popen(argv, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.procs.append(p)
         return p
+
+
+
+@unittest.skipUnless(NODE, "node not installed")
+class GenerationTests(KitSandbox):
+    """Reengineer step 9: every service knows the kit snapshot it runs from.
+
+    On 2026-10-11 room-capture, hud-speak and the origin-guard server ran from
+    snapshots already pruned, and only reading ps by hand showed it.
+    """
 
     def test_status_flags_a_service_on_an_old_generation_and_check_fails_past_a_minute(self):
         self.cli("register", "svc", "--keepalive", "--", "/bin/sh", str(self.tmp / "kit/bin/svc.sh"))
@@ -487,6 +493,287 @@ class GenerationTests(unittest.TestCase):
         finally:
             proc.send_signal(signal.SIGTERM)
             proc.wait(timeout=15)
+
+
+
+SERVER = r"""
+import http.server, os, socket, sys
+word, port = sys.argv[1], int(sys.argv[2])
+class H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        body = word.encode()
+        self.send_response(200); self.send_header("content-length", str(len(body))); self.end_headers(); self.wfile.write(body)
+    def log_message(self, *a): pass
+srv = http.server.HTTPServer(("127.0.0.1", port), H, bind_and_activate=False)
+fd = os.environ.get("CHEWBACCA_LISTEN_FD")
+if fd:
+    srv.socket = socket.socket(fileno=int(fd))
+else:
+    srv.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); srv.server_bind(); srv.server_activate()
+srv.serve_forever()
+"""
+
+
+def free_port():
+    import socket
+    s = socket.socket(); s.bind(("127.0.0.1", 0)); p = s.getsockname()[1]; s.close()
+    return p
+
+
+@unittest.skipUnless(NODE, "node not installed")
+class BlueGreenTests(KitSandbox):
+    """Reengineer step 10: a kit move leaves no gap in a keepalive service.
+
+    Before this, every service died with the daemon on a kit move and came
+    back with the next one, 5.3 to 8.0 s later per the 2026-10-12 daemon log.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.port = free_port()
+        for sha, word in ((SHA_A, "old"), (SHA_B, "new")):
+            (self.tmp / "snapshots" / sha / "bin" / "web.py").write_text(SERVER)
+        self.daemons = []
+        self.stop_launchd = False
+
+    def tearDown(self):
+        self.stop_launchd = True
+        for d in self.daemons:
+            if d.poll() is None:
+                d.send_signal(signal.SIGTERM)
+                try:
+                    d.wait(timeout=15)
+                except subprocess.TimeoutExpired:
+                    d.kill()
+        super().tearDown()
+
+    def launchd(self):
+        """Stand in for launchd's KeepAlive: start the daemon again whenever it
+        exits. Real launchd took 5.3 to 8.0 s; this restarts at once, which
+        flatters the code before this step."""
+        import threading
+
+        def loop():
+            while not self.stop_launchd:
+                with open(self.tmp / "daemon.out", "a") as out:
+                    d = subprocess.Popen([NODE, str(DAEMON), "run"], env=self.env, stdout=out, stderr=subprocess.STDOUT)
+                self.daemons.append(d)
+                while d.poll() is None and not self.stop_launchd:
+                    time.sleep(0.05)
+        threading.Thread(target=loop, daemon=True).start()
+
+    def write_service(self, **extra):
+        # Written as JSON rather than through `register`, so the same test runs
+        # on the daemon before this step (which has no --swap flag) and measures it.
+        svc = {"name": "web", "keepalive": True,
+               "argv": [sys.executable, str(self.tmp / "kit/bin/web.py"), "X", str(self.port)], **extra}
+        d = self.tmp / "daemon/services"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "web.json").write_text(json.dumps(svc))
+
+    def get(self):
+        import urllib.request
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{self.port}/", timeout=1) as r:
+                return r.read().decode()
+        except OSError:
+            return None
+
+    def state(self):
+        f = self.tmp / "daemon/state.json"
+        try:
+            return json.loads(f.read_text())
+        except (OSError, ValueError):
+            return {}
+
+    def probe_across_a_move(self, word_old, word_new):
+        for _ in range(80):
+            if self.get() == word_old:
+                break
+            time.sleep(0.1)
+        self.assertEqual(self.get(), word_old, "service never came up")
+        first_daemon = self.daemons[-1].pid
+        self.point(SHA_B)
+        failed, longest, down_since, answers = 0, 0.0, None, []
+        deadline = time.time() + 40
+        while time.time() < deadline:
+            t = time.time()
+            a = self.get()
+            if a is None:
+                failed += 1
+                down_since = down_since or t
+            else:
+                if down_since:
+                    longest = max(longest, t - down_since)
+                    down_since = None
+                answers.append(a)
+                if a == word_new and self.state().get("web", {}).get("gen") == SHA_B and self.daemons[-1].pid != first_daemon:
+                    break
+            time.sleep(0.05)
+        print(f"\n  gap across a kit move: {failed} refused probes, longest {longest:.2f} s", file=sys.stderr)
+        return failed, longest, answers
+
+    def test_overlap_service_refuses_nothing_across_a_kit_move(self):
+        self.write_service(swap="overlap", listen=self.port, health={"http": "/"})
+        for sha, word in ((SHA_A, "old"), (SHA_B, "new")):
+            (self.tmp / "snapshots" / sha / "bin" / "web.py").write_text(SERVER.replace("word, port = sys.argv[1]", f"word, port = {word!r}"))
+        self.launchd()
+        failed, longest, answers = self.probe_across_a_move("old", "new")
+        self.assertEqual(answers[-1], "new", "the service never moved to the new kit")
+        self.assertEqual(failed, 0, f"{failed} requests refused across the move, longest gap {longest:.2f} s")
+        swaps = [json.loads(l) for l in (self.tmp / "daemon/swaps.jsonl").read_text().splitlines()]
+        self.assertEqual([(s["service"], s["mode"], s["from"], s["to"], s["downMs"]) for s in swaps],
+                         [("web", "overlap", SHA_A, SHA_B, 0)])
+        self.assertIn("healthy", swaps[0]["result"])
+
+    def test_stop_start_service_outlives_the_daemon_restart(self):
+        # realm-ui binds its own port, so it can't overlap: it stops and starts
+        # in one tick of the new daemon, instead of dying with the old one.
+        self.write_service()
+        for sha, word in ((SHA_A, "old"), (SHA_B, "new")):
+            (self.tmp / "snapshots" / sha / "bin" / "web.py").write_text(SERVER.replace("word, port = sys.argv[1]", f"word, port = {word!r}"))
+        self.launchd()
+        failed, longest, answers = self.probe_across_a_move("old", "new")
+        self.assertEqual(answers[-1], "new")
+        out = (self.tmp / "daemon.out").read_text()
+        self.assertIn("left running for the next one: web", out)
+        self.assertIn("adopted web from the last run", out)
+        swaps = [json.loads(l) for l in (self.tmp / "daemon/swaps.jsonl").read_text().splitlines()]
+        self.assertEqual([(s["mode"], s["to"]) for s in swaps], [("stop-start", SHA_B)])
+        # The service was down only for its own stop and start, never for the
+        # daemon's restart: well under a second here, 5.3 to 8.0 s before.
+        self.assertLess(longest, 1.5)
+
+    def test_a_new_copy_that_dies_leaves_the_old_one_serving(self):
+        self.write_service(swap="overlap", listen=self.port, health={"http": "/"})
+        (self.tmp / "snapshots" / SHA_A / "bin" / "web.py").write_text(SERVER.replace("word, port = sys.argv[1]", "word, port = 'old'"))
+        (self.tmp / "snapshots" / SHA_B / "bin" / "web.py").write_text("import sys; sys.exit(3)\n")
+        self.launchd()
+        for _ in range(80):
+            if self.get() == "old":
+                break
+            time.sleep(0.1)
+        first = self.state()["web"]["pid"]
+        self.point(SHA_B)
+        swaps = self.tmp / "daemon/swaps.jsonl"
+        for _ in range(200):
+            if swaps.exists() and swaps.read_text().strip():
+                break
+            time.sleep(0.1)
+        ev = json.loads(swaps.read_text().splitlines()[0])
+        self.assertEqual(ev["result"], "new copy exited")
+        self.assertEqual(self.get(), "old")
+        st = self.state()["web"]
+        self.assertEqual((st["pid"], st["gen"]), (first, SHA_A))
+        self.assertGreater(st["swapRetryAt"], time.time() * 1000)
+
+    def test_a_copy_bound_without_reuseport_swaps_stop_start_once(self):
+        # people-dashboard ran from a registration without --listen and bound
+        # 7373 itself; no new copy can bind beside that one.
+        self.write_service()
+        for sha, word in ((SHA_A, "old"), (SHA_B, "new")):
+            (self.tmp / "snapshots" / sha / "bin" / "web.py").write_text(SERVER.replace("word, port = sys.argv[1]", f"word, port = {word!r}"))
+        self.launchd()
+        for _ in range(80):
+            if self.get() == "old":
+                break
+            time.sleep(0.1)
+        self.assertEqual(self.get(), "old")
+        self.write_service(swap="overlap", listen=self.port, health={"http": "/"})
+        self.point(SHA_B)
+        swaps = self.tmp / "daemon/swaps.jsonl"
+        for _ in range(200):
+            if self.get() == "new" and swaps.exists():
+                break
+            time.sleep(0.1)
+        ev = [json.loads(l) for l in swaps.read_text().splitlines()]
+        self.assertEqual([(e["mode"], e["result"]) for e in ev], [("stop-start", "started")])
+        self.assertTrue(self.state()["web"]["shared"])
+
+    def test_a_handover_too_old_is_reaped_not_adopted(self):
+        self.write_service()
+        p = self.spawn(["/bin/sleep", "300"])
+        lstart = node_eval(f"console.log(JSON.stringify(require({str(DAEMON)!r}).startedAt({p.pid})))", self.env)
+        (self.tmp / "daemon/state.json").write_text(json.dumps({"web": {
+            "pid": p.pid, "argv0": "sleep", "gen": SHA_A, "from": "kit", "lastStart": lstart,
+            "handover": int(time.time() * 1000) - 200_000}}))
+        with open(self.tmp / "daemon.out", "a") as out:
+            d = subprocess.Popen([NODE, str(DAEMON), "run"], env=self.env, stdout=out, stderr=subprocess.STDOUT)
+        self.daemons.append(d)
+        for _ in range(100):
+            if p.poll() is not None:
+                break
+            time.sleep(0.1)
+        self.assertIsNotNone(p.poll(), "a handover older than HANDOVER_MAX_S was adopted")
+
+    def test_register_flags_round_trip_and_validate(self):
+        self.cli("register", "web", "--keepalive", "--swap", "overlap", "--listen", "7373", "--health-http", "/", "--", "/bin/true")
+        svc = json.loads((self.tmp / "daemon/services/web.json").read_text())
+        self.assertEqual((svc["swap"], svc["listen"], svc["health"]), ("overlap", 7373, {"http": "/"}))
+        for bad in (["--every", "60", "--swap", "overlap"], ["--keepalive", "--swap", "sideways"],
+                    ["--keepalive", "--listen", "0"], ["--keepalive", "--health-http", "/"]):
+            r = self.cli("register", "bad", *bad, "--", "/bin/true", check=False)
+            self.assertEqual(r.returncode, 2, bad)
+        sys.path.insert(0, str(ROOT / "bin" / "lib"))
+        import daemon_register
+        self.assertIsNone(daemon_register.validate({"name": "w", "keepalive": True, "argv": ["/bin/true"],
+                                                    "swap": "overlap", "listen": 7373, "health": {"http": "/"}}))
+        self.assertIsNotNone(daemon_register.validate({"name": "w", "every": 60, "argv": ["/bin/true"], "swap": "overlap"}))
+
+
+class ListenExecTests(unittest.TestCase):
+    def test_people_dashboard_serves_on_the_handed_over_port(self):
+        port = free_port()
+        code = ("require(%r).serve({db: () => null, port: 1, host: '127.0.0.1', onReady: () => {}})"
+                % str(ROOT / "bin/lib/people-dashboard.js"))
+        p = subprocess.Popen(["/usr/bin/python3", str(ROOT / "bin/lib/listen_exec.py"), str(port), "--", NODE, "-e", code],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            import urllib.request
+            body = None
+            for _ in range(100):
+                try:
+                    with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=1) as r:
+                        body = r.read()
+                    break
+                except OSError:
+                    time.sleep(0.05)
+            self.assertTrue(body and b"<" in body, "dashboard did not answer on the handed-over fd")
+        finally:
+            p.terminate(); p.wait(timeout=5)
+
+    def test_only_the_new_half_of_a_swap_binds_beside_a_live_copy(self):
+        import socket
+        port = free_port()
+        held = socket.socket()
+        held.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        held.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        held.bind(("127.0.0.1", port))
+        held.listen(8)
+        try:
+            run = lambda env: subprocess.run(["/usr/bin/python3", str(ROOT / "bin/lib/listen_exec.py"), str(port), "--", "true"],
+                                             env=env, capture_output=True, text=True, timeout=10)
+            plain = run({k: v for k, v in os.environ.items() if k != "CHEWBACCA_LISTEN_OVERLAP"})
+            self.assertEqual(plain.returncode, 1, plain.stderr)
+            self.assertIn("already answers", plain.stderr)
+            # execvp: a bare command name resolves on PATH.
+            swap = run(dict(os.environ, CHEWBACCA_LISTEN_OVERLAP="1"))
+            self.assertEqual(swap.returncode, 0, swap.stderr)
+        finally:
+            held.close()
+
+    def test_kit_paths_register_through_current(self):
+        tmp = Path(tempfile.mkdtemp()).resolve()
+        try:
+            snap = tmp / ".chewbacca/kit/snapshots/abc123/bin"
+            snap.mkdir(parents=True)
+            (snap / "people").write_text("")
+            (tmp / ".chewbacca/kit/current").symlink_to("snapshots/abc123")
+            code = "console.log(JSON.stringify(require(%r).viaCurrentKit(%r)))" % (str(ROOT / "bin/lib/people/dashboard.js"), str(snap / "people"))
+            env = dict(os.environ, HOME=str(tmp))
+            self.assertEqual(node_eval(code, env), str(tmp / ".chewbacca/kit/current/bin/people"))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
 
 
 if __name__ == "__main__":

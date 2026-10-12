@@ -5,7 +5,8 @@
  *
  *   chewbacca-daemon install            write the one LaunchAgent, adopt the old ones
  *   chewbacca-daemon register NAME (--every SEC | --at HH:MM[,HH:MM] | --keepalive | --app PATH)
- *                                [--nice N] [--env K=V]... [--start-later] -- ARGV...
+ *                                [--nice N] [--env K=V]... [--start-later]
+ *                                [--swap overlap|stop-start] [--listen PORT] [--health-http PATH] -- ARGV...
  *   chewbacca-daemon unregister NAME
  *   chewbacca-daemon status [--json] [--check]
  *   chewbacca-daemon run                 the supervisor launchd starts
@@ -84,6 +85,42 @@ const ADOPT_EVERY_MS = 10 * 60 * 1000;
 // old code for that long. 60 s is the plan's line (reengineer step 9).
 const STALE_GRACE_S = 60;
 
+// Blue/green (reengineer step 10). On a kit move every service used to die
+// with the daemon and come back with the next one: the daemon log shows 5.3 to
+// 8.0 s from "kit moved" to "daemon up" across the 7 moves on 2026-10-12, and
+// people-dashboard (0.07 s to listen) and realm-ui (0.17 s) were dark that
+// whole time. Now keepalive services outlive the daemon's restart, and the new
+// daemon swaps each one onto the new kit.
+//
+// The health check decides which copy to keep; it does not hold traffic back.
+// The last socket bound gets every new connection, so a --listen service's new
+// copy serves from the moment it binds, and a bad one serves its errors for up
+// to HEALTH_TIMEOUT_S before the old one takes over again.
+//
+// An adopted process is not our child, so its exit code is unknown: a
+// crash-only service (realm) that exits cleanly in the tick before its swap
+// comes back after backoff instead of staying down. Every adopted service
+// swaps on the first tick, so that window is about 5 s.
+//
+// A new copy must stay up this long before the old one stops. Both services
+// above listen in under 0.2 s, so 3 s is 15 times that. Guessed past that.
+const HEALTH_UP_S = 3;
+// A new copy that is not healthy by now is stopped and the old one keeps
+// serving. Guessed, never measured: 10 times HEALTH_UP_S.
+const HEALTH_TIMEOUT_S = 30;
+// After a failed swap, try again this much later. Guessed: the crash
+// backoff's own ceiling, BACKOFF_MAX_S.
+const SWAP_RETRY_S = 300;
+// A service the last daemon left running is adopted only if the new daemon
+// starts within this long. launchd brought it back in 5.3 to 8.0 s on
+// 2026-10-12; anything far later is a crash we should not trust.
+const HANDOVER_MAX_S = 120;
+// ps prints a start time to the second, and spawn() returns within a few ms
+// of the fork, so a pid whose start is within 2 s of lastStart is ours.
+const SAME_START_MS = 2000;
+const PYTHON = "/usr/bin/python3";
+const LISTEN_EXEC = path.join(__dirname, "lib", "listen_exec.py");
+
 const NAME_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 
 function readJSON(file, fallback) {
@@ -103,6 +140,11 @@ function validate(svc) {
   if (svc.keepalive !== undefined && svc.keepalive !== true && svc.keepalive !== "crash") return "--keepalive is true or crash";
   if (svc.every !== undefined && !(Number.isFinite(svc.every) && svc.every >= 5)) return "--every needs whole seconds, at least 5";
   if (svc.at !== undefined && !(Array.isArray(svc.at) && svc.at.length && svc.at.every((t) => /^([01]\d|2[0-3]):[0-5]\d$/.test(t)))) return "--at needs HH:MM times";
+  if (svc.swap !== undefined && !["overlap", "stop-start"].includes(svc.swap)) return "--swap is overlap or stop-start";
+  if (svc.swap === "overlap" && !svc.keepalive) return "--swap overlap needs --keepalive";
+  if (svc.listen !== undefined && !(Number.isInteger(svc.listen) && svc.listen > 0 && svc.listen < 65536)) return "--listen needs a port";
+  if (svc.health !== undefined && !(svc.health && typeof svc.health.http === "string" && svc.health.http.startsWith("/") && svc.listen))
+    return "--health-http needs a path starting with / and --listen";
   if (svc.app !== undefined) { if (typeof svc.app !== "string" || !svc.app.endsWith(".app")) return "--app needs a .app path"; }
   else if (!Array.isArray(svc.argv) || !svc.argv.length || !svc.argv.every((a) => typeof a === "string")) return "give the command after --";
   return null;
@@ -413,6 +455,7 @@ function due(svc, st, now, boot = 0) {
 function finished(svc, st, children, boot, code, signal, why) {
   children.delete(svc.name);
   st.pid = null;
+  st.handover = null;
   st.lastExit = why || (signal ? `signal ${signal}` : code);
   st.lastEnd = Date.now();
   if (st.swapping) {
@@ -430,6 +473,26 @@ function finished(svc, st, children, boot, code, signal, why) {
   }
 }
 
+// Spawn a service's command, through listen_exec.py when it holds a port.
+// overlap: this is the new half of a swap, allowed to bind beside the old one.
+function launch(svc, overlap = false) {
+  const fd = openLog(svc.name);
+  try {
+    const argv = svc.listen ? [PYTHON, LISTEN_EXEC, String(svc.listen), "--", ...svc.argv] : svc.argv;
+    const env = { ...process.env, PATH: DEFAULT_PATH, ...(svc.env || {}) };
+    delete env.CHEWBACCA_LISTEN_OVERLAP;
+    if (overlap) env.CHEWBACCA_LISTEN_OVERLAP = "1";
+    const child = spawn(argv[0], argv.slice(1), {
+      cwd: svc.cwd || HOME, env,
+      detached: true, stdio: ["ignore", fd, fd],
+    });
+    if (Number.isInteger(svc.nice) && child.pid) { try { os.setPriority(child.pid, svc.nice); } catch { /* best effort */ } }
+    return child;
+  } finally {
+    try { fs.closeSync(fd); } catch { /* closed */ }
+  }
+}
+
 function start(svc, st, children, boot) {
   const now = Date.now();
   st.lastStart = now;
@@ -444,35 +507,69 @@ function start(svc, st, children, boot) {
     log(`opened ${svc.name}`);
     return;
   }
-  let fd;
   let child;
   try {
-    fd = openLog(svc.name);
-    child = spawn(svc.argv[0], svc.argv.slice(1), {
-      cwd: svc.cwd || HOME, env: { ...process.env, PATH: DEFAULT_PATH, ...(svc.env || {}) },
-      detached: true, stdio: ["ignore", fd, fd],
-    });
+    child = launch(svc);
   } catch (e) {
-    if (fd !== undefined) try { fs.closeSync(fd); } catch { /* closed */ }
     st.pid = null;
     finished(svc, st, children, boot, null, null, `spawn failed: ${e.message}`);
     return;
   }
-  fs.closeSync(fd);
-  if (Number.isInteger(svc.nice) && child.pid) { try { os.setPriority(child.pid, svc.nice); } catch { /* best effort */ } }
   st.pid = child.pid || null;
   st.swapping = false;
+  st.handover = null;
+  st.shared = Boolean(svc.listen);
   st.argv0 = path.basename(svc.argv[0]);
   const g = generationOf(svc);
   st.gen = g.gen;
   st.from = g.from;
   children.set(svc.name, child);
+  watch(svc, st, children, boot, child);
+}
+
+// Exit handling for a child that is (or becomes) the service's current copy.
+// A copy replaced by a swap exits later; by then st.pid names its successor,
+// and that exit must not mark the service down.
+function watch(svc, st, children, boot, child) {
+  const pid = child.pid || null;
   // A missing binary never emits "exit", only "error" (ENOENT, pid undefined):
   // without this the service stayed "running" forever and blocked kit restarts.
   let ended = false;
-  const end = (code, signal, why) => { if (ended) return; ended = true; finished(svc, st, children, boot, code, signal, why); };
+  const end = (code, signal, why) => {
+    if (ended) return; ended = true;
+    if (st.pid !== pid) return;
+    finished(svc, st, children, boot, code, signal, why);
+  };
   child.on("error", (e) => end(null, null, `error: ${e.message}`));
-  child.on("exit", (code, signal) => { if (svc.every) st.retryAt = 0; end(code, signal); });
+  child.on("exit", (code, signal) => { if (svc.every && st.pid === pid) st.retryAt = 0; end(code, signal); });
+}
+
+// One line per swap in swaps.jsonl, with both generations, the health result
+// and how long it took (Cole's rule in docs/plans/one-supervisor.md).
+function swapEvent(ev) {
+  log(`swap ${ev.service} ${ev.mode}: ${String(ev.from || "?").slice(0, 12)} -> ${String(ev.to || "?").slice(0, 12)} ${ev.result} in ${ev.ms} ms`);
+  try {
+    fs.mkdirSync(DIR, { recursive: true, mode: 0o700 });
+    fs.appendFileSync(path.join(DIR, "swaps.jsonl"), JSON.stringify({ at: new Date().toISOString(), ...ev }) + "\n", { mode: 0o600 });
+  } catch { /* disk full: the daemon log has it */ }
+}
+
+// When a process started, from ps, in ms; null when it is gone.
+function startedAt(pid) {
+  const r = spawnSync("/bin/ps", ["-o", "lstart=", "-p", String(pid)], { encoding: "utf8" });
+  const t = Date.parse(String(r.stdout || "").trim());
+  return Number.isFinite(t) ? t : null;
+}
+
+// Is this pid the service we started, and not a reused number? Same program
+// name, or (for a service that execs another binary, like realm-ui's python
+// becoming node) started within SAME_START_MS of when we spawned it.
+function ours(st) {
+  if (!st.pid || !alive(st.pid)) return false;
+  const comm = spawnSync("/bin/ps", ["-o", "comm=", "-p", String(st.pid)], { encoding: "utf8" }).stdout.trim();
+  if (st.argv0 && path.basename(comm) === st.argv0) return true;
+  const t = startedAt(st.pid);
+  return Boolean(t && st.lastStart && Math.abs(t - st.lastStart) < SAME_START_MS);
 }
 
 function kitTarget() {
@@ -487,32 +584,150 @@ function sleepMs(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
+// Alive and not a zombie. A child of this daemon that exits stays a zombie
+// until node reaps it, and node can't reap while stopGroups blocks the loop,
+// so kill(pid, 0) kept saying "alive": every stop waited the full 5 s and
+// then sent SIGKILL. That was 5 of the 5.3 to 8.0 s each kit move took on
+// 2026-10-12 (reengineer step 10 found it).
+function running(pid) {
+  if (!alive(pid)) return false;
+  const r = spawnSync("/bin/ps", ["-o", "stat=", "-p", String(pid)], { encoding: "utf8" });
+  const stat = String(r.stdout || "").trim();
+  return stat !== "" && !stat.startsWith("Z");
+}
+
 // SIGTERM every group, give them five seconds, then SIGKILL what's left, so a
 // slow child can't keep a port the next daemon's copy needs. Five is guessed.
 function stopGroups(pids) {
   for (const pid of pids) { try { process.kill(-pid, "SIGTERM"); } catch { /* gone */ } }
   const until = Date.now() + 5000;
-  while (pids.some(alive) && Date.now() < until) sleepMs(100);
+  while (pids.some(running) && Date.now() < until) sleepMs(100);
   for (const pid of pids) if (alive(pid)) { try { process.kill(-pid, "SIGKILL"); } catch { /* gone */ } }
 }
 
 // A daemon that crashed left its children running. A saved pid still alive
 // and still running the same program is ours; anything else is a reused pid.
-function reapOrphans(state) {
-  const ours = [];
-  for (const st of Object.values(state)) {
-    if (!st.pid || !alive(st.pid)) continue;
-    const comm = spawnSync("/bin/ps", ["-o", "comm=", "-p", String(st.pid)], { encoding: "utf8" }).stdout.trim();
-    if (st.argv0 && path.basename(comm) === st.argv0) ours.push(st.pid);
+// The exception is a keepalive service the last daemon handed over on a kit
+// move: it keeps serving, and this daemon adopts it and swaps it.
+function reapOrphans(state, services = [], adopted = new Map()) {
+  const now = Date.now();
+  const keep = new Set(services.filter((s) => s.keepalive && !s.app).map((s) => s.name));
+  const stop = [];
+  for (const [name, st] of Object.entries(state)) {
+    if (!ours(st)) continue;
+    if (st.handover && now - st.handover < HANDOVER_MAX_S * 1000 && keep.has(name)) { adopted.set(name, st.pid); continue; }
+    stop.push(st.pid);
   }
-  if (ours.length) { log(`stopping ${ours.length} left over from the last run`); stopGroups(ours); }
-  for (const st of Object.values(state)) { st.pid = null; st.swapping = false; }
+  if (stop.length) { log(`stopping ${stop.length} left over from the last run`); stopGroups(stop); }
+  for (const [name, st] of Object.entries(state)) {
+    if (!adopted.has(name)) st.pid = null;
+    st.swapping = false;
+    st.handover = null;
+  }
+  if (adopted.size) log(`adopted ${[...adopted.keys()].join(", ")} from the last run`);
+  return adopted;
+}
+
+// Move one keepalive service onto the current kit.
+//   overlap: start the new copy beside the old one; once it is healthy, stop
+//     the old one. A --listen service's new copy takes the port's new
+//     connections the moment it binds (listen_exec.py), so nothing is refused.
+//   stop-start: stop the old one, start the new one in the same tick. For a
+//     service that binds its own port and can't share it (realm-ui).
+function swapStart(svc, st, ctx, cur) {
+  const { children, greens, adopted, boot } = ctx;
+  const t0 = Date.now();
+  const from = st.gen;
+  // A copy started before its registration had --listen bound the port
+  // without SO_REUSEPORT, and no new copy can bind beside it: swap that one
+  // stop-start, once, and every swap after it overlaps.
+  const mode = svc.swap === "overlap" && (!svc.listen || st.shared) ? "overlap" : "stop-start";
+  if (mode !== "overlap") {
+    const old = st.pid;
+    children.delete(svc.name);
+    adopted.delete(svc.name);
+    st.pid = null;
+    stopGroups([old]);
+    const stopped = Date.now() - t0;
+    st.retryAt = 0;
+    start(svc, st, children, boot);
+    swapEvent({ service: svc.name, mode: "stop-start", from, to: st.gen, result: st.pid ? "started" : "failed to start",
+      ms: Date.now() - t0, downMs: stopped });
+    return;
+  }
+  let child;
+  try { child = launch(svc, true); } catch (e) {
+    st.swapRetryAt = t0 + SWAP_RETRY_S * 1000;
+    swapEvent({ service: svc.name, mode: "overlap", from, to: cur, result: `spawn failed: ${e.message}`, ms: 0 });
+    return;
+  }
+  const g = { child, pid: child.pid || null, since: t0, from, to: cur, dead: false, healthy: false, checking: false };
+  child.on("error", () => { g.dead = true; });
+  child.on("exit", () => { g.dead = true; });
+  greens.set(svc.name, g);
+  log(`swap ${svc.name}: started new copy ${g.pid} beside ${st.pid}`);
+}
+
+function healthCheck(svc, g) {
+  if (!svc.health || g.checking) return;
+  g.checking = true;
+  const http = require("http");
+  const req = http.get({ host: "127.0.0.1", port: svc.listen, path: svc.health.http, timeout: 2000 }, (res) => {
+    res.resume();
+    g.checking = false;
+    if (res.statusCode < 500) g.healthy = true;
+  });
+  req.on("timeout", () => req.destroy(new Error("timeout")));
+  req.on("error", () => { g.checking = false; });
+}
+
+// One tick of every overlap swap in flight: promote a healthy new copy,
+// or give up on a dead or slow one and keep the old.
+function swapTick(services, state, ctx) {
+  const { children, greens, adopted, boot } = ctx;
+  const now = Date.now();
+  for (const [name, g] of greens) {
+    const svc = services.find((s) => s.name === name);
+    const st = state[name];
+    const fail = (why) => {
+      greens.delete(name);
+      if (g.pid && !g.dead) stopGroups([g.pid]);
+      if (st) st.swapRetryAt = now + SWAP_RETRY_S * 1000;
+      swapEvent({ service: name, mode: "overlap", from: g.from, to: g.to, result: why, ms: now - g.since });
+    };
+    if (!svc || !st) { fail("service went away"); continue; }
+    if (g.dead || !g.pid) { fail("new copy exited"); continue; }
+    if (!st.pid) {
+      // The old copy died during the swap: the new one is all there is.
+      greens.delete(name);
+      st.pid = g.pid; st.lastStart = g.since; st.argv0 = path.basename(svc.argv[0]); st.shared = Boolean(svc.listen);
+      Object.assign(st, (({ gen, from }) => ({ gen, from }))(generationOf(svc)));
+      children.set(name, g.child); watch(svc, st, children, boot, g.child);
+      swapEvent({ service: name, mode: "overlap", from: g.from, to: st.gen, result: "old copy exited first", ms: now - g.since });
+      continue;
+    }
+    if (now - g.since > HEALTH_TIMEOUT_S * 1000) { fail(`not healthy after ${HEALTH_TIMEOUT_S} s`); continue; }
+    if (now - g.since < HEALTH_UP_S * 1000) continue;
+    if (svc.health && !g.healthy) { healthCheck(svc, g); continue; }
+    const old = st.pid;
+    greens.delete(name);
+    adopted.delete(name);
+    st.pid = g.pid; st.lastStart = g.since; st.argv0 = path.basename(svc.argv[0]); st.handover = null; st.shared = Boolean(svc.listen);
+    const gen = generationOf(svc);
+    st.gen = gen.gen; st.from = gen.from;
+    children.set(name, g.child);
+    watch(svc, st, children, boot, g.child);
+    stopGroups([old]);
+    swapEvent({ service: name, mode: "overlap", from: g.from, to: st.gen, result: svc.health ? `healthy (${svc.health.http})` : `up ${HEALTH_UP_S} s`,
+      ms: Date.now() - g.since, downMs: 0 });
+  }
 }
 
 function run() {
   const children = new Map();
+  const greens = new Map();
   const state = readJSON(STATE, {});
-  reapOrphans(state);
+  const adopted = reapOrphans(state, loadServices());
   const boot = bootTime();
   const bootKit = kitTarget();
   try { writeJSON(SELF, { pid: process.pid, gen: kitSha(), started: Date.now() }); } catch { /* status shows it unknown */ }
@@ -521,9 +736,31 @@ function run() {
   let lastAdopt = 0;
   let ticks = 0;
 
+  const ctx = { children, greens, adopted, boot };
   const stopAll = (sig) => {
-    stopGroups([...children.values()].map((c) => c.pid).filter(Boolean));
+    stopGroups([...children.values(), ...greens.values()].map((c) => c.pid).filter(Boolean).concat([...adopted.values()]));
     log(`daemon down (${sig})`);
+    process.exit(0);
+  };
+  // A kit move: keepalive services keep serving while launchd brings the next
+  // daemon up on the new kit, which adopts and swaps them. Only a new copy
+  // mid-swap is stopped, since nothing would ever promote it.
+  const handOver = (services) => {
+    const now = Date.now();
+    const keep = new Set(services.filter((s) => s.keepalive && !s.app).map((s) => s.name));
+    const stop = [...greens.values()].map((g) => g.pid).filter(Boolean);
+    const left = [];
+    for (const [name, child] of children) {
+      if (keep.has(name) && state[name] && state[name].pid === child.pid && alive(child.pid)) { state[name].handover = now; left.push(name); }
+      else if (child.pid) stop.push(child.pid);
+    }
+    for (const [name, pid] of adopted) {
+      if (keep.has(name) && state[name] && state[name].pid === pid && alive(pid)) { state[name].handover = now; left.push(name); }
+      else stop.push(pid);
+    }
+    stopGroups(stop);
+    try { writeJSON(STATE, state); } catch { /* the next daemon reaps them as orphans instead */ }
+    log(`daemon down (kit update), left running for the next one: ${left.join(", ") || "none"}`);
     process.exit(0);
   };
   process.on("SIGTERM", () => stopAll("SIGTERM"));
@@ -541,6 +778,19 @@ function run() {
     const live = new Set(services.map((s) => s.name));
     for (const [name, child] of children) {
       if (!live.has(name) && child.pid) { try { process.kill(-child.pid, "SIGTERM"); } catch { /* gone */ } }
+    }
+    for (const [name, pid] of adopted) {
+      if (!live.has(name)) { try { process.kill(-pid, "SIGTERM"); } catch { /* gone */ } }
+    }
+    // An adopted service is not our child, so no exit event comes: poll it.
+    for (const [name, pid] of adopted) {
+      const st = state[name];
+      if (!st || st.pid !== pid) { adopted.delete(name); continue; }
+      if (!alive(pid)) {
+        adopted.delete(name);
+        const svc = services.find((s) => s.name === name);
+        if (svc) finished(svc, st, children, boot, null, null); else st.pid = null;
+      }
     }
     for (const svc of services) {
       const st = state[svc.name] || (state[svc.name] = { firstSeen: now });
@@ -560,8 +810,8 @@ function run() {
     }
     for (const name of Object.keys(state)) if (!live.has(name) && !children.has(name)) delete state[name];
     try { writeJSON(STATE, state); } catch { /* disk full: keep running */ }
-    // A kit update swapped ~/.chewbacca/kit/current: exit once nothing is mid-run,
-    // and launchd's KeepAlive starts the new code.
+    // A kit update swapped ~/.chewbacca/kit/current: hand over once no timed
+    // job is mid-run, and launchd's KeepAlive starts the new code.
     const kit = kitTarget();
     if (bootKit && kit && kit !== bootKit) {
       const busy = [...children.keys()].filter((n) => {
@@ -569,27 +819,29 @@ function run() {
       });
       if (!busy.length) {
         log(`kit moved to ${path.basename(kit)}, restarting`);
-        stopAll("kit update");
-      }
-      // A timed job holds this daemon on the old code until it ends (people-sync
-      // ran 960 s). Keepalive services don't wait for it: each one on an old
-      // generation stops now and starts on the new kit next tick.
-      // Only a known old generation swaps: a null gen, or a kit outside the
-      // snapshots dir, would restart the service every tick.
-      const cur = kitSha();
-      for (const svc of services) {
-        const st = state[svc.name];
-        const child = children.get(svc.name);
-        if (!cur || !svc.keepalive || !st || !st.pid || !child || st.swapping || st.from === "checkout") continue;
-        if (!st.gen || st.gen === cur) continue;
-        // An argv pinned to one snapshot (chewbacca-bridge registers its
-        // resolved path) would come back on the old code and swap every tick.
-        if (generationOf(svc).gen !== cur) continue;
-        st.swapping = true;
-        log(`swap ${svc.name}: ${String(st.gen || "?").slice(0, 12)} -> ${cur.slice(0, 12)} (waiting on ${busy.join(", ")})`);
-        try { process.kill(-st.pid, "SIGTERM"); } catch { /* gone */ }
+        handOver(services);
+        return;
       }
     }
+    // Keepalive services on an old generation move to the current kit, one
+    // swap each: after the daemon itself restarted onto a new kit (it adopted
+    // them), or while a timed job holds it on the old code (people-sync ran
+    // 960 s on 2026-10-12, and every keepalive service waited on it).
+    // Only a known old generation swaps: a null gen, or a kit outside the
+    // snapshots dir, would restart the service every tick.
+    const cur = kitSha();
+    swapTick(services, state, ctx);
+    for (const svc of services) {
+      const st = state[svc.name];
+      if (!cur || !svc.keepalive || !st || !st.pid || greens.has(svc.name) || st.from === "checkout") continue;
+      if (!children.has(svc.name) && !adopted.has(svc.name)) continue;
+      if (!st.gen || st.gen === cur || now < (st.swapRetryAt || 0)) continue;
+      // An argv pinned to one snapshot (chewbacca-bridge registered its
+      // resolved path) would come back on the old code and swap every tick.
+      if (generationOf(svc).gen !== cur) continue;
+      try { swapStart(svc, st, ctx, cur); } catch (e) { log(`swap ${svc.name}: ${e.message}`); }
+    }
+    try { writeJSON(STATE, state); } catch { /* disk full: keep running */ }
   };
   const safeTick = () => { try { tick(); } catch (e) { log(`tick failed: ${e.stack || e.message}`); } };
   safeTick();
@@ -698,6 +950,9 @@ function parseRegister(args) {
     else if (a === "--nice") svc.nice = Number(opts[++i]);
     else if (a === "--cwd") svc.cwd = opts[++i];
     else if (a === "--start-later") svc.startLater = true;
+    else if (a === "--swap") svc.swap = opts[++i];
+    else if (a === "--listen") svc.listen = Number(opts[++i]);
+    else if (a === "--health-http") svc.health = { http: opts[++i] };
     else if (a === "--env") {
       const kv = String(opts[++i] || ""); const eq = kv.indexOf("=");
       if (eq < 1) throw new Error("--env needs KEY=VALUE");
@@ -747,4 +1002,4 @@ function main(argv) {
 }
 
 if (require.main === module) main(process.argv.slice(2));
-module.exports = { generationOf, shasIn, validate, serviceFromPlist, lastSlot, due, parseRegister, plistXML, adoptLegacy, register };
+module.exports = { generationOf, shasIn, validate, serviceFromPlist, lastSlot, due, parseRegister, plistXML, adoptLegacy, register, startedAt };

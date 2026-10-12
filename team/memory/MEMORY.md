@@ -254,6 +254,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_never_decide_for_the_user: no AI-policy, license or learn-it-yourself gates; state a fact once at most and do what he asked (10/11)
 - feedback_license_is_the_users_call: never refuse, warn or steer over an open source license; name it as a fact, the user decides (Carlton said copy Realm, 10/11)
 - feedback_long_lived_code_goes_stale: a process living past a kit update runs old code; one owner (chewbacca-daemon) restarts it, or it hands over itself (show my agents broke 3 ways, 10/11)
+- feedback_supervisor_never_stops_a_self_handover: a service with state a restart destroys (realm turns) owns its handover; the daemon only reads where it went (two turns killed 10/12, fixed a2097b88, live 18:06Z)
 - feedback_one_background_item: ONE Login Items row (com.chewbacca, chewbacca-daemon); new background jobs register as services, never their own plist (10/11)
 - feedback_new_tools_never_reached_path: New bin/ tools stayed command-not-found until setup reran (26 on 10/10, text-command too); kit-autopull links them now via tools_link.py
 - project_kit_runtime: PATH tools run from ~/.chewbacca/kit/current, a detached worktree of origin/main; atomic swap, 15 min timer, doctor checks the sha (10/10)

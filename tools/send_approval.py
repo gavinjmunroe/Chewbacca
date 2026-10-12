@@ -114,6 +114,20 @@ def root():
     return os.environ.get("CHEWBACCA_SEND_APPROVALS") or os.path.expanduser("~/.chewbacca/send-approvals")
 
 
+# Caleb, 2026-10-12 9:54am, on hearing step 12 made every send wait on a
+# press: "Wait wtf of course it should be able to send texts or emails???"
+# His standing rulings say the same ("text me X" is one call, 10/10; a reply
+# in a lead's own thread goes out with no confirmation step, 10/11). So the
+# press is opt-in: off unless this file says "press". Off, take() still logs
+# every send as a verdict row and returns "agent".
+def mode():
+    try:
+        with open(os.path.join(root(), "mode"), encoding="utf-8") as fh:
+            return fh.read().strip() or "agent"
+    except OSError:
+        return "agent"
+
+
 def _dir(name):
     path = os.path.join(root(), name)
     os.makedirs(path, mode=0o700, exist_ok=True)
@@ -435,6 +449,9 @@ def take(channel, to, text, subject="", show=None, tty=None, env=None, chain=Fal
     Returns which press approved it: a minted token's press, hud, code or tty."""
     channel, to, text, subject = str(channel), str(to), str(text), str(subject or "")
     env = os.environ if env is None else env
+    if mode() != "press":
+        _log("take", channel, to, "agent")
+        return "agent"
     press = _take_token(channel, to, text, subject)
     if press:
         _log("take", channel, to, press)

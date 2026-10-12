@@ -57,6 +57,8 @@ class Sandbox(unittest.TestCase):
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.tmp, "approvals"), exist_ok=True)
+        Path(self.tmp, "approvals", "mode").write_text("press\n")
         env = {"CHEWBACCA_SEND_APPROVALS": os.path.join(self.tmp, "approvals"),
                "CHEWBACCA_SEND_CODE_SHOW": "off",
                "CHEWBACCA_VERDICT_LOG": os.path.join(self.tmp, "verdicts.tsv")}
@@ -606,6 +608,21 @@ class PeopleSendTests(Sandbox):
                          {"channel": "whatsapp", "to": "15550102@s.whatsapp.net", "text": "running late",
                           "subject": ""})
 
+
+
+class AgentSendsByDefault(unittest.TestCase):
+    """Caleb, 2026-10-12: "of course it should be able to send texts or
+    emails". With no mode file, an agent's send goes through and is logged."""
+
+    def test_no_mode_file_lets_the_agent_send(self):
+        tmp = tempfile.mkdtemp()
+        try:
+            with mock.patch.dict(os.environ, {"CHEWBACCA_SEND_APPROVALS": os.path.join(tmp, "a"),
+                                              "CHEWBACCA_SEND_CODE_SHOW": "off",
+                                              "CHEWBACCA_VERDICT_LOG": os.path.join(tmp, "v.tsv")}):
+                self.assertEqual(sa.take("imessage", "+15555550100", "hi", chain=[]), "agent")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
 
 if __name__ == "__main__":
     unittest.main()

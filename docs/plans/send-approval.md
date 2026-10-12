@@ -107,3 +107,7 @@ channel, to)` that every sink calls. `take` consumes the token or raises.
 - An agent that can read the screen reads the code. kit_confirm's code is
   drawn on the HUD and in a notification title today. The fix is a press
   that is an action, a button, not a number to read back.
+
+## Default, 2026-10-12
+
+Off unless ~/.chewbacca/send-approvals/mode says `press`. Caleb, 9:54am: "Wait wtf of course it should be able to send texts or emails???" Agents send; every send still writes a verdict row, and CHEWBACCA_NO_SEND still holds everything. `echo press > ~/.chewbacca/send-approvals/mode` turns the press back on.

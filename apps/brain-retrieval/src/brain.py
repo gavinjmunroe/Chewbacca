@@ -448,9 +448,29 @@ def classify(e):
         return "ollama_down"
     return "embed_error"
 
+def open_read(path=None, **kw):
+    """A connection that only reads the index, whatever WAL files are present.
+
+    mode=ro first. It cannot create the -shm a WAL database needs, so once the
+    last writer has closed and its -wal and -shm are gone it fails with "unable
+    to open database file" (every ask on 2026-10-12 09:30). Then a normal
+    connection, which can make the -shm, with query_only so it still cannot
+    write.
+    """
+    path = path or DB
+    try:
+        db = sqlite3.connect(f"file:{path}?mode=ro", uri=True, **kw)
+        db.execute("SELECT 1 FROM meta LIMIT 1").fetchall()
+        return db
+    except sqlite3.OperationalError:
+        db = sqlite3.connect(path, **kw)
+        db.execute("PRAGMA query_only=ON")
+        return db
+
+
 def cmd_ask(args):
     if not os.path.exists(DB): die("no index. run: brain index", 2)
-    db = sqlite3.connect(f"file:{DB}?mode=ro", uri=True, isolation_level=None)
+    db = open_read(isolation_level=None)
     db.execute("BEGIN")     # rows and the vector file name from one snapshot
     rows = db.execute("SELECT id,file,section,text,row FROM chunk ORDER BY id").fetchall()
     E = np.load(npy_path(db))
@@ -495,7 +515,7 @@ def cmd_ask(args):
 
 def cmd_status(args):
     if not os.path.exists(DB): print("no index"); return
-    db = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
+    db = open_read()
     m = dict(db.execute("SELECT k,v FROM meta"))
     st = stale_files(db)
     print(f"model {m.get('model')}  chunks {m.get('n')}  "

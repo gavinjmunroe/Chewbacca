@@ -153,6 +153,48 @@ def main():
     check("a deleted file is gone from results", "gamma.md" not in brain_cmd(
         "ask", "mash up wednesday", "--k", "5").stdout)
 
+    # 2026-10-12 09:30: every `brain ask` on the real brain died with "unable
+    # to open database file". The index is WAL, and a mode=ro connection cannot
+    # make the -shm file, so once the last writer closed and its -wal and -shm
+    # were gone, no read-only reader could open it. brain-recall went silent
+    # (14 of 89 prompts that day reached brain and got nothing) and the sealed
+    # bench could not run.
+    import sqlite3 as _sq
+    _db = _sq.connect(os.path.join(brain, ".brain", "index.db"))
+    _db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    _db.close()
+    for side in ("-wal", "-shm"):
+        try:
+            os.remove(os.path.join(brain, ".brain", "index.db" + side))
+        except FileNotFoundError:
+            pass
+    # Only Apple's sqlite (3.43 in /usr/bin/python3, the python3 `brain`'s
+    # shebang finds on this Mac) refuses; Homebrew's newer one opens it fine,
+    # so the check runs on every interpreter that can load brain.py.
+    runners = [[sys.executable, "-I"]]
+    for stock in ("/usr/bin/python3",):
+        if os.path.exists(stock) and subprocess.run([stock, "-c", "import numpy"],
+                                                    capture_output=True).returncode == 0:
+            runners.append([stock])
+    for runner in runners:
+        for side in ("-wal", "-shm"):
+            try:
+                os.remove(os.path.join(brain, ".brain", "index.db" + side))
+            except FileNotFoundError:
+                pass
+        r = subprocess.run(runner + [BRAIN, "ask", "zeutara thanksgiving companies", "--k", "2"],
+                           env=env, capture_output=True, text=True, timeout=60)
+        check(f"{runner[0]}: an ask with no -wal or -shm beside the index still answers",
+              r.stdout.startswith("# brain mode=hybrid") and "delta.md" in r.stdout, r.stdout + r.stderr[-300:])
+        for side in ("-wal", "-shm"):
+            try:
+                os.remove(os.path.join(brain, ".brain", "index.db" + side))
+            except FileNotFoundError:
+                pass
+        r = subprocess.run(runner + [BRAIN, "status"], env=env, capture_output=True, text=True, timeout=60)
+        check(f"{runner[0]}: status with no -wal or -shm still reads",
+              r.returncode == 0 and "stale files" in r.stdout, r.stdout + r.stderr[-300:])
+
     # Incremental must equal a from-scratch build, vector for vector.
     import numpy as np
     import sqlite3

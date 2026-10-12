@@ -26,7 +26,7 @@ POOL = 30   # candidates the model reads. Frozen config A, findings/RESULTS.md.
 def ask(args):
     if not os.path.exists(brain.DB):
         brain.die("no index. run: brain index", 2)
-    db = sqlite3.connect(f"file:{brain.DB}?mode=ro", uri=True, isolation_level=None)
+    db = brain.open_read(isolation_level=None)
     db.execute("BEGIN")
     rows = db.execute("SELECT id,file,section,text,row FROM chunk ORDER BY id").fetchall()
     E = np.load(brain.npy_path(db))

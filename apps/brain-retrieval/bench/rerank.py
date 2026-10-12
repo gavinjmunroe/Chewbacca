@@ -30,7 +30,7 @@ POOL = 50
 
 
 def load_index():
-    db = sqlite3.connect(f"file:{os.path.join(IDX, 'index.db')}?mode=ro", uri=True)
+    db = brain.open_read(os.path.join(IDX, "index.db"))
     rows = db.execute("SELECT id,file,section,text,row FROM chunk ORDER BY id").fetchall()
     npy = dict(db.execute("SELECT k,v FROM meta")).get("npy", "emb.npy")
     return db, rows, np.load(os.path.join(IDX, npy))

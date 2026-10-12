@@ -1,0 +1,71 @@
+{
+  "about": "Reengineer step 16: every guard, router and classifier ships with its replay or sealed eval. tools/decision_evals.py finds them (see its docstring), counts a hook with a `# gate:` header as replayed by tests/test_hookd_replay.py, and reads the rest from evals below. grandfathered is what main held on 2026-10-12 with neither; it only shrinks.",
+  "components": {
+    "tools/gtme_reply.py": "classifier",
+    "tools/skill_match.py": "router",
+    ".claude/hooks/brain-recall.sh": "router"
+  },
+  "evals": {
+    "tools/gtme_reply.py": {
+      "type": "replay",
+      "test": "tests/test_gtme_reply.py",
+      "corpus": "tests/fixtures/gtme-reply/reply_intent_cases.json"
+    },
+    ".claude/hooks/brain-recall.sh": {
+      "type": "sealed",
+      "script": "tools/recall_gate.py",
+      "set": "~/second-brain/.bench/brain-retrieval",
+      "floor": "recall@5 55.4"
+    }
+  },
+  "grandfathered": [
+    ".claude/hooks/agent-claim-guard.sh",
+    ".claude/hooks/artifact-guard.sh",
+    ".claude/hooks/assumption-guard.sh",
+    ".claude/hooks/brain-sync.sh",
+    ".claude/hooks/design-context.sh",
+    ".claude/hooks/design-gate.sh",
+    ".claude/hooks/disk-guard.sh",
+    ".claude/hooks/durable-guard.sh",
+    ".claude/hooks/env-guard.sh",
+    ".claude/hooks/fusion-guard.sh",
+    ".claude/hooks/handoff-guard.sh",
+    ".claude/hooks/interface-first.sh",
+    ".claude/hooks/kit-route.sh",
+    ".claude/hooks/link-guard.sh",
+    ".claude/hooks/list-guard.sh",
+    ".claude/hooks/machine-budget.sh",
+    ".claude/hooks/method-guard.sh",
+    ".claude/hooks/model-route.sh",
+    ".claude/hooks/plan-guard.sh",
+    ".claude/hooks/prayer-guard.sh",
+    ".claude/hooks/prose-guard.sh",
+    ".claude/hooks/ready-guard.sh",
+    ".claude/hooks/reply-lessons.sh",
+    ".claude/hooks/repo-overlap-guard.sh",
+    ".claude/hooks/scope-guard.sh",
+    ".claude/hooks/skill-gate.sh",
+    ".claude/hooks/skill-route-shadow.sh",
+    ".claude/hooks/skill-route.sh",
+    ".claude/hooks/slop-guard.sh",
+    ".claude/hooks/stale-read-guard.sh",
+    ".claude/hooks/terminal-loop.sh",
+    ".claude/hooks/thinking-dash-guard.sh",
+    ".claude/hooks/ux-guard.sh",
+    ".claude/hooks/vibe-guard.sh",
+    ".claude/hooks/voice-guard.sh",
+    "bin/gtme-score",
+    "bin/lib/app_route.py",
+    "bin/lib/clay_route.py",
+    "bin/lib/model_route.py",
+    "bin/lib/people/scoring.js",
+    "bin/lib/route.py",
+    "bin/lib/surface_intent.py",
+    "bin/model-route",
+    "bin/route-label",
+    "tools/gtme_score.py",
+    "tools/hybrid_route.py",
+    "tools/skill_match.py",
+    "tools/skill_route_shadow.py"
+  ]
+}

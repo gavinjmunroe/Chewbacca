@@ -896,6 +896,9 @@ if group "installer"; then
   # Reengineer step 15: prose rules that became checks, and the share ratchet.
   check  "attribution, artifact and commit-msg checks refuse what git.md, CLAUDE.md and review-discipline.md ban" \
     python3 "$ROOT/tests/test_rule_checks.py"
+  # Reengineer step 16: no guard, router or classifier without its eval.
+  check  "a new guard, router or classifier with no replay or sealed eval fails" \
+    python3 "$ROOT/tests/test_decision_evals.py"
   check  "pr-guard refuses a pull request on a BMA or Amber repo" \
     bash "$ROOT/tests/pr_guard.sh"
   # 2026-10-11, the repeats ranked in docs/plans/REPEAT-MISTAKES.md.

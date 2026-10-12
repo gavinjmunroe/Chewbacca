@@ -77,6 +77,11 @@ while IFS= read -r f; do
 done <<< "$CHANGED"
 
 touched '(\.py$|^bin/|^tools/|^mac/|^hud/scripts/)' && run "no undefined names" bash tests/undefined_names.sh
+# Reengineer step 16: a new guard, router or classifier lands with its replay
+# or sealed eval, never without. Runs on every push, since a new one can be
+# any file; a git ls-files walk and a grep per hook, 0.1 to 0.2 s.
+MAIN_REF="$(git rev-parse -q --verify upstream/main >/dev/null 2>&1 && echo upstream/main || echo origin/main)"
+run "no guard, router or classifier without its eval" python3 tools/decision_evals.py verify --base "$MAIN_REF"
 touched '\.md$' && run "doc links resolve" python3 tools/linkcheck.py
 touched '^(setup\.sh|\.claude/hooks/)' && run "every hook is registered" bash tests/hooks_registered.sh
 touched '^(setup\.sh|\.claude/hooks/)' && run "setup hook registration" python3 tests/test_setup_hooks.py

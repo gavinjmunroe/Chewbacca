@@ -31,6 +31,12 @@ t "a count over a subquery"   2 "sqlite3 ~/Library/Messages/chat.db \"select cou
 t "a dot mode before a count" 2 "sqlite3 ~/Library/Messages/chat.db .headers \"select count(*) from message where is_from_me=1\""
 t "max of a handle"            2 "sqlite3 ~/Library/Messages/chat.db \"select max(chat_identifier) from chat c join chat_message_join j on j.chat_id=c.ROWID\""
 t "min of a handle id"          2 "sqlite3 ~/Library/Messages/chat.db \"select min(h.id), count(*) from message m join handle h on h.ROWID=m.handle_id where m.is_from_me=0\""
+t "sum of a handle grouped"    2 "sqlite3 ~/Library/Messages/chat.db \"select sum(h.id), count(*) from message m join handle h on h.ROWID=m.handle_id where m.is_from_me=0 group by h.id\""
+t "sum of a chat id grouped"    2 "sqlite3 ~/Library/Messages/chat.db \"select sum(chat_id), count(*) from chat_message_join group by chat_id\""
+t "a quoted dot dump"           2 "sqlite3 ~/Library/Messages/chat.db .''dump \"select count(*) from message where is_from_me=1\""
+t "an escaped dot dump"         2 "sqlite3 ~/Library/Messages/chat.db \\.dump \"select count(*) from message where is_from_me=1\""
+t "an init file"                2 "sqlite3 -init q.sql ~/Library/Messages/chat.db \"select count(*) from message where is_from_me=1\""
+t "a second statement inside"   2 "sqlite3 ~/Library/Messages/chat.db \"select count(*) from message where is_from_me=1; select is_from_me, ROWID from message\""
 t "count through python"        2 "python3 -c \"import sqlite3; print(sqlite3.connect('chat.db').execute('select count(*), sum(is_from_me) from message').fetchall())\""
 echo "SHOULD PASS (exit 0):"
 # 2026-10-12, the weekly false-positive report's top refusal: a volume check

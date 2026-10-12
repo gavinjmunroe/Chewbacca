@@ -56,7 +56,25 @@ def binary():
 
 def ask_raw(action, context):
     """The policy's answer for one action and a context already in the
-    schema's shape: {"decision": "allow"|"deny"|"unavailable", "rules": [...]}."""
+    schema's shape: {"decision": "allow"|"deny"|"unavailable", "rules": [...]}.
+    Each answer is one verdict row with its latency (tools/verdicts.py), so
+    `chewbacca why` shows a policy no beside a hook's."""
+    import time
+    started = time.monotonic()
+    got = _ask_raw(action, context)
+    try:
+        sys.path.insert(0, str(ROOT / "tools"))
+        import verdicts
+        why = [r.get("id", "") for r in got.get("rules") or []] + list(got.get("errors") or [])
+        verdicts.record("send", "send-policy %s" % action, got.get("decision", ""),
+                        ms=(time.monotonic() - started) * 1000, reason="; ".join(why),
+                        subject=str(context.get("channel") or context.get("op") or context.get("client") or ""))
+    except Exception:
+        pass  # a missing row never changes the answer
+    return got
+
+
+def _ask_raw(action, context):
     exe = binary()
     if not exe:
         return {"decision": "unavailable", "rules": [],

@@ -273,6 +273,26 @@ class Take(unittest.TestCase):
                              "kit_confirm")
 
 
+class Verdicts(unittest.TestCase):
+    """Every answer the policy gives is one verdict row with its latency, so
+    `chewbacca why` shows a policy no beside a hook's, and a slow policy shows
+    up in `verdicts.py stats` (Cole's check, final review 2026-10-12)."""
+
+    def test_each_answer_is_one_row_with_its_latency(self):
+        log = os.path.join(tempfile.mkdtemp(), "verdicts.tsv")
+        with mock.patch.dict(os.environ, {"CHEWBACCA_VERDICT_LOG": log, "CHEWBACCA_VERDICTS": "1"}):
+            sp.ask("text", {"channel": "imessage"}, env={"CHEWBACCA_NO_SEND": "1"})
+            sp.ask("text", {"channel": "imessage"}, env={})
+            with mock.patch.dict(os.environ, {"CHEWBACCA_SENDPOLICY": "/nonexistent/x"}):
+                sp.ask("text", {"channel": "imessage"}, env={})
+        rows = [l.split("\t") for l in Path(log).read_text().splitlines()]
+        self.assertEqual([(r[1], r[2], r[4]) for r in rows],
+                         [("send", "send-policy text", "deny"), ("send", "send-policy text", "allow"),
+                          ("send", "send-policy text", "unavailable")])
+        self.assertIn("no-send", rows[0][8])
+        self.assertTrue(all(r[5].isdigit() for r in rows))
+
+
 class Could(unittest.TestCase):
     """`chewbacca send-policy could` is the one question, from a shell."""
 

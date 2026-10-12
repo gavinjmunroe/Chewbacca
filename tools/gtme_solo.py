@@ -560,8 +560,13 @@ def cmd_batch(a) -> int:
         rulings = op.rulings_for(a.client)
         kept = []
         for m in mails:
-            why = gtme_jev.review(m, rulings)
+            why = gtme_jev.review(m, rulings, min_grade=plan.get("min_grade"))
             (held.append({**m, "held_for": why}) if why else kept.append(m))
+            # Every verdict next to the address it was about, so replies and
+            # meetings can later be joined to it and the bars set from our
+            # own numbers instead of guesses.
+            append(d / "jev.jsonl", {"to": m["to"], "step": m["step"], "held": bool(why), "why": why,
+                                     "at": op.stamp()})
         mails = kept
     frozen = json.dumps([{k: m[k] for k in ("to", "step", "subject", "body")} for m in mails], sort_keys=True)
     bid = hashlib.sha256(frozen.encode()).hexdigest()[:10]
@@ -809,8 +814,9 @@ def auto_answer(client: str, plan: dict, first: dict, tid: str, heads: dict, frm
     if not check["ok"]:
         return False
     sender = plan.get("sender") or {}
+    link = (plan.get("autosend") or {}).get("link") or ""
     m = {"to": frm, "subject": "Re: " + (first.get("subject") or ""),
-         "body": f"{answer}\n\n{sender.get('name') or ''}".rstrip(),
+         "body": "\n\n".join(x for x in (answer, link, sender.get("name") or "") if x),
          "message_id": heads.get("message-id", ""), "thread": tid}
     try:
         res = gws(["gmail", "users", "messages", "send", "--params", json.dumps({"userId": "me"}),
@@ -843,6 +849,13 @@ def cmd_autosend(a) -> int:
     if bad:
         raise Refused("That reply can't go out unread: " + "; ".join(bad) + ". Keep it to a short ask for a time.")
     plan["autosend"] = {"interested": text}
+    if a.link:
+        # The one link an unread reply may carry: the person's own booking
+        # page, saved by them here. The answer text itself still can't hold one.
+        u = urllib.parse.urlparse(a.link.strip())
+        if u.scheme != "https" or not u.hostname:
+            raise Refused("The booking link has to be a full https:// address, like https://calendly.com/you/30min.")
+        plan["autosend"]["link"] = a.link.strip()
     op.write_json(cdir(a.client) / "plan.json", plan)
     print("On. When someone replies that they're interested, this goes back in their thread, signed with your "
           "name, and `inbox` lists it. Every other reply still waits for you.")
@@ -1057,6 +1070,7 @@ def main(argv=None) -> int:
     p = sub.add_parser("autosend", help="the reply that goes back on its own when someone says yes")
     p.add_argument("--client", required=True)
     p.add_argument("--interested", help="a short ask for a time, no links or numbers")
+    p.add_argument("--link", help="your own booking page (Calendly, Cal.com), sent under the answer")
     p.add_argument("--off", action="store_true")
     p = sub.add_parser("copy", help="set the email sequence from a JSON file")
     p.add_argument("--client", required=True)

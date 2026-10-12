@@ -277,7 +277,7 @@ class Solo(unittest.TestCase):
         plan["jev_checks"] = True
         (self.d / "plan.json").write_text(json.dumps(plan))
         real = gtme_jev.review
-        gtme_jev.review = lambda m, rulings: ["the opener reads vague or harsh to Jev (0.20)"] \
+        gtme_jev.review = lambda m, rulings, **kw: ["the opener reads vague or harsh to Jev (0.20)"] \
             if m["to"] == "maria@crumbcorner.test" else []
         try:
             b = self.batch()
@@ -366,6 +366,23 @@ class Solo(unittest.TestCase):
         # a second read never answers the same yes twice
         self.run_cli("inbox", "--client", "Dana Co", "--json")
         self.assertEqual(len(self.sends()), before + 1)
+
+    def test_the_saved_booking_link_rides_under_the_answer(self):
+        self.ready()
+        self.assertEqual(self.run_cli("autosend", "--client", "Dana Co", "--interested",
+                                      "Want to grab a time this week?", "--link", "http://cal.test/dana"), 2)
+        self.assertEqual(self.run_cli("autosend", "--client", "Dana Co", "--interested",
+                                      "Want to grab a time this week?", "--link", "https://cal.test/dana"), 0)
+        b = self.batch()
+        self.run_cli("send", "--client", "Dana Co", "--batch", b["id"], "--gap", "0")
+        sent = self.sent_threads()
+        self.threads.write_text(json.dumps({
+            sent["maria@crumbcorner.test"]: [["maria@crumbcorner.test", "Yes, I'm interested. Let's chat."]]}))
+        before = len(self.sends())
+        self.run_cli("inbox", "--client", "Dana Co", "--json")
+        raw = base64.urlsafe_b64decode(json.loads(self.sends()[before][7])["raw"]).decode()
+        self.assertIn("Want to grab a time this week?", raw)
+        self.assertIn("https://cal.test/dana", raw)
 
     def test_autosend_refuses_an_answer_with_a_link_or_number_and_no_send_holds_it(self):
         self.ready()

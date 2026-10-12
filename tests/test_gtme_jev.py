@@ -22,7 +22,8 @@ def fake(answers):
         calls.append((state, questions))
         if answers is None:
             return None, None
-        return {k: {"noul": answers.get(k, 0.0)} for k in questions}, None
+        return {k: ({"score": answers.get(k, 2)} if q["type"] == "score" else {"noul": answers.get(k, 0.0)})
+                for k, q in questions.items()}, None
     ask.calls = calls
     return ask
 
@@ -50,6 +51,26 @@ class Review(unittest.TestCase):
         ask = fake({})
         self.assertEqual(gtme_jev.review({**MAIL, "line": ""}, [RULINGS[1]], ask=ask), [])
         self.assertEqual(ask.calls, [])
+
+
+class Grade(unittest.TestCase):
+    LONG = {**MAIL, "step": 1, "body": MAIL["body"] + " " + "word " * 50}
+
+    def test_strong_copy_passes_the_85_bar(self):
+        ask = fake({"line": 0.95, "rule:refusals": 0.01})
+        self.assertEqual(gtme_jev.review(self.LONG, RULINGS, ask=ask, min_grade=85), [])
+        self.assertTrue(any(k.startswith("grade:") for k in ask.calls[0][1]))
+
+    def test_weak_copy_is_held_with_its_breakdown(self):
+        ask = fake({"line": 0.95, "rule:refusals": 0.01, "grade:situation": 0, "grade:value": 1})
+        why = gtme_jev.review(self.LONG, RULINGS, ask=ask, min_grade=85)
+        self.assertIn("under 85", why[0])
+        self.assertIn("situation 0", why[0])
+
+    def test_follow_ups_are_not_graded(self):
+        ask = fake({"line": 0.95})
+        gtme_jev.review({**self.LONG, "step": 2}, [], ask=ask, min_grade=85)
+        self.assertFalse(any(k.startswith("grade:") for k in ask.calls[0][1]))
 
 
 if __name__ == "__main__":

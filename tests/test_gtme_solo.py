@@ -270,6 +270,22 @@ class Solo(unittest.TestCase):
         self.assertEqual([m["to"] for m in b["mails"]], ["maria@crumbcorner.test"])
         self.assertIn("hello@rollhouse.test", [m["to"] for m in b["held"]])
 
+    def test_jev_checks_hold_an_email_jev_flags(self):
+        import gtme_jev
+        self.ready()
+        plan = json.loads((self.d / "plan.json").read_text())
+        plan["jev_checks"] = True
+        (self.d / "plan.json").write_text(json.dumps(plan))
+        real = gtme_jev.review
+        gtme_jev.review = lambda m, rulings: ["the opener reads vague or harsh to Jev (0.20)"] \
+            if m["to"] == "maria@crumbcorner.test" else []
+        try:
+            b = self.batch()
+        finally:
+            gtme_jev.review = real
+        self.assertNotIn("maria@crumbcorner.test", [m["to"] for m in b["mails"]])
+        self.assertIn("maria@crumbcorner.test", [m["to"] for m in b["held"]])
+
     def add_second_contact(self):
         rows = (self.d / "leads.csv").read_text().splitlines()
         rows.append("Crumb Corner,crumbcorner.test,,,,pastor@crumbcorner.test,Austin,google-maps,,,,,")

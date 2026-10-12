@@ -501,6 +501,8 @@ if group "gtme"; then
   # follow-ups, replies sorted. A fake gws; nothing reaches Gmail or the network.
   check "gtme own-inbox path finds, freezes, sends only an approved batch, sorts replies" \
     python3 "$ROOT/tests/test_gtme_solo.py"
+  check "gtme-jev holds an email Jev flags or couldn't check, in one call per email" \
+    python3 "$ROOT/tests/test_gtme_jev.py"
   check "no code pins a model confidence at 1.0, Jev scores it" \
     python3 "$ROOT/tests/test_no_pinned_confidence.py"
   check "outbound waiting on him shows in needs-you, sent and expired batches don't" \

@@ -555,6 +555,14 @@ def cmd_batch(a) -> int:
         if plan.get("require_line") and not lead["line"]:
             bad.append("the first email needs its personal line and this lead has none yet")
         (held if bad else mails).append({**mail, "held_for": bad} if bad else mail)
+    if plan.get("jev_checks") and mails:
+        import gtme_jev
+        rulings = op.rulings_for(a.client)
+        kept = []
+        for m in mails:
+            why = gtme_jev.review(m, rulings)
+            (held.append({**m, "held_for": why}) if why else kept.append(m))
+        mails = kept
     frozen = json.dumps([{k: m[k] for k in ("to", "step", "subject", "body")} for m in mails], sort_keys=True)
     bid = hashlib.sha256(frozen.encode()).hexdigest()[:10]
     batch = {"id": bid, "made_at": op.stamp(), "client": a.client, "mails": mails, "held": held,

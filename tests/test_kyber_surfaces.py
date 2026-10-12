@@ -729,6 +729,28 @@ def stale_daemon_is_retired():
         ks.ask, ks.running = real_ask, real_running
 
 
+def kit_move_hands_over(tmp: Path):
+    """2026-10-11 8:11pm: the agents icon opened the retired Swift card. The
+    daemon had started on snapshot 902977c0, the kit moved on and pruned it,
+    and nothing called `start` to retire it. Now the daemon itself hands over
+    once the kit has moved and the glass has been quiet."""
+    now = {"t": 100.0}
+    d = ks.Daemon(FakeHud(), state_path=tmp / "state.json", activity_path=tmp / "activity.jsonl",
+                  badges_path=tmp / "badges.json", spaces=dict(ks.DEFAULT_SPACES), clock=lambda: now["t"],
+                  spawn=lambda fn: None, ingest=lambda c: {})
+    check("a kit that hasn't moved never hands over", not ks.handover_due(d, False))
+    check("a kit move while the glass was just used waits", not ks.handover_due(d, True))
+    now["t"] += ks.HANDOVER_QUIET_S
+    check("a kit move after quiet hands over", ks.handover_due(d, True))
+    d.command({"cmd": "ping"})
+    check("a ping is not use: the next start's check doesn't hold the handover off", ks.handover_due(d, True))
+    d.handle_line("e apps row=agents")
+    check("a press on the glass holds it off again", not ks.handover_due(d, True))
+    now["t"] += ks.HANDOVER_QUIET_S
+    d.command({"cmd": "list"})
+    check("so does a client command", not ks.handover_due(d, True))
+
+
 def first_frame_follows_the_model(tmp: Path):
     """2026-10-11 17:55: "Show my agents" drew the agents card as a title
     over an empty status line, about 90 points tall, while it waited on the
@@ -778,6 +800,8 @@ def main() -> int:
     stale_daemon_is_retired()
     with tempfile.TemporaryDirectory() as d:
         first_frame_follows_the_model(Path(d))
+    with tempfile.TemporaryDirectory() as d:
+        kit_move_hands_over(Path(d))
     payload_parse()
     listener_ignores_surface_actions()
     check("idle glass ingests every five minutes, open glass every minute",

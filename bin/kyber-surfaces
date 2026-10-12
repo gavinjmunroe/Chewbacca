@@ -60,6 +60,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
 import live_glass  # noqa: E402
 import surface_lint  # noqa: E402
 import hud_events  # noqa: E402
+import kit_snapshot  # noqa: E402
 import osgraph  # noqa: E402
 import osgraph_ingest  # noqa: E402
 import surfaces  # noqa: E402
@@ -207,6 +208,9 @@ class Daemon:
         self.lock = threading.RLock()
         self.next_ingest = 0.0
         self.ingesting = False
+        # When the display or a client last asked for anything; a kit
+        # handover waits for HANDOVER_QUIET_S of quiet after it.
+        self.touched = clock()
 
     # ── the graph ────────────────────────────────────────────────────────
 
@@ -519,6 +523,8 @@ class Daemon:
         """One line from the display. Only `e`, `v` and `x` matter here; `h`
         (what was said) belongs to hud-listen and is never read."""
         line = line.strip()
+        if line:
+            self.touched = self.clock()
         if line.startswith("e "):
             # Read with bin/lib/hud_events.py, the one reader every client
             # shares: values are JSON, and a line that does not parse cleanly
@@ -693,6 +699,7 @@ class Daemon:
         cmd = body.get("cmd")
         if cmd == "ping":
             return {"ok": True, "code": CODE}
+        self.touched = self.clock()
         if cmd == "open":
             msg = self.open_surface(str(body.get("name", "")), body.get("at") or None, body.get("preset") or None,
                                     arg=str(body.get("arg") or ""))
@@ -902,6 +909,51 @@ def live_context() -> Context:
     return ctx
 
 
+# How often the daemon looks for a kit update, and how long the glass must
+# have been quiet before it hands over to the new snapshot. On 2026-10-11 at
+# 8:11pm the agents icon opened the retired Swift card: this daemon had
+# started at 20:00 on 902977c0, the kit runtime moved `current` on and pruned
+# that snapshot, and the lazy import of the realm surface had nothing left to
+# load. retire_stale only helped when something called `start`; a daemon
+# nobody restarted ran deleted code until it died. Both numbers guessed,
+# never measured: a handover costs about a second of redraw.
+HANDOVER_CHECK_S = 15.0
+HANDOVER_QUIET_S = 30.0
+
+
+def handover_due(daemon: "Daemon", moved: bool) -> bool:
+    """The kit moved under this daemon and nobody has touched the glass lately."""
+    return moved and daemon.clock() - daemon.touched >= HANDOVER_QUIET_S
+
+
+def hand_over(server: socket.socket, link: "HudLink") -> None:
+    """Start the current snapshot's daemon and leave. The control socket
+    closes first so the successor's `running()` check finds nobody home,
+    and the start lock is held so a client's `start` can't race it in."""
+    import fcntl  # noqa: PLC0415
+
+    successor = Path(CODE).parent.parent / "current" / "bin" / "kyber-surfaces"
+    CONTROL_LOCK.parent.mkdir(parents=True, exist_ok=True)
+    with open(CONTROL_LOCK, "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        server.close()
+        with link.lock:
+            if link.sock is not None:
+                try:
+                    link.sock.close()
+                except OSError:
+                    pass
+                link.sock = None
+        log(f"the kit moved; handing over to {successor.resolve()}")
+        with LOG.open("a") as out:
+            subprocess.Popen([sys.executable, str(successor), "run"], stdin=subprocess.DEVNULL,
+                             stdout=out, stderr=out, start_new_session=True)
+        deadline = time.monotonic() + START_WAIT_S
+        while time.monotonic() < deadline and not running():
+            time.sleep(0.1)
+    os._exit(0)
+
+
 def cmd_run() -> int:
     if running():
         print("kyber-surfaces is already running", file=sys.stderr)
@@ -910,13 +962,18 @@ def cmd_run() -> int:
     link = HudLink()
     daemon = Daemon(link, ctx=live_context())
     link.daemon = daemon
-    serve_control(daemon, CONTROL)
+    server = serve_control(daemon, CONTROL)
     daemon.restore()
     threading.Thread(target=link.loop, daemon=True).start()
     log(f"surfaces daemon up: {CONTROL} -> {HUD_SOCKET}, graph {daemon.ctx.graph.path}")
+    next_check = time.monotonic() + HANDOVER_CHECK_S
     try:
         while True:
             daemon.tick()
+            if time.monotonic() >= next_check:
+                next_check = time.monotonic() + HANDOVER_CHECK_S
+                if handover_due(daemon, kit_snapshot.moved(Path(__file__))):
+                    hand_over(server, link)
             time.sleep(0.5)
     except KeyboardInterrupt:
         return 0

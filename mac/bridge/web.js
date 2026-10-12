@@ -89,7 +89,12 @@ const PORT = parseInt(
       9333 +
         (SRC_PROFILE === "Default"
           ? 0
-          : 1 + ([...SRC_PROFILE].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % 500)),
+          : 1 +
+            ([...SRC_PROFILE].reduce(
+              (h, c) => (h * 31 + c.charCodeAt(0)) >>> 0,
+              7,
+            ) %
+              500)),
     ),
   10,
 );
@@ -145,8 +150,97 @@ function writeLocalState() {
   );
 }
 
+// No window, ever, unless a person asked for one. Caleb, 2026-10-11, after this
+// bridge's Chrome jumped in front of him mid-work for the second time that
+// night: "Make sure chewbs never flash bangs anyone ever again". The bridge
+// Chrome is a copy of the profile used for reads and form fills; nothing in it
+// needs to be seen. CHEWIE_WEB_VISIBLE=1 shows it, for a sign-in a person does.
+const VISIBLE = process.env.CHEWIE_WEB_VISIBLE === "1";
+
+function launchArgs() {
+  const args = [
+    `--remote-debugging-port=${PORT}`,
+    `--user-data-dir=${PROFILE}`,
+    "--profile-directory=Default",
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--restore-last-session=false",
+  ];
+  if (!VISIBLE) args.push("--headless=new", "--window-size=1440,900");
+  return args;
+}
+
+// A bridge Chrome left running with a window (launched before this change, or
+// once with CHEWIE_WEB_VISIBLE=1) would keep taking the screen on every call.
+async function runningHeadless() {
+  return new Promise((res) => {
+    const req = http.get(
+      { host: "127.0.0.1", port: PORT, path: "/json/version", timeout: 800 },
+      (r) => {
+        let body = "";
+        r.on("data", (c) => (body += c));
+        r.on("end", () => {
+          try {
+            const v = JSON.parse(body);
+            res(
+              /Headless/i.test(`${v.Browser || ""} ${v["User-Agent"] || ""}`),
+            );
+          } catch {
+            res(false);
+          }
+        });
+      },
+    );
+    req.on("error", () => res(false));
+    req.on("timeout", () => {
+      req.destroy();
+      res(false);
+    });
+  });
+}
+
+async function closeBridgeChrome() {
+  // Browser.close only works on the browser target, which /json/version names;
+  // a page target ignores it and the windowed Chrome stays (measured 2026-10-11).
+  try {
+    const ver = await new Promise((res, rej) => {
+      http
+        .get(
+          {
+            host: "127.0.0.1",
+            port: PORT,
+            path: "/json/version",
+            timeout: 800,
+          },
+          (r) => {
+            let b = "";
+            r.on("data", (c) => (b += c));
+            r.on("end", () => {
+              try {
+                res(JSON.parse(b));
+              } catch (e) {
+                rej(e);
+              }
+            });
+          },
+        )
+        .on("error", rej);
+    });
+    const client = await CDP({ target: ver.webSocketDebuggerUrl });
+    await client.Browser.close();
+  } catch {
+    /* already gone */
+  }
+  for (let i = 0; i < 40 && (await debuggerUp()); i++) {
+    await new Promise((r) => setTimeout(r, 250));
+  }
+}
+
 async function ensureChrome() {
-  if (await debuggerUp()) return;
+  if (await debuggerUp()) {
+    if (VISIBLE || (await runningHeadless())) return;
+    await closeBridgeChrome();
+  }
   if (!fs.existsSync(CHROME)) fail("Google Chrome not found at " + CHROME);
   // Seed the debug profile from the chosen real profile once, so logins carry over.
   if (!fs.existsSync(PROFILE)) {
@@ -188,18 +282,10 @@ async function ensureChrome() {
       /* a fresh profile still works, just logged out */
     }
   }
-  const child = spawn(
-    CHROME,
-    [
-      `--remote-debugging-port=${PORT}`,
-      `--user-data-dir=${PROFILE}`,
-      "--profile-directory=Default",
-      "--no-first-run",
-      "--no-default-browser-check",
-      "--restore-last-session=false",
-    ],
-    { detached: true, stdio: "ignore" },
-  );
+  const child = spawn(CHROME, launchArgs(), {
+    detached: true,
+    stdio: "ignore",
+  });
   child.unref();
   for (let i = 0; i < 40; i++) {
     if (await debuggerUp()) return;
@@ -294,6 +380,11 @@ const FIND_JS = (sel) => `(() => {
 async function main() {
   const [cmd, ...rest] = process.argv.slice(2);
   switch (cmd) {
+    case "launch-args": {
+      // What the bridge would start Chrome with; for tests, starts nothing.
+      out(launchArgs());
+      break;
+    }
     case "frames": {
       await ensureChrome();
       const list = await CDP.List({ port: PORT });

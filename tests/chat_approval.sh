@@ -142,26 +142,45 @@ rm -rf "$dir"; say "The coordinator sent a message:
 check "a cross-session message after a lead-in line never approves" no
 rm -rf "$dir"; say "From what I can tell the build is fine, do it urself"
 check "a one-line prompt that merely starts with From still approves" yes
-# 17:12, 2026-10-11: a jobs notice resumed Caleb's own VS Code tab headless
-# (ATTENDED=0 for one turn). That turn is refused, but the tab is not
-# remembered as launched: his next typed prompt there still counts.
-rm -rf "$dir"; say "do everything yourself"
-payload "You ended your turn while your Swift build job was queued" | env -u CHEWBACCA_LAUNCHED_BY CHEWBACCA_STATE_DIR="$T/state" CLAUDE_CODE_SESSION_ATTENDED=0 CLAUDE_PID=1 bash "$H"
+# Transcripts as the harness writes them: one JSON line per prompt.
+line() { python3 -c 'import json,sys; print(json.dumps({"type":"user","timestamp":sys.argv[1],"message":{"role":"user","content":sys.argv[2]}}))' "$1" "$2"; }
+line 2026-10-11T23:00:00.000Z "Make chewbs a gtme" > "$T/person.jsonl"
+line 2026-10-12T00:12:00.000Z "Reply with exactly: launch test ok" > "$T/bg.jsonl"
+line 2026-10-11T23:00:00.000Z "$SEED" > "$T/seeded.jsonl"
+: > "$T/empty.jsonl"
+hook() { # $1 transcript, $2 attended 0|1, $3 prompt
+  TP="$1" payload "$3" | env -u CHEWBACCA_LAUNCHED_BY CHEWBACCA_STATE_DIR="$T/state" CLAUDE_CODE_SESSION_ATTENDED="$2" CLAUDE_PID=1 bash "$H"
+}
+marked() { [ -e "$dir/launched/s1" ]; }
+
+# 17:12, 2026-10-11: a jobs notice resumed Caleb's own VS Code tab headless.
+# That turn is refused, the tab is not remembered, his next prompt counts.
+rm -rf "$dir"; hook "$T/person.jsonl" 1 "do everything yourself"
+hook "$T/person.jsonl" 0 "You ended your turn while your Swift build job was queued"
 check "a headless resume of his tab never approves" no
-if [ -e "$dir/launched/s1" ]; then echo "FAIL  a headless resume remembered his tab as launched"; fail=1; else echo "ok    a headless resume is not remembered"; fi
-say "Do everything we can so tmr morning is just launch campaigns"
+if marked; then echo "FAIL  a headless resume remembered his tab"; fail=1; else echo "ok    a headless resume of a person's tab is not remembered"; fi
+hook "$T/person.jsonl" 1 "Do everything we can so tmr morning is just launch campaigns"
 check "his next typed prompt in that tab approves" yes
-# Marks the old hook wrote (a bare timestamp) heal when the transcript shows the
-# session was never seeded by chewbacca launch, and hold when it was.
-python3 -c 'import json,sys; print(json.dumps({"type":"user","message":{"role":"user","content":sys.argv[1]}}))' "Make chewbs a gtme" > "$T/plain.jsonl"
-python3 -c 'import json,sys; print(json.dumps({"type":"user","message":{"role":"user","content":sys.argv[1]}}))' "$SEED" > "$T/seeded.jsonl"
-rm -rf "$dir"; mkdir -p "$dir/launched"; echo 1791700000 > "$dir/launched/s1"
-TP="$T/plain.jsonl" payload "do it" | env -u CHEWBACCA_LAUNCHED_BY CHEWBACCA_STATE_DIR="$T/state" CLAUDE_CODE_SESSION_ATTENDED=1 CLAUDE_PID=1 bash "$H"
-check "an old mark on a never-seeded tab heals and approves" yes
-rm -rf "$dir"; mkdir -p "$dir/launched"; echo 1791700000 > "$dir/launched/s1"
-TP="$T/seeded.jsonl" payload "do it" | env -u CHEWBACCA_LAUNCHED_BY CHEWBACCA_STATE_DIR="$T/state" CLAUDE_CODE_SESSION_ATTENDED=1 CLAUDE_PID=1 bash "$H"
+
+# Security review of 2b742c7e: a session BORN headless (claude --bg, no seed)
+# is still remembered, so its later turns with no env marker never approve.
+rm -rf "$dir"; hook "$T/empty.jsonl" 0 "Reply with exactly: launch test ok"
+if marked; then echo "ok    a born-headless session is remembered"; else echo "FAIL  a born-headless session was not remembered"; fail=1; fi
+hook "$T/bg.jsonl" 1 "do it"
+check "a born-headless session's later unmarked turn never approves" no
+rm -rf "$dir"; hook "$T/missing.jsonl" 0 "Reply with exactly: launch test ok"
+if marked; then echo "ok    an unreadable transcript on a headless turn is remembered (fails closed)"; else echo "FAIL  unreadable headless turn not remembered"; fail=1; fi
+
+# Old bare marks heal only on a tab a person was typing in well before the mark.
+old_mark() { rm -rf "$dir"; mkdir -p "$dir/launched"; echo 1791700000 > "$dir/launched/s1"; touch -t 202610111712 "$dir/launched/s1"; }
+old_mark; hook "$T/person.jsonl" 1 "do it"
+check "an old mark on a tab he typed in first heals and approves" yes
+old_mark; hook "$T/bg.jsonl" 1 "do it"
+check "an old mark on a born-headless session holds" no
+old_mark; hook "$T/seeded.jsonl" 1 "do it"
 check "an old mark on a seeded session holds" no
-rm -rf "$dir"; mkdir -p "$dir/launched"; echo 1791700000 > "$dir/launched/s1"
-say "do it"
+old_mark; hook "$T/empty.jsonl" 1 "do it"
+check "an old mark with no typed prompts holds" no
+old_mark; say "do it"
 check "an old mark with no readable transcript holds (fails closed)" no
 exit $fail

@@ -134,43 +134,73 @@ def nested():
     return None
 
 
-def seeded_by_launch():
-    """True when this session's first prompt was a chewbacca launch seed. Read
-    from the transcript, which no tool call here writes."""
+def human_prompts():
+    """(ok, prompts): the session's earlier typed prompts as (epoch, text), read
+    from the transcript the harness writes. ok is False when it can't be read."""
     path = str(payload.get("transcript_path") or "")
+    out = []
     try:
         with open(path) as f:
-            for _, line in zip(range(400), f):
+            for _, line in zip(range(20000), f):
                 try:
                     d = json.loads(line)
                 except ValueError:
                     continue
                 m = d.get("message") or {}
-                if d.get("type") == "user" and isinstance(m.get("content"), str):
-                    return SEED_LINE in m["content"]
+                c = m.get("content")
+                if d.get("type") != "user" or not isinstance(c, str):
+                    continue
+                if INJECTED.search(c) or CROSS.search(c) or c.startswith("This session is being continued"):
+                    continue
+                ts = str(d.get("timestamp") or "")
+                try:
+                    import datetime
+                    at = datetime.datetime.strptime(ts[:19], "%Y-%m-%dT%H:%M:%S").replace(
+                        tzinfo=datetime.timezone.utc).timestamp()
+                except ValueError:
+                    continue
+                out.append((at, c))
     except OSError:
-        return None
-    return None
+        return False, []
+    return True, out
+
+
+# aedae1b7 (2026-10-10 14:10 PDT) is when the old hook began remembering every
+# headless turn. A bare mark is only trusted to heal on prompts after that.
+OLD_MARKS_FROM = 1791666600
+# A born-headless session's first prompt lands within seconds of its mark.
+# A person's tab has typed prompts long before a stray headless resume.
+HEAL_LEAD_S = 300
 
 
 def mark_stands():
-    """A remembered mark holds when it says why (v2) or when the session was
-    seeded by chewbacca launch. On 2026-10-11 a jobs notice resumed Caleb's own
-    VS Code tab headless at 17:12 (ATTENDED=0 for that one turn), the old hook
-    remembered the whole tab as launched, and every prompt he typed there after
-    stopped counting: the 8 Monday drafts could not be fixed. A one-off headless
-    turn is refused on its own env, so it never needs remembering."""
+    """A remembered mark holds unless it is an old bare mark on a tab a person
+    was typing in first. On 2026-10-11 a jobs notice resumed Caleb's own VS
+    Code tab headless at 17:12, the old hook remembered the whole tab, and
+    nothing he typed there counted: Monday's 8 drafts could not be fixed."""
     try:
         body = open(launched_mark).read().strip()
+        marked = os.path.getmtime(launched_mark)
     except OSError:
         return False
     if body.startswith("{"):
         return True
-    seeded = seeded_by_launch()
-    if seeded is False:
+    ok, prompts = human_prompts()
+    if not ok or not prompts:
+        return True
+    if any(SEED_LINE in c for _, c in prompts):
+        return True
+    first = min(at for at, _ in prompts)
+    if OLD_MARKS_FROM <= first <= marked - HEAL_LEAD_S:
         remove(launched_mark)
         return False
-    return True  # unreadable transcript: fail closed
+    return True
+
+
+def born_headless():
+    """True when no person has typed in this session yet, or that can't be read."""
+    ok, prompts = human_prompts()
+    return (not ok) or not prompts
 
 
 def why_not_caleb():
@@ -182,8 +212,9 @@ def why_not_caleb():
         return "launched"
     if os.environ.get("CHEWBACCA_LAUNCHED_BY") or os.environ.get("CHEWBACCA_AGENT_LAUNCHED"):
         return "launched"
-    # Headless turns carry their marker every time, so they are refused turn by
-    # turn and never remembered (see mark_stands).
+    # A headless turn is refused here; it is remembered only when the session
+    # was born headless (see born_headless), so a stray resume of a person's tab
+    # costs that one turn and not the tab.
     if os.environ.get("CLAUDE_CODE_SESSION_ATTENDED") == "0":
         return "headless"
     n = nested()
@@ -204,6 +235,9 @@ if why:
         remove(mine)
     if why == "headless":
         remove(mine)
+        if launched_mark and born_headless():
+            os.makedirs(launched_dir, exist_ok=True)
+            open(launched_mark, "w").write(json.dumps({"at": int(time.time()), "why": "born headless"}))
     raise SystemExit(0)
 
 # A stop aimed at the work, or a whole message that is just "stop". "Never tell

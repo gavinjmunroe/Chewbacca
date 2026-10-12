@@ -103,16 +103,21 @@ t "<<- piped to sh"             2 "$T/dirty" "cat <<-EOF | sh
 	EOF"
 t "arithmetic shift"            2 "$T/dirty" "echo \$((1<<X))
 git reset --hard"
+# Final review, 2026-10-11: one-line shapes that fooled a target-only check.
+t "branch that never runs"      2 "$T/dirty" "true || W=$T/clean; git -C ./\$W reset --hard"
+t "subscripted assignment"      2 "$T/dirty" "W=$T/clean; W[0]=$T/dirty; cd \$W && git reset --hard"
+t "work tree beats -C"          2 "$T/dirty" "git --work-tree $T/dirty -C $T/clean reset --hard"
+t "clean target, dirty cwd"     2 "$T/dirty" "git -C $T/clean reset --hard"
 touch "$T/clean/untracked.txt"
 t "clean -f, untracked only"    2 "$T/clean" "git clean -f"
 rm -f "$T/clean/untracked.txt"
 echo "lets through:"
 t "checkout -b from a base"   0 "$T/dirty" "git checkout -b feature2 HEAD"
 t "commit message naming restore" 0 "$T/dirty" "git commit -m 'restore the file' --allow-empty --dry-run"
-# 2026-10-11: a clean worktree reached by cd, -C or a variable was refused
-# because the session's dirty checkout was judged instead (30 in a week).
-t "cd to a clean repo"        0 "$T/dirty" "W=$T/clean; cd \$W && git reset --hard"
-t "-C a clean repo"           0 "$T/dirty" "git -C $T/clean reset --hard"
+# 2026-10-11: from a clean cwd, a clean target named by a variable passes;
+# from a dirty cwd it takes the override on that one command, because the
+# cwd is always judged (six bypasses when it wasn't).
+t "variable to a clean repo"  0 "$T/clean" "W=$T/clean; cd \$W && git reset --hard"
 t "override on its own piece" 0 "$T/dirty" "W=$T/dirty; DESTRUCTIVE_OK=1 git -C \"\$W\" reset --hard"
 t "same commands, clean repo" 0 "$T/clean" "git reset --hard HEAD"
 t "restore --staged, dirty"   0 "$T/dirty" "git restore --staged f"

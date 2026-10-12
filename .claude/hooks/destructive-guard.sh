@@ -268,7 +268,13 @@ for seg in segments:
     # phrase in the piece ($(...), an alias) is hidden.
     hidden += max(0, found - (1 if destroys and PHRASE.search(" ".join(a)) else 0))
     if destroys:
-        for d in ([here] if simple else [here, cwd] + sorted(targets - {here, cwd})):
+        # The session's cwd is always judged too. Judging only a resolved
+        # target let six one-line shapes through on 2026-10-11 (a branch that
+        # never ran, W[0]=, a symlink, option order, zsh's two-argument cd):
+        # a parse can be wrong, and the cwd check is what the baseline never
+        # lost. A clean target reached from a dirty cwd takes DESTRUCTIVE_OK=1
+        # on that one command.
+        for d in [here] + sorted(({cwd} | (set() if simple else targets)) - {here}):
             if repo_dirty(d, untracked=(verb == "clean")):
                 print(f"`git {' '.join(a)}` would throw away uncommitted work in {d}, and other tabs share this checkout.")
                 raise SystemExit

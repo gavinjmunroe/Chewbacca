@@ -15,7 +15,7 @@ c5d7b0db396449034ca4b4010f04aa5644dd19268abb83d3ccb4230bb004bddb  .claude/hooks/
 4f672620fc9ae3899a8bd134fbad1ab8c49bc3f3b37706ec3682aed243ab1692  .claude/hooks/coursework-context.sh
 86f870318c9bbd7a51448f1bc4cc52fd03a7dc20f707fc72da330641f00a05da  .claude/hooks/design-context.sh
 ca5417881d11f679d1aac8ee8ed3bc81c0a42e1b8118d0d83a98ac3d41dcfedb  .claude/hooks/design-gate.sh
-546fcd96d1684aea57df75dd78440e9f3dfe5def61e359f0addb21db2cf3bb2e  .claude/hooks/destructive-guard.sh
+08971db181d7aebccabe8fdd4513a27faeac9ebc139ae04b56898673e1f85315  .claude/hooks/destructive-guard.sh
 1d2da635f526852fe038ad9d0011d5a949e12683f93c834c970aa0c6fe06d38f  .claude/hooks/disk-guard.sh
 765f6581aa0539cb829ecfb77e49312cb7616c77a6cc0ac83d4d5290984795ae  .claude/hooks/durable-guard.sh
 024bcec24469e60d3c4108857daee436618cb9ffa65fa92094b5eeccf2d962cd  .claude/hooks/env-guard.sh

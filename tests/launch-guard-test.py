@@ -183,6 +183,9 @@ cases += [
     U('cat <<EOF | osascript\ntell application "System Events" to click button "Launch" of window 1\nEOF', 2),
     U('echo "a <<END"\nchewie web click launch', 2),
     U('fish -c "chewie web click launch"', 2),
+    # Review of f5447e2c: the command text lost $lower's whitespace squeeze.
+    U('chewie web click "add   leads"', 2),
+    U('chewie web click "start\nsending"', 2),
 ]
 
 bad = 0

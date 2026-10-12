@@ -29,7 +29,7 @@ c128940f83b0f34530c1f075d998b869c96b43058052195c9ab3ba560053a935  .claude/hooks/
 8b7342cf282c105548e2218fefae061995bb5eac42915fe99b19afd0ab618b6f  .claude/hooks/kit-autopush.sh
 7f5e5978631919e37c08a0c6b473922000be160f283644a485e7e66a0dddacbc  .claude/hooks/kit-debt.sh
 288b71768e2d3bf409ece00aa793d639e6de52926b56a81f7ac51ab4bd8d75c7  .claude/hooks/kit-route.sh
-bbf94a523a36cdc8fe4eec0e318901dde267af1da1727219da6c136c086c2b52  .claude/hooks/launch-guard.sh
+50a7ae1c69e75f2fd70d3fa2e5e09f58aef4c7fc16b7f2a1c13184d932a8c5d8  .claude/hooks/launch-guard.sh
 89a5d9080af85b7c12e9dcfc6ee6134f46fe75931f033bb123e289c0b84c6137  .claude/hooks/lesson-guard.sh
 92079d67676e053640dd265a16735b7457cfa15b8e9189dd1ef01d9d89403745  .claude/hooks/lib.sh
 6ef9452e65da3a40b84794e23d7f4e206cfff7ac2c0dde11b882e556ac846da9  .claude/hooks/link-guard.sh

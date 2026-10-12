@@ -399,7 +399,9 @@ case "$tool" in
     # heredoc bodies) was tried the same night and a review reproduced seven
     # bypasses (nice, find -exec, `cat <<EOF | osascript`, ...), so the
     # substring rule stays.
-    cmdlower="$(printf '%s' "$cmd" | tr '[:upper:]' '[:lower:]')"
+    # Same normalization as $lower: a phrase split by extra spaces or a
+    # newline still matches (security review of f5447e2c).
+    cmdlower="$(printf '%s' "$cmd" | tr '[:upper:]' '[:lower:]' | tr -s ' \t\n' '   ')"
     if printf '%s' "$cmdlower" | grep -qE 'chewie|jev-browse|peekaboo|mac-use|cliclick|osascript' &&
        printf '%s' "$cmdlower" | grep -qE "$WORDS" && ! chat_ok launch; then
       refuse "a UI click can't be tied to one action on one campaign; a person presses Start in the Clay UI."

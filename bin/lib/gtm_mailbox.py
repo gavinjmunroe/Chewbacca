@@ -12,10 +12,10 @@ So every lead who replied is looked up in the inboxes connected with
 `chewbacca email add`, and the same detector the Clay threads use
 (gtm_ingest.detect_booking) runs on that whole conversation.
 
-WHO A BOOKING BELONGS TO (security review of 1e5f7e4e). One Mac holds several
-clients' inboxes, so a client reads only the inboxes its config names
-(`"mailboxes": ["jonah@zeutara.com"]`), and with one client configured, every
-connected inbox. A lead enrolled by two clients is credited to neither.
+WHO A BOOKING BELONGS TO (security reviews of 1e5f7e4e and 2ce02c27). One Mac
+holds several clients' inboxes and the owner's own, so a client reads only the
+inboxes its config names (`"mailboxes": ["jonah@zeutara.com"]`), never a
+default. A lead enrolled by two clients is credited to neither.
 
 WHAT COUNTS AS CONFIRMED (same review). Anyone can send an email titled
 "Invitation:" with an .ics attached, so a lead's own message never confirms a
@@ -34,7 +34,7 @@ import os
 import re
 import sys
 from datetime import datetime, timezone
-from email.utils import parseaddr, parsedate_to_datetime
+from email.utils import parseaddr
 
 import gtm_ingest as gi
 from osgraph import Edge, Graph, Node, node_key
@@ -79,10 +79,11 @@ def inboxes_for(cfg: dict, cid: str, connected: list[str]) -> list[str]:
     client = next((c for c in clients if gi.client_id(c) == cid), None)
     if client is None:
         return []
+    # Only inboxes the client names, even with one client: the second security
+    # review (2026-10-11) found the one-client fallback read whatever else was
+    # connected, the owner's personal Gmail included.
     named = [str(x).lower() for x in client.get("mailboxes") or []]
-    if named:
-        return [i for i in connected if i.lower() in named]
-    return connected if len(clients) == 1 else []
+    return [i for i in connected if i.lower() in named]
 
 
 def _part_text(payload: dict) -> tuple[str, str, bool]:
@@ -115,11 +116,14 @@ def to_message(raw: dict, lead: str) -> dict | None:
     if not ours and frm != lead:
         return None  # a third party in the thread: not the lead, not us
     plain, html, ics = _part_text(raw.get("payload") or {})
+    # Gmail's own receive time orders the conversation. The Date header is
+    # whatever the sender wrote, so a backdated "accept" could otherwise sit
+    # after an invite it never answered (second security review, 2026-10-11).
     try:
-        when = parsedate_to_datetime(heads.get("date", "")).astimezone(timezone.utc).isoformat()
-    except (TypeError, ValueError):
         ms = int(raw.get("internalDate") or 0)
-        when = datetime.fromtimestamp(ms / 1000, timezone.utc).isoformat() if ms else ""
+    except (TypeError, ValueError):
+        ms = 0
+    when = datetime.fromtimestamp(ms / 1000, timezone.utc).isoformat() if ms else ""
     if not when:
         return None
     body = html or plain.replace("\n", "<br>")

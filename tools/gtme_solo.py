@@ -827,7 +827,8 @@ def cmd_autosend(a) -> int:
     if not a.interested:
         raise Refused('Give the reply to send when someone says yes: --interested "...", or --off.')
     text = gtme_reply.strip_em_dashes(a.interested.strip())
-    probe = gtme_reply.auto_sendable({"sentiment": "interested", "confidence": 1.0, "threshold": 1.0,
+    # Only the draft checks are read off this probe, so the score is moot.
+    probe = gtme_reply.auto_sendable({"sentiment": "interested", "confidence": 1.0, "threshold": 1.0,  # exact, not a model score
                                       "draft": text, "reply": "Yes, I'm interested. Let's talk.",
                                       "lead_id": "probe", "campaign_id": a.client})
     bad = [r for r in probe["reasons"] if r.startswith("draft")]

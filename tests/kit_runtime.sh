@@ -142,5 +142,20 @@ python3 -I "$KR" update --repo "$TMP/other" --adopt >/dev/null 2>&1 || fail "--a
 # 10. setup.sh run from inside a snapshot hands over to the source checkout.
 grep -q 'exec bash "$_kr_src/setup.sh"' "$ROOT/setup.sh" || fail "setup.sh no longer redirects out of the runtime"
 
+# 11. `chewbacca update` from PATH runs setup.sh from the snapshot the update
+#     just built. On 2026-10-11 it ran the old snapshot's setup.sh, which synced
+#     the source to the old sha, so a hook landed that hour never registered.
+cp "$ROOT/bin/chewbacca" "$W/bin/chewbacca"
+printf 'link_tool alpha\ngit -C "$(cd -P "$(dirname "$0")" && pwd)" rev-parse HEAD > "$HOME/setup-ran"\n' > "$W/setup.sh"
+git -C "$W" add bin/chewbacca setup.sh; git -C "$W" commit -qm cli; git -C "$W" push -q origin main
+python3 -I "$KR" update --repo "$S" --adopt --fetch >/dev/null 2>&1 || fail "update to the cli commit failed"
+OLD_CLI="$(cd -P "$RT/current" && pwd)/bin/chewbacca"
+release v7
+rm -f "$HOME/setup-ran"
+(unset CHEWBACCA_ROOT; CHEWBACCA_REPO_DIR="$S" bash "$OLD_CLI" update) >/dev/null 2>&1 || fail "chewbacca update exited non-zero"
+[ "$(runtime_sha)" = "$(origin_sha)" ] || fail "chewbacca update did not move the runtime to origin/main"
+[ "$(cat "$HOME/setup-ran" 2>/dev/null)" = "$(origin_sha)" ] ||
+  fail "chewbacca update ran setup.sh from $(cat "$HOME/setup-ran" 2>/dev/null || echo nothing), not the new snapshot $(origin_sha)"
+
 [ "$FAILED" -eq 0 ] && echo "ok    PATH tools run from a clean origin/main runtime, swapped atomically, source untouched"
 exit "$FAILED"

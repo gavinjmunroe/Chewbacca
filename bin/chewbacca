@@ -308,6 +308,12 @@ update)
   # no branch to pull. Updating it means a new snapshot of origin/main.
   if [ -f "$ROOT.kit-runtime.json" ]; then
     python3 -I "$ROOT/tools/kit_runtime.py" update --fetch --link-bin "$HOME/.local/bin" || exit 1
+    # ROOT still names the snapshot this process started in, which the update
+    # just replaced. Its setup.sh syncs the source checkout to its own, older
+    # sha before handing over, so on 2026-10-11 an update installed the
+    # previous version's setup and essay-gate only registered on a second run.
+    NEW_ROOT="$(cd -P "$(python3 -I "$ROOT/tools/kit_runtime.py" path)" 2>/dev/null && pwd)"
+    [ -n "$NEW_ROOT" ] && [ -f "$NEW_ROOT/setup.sh" ] && ROOT="$NEW_ROOT"
     run setup.sh "$@"
     exit $?
   fi

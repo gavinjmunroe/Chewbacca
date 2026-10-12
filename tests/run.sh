@@ -25,7 +25,9 @@ GROUPS_HERE=$(grep -oE '^[[:space:]]*if group "[^"]+"' "${BASH_SOURCE[0]}" | cut
 # An unknown word used to select nothing and print "0 passed, 0 skipped", a
 # clean result for doing no work at all: `--list` did exactly that (2026-09-26).
 if [ "$ONLY" = "--list" ]; then printf '%s\n' "$GROUPS_HERE"; exit 0; fi
-if [ -n "$ONLY" ] && ! printf '%s\n' "$GROUPS_HERE" | grep -qxF -- "$ONLY"; then
+# A here-string, not a pipe: grep -q exits on the first match, printf takes
+# SIGPIPE, and pipefail turned that into "unknown group: installer" (2026-10-11).
+if [ -n "$ONLY" ] && ! grep -qxF -- "$ONLY" <<< "$GROUPS_HERE"; then
   echo "unknown group: $ONLY. Groups: $(printf '%s' "$GROUPS_HERE" | tr '\n' ',')" >&2; exit 2
 fi
 declare -a FAILURES=()

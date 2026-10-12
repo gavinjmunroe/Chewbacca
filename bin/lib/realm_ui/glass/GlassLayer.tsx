@@ -44,7 +44,7 @@ import { rpc } from "../src/rpc/client";
 import type { AppState } from "../src/state/store";
 import { Spinner } from "../src/components/Spinner";
 import { Story } from "./Story";
-import { editRange, excerpt, lostFocus, voiceIntent } from "./model.mjs";
+import { editRange, excerpt, lostFocus, reviewDecided, voiceIntent } from "./model.mjs";
 import {
   atRest,
   emptyAgent,
@@ -1471,8 +1471,9 @@ export function Review({
     )) as Result<unknown>;
     update(path, (f) => (r.ok ? { ...f, staged: true, fault: null } : { ...f, fault: r.fault }));
   };
-  // Every hunk put back, and nothing past the ones read: no decision left.
-  const empty = files !== null && !broke && past === 0 && files.every((f) => !f.hunks.length && !f.fault);
+  // Every hunk put back or kept and staged, and nothing past the ones read:
+  // no decision left (model.mjs reviewDecided).
+  const empty = files !== null && !broke && reviewDecided(files, past);
   useEffect(() => {
     if (files !== null && !broke) onEmpty?.(empty);
   }, [empty, files, broke, onEmpty]);

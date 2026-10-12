@@ -345,3 +345,19 @@ export function lostFocus({ mode, focus, known, haveSessions, morphing, asked })
   if (mode === "tiles" || !focus || !haveSessions || known || morphing) return "stay";
   return asked === focus ? "tiles" : "ask";
 }
+
+/** Whether a review has nothing left to decide: every file's hunks are put
+ *  back, or all kept and the file staged, and none failed to read. In the
+ *  morning rehearsal, 2026-10-11, one file rejected and the other kept and
+ *  staged still read "2 files changed... Keep all 2 files", a call about a
+ *  decision already made. `past` is files beyond the ones read. */
+export function reviewDecided(files, past = 0) {
+  if (!Array.isArray(files) || past > 0) return false;
+  return files.every((f) => {
+    if (f.fault) return false;
+    const n = f.hunks?.length ?? 0;
+    if (!n) return true;
+    const kept = f.kept instanceof Set ? f.kept : new Set(f.kept ?? []);
+    return f.staged === true && Array.from({ length: n }, (_, i) => i).every((i) => kept.has(i));
+  });
+}

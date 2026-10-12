@@ -1,4 +1,8 @@
 #!/bin/bash
+# hookd skips this guard for a Bash call that names none of these words,
+# each one its first check requires. Proven by tools/hookd_replay.py.
+# gate: open osascript
+[ -z "${HOOKD_INNER:-}" ] && [ -x "$HOME/.local/bin/hookd" ] && exec "$HOME/.local/bin/hookd" gate "$0" "$@"
 # PreToolUse on Bash: refuse an agent command that would pull an app or a
 # browser tab to the front of Caleb's screen.
 #

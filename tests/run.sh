@@ -988,6 +988,8 @@ if group "installer"; then
     bash "$ROOT/tests/kit_runtime.sh" "$ROOT"
   check  "a snapshot a live process runs from is never pruned, even when lsof fails" \
     /usr/bin/python3 "$ROOT/tests/test_kit_prune_in_use.py"
+  check  "every daemon service setup registers runs the kit runtime, not a checkout" \
+    /usr/bin/python3 "$ROOT/tests/test_supervisor_paths.py"
 
   # Eight skills sat uninstalled on 2026-10-09 because no tab ran setup after
   # adding them. Git hooks now link them; this proves the linker is safe.

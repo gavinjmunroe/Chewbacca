@@ -89,7 +89,9 @@ def parity(args):
     calls = [payload for payload, _ in bash_calls(args.days)]
     random.Random(11).shuffle(calls)
     scratch = tempfile.mkdtemp(prefix='hookd-replay-')
-    env = dict(os.environ, CHEWBACCA_HOME=scratch, HOOKD_LOG='off',
+    # HOOKD_INNER: the guard runs its own body. Without it a guard's first
+    # line would hand the call back to hookd and every replay would pass.
+    env = dict(os.environ, CHEWBACCA_HOME=scratch, HOOKD_LOG='off', HOOKD_INNER='1',
                CHEWBACCA_LOG_DIR=os.path.join(scratch, 'logs'))
     failures, report = [], {}
     for script in hooks:

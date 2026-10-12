@@ -127,6 +127,11 @@ class HookdTests(unittest.TestCase):
         bare = dict(env, HOME=str(self.temp))  # no hookd: the guard runs itself
         self.assertEqual(run('npx vercel --prod', bare), 2)
 
+    def test_the_replay_runs_guard_bodies(self):
+        # Without HOOKD_INNER a gated guard hands the replay's call back to
+        # hookd, and a parity replay of skip cases passes by construction.
+        self.assertIn("HOOKD_INNER='1'", (ROOT / 'tools/hookd_replay.py').read_text())
+
     def test_ungated_scripts_register_unchanged(self):
         plain = self.temp / 'plain.sh'
         plain.write_text('#!/bin/bash\nexit 0\n')

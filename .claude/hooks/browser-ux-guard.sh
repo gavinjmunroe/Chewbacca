@@ -1,4 +1,8 @@
 #!/bin/bash
+# hookd skips this guard for a Bash call that names none of these words,
+# each one its first check requires. Proven by tools/hookd_replay.py.
+# gate: peekaboo chewie screencapture --coords web.js
+[ -z "${HOOKD_INNER:-}" ] && [ -x "$HOME/.local/bin/hookd" ] && exec "$HOME/.local/bin/hookd" gate "$0" "$@"
 # PreToolUse on Bash and the peekaboo MCP tools: refuse to read or drive a
 # BROWSER through pixels before the DOM route has been tried in this session.
 #

@@ -2839,14 +2839,20 @@ if command -v brew &>/dev/null; then
   # should aim to be only 1 thing ... Most ppl will get weirded out".
   _mr_node=$("$SCRIPT_DIR/bin/chewbacca-node" 2>/dev/null || command -v node)
   _daemon() { "$_mr_node" "$SCRIPT_DIR/bin/chewbacca-daemon" "$@" >/dev/null; }
-  _daemon register messages-refresh --every 600 -- "$_mr_node" "$SCRIPT_DIR/bin/people" texts refresh &&
+  # Services run the kit runtime (origin/main), never this checkout: a shared
+  # checkout drifts behind under other tabs' edits, and on 2026-10-11 jobs ran
+  # from one 87 commits behind main (docs/plans/one-supervisor.md, step 2).
+  # Each run resolves kit/current afresh, and the daemon restarts on a kit move.
+  _svc_root="$SCRIPT_DIR"
+  [ -z "${CHEWBACCA_SUITE:-}" ] && [ -f "$HOME/.chewbacca/kit/current/bin/chewbacca-jobs" ] && _svc_root="$HOME/.chewbacca/kit/current"
+  _daemon register messages-refresh --every 600 -- "$_mr_node" "$_svc_root/bin/people" texts refresh &&
     log "message refresh scheduled every 10 min" || warn "could not schedule the message refresh"
 
   # The machine queue's heartbeat: every 30 s `chewbacca jobs tick` admits queued work
   # when there's room, pauses heavy work when the Mac is busy, and resumes it
   # after. 2026-10-10: every tab ran its own long jobs with no shared budget,
   # the Mac swapped at load 80+, and Caleb had to force-quit Claude.
-  _daemon register jobs --every 30 -- /usr/bin/python3 "$SCRIPT_DIR/bin/chewbacca-jobs" tick &&
+  _daemon register jobs --every 30 -- /usr/bin/python3 "$_svc_root/bin/chewbacca-jobs" tick &&
     log "machine job queue ticking every 30 s" || warn "could not schedule the job queue"
 
   # Agent alerts on the HUD: once a minute `kyber-sessions watch` toasts a tab

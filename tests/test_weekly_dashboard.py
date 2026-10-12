@@ -125,6 +125,67 @@ def main():
         check("the kit scan finds kits under dev", "devkit" in kits, str(kits))
         check("the kit scan never walks Library", "libkit" not in kits, str(kits))
 
+
+        # The dashboard serves private numbers on loopback. A hostile page can
+        # point its own name at 127.0.0.1 and read them from the browser, and
+        # whatever else holds a taken port must not be opened as the dashboard.
+        import hashlib
+        import hmac
+        import http.client
+        import socket
+
+        def free_port():
+            probe = socket.socket()
+            probe.bind(("127.0.0.1", 0))
+            number = probe.getsockname()[1]
+            probe.close()
+            return number
+
+        hud = str(ROOT / "bin" / "lib" / "chewbacca-hud.js")
+        home = tmp / "sechome"
+        home.mkdir()
+        senv = dict(env, HOME=str(home))
+
+        def serve_code(number):
+            return 'require("' + hud + '").serve({port:' + str(number) + ',onReady:()=>console.log("READY")})'
+
+        port = free_port()
+        server = subprocess.Popen(["node", "-e", serve_code(port)], env=senv, stdout=subprocess.PIPE, text=True)
+        try:
+            server.stdout.readline()
+
+            def get(path, headers=None, host=None):
+                conn = http.client.HTTPConnection("127.0.0.1", port, timeout=15)
+                conn.request("GET", path, headers={"Host": host or f"localhost:{port}", **(headers or {})})
+                reply = conn.getresponse()
+                body = reply.read()
+                conn.close()
+                return reply.status, body
+
+            check("a request naming this machine is served", get("/week")[0] == 200)
+            check("a request naming another host is refused", get("/api/week", host="evil.example")[0] == 403)
+            check("a cross-site fetch is refused", get("/api/state", headers={"Sec-Fetch-Site": "cross-site"})[0] == 403)
+            nonce = "abcdef0123456789"
+            status, body = get(f"/healthz?n={nonce}")
+            token = (home / ".chewbacca" / "hud.token").read_text().strip()
+            want = hmac.new(token.encode(), nonce.encode(), hashlib.sha256).hexdigest()
+            check("the server proves who it is with the user's own secret", status == 200 and json.loads(body)["proof"] == want)
+            check("the secret file is private to the user", oct((home / ".chewbacca" / "hud.token").stat().st_mode & 0o777) == "0o600")
+            again = subprocess.run(["node", "-e", serve_code(port)], env=senv, capture_output=True, text=True, timeout=30)
+            check("a second open reuses the running dashboard", again.returncode == 0 and "READY" in again.stdout, again.stderr)
+        finally:
+            server.terminate()
+            server.wait(timeout=10)
+
+        squatter = socket.socket()
+        squatter.bind(("127.0.0.1", 0))
+        squatter.listen(5)
+        taken = squatter.getsockname()[1]
+        stranger = subprocess.run(["node", "-e", serve_code(taken)], env=senv, capture_output=True, text=True, timeout=30)
+        squatter.close()
+        check("a port held by something else is not taken for the dashboard",
+              stranger.returncode != 0 and "READY" not in stranger.stdout, stranger.stdout + stranger.stderr)
+
     print("\nall passed" if not failures else f"\n{failures} failed")
     return 1 if failures else 0
 

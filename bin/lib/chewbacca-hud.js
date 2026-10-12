@@ -10,6 +10,7 @@
 // this reads a private message archive and it does not belong on the network.
 
 const http = require("node:http");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
@@ -713,8 +714,72 @@ function serveCached(res, cache, args, script = false) {
   }
 }
 
+// Proof that the thing on the port is this tool and not whatever else got
+// there first. A random secret lives in a 0600 file only this user can read,
+// and the server answers a challenge with an HMAC of it, so a process that
+// merely holds the port, or another user on the same Mac, cannot pass for it.
+function hudToken() {
+  const file = process.env.CHEWBACCA_HUD_TOKEN_FILE || path.join(os.homedir(), ".chewbacca", "hud.token");
+  try {
+    const existing = fs.readFileSync(file, "utf8").trim();
+    if (existing) return existing;
+  } catch {
+    /* first run: made below */
+  }
+  const token = crypto.randomBytes(32).toString("hex");
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, token + "\n", { mode: 0o600 });
+  return token;
+}
+const proof = (nonce) => crypto.createHmac("sha256", hudToken()).update(nonce).digest("hex");
+
+function isOurs(port, host) {
+  const nonce = crypto.randomBytes(16).toString("hex");
+  return new Promise((resolve) => {
+    const req = http.get(
+      { host, port, path: `/healthz?n=${nonce}`, headers: { host: `${host}:${port}` }, timeout: 2500 },
+      (res) => {
+        let body = "";
+        res.on("data", (d) => (body += d));
+        res.on("end", () => {
+          try {
+            resolve(JSON.parse(body).proof === proof(nonce));
+          } catch {
+            resolve(false);
+          }
+        });
+      },
+    );
+    req.on("timeout", () => {
+      req.destroy();
+      resolve(false);
+    });
+    req.on("error", () => resolve(false));
+  });
+}
+
 function serve({ port = 7474, host = "127.0.0.1", onReady }) {
   const server = http.createServer((req, res) => {
+    // Only a request that names this machine in Host, from a page this server
+    // served, gets anything. A hostile site can point its own name at 127.0.0.1
+    // (DNS rebinding) and then read these JSON routes from the browser; its
+    // requests carry its own name in Host and a cross-site fetch mark, and
+    // both are refused here before a single route runs.
+    const p = server.address() && server.address().port;
+    const named = String(req.headers.host || "").toLowerCase();
+    const site = req.headers["sec-fetch-site"];
+    const localHost = [`localhost:${p}`, `127.0.0.1:${p}`, `[::1]:${p}`].includes(named);
+    if (!localHost || (site && site !== "same-origin" && site !== "none")) {
+      res.writeHead(403, { "content-type": "text/plain" });
+      res.end("forbidden");
+      return;
+    }
+    if (req.url.startsWith("/healthz")) {
+      const nonce = new URL(req.url, "http://x").searchParams.get("n") || "";
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ app: "chewbacca-hud", proof: /^[a-f0-9]{8,64}$/.test(nonce) ? proof(nonce) : null }));
+      return;
+    }
     if (req.url.startsWith("/api/state")) {
       serveCached(res, stateCache, ["--json"]);
       return;
@@ -736,12 +801,21 @@ function serve({ port = 7474, host = "127.0.0.1", onReady }) {
     res.writeHead(404, { "content-type": "text/plain" });
     res.end("not found");
   });
-  // A second `chewbacca open` finds the first still serving. That is the
-  // normal case, so it opens the window onto the running one instead of
-  // dying on the port.
-  server.on("error", (e) => {
-    if (e.code === "EADDRINUSE") onReady(server);
-    else throw e;
+  // A second `chewbacca open` finds the first still serving, which is the
+  // normal case, so it opens the window onto the running one. But a taken port
+  // is not proof of that: it opens a window only after the holder answers a
+  // challenge only this user's own server can answer.
+  server.on("error", async (e) => {
+    if (e.code === "EADDRINUSE") {
+      if (await isOurs(port, host)) onReady(server);
+      else {
+        console.error(`  port ${port} is held by something that is not chewbacca. Set CHEWBACCA_HUD_PORT to a free port.`);
+        process.exit(1);
+      }
+      return;
+    }
+    console.error(`  chewbacca could not start: ${e.message}`);
+    process.exit(1);
   });
   server.listen(port, host, () => onReady(server));
   return server;

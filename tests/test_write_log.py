@@ -397,5 +397,65 @@ class WriteLogTests(unittest.TestCase):
                 self.assertEqual(calls, [when])
 
 
+class WriteLogSpeedTests(unittest.TestCase):
+    """The hook runs before and after every tool call in every tab."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.folder = Path(self.temp.name).resolve()
+        self.repo = self.folder / 'brain'
+        self.repo.mkdir()
+        subprocess.run(['git', 'init', '-q'], cwd=self.repo, check=True)
+        sys.path.insert(0, str(ROOT / 'tools'))
+        import write_log
+        self.write_log = write_log
+
+    def test_observing_many_dirty_files_stays_cheap(self):
+        # 6,000 untracked files, half the brain's 12,119 on 2026-10-11. The
+        # pathlib loop cost ~0.18 s of Python CPU here; the string loop ~0.04 s.
+        # 0.1 s leaves headroom for a loaded Mac and still fails the old loop.
+        for folder in range(60):
+            target = self.repo / f'raw/creator-{folder}'
+            target.mkdir(parents=True)
+            for index in range(100):
+                (target / f'{index}.md').write_text('x')
+        state = self.folder / 'state'
+        state.mkdir()
+        log = self.folder / 'log.tsv'
+        getattr(self.write_log, 'CONTEXT', set()).clear()
+        self.write_log.observe(self.repo, log, state)  # warm the digest cache
+        best = None
+        for _ in range(3):
+            started = time.process_time()
+            seen = self.write_log.observe(self.repo, log, state)
+            spent = time.process_time() - started
+            best = spent if best is None else min(best, spent)
+        self.assertEqual(len(seen), 6000)
+        self.assertLess(best, 0.1)
+
+    def test_only_context_repos_use_the_builtin_fsmonitor(self):
+        calls = []
+
+        def spy(command, *args, **kwargs):
+            # Never really start a daemon on a temp dir: record and answer empty.
+            calls.append(command)
+            return subprocess.CompletedProcess(command, 0, b'', b'')
+
+        other = self.folder / 'other'
+        other.mkdir()
+        subprocess.run(['git', 'init', '-q'], cwd=other, check=True)
+        self.write_log.CONTEXT.clear()
+        self.write_log.CONTEXT.add(self.repo)
+        with patch.object(self.write_log.subprocess, 'run', side_effect=spy), \
+                patch.object(self.write_log.sys, 'platform', 'darwin'):
+            self.write_log.git(self.repo, 'status', '--porcelain')
+            self.write_log.git(other, 'status', '--porcelain')
+        self.write_log.CONTEXT.clear()
+        self.assertIn('core.fsmonitor=true', calls[0])
+        self.assertIn('core.fsmonitor=false', calls[1])
+        self.assertNotIn('core.fsmonitor=true', calls[1])
+
+
 if __name__ == '__main__':
     unittest.main()

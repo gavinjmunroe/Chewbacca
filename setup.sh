@@ -1264,6 +1264,17 @@ CHEWBACCA_REPO_DIR="$SCRIPT_DIR"
 D1CONFIG
 log "Hook config written to ~/.claude/d1-config.sh"
 
+# write-log runs `git status` on the context repo before and after every tool
+# call. On 2026-10-11 that cost 0.85 s CPU per status on a 61,752-file brain;
+# with git's builtin fsmonitor daemon kept current by the repo's own config,
+# 0.17 s. The daemon only keeps that speed if every git command there (brain
+# sync included) carries the setting, so it lives in the repo's config.
+# macOS only: the builtin daemon does not exist on Linux.
+if [ "$(uname)" = "Darwin" ] && [ -z "${CHEWBACCA_SUITE:-}" ] && [ -n "$PC_DIR" ] && [ -e "$PC_DIR/.git" ]; then
+  git -C "$PC_DIR" config core.fsmonitor true
+  git -C "$PC_DIR" config core.untrackedCache true
+fi
+
 # Merge drivers for SHA256SUMS.txt and the README counts block. On 2026-10-09
 # about ten tabs pushed main and nearly every merge stopped on those two
 # generated files. .gitattributes names the drivers; git config holds the

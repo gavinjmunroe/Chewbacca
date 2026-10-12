@@ -24,8 +24,22 @@ SAFE = ['git', '-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null',
         f'--attr-source={EMPTY_TREE}', '--no-optional-locks']
 
 
+# The user's own context repos (the brain) may use git's builtin fsmonitor
+# daemon: `true` names git's own watcher, never a configured program, so the
+# hostile-config concern above does not apply, and it is only ever turned on
+# for repos named in ~/.claude/d1-config.sh. On 2026-10-11 the brain had
+# 61,752 tracked and 12,119 dirty files and one status cost 0.85 s CPU
+# (0.76 s of it lstat in the kernel); with the daemon it cost 0.17 s.
+TRUSTED = ['git', '-c', 'core.fsmonitor=true', '-c', 'core.hooksPath=/dev/null',
+           f'--attr-source={EMPTY_TREE}', '--no-optional-locks']
+# Context repos resolved for this call; filled by repositories().
+CONTEXT = set()
+
+
 def git(repo, *args):
-    result = subprocess.run([*SAFE, '-C', str(repo), *args], capture_output=True, timeout=5)
+    # The builtin daemon exists on macOS and Windows only (git 2.36+).
+    prefix = TRUSTED if sys.platform == 'darwin' and Path(repo) in CONTEXT else SAFE
+    result = subprocess.run([*prefix, '-C', str(repo), *args], capture_output=True, timeout=5)
     if result.returncode:
         raise ValueError('repository observation unavailable')
     return result.stdout
@@ -167,8 +181,15 @@ def repositories(payload):
         return found
 
     explicit = toplevels(candidates)
+    if implicit:
+        context = toplevels(implicit)
+    else:  # an Edit inside the brain: no extra git call to find it
+        roots = [str(Path(d).expanduser().resolve()) for d in context_dirs()]
+        context = {top for top in explicit if str(top) in roots}
+    CONTEXT.clear()
+    CONTEXT.update(context)
     IMPLICIT.clear()
-    IMPLICIT.update(toplevels(implicit) - explicit)
+    IMPLICIT.update((context if implicit else set()) - explicit)
     return sorted(explicit | IMPLICIT)
 
 
@@ -243,22 +264,29 @@ def observe(repo, log, state):
         cache = {}
     fresh = {}
     result = {}
+    # Plain strings, not pathlib, in this loop. On 2026-10-11 the brain had
+    # 12,119 dirty paths and `state in path.parents` plus `path.parts` cost
+    # 0.5 s of the hook's 1.0 s per event (cProfile), paid before and after
+    # every tool call in every tab.
+    root = str(repo).rstrip(os.sep) + os.sep
+    skip = {str(log), str(log.with_suffix(log.suffix + '.lock')), str(state)}
+    state_prefix = str(state).rstrip(os.sep) + os.sep
     for name in names:
-        path = repo / name
-        if any(character in str(path) for character in '\t\r\n'):
+        text = root + name
+        if '\t' in text or '\r' in text or '\n' in text:
             continue  # Legacy TSV cannot represent these paths unambiguously.
-        if path == log or path == log.with_suffix(log.suffix + '.lock') or state == path or state in path.parents:
+        if text in skip or text.startswith(state_prefix):
             continue
-        if '.chewbacca' in path.parts:
+        if os.sep + '.chewbacca' + os.sep in text + os.sep:
             continue
-        key = stat_key(path)
-        hit = cache.get(str(path))
+        key = stat_key(text)
+        hit = cache.get(text)
         if key and hit and hit[0] == key:
-            result[str(path)] = hit[1]
+            result[text] = hit[1]
         else:
-            result[str(path)] = fingerprint(path)
+            result[text] = fingerprint(Path(text))
         if key:
-            fresh[str(path)] = [key, result[str(path)]]
+            fresh[text] = [key, result[text]]
     if fresh != cache:
         try:
             save(cache_path, fresh)
@@ -269,7 +297,7 @@ def observe(repo, log, state):
 
 def stat_key(path):
     try:
-        m = path.lstat()
+        m = os.lstat(path)
     except OSError:
         return None
     if not stat.S_ISREG(m.st_mode):

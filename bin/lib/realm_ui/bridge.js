@@ -67,8 +67,20 @@
     pathForFile: () => "",
     clipboard: { readText: () => Promise.resolve("") },
     permissions: absent(["probe", "openSettings"]),
-    macAccess: absent(["status", "grant", "openSettings", "appIcon", "revealApp"]),
-    computerAccess: absent(["status", "request", "openSettings"]),
+    // Two namespaces his store reads a shape from, not just a value: the
+    // composer's @ picker reads `computerAccess.rows` and the Permissions tab
+    // `macAccess.rows`, so a null crashed the whole page the moment @ was
+    // typed on the glass (realm-hud-report.md, 2026-10-11). They answer
+    // "nothing granted here" in his own shape: no rows, no helper.
+    macAccess: {
+      ...absent(["grant", "openSettings", "appIcon", "revealApp"]),
+      status: () => Promise.resolve({ cli: { present: false, path: null, version: null }, host: { name: "Chewbacca glass", bundlePath: null, packaged: false }, rows: [] }),
+    },
+    computerAccess: {
+      ...absent(["openSettings"]),
+      status: () => Promise.resolve({ hostName: "Chewbacca glass", packaged: false, helperAvailable: false, rows: [] }),
+      request: () => Promise.resolve({ hostName: "Chewbacca glass", packaged: false, helperAvailable: false, rows: [] }),
+    },
     updates: absent(["status", "check", "download", "install", "onChanged"]),
     notify: absent(["show", "badge", "onActivate"]),
     credentials: absent(["list", "status", "add", "remove", "share", "setPresenceTtl"]),
@@ -94,8 +106,16 @@
   };
   const glass = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.realmGlass;
   window.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape" || event.isComposing || !glass) return;
-    if (!pageWantsEscape(document)) glass.postMessage("dismiss");
+    if (event.key !== "Escape" || event.isComposing) return;
+    // Our glass layer (glass/GlassLayer.tsx) answers first: in the grown
+    // workspace Escape shrinks it back to its tile instead of closing.
+    const layer = window.__realmGlass;
+    if (layer && layer.onEscape && layer.onEscape(event)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    if (glass && !pageWantsEscape(document)) glass.postMessage("dismiss");
   }, true);
 
   Object.defineProperty(window, "realm", {

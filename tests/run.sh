@@ -1737,6 +1737,10 @@ if group "hud"; then
     python3 "$ROOT/tests/test_realm_client.py"
   check  "Realm's own interface: built from Carlton's renderer, piped to the engine only from its own origin and token" \
     python3 "$ROOT/tests/test_realm_ui.py"
+  check  "Realm's glass layer rides on Carlton's renderer untouched, and the talk key fills only the agent that has the glass" \
+    python3 "$ROOT/tests/test_realm_glass.py"
+  check  "the stage follows the agent: a file while editing, a command while running, tests when run, then hunks to Keep or Reject" \
+    node --test "$ROOT/tests/test_realm_glass.mjs"
   check  "engines run only remixable, local, spec-declared reads, and oss labels every license" \
     python3 "$ROOT/tests/test_surface_engines.py"
   check  "code is read only, refuses a path with a control, format or bidi character, and runs no repo filter" \

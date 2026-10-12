@@ -668,6 +668,7 @@ struct SurfaceChrome: ViewModifier {
         case .bracket: return AnyView(bracket(content))
         case .window: return AnyView(window(content))
         case .glass: return AnyView(glass(content))
+        case .clear: return AnyView(content)
         }
     }
 

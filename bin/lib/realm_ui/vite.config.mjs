@@ -41,6 +41,26 @@ const textScale = () => ({
 // Difference one: Electron's preload put window.realm on the page before any
 // script ran. Here a classic script served by server.mjs does it, ahead of the
 // module entry, so the bundle sees the same global on its first line.
+//
+// And our glass layer (bin/lib/realm_ui/glass) goes in by entry, never by
+// editing his files: index.html's module entry is pointed at glass/main.tsx,
+// which imports our layer, then his own src/main.tsx unchanged, then our
+// stylesheet. A renderer whose index.html no longer names /src/main.tsx
+// fails the build here instead of shipping without the layer.
+const glassEntry = () => ({
+  name: "chewbacca:glass-entry",
+  // Before Vite resolves the module entry, so the bundle is built from ours.
+  transformIndexHtml: {
+    order: "pre",
+    handler(html) {
+      if (!html.includes('src="/src/main.tsx"')) {
+        throw new Error("realm-ui: index.html no longer loads /src/main.tsx; the glass layer has no entry to wrap");
+      }
+      return html.replace('src="/src/main.tsx"', 'src="/glass/main.tsx"');
+    },
+  },
+});
+
 const glassBridge = () => ({
   name: "chewbacca:realm-bridge",
   transformIndexHtml(html) {
@@ -59,6 +79,7 @@ export default defineConfig({
     textScale(),
     react(),
     tailwindcss(),
+    glassEntry(),
     glassBridge(),
   ],
   resolve: {

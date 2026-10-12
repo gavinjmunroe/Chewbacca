@@ -35,7 +35,10 @@ class RealmApp(Provider):
     # itself and needs no redraw from here.
     refresh = 30.0
     replaces = "Realm's desktop app and VS Code's agent tabs"
-    chrome = "glass"
+    # The page floats its own surfaces (agent tiles, Carlton's panes, the
+    # stage) on the desktop and leaves the rest clear; a frosted field the
+    # size of the surface behind it read as a window (realm-hud-report.md).
+    chrome = "clear"
 
     def __init__(self, start=None) -> None:
         super().__init__()

@@ -39,6 +39,7 @@ import {
 } from "node:fs";
 import { join, resolve, extname, sep, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { glassState, handleGlass } from "./glass_routes.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const HOST = "127.0.0.1";
@@ -84,6 +85,9 @@ export function parseArgs(argv) {
       i++;
     } else if (k === "--state") {
       out.state = v;
+      i++;
+    } else if (k === "--files-root") {
+      out.filesRoot = v;
       i++;
     } else if (k === "--port") {
       out.port = Number(v);
@@ -176,12 +180,18 @@ export function start({
   state,
   port = 0,
   token = randomBytes(24).toString("base64url"),
+  // Where the stage may read files and put hunks back: $HOME unless a test
+  // or a scratch engine names another root.
+  filesRoot,
 }) {
   const root = resolve(dist);
   const bridgeSource = readFileSync(join(HERE, "bridge.js"), "utf8");
   let origin = "",
     hostHeader = "",
     bridge = "";
+  // The glass layer's routes (glass_routes.mjs): voice, focus, the stage's
+  // file view and a hunk put back. Same token as the pipe.
+  const glass = glassState();
 
   const server = createServer((req, res) => {
     if (req.headers.host !== hostHeader) {
@@ -195,6 +205,17 @@ export function start({
       res.writeHead(400).end();
       return;
     }
+    if (
+      handleGlass(req, res, {
+        path,
+        url: new URL(req.url, origin),
+        token,
+        origin,
+        state: glass,
+        ...(filesRoot ? { home: filesRoot } : {}),
+      })
+    )
+      return;
     if (path === "/realm-bridge.js") {
       res
         .writeHead(200, {

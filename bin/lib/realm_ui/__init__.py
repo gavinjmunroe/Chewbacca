@@ -12,7 +12,10 @@ on 127.0.0.1 next to the realm engine Kyber already runs:
     serve    server.mjs: the bundle, bridge.js as window.realm, and a WebSocket
              pipe to the engine holding realm's own origin and token locks
 
-The realm checkout is never edited; the copy is what gets built. The HUD
+The realm checkout is never edited; the copy is what gets built. Our glass
+layer (glass/: agent tiles, the grow morph, the stage that follows the agent,
+voice) is copied beside his src/ and becomes the bundle's entry, importing his
+main.tsx unchanged (vite.config.mjs, glass/main.tsx). The HUD
 draws the page with AppPane.swift, and bin/lib/surfaces/realm_app.py opens it.
 Stock /usr/bin/python3 is 3.9 on this Mac, so no `X | None` at runtime here.
 """
@@ -139,7 +142,7 @@ def build(force: bool = False, log=print) -> dict:
     desktop = json.loads((repo / "apps" / "desktop" / "package.json").read_text())
     pkg = package_json(desktop)
     config = (HERE / "vite.config.mjs").read_text()
-    stamp = fingerprint(commit, json.dumps(pkg, sort_keys=True), config)
+    stamp = fingerprint(commit, json.dumps(pkg, sort_keys=True), config, *layer_texts())
     record_path = build_dir() / "build.json"
     try:
         record = json.loads(record_path.read_text())
@@ -161,6 +164,9 @@ def build(force: bool = False, log=print) -> dict:
     for pkg_name in ("contracts", "ui"):
         _copy(repo / "packages" / pkg_name, b / "packages" / pkg_name)
     shutil.copy2(HERE / "vite.config.mjs", b / "vite.config.mjs")
+    # Our layer sits beside his src/, never inside it: glass/main.tsx is the
+    # entry and imports his main.tsx as written (vite.config.mjs).
+    _copy(LAYER, b / "apps" / "desktop" / "src" / "renderer" / "glass")
 
     pkg_text = json.dumps(pkg, indent=1) + "\n"
     pkg_path = b / "package.json"
@@ -189,6 +195,14 @@ def build(force: bool = False, log=print) -> dict:
     record_path.write_text(json.dumps(record) + "\n")
     log(f"realm-ui: built realm {commit[:8]} in {record['seconds']}s")
     return record
+
+
+LAYER = HERE / "glass"
+
+
+def layer_texts() -> list:
+    """Every file of our glass layer, so a change to it rebuilds the bundle."""
+    return [f"{p.relative_to(LAYER)}\n{p.read_text()}" for p in sorted(LAYER.rglob("*")) if p.is_file()]
 
 
 def built() -> bool:

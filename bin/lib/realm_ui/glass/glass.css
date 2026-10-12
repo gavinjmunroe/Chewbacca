@@ -1,0 +1,450 @@
+/* Realm on the Chewbacca glass: our stylesheet over Carlton Aikins' Realm
+ * renderer (github.com/31Carlton7/realm). Loaded after his tokens.css and
+ * styles.css (glass/main.tsx), so it wins where it overrides them, and it
+ * only ever uses his tokens: the colour ladder, radii, type and motion are
+ * his. What it changes is the frame: no window ground, no rail, no sidebar,
+ * and his panes float on the desktop at the alpha his own design.md measured
+ * as the thinnest that holds body text at AA over any desktop (84%).
+ */
+
+:root[data-glass] {
+  --pane-alpha: 84%;
+  --glass-stage-w: min(46vw, 560px);
+  --glass-gap: 12px;
+  background: transparent;
+}
+
+/* Tiles: his app stays mounted and live underneath (instant on grow) but is
+ * not drawn and takes no pointer. */
+:root[data-glass="tiles"] #root {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity var(--dur-fast) var(--ease-fade),
+    visibility 0s linear var(--dur-fast);
+}
+:root[data-glass="work"] #root {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity var(--dur-enter) var(--ease-fade);
+}
+
+/* No chrome on the glass: the window's rail, its sidebar column, the lead
+ * and the frame around the panes are a window's, and this is not one. */
+:root[data-glass] .app-rail,
+:root[data-glass] .app > .sidebar,
+:root[data-glass] .sidebar-shade,
+:root[data-glass] .window-lead,
+:root[data-glass] .side-pane-toggle {
+  display: none !important;
+}
+:root[data-glass] .app {
+  --sidebar-w: 0px !important;
+  background: transparent;
+}
+:root[data-glass] .app > .main {
+  border: 0 !important;
+  border-radius: var(--radius-window, 16px);
+  overflow: clip;
+  background: var(--pane-ground) !important;
+  box-shadow: var(--shadow-overlay);
+}
+:root[data-glass] .app > .main::before,
+:root[data-glass] .app > .main::after {
+  display: none !important;
+}
+
+/* The stage takes its column only while it has something on it, and the
+ * workspace gives way on his `--dur-base` size step: one morph per change. */
+:root[data-glass="work"] #root {
+  width: 100%;
+  transition:
+    opacity var(--dur-enter) var(--ease-fade),
+    width var(--dur-base) var(--ease-out-strong);
+}
+:root[data-glass="work"][data-glass-stage] #root {
+  width: calc(100% - var(--glass-stage-w) - var(--glass-gap));
+}
+
+.glass-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  font-family: var(--font-sans);
+  color: var(--ink);
+}
+.glass-layer[data-mode="tiles"] {
+  pointer-events: auto;
+}
+
+/* ── tiles ─────────────────────────────────────────────────────────────── */
+.glass-field {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  animation: glass-in var(--dur-slow) var(--ease-out-strong) both;
+}
+.glass-field[data-leaving] {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease-fade);
+}
+.glass-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 300px));
+  gap: var(--glass-gap);
+}
+.glass-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 132px;
+  padding: 14px 16px 14px;
+  text-align: left;
+  border-radius: var(--radius-card, 12px);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  box-shadow:
+    inset 0 0 0 var(--hairline-w, 1px) var(--card-ring, var(--line)),
+    var(--shadow-card);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-hover) var(--ease-fade),
+    box-shadow var(--dur-hover) var(--ease-fade),
+    scale var(--dur-press) var(--ease-out-strong);
+}
+@media (hover: hover) and (pointer: fine) {
+  .glass-tile:hover {
+    background: color-mix(in srgb, var(--surface) 96%, var(--ink) 4%);
+  }
+}
+.glass-tile:active {
+  scale: 0.97;
+}
+.glass-tile[data-picked] {
+  box-shadow:
+    inset 0 0 0 var(--hairline-w, 1px)
+      color-mix(in srgb, var(--accent) 70%, transparent),
+    var(--shadow-card);
+}
+.glass-tile:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* A tile that needs the person is the loudest thing on the glass: one edge
+ * of his orange, never a fill. */
+.glass-tile[data-tone="needs"] {
+  box-shadow:
+    inset 0 0 0 1.5px var(--orange),
+    var(--shadow-card);
+}
+.glass-tile-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-xs, 12px);
+  color: var(--ink-2);
+}
+.glass-tile-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.glass-tile[data-tone="running"] .glass-tile-state {
+  color: var(--accent-ink);
+}
+.glass-tile[data-tone="needs"] .glass-tile-state {
+  color: var(--orange);
+}
+.glass-tile[data-tone="failed"] .glass-tile-state {
+  color: var(--red);
+}
+.glass-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 99px;
+  background: currentColor;
+  opacity: 0.8;
+}
+.glass-tile-age {
+  margin-left: auto;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.glass-tile-title {
+  font-size: var(--text-base, 14px);
+  font-weight: var(--font-weight-semibold, 560);
+  line-height: 20px;
+  color: var(--ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.glass-tile-now {
+  font-size: var(--text-sm, 13px);
+  line-height: 18px;
+  color: var(--ink-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.glass-tile-meta {
+  margin-top: auto;
+  font-size: var(--text-xs, 12px);
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.glass-quiet {
+  margin: 0;
+  padding: 10px 16px;
+  border-radius: var(--radius-pill, 999px);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  color: var(--ink-2);
+  font-size: var(--text-sm, 13px);
+}
+
+/* ── the light morph ───────────────────────────────────────────────────── */
+.glass-light {
+  position: fixed;
+  z-index: 50;
+  pointer-events: none;
+  border-radius: var(--radius-window, 16px);
+  box-shadow:
+    inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 85%, white 15%),
+    0 0 24px color-mix(in srgb, var(--accent) 35%, transparent);
+  transition-property: left, top, width, height, opacity;
+  transition-timing-function:
+    var(--ease-out-strong), var(--ease-out-strong), var(--ease-out-strong),
+    var(--ease-out-strong), var(--ease-fade);
+}
+
+/* ── the stage ─────────────────────────────────────────────────────────── */
+.glass-stage {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--glass-stage-w);
+  display: flex;
+  flex-direction: column;
+  gap: var(--glass-gap);
+  overflow-y: auto;
+  pointer-events: auto;
+  animation: glass-stage-in var(--dur-base) var(--ease-out-strong) both;
+}
+.glass-card {
+  flex: none;
+  border-radius: var(--radius-card, 12px);
+  background: var(--pane-ground);
+  box-shadow:
+    inset 0 0 0 var(--hairline-w, 1px) var(--card-ring, var(--line)),
+    var(--shadow-overlay);
+  overflow: hidden;
+  animation: glass-card-in var(--dur-enter) var(--ease-out-strong) both;
+}
+.glass-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 14px 8px;
+  font-size: var(--text-sm, 13px);
+}
+.glass-verb {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: var(--font-weight-semibold, 560);
+  color: var(--ink);
+}
+.glass-verb[data-live] {
+  color: var(--accent-ink);
+}
+.glass-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+}
+.glass-dir {
+  color: var(--ink-3);
+}
+.glass-counts {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 10px;
+  font-variant-numeric: tabular-nums;
+}
+[data-tone="good"] {
+  color: var(--green);
+}
+[data-tone="bad"] {
+  color: var(--red);
+}
+.glass-code {
+  margin: 0;
+  padding: 4px 0 10px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-2);
+  overflow-x: auto;
+  white-space: pre;
+}
+.glass-line {
+  display: block;
+  padding: 0 14px 0 0;
+  position: relative;
+}
+.glass-ln {
+  display: inline-block;
+  width: 44px;
+  padding-right: 12px;
+  text-align: right;
+  color: var(--ink-3);
+  user-select: none;
+}
+/* The changed lines are lit: his accent tint, one lit edge on the leading
+ * side, and the ink brought to full. Before the edit lands, the lines about
+ * to change are lit in his orange. */
+.glass-line[data-lit] {
+  color: var(--ink);
+  background: var(--accent-tint);
+  box-shadow: inset 2px 0 0 var(--accent);
+  transition: background-color var(--dur-swap) var(--ease-fade);
+}
+.glass-line[data-lit="before"] {
+  background: var(--orange-tint);
+  box-shadow: inset 2px 0 0 var(--orange);
+}
+.glass-term {
+  padding-left: 14px;
+}
+.glass-term .glass-line {
+  padding-right: 14px;
+}
+.glass-prompt {
+  color: var(--ink);
+}
+.glass-line[data-diff="add"] {
+  color: var(--ink);
+  background: var(--green-tint);
+}
+.glass-line[data-diff="del"] {
+  color: var(--ink-2);
+  background: var(--red-tint);
+}
+.glass-sign {
+  display: inline-block;
+  width: 14px;
+  color: var(--ink-3);
+}
+.glass-line[data-diff="add"] .glass-sign {
+  color: var(--green);
+}
+.glass-line[data-diff="del"] .glass-sign {
+  color: var(--red);
+}
+.glass-file + .glass-file {
+  border-top: var(--hairline-w, 1px) solid var(--line);
+}
+.glass-file-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px 2px;
+  font-size: var(--text-sm, 13px);
+}
+.glass-file-head .glass-word {
+  margin-left: auto;
+}
+.glass-hunk + .glass-hunk {
+  border-top: var(--hairline-w, 1px) solid var(--line-soft, var(--line));
+}
+.glass-hunk-actions {
+  display: flex;
+  gap: 4px;
+  padding: 0 8px 10px;
+}
+/* A verb is a lit word, not a pill (hud/CLAUDE.md, Past the window): it
+ * says what it changes, and a press answers on the way down. */
+.glass-word {
+  min-height: 28px;
+  padding: 4px 8px;
+  border-radius: var(--radius-control, 8px);
+  font-size: var(--text-sm, 13px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--accent-ink);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-hover) var(--ease-fade),
+    scale var(--dur-press) var(--ease-out-strong);
+}
+.glass-word[data-tone="bad"] {
+  color: var(--red);
+}
+@media (hover: hover) and (pointer: fine) {
+  .glass-word:hover {
+    background: var(--hover);
+  }
+}
+.glass-word:active {
+  scale: 0.97;
+}
+.glass-word:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.glass-note {
+  margin: 0;
+  padding: 6px 14px 10px;
+  font-size: var(--text-sm, 13px);
+  color: var(--ink-2);
+}
+.glass-file-head .glass-note {
+  padding: 0;
+  margin-left: auto;
+}
+
+@keyframes glass-in {
+  from {
+    opacity: 0;
+    scale: 0.985;
+  }
+}
+@keyframes glass-stage-in {
+  from {
+    opacity: 0;
+    translate: 12px 0;
+  }
+}
+@keyframes glass-card-in {
+  from {
+    opacity: 0;
+    translate: 0 6px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glass-field,
+  .glass-stage,
+  .glass-card {
+    animation-name: glass-fade;
+  }
+  :root[data-glass="work"] #root {
+    transition: opacity var(--dur-fast) var(--ease-fade);
+  }
+}
+@keyframes glass-fade {
+  from {
+    opacity: 0;
+  }
+}

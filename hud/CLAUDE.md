@@ -518,6 +518,54 @@ save is still checked against the version it was edited from; a file that
 changed on disk meanwhile opens with the conflict notice. The agent card
 keeps up to five tabs per session (agent_ide.py MAX_TABS).
 
+### Realm's workspace on the glass
+
+Caleb, 2026-10-11: "Literally I just need carlton's app but refactored for a
+fire hud experience". Carlton's renderer runs unedited; everything of ours is
+a layer that `realm-ui build` puts beside his `src/` (bin/lib/realm_ui/glass):
+`glass/main.tsx` is the bundle's entry and imports our layer, then his
+`src/main.tsx` as written, then `glass.css`. The layer reaches his store by
+riding inside his one `StoreContext.Provider` (`install.tsx`), and his engine
+through his own `rpc()`. tests/test_realm_glass.py builds an untouched copy of
+his renderer and checks the bundle carries the layer and his files are byte
+for byte his (`REALM_GLASS_BUILD=1`, about a minute).
+
+- **Tiles first.** "Show my agents" opens on every agent as a tile floating
+  on the desktop: his surface ladder at 92%, his provider mark, the state as a
+  word (Working, Needs you, Done, Failed) and what it is doing now. His app is
+  mounted and live underneath, not drawn. The surface is `chrome=clear`: no
+  frosted field, since the page floats its own surfaces and a field the size
+  of the surface read as a window.
+- **One morph.** A press grows a lit outline from the tile to the workspace
+  (320 ms, his `--dur-move`, `--ease-out-strong`); his app comes up under it
+  while the tiles fade, so no frame is empty, and the light goes out. Escape
+  shrinks it back into its tile (240 ms). Escape inside his palette, a menu,
+  a dialog, the editor or a terminal stays his (bridge.js asks the layer
+  first).
+- **The layout follows the agent.** The column beside the conversation holds
+  only what the agent is doing: the file it is editing with the changed lines
+  lit (orange before the edit lands, his accent after), a command while it
+  runs (gone 2.4 s after), tests only when a test command runs, with the
+  count in words. When the turn settles the file and command go and its diff
+  arrives as hunks. With nothing on it the column is not drawn and his panes
+  take the width back on his 200 ms size step.
+- **Every write is a press that says what it changes.** Keep writes nothing.
+  "Reject: puts back 3 added and 1 removed in auto-compact.ts" is
+  realm-ui's `/glass/reject`, a checked `git apply -R` of exactly that hunk,
+  refused when the file moved on. A file whose hunks are all kept offers
+  "Stage orgs.ts" (his engine's `workspace.stage`). His permission card stays
+  the gate for the agent's own commands.
+- **Voice.** The talk key goes to the agent that has the glass while the page
+  is shown (Kyber tells it on attach and detach): hud-listen asks realm-ui's
+  `/glass/voice` before the assistant (bin/lib/realm_glass_voice.py), surface
+  words like "close my agents" excepted. It fills that agent's reply, "at
+  orgs.ts" adds `@orgs.ts` and opens his picker, "open the palette orgs" and
+  "find X" open his palette. Nothing is sent; Return is the press. Off the
+  glass, or with a report older than 45 s, the assistant answers as before.
+- **The bridge answers in his shapes.** His `@` picker reads
+  `computerAccess.rows`; a null there took the whole page down the moment `@`
+  was typed on the glass (found by the end to end run, fixed 2026-10-11).
+
 ### Carlton's language on the glass
 
 Caleb, 2026-10-11: "Not just functionality of carlton's thing, but his UIUX

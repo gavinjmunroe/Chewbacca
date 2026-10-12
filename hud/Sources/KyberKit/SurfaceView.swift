@@ -111,7 +111,7 @@ public struct SurfaceView: View {
         case "Metric": return empty("value")
         default: break
         }
-        guard chrome == .glass else { return false }
+        guard chrome.isGlass else { return false }
         switch type {
         case "Text": return empty("value")
         case "Heading": return empty("text")
@@ -212,7 +212,7 @@ public struct SurfaceView: View {
                     // No title, no line: a launcher rail has nothing to
                     // name, and an empty Text still takes 14 of gap.
                     // On the glass the content names itself: no title line.
-                    if chrome != .glass, let title = p["title"]?.display, !title.isEmpty {
+                    if !chrome.isGlass, let title = p["title"]?.display, !title.isEmpty {
                         Text(chrome == .window ? title.uppercased() : title)
                             .font(chrome == .window
                                 ? Typeface.pixel(11)
@@ -310,7 +310,7 @@ public struct SurfaceView: View {
         switch element.type {
         case "Heading":
             let level = Int(p["level"]?.doubleValue ?? 2)
-            if chrome == .glass {
+            if chrome.isGlass {
                 // The open thing's name, set as the largest words on the
                 // glass after the counts: it is what the light carried in.
                 return AnyView(
@@ -383,7 +383,7 @@ public struct SurfaceView: View {
         case "Metric":
             let value = p["value"]?.display ?? ""
             let tone = Self.threshold(p, value: p["value"]?.doubleValue, in: chrome)
-            if chrome == .glass {
+            if chrome.isGlass {
                 return AnyView(
                     GlassMetric(label: p["label"]?.display ?? "", value: value,
                                 tone: tone, number: p["value"]?.doubleValue)
@@ -474,7 +474,7 @@ public struct SurfaceView: View {
                     tone: Self.threshold(p, value: fraction, in: chrome) ?? tone))
 
         default:
-            if chrome == .glass {
+            if chrome.isGlass {
                 return AnyView(GlassRail(items: p["items"]?.arrayValue ?? [], rowAction: rowAction(p, id)))
             }
             return AnyView(
@@ -548,7 +548,7 @@ public struct SurfaceView: View {
             var payload: [String: JSON] = [:]
             if let collection = p["collection"] { payload["collection"] = collection }
             let primary = p["variant"]?.stringValue == "primary"
-            if chrome == .glass {
+            if chrome.isGlass {
                 return AnyView(GlassWord(label: p["label"]?.display ?? "") {
                     store.fire(action, from: element.id, payload: payload)
                 })
@@ -928,7 +928,7 @@ struct ListView: View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(rows) { row in
                 HStack(alignment: rowAction == nil ? .top : .center, spacing: 7) {
-                    if chrome == .glass && !ordered {
+                    if chrome.isGlass && !ordered {
                         // No bullet on the glass: the indent under the name
                         // already says these lines belong to it.
                         EmptyView()

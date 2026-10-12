@@ -94,6 +94,17 @@ struct GlassGlanceTests {
         #expect(Chrome(rawValue: "hologram") == nil)
         #expect(!Chrome.glass.isFilled)
     }
+
+    @Test("clear is glass with no field: no card, no fill, and it parses")
+    func clearChrome() throws {
+        guard case let .surface(_, _, _, _, chrome, _, _, _) = try LineParser.parse("@ realm chrome=clear") else {
+            Issue.record("not a surface")
+            return
+        }
+        #expect(chrome == .clear)
+        #expect(Chrome.clear.isGlass && Chrome.glass.isGlass && !Chrome.card.isGlass)
+        #expect(!Chrome.clear.isFilled)
+    }
 }
 
 /// The daemon's own `@` line reaches the model as glass, end to end.

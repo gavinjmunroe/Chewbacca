@@ -206,9 +206,19 @@ public enum Chrome: String, Sendable, CaseIterable {
     /// content itself (hud/CLAUDE.md, "Past the window"). Caleb, 2026-10-11:
     /// "The future of UX does not look like macos".
     case glass
+    /// Glass with no field under it at all: the content draws its own
+    /// grounds. For a whole app on the glass (the `App` component), whose
+    /// page floats its own surfaces over the desktop and leaves the rest
+    /// clear, so a frosted field the size of the surface would read as a
+    /// window behind it (Realm on the glass, 2026-10-11). Behaves as `glass`
+    /// in every other way.
+    case clear
 
     /// Whether this chrome paints a background the person can grab anywhere.
     public var isFilled: Bool { self == .card || self == .window }
+
+    /// `glass` and `clear`: no card, no title bar, lit words for verbs.
+    public var isGlass: Bool { self == .glass || self == .clear }
 }
 
 /// A surface placed beside a rectangle on the screen rather than in a region.

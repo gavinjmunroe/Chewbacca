@@ -551,6 +551,49 @@ These live in peripheral vision on a screen somebody is not looking at. Staring
 at a bright tile judges the wrong thing. Open `states.html`, turn the blur up,
 then look at something else and say out loud which tile just changed.
 
+## Agent work on the glass: what we took from Zed, Cursor and Warp
+
+Researched 2026-10-11 before the Realm IDE layer (bin/lib/realm_ui/glass)
+was built, from Zed's agent panel docs (zed.dev/docs/ai/agent-panel), Warp's
+agent and interactive code review docs (docs.warp.dev), Cursor's forum
+threads on its 2.0 review controls, and The New Stack's Warp 2.0 Q&A. Each rule is checkable on a frame.
+
+Taken:
+
+1. **Edits are reviewed per hunk, Keep or Reject, plus the whole set.** Zed's
+   multibuffer review and Cursor's Keep/Undo both settled on the hunk as the
+   unit. On the glass a hunk is its lines with signs and tints (colour never
+   alone, Carlton's design.md), Keep and Reject under it.
+2. **Review controls live with the hunk, near where the eye already is.**
+   Cursor moved its Keep/Undo bar to the top breadcrumbs in 2.0 and users
+   called it "awkward and easy to miss" and asked for the lower placement
+   back (forum.cursor.com, 155718). Ours sit directly under each hunk.
+3. **Follow the agent.** Zed's follow mode jumps the editor to every file the
+   agent touches. On the glass the file comes in beside the conversation
+   while it is edited, lit where it changed, and goes when the turn settles.
+4. **The agent's commands are shown while they run.** Warp's blocks make a
+   command and its output one object. Ours is one card: the command, its
+   tail, Running or Ran, folded away 2.4 s after it ends.
+5. **Several agents, each with a state you can read at a glance, and a
+   notification only when one is blocked.** Warp's Agent Management Panel
+   colour-codes running, done and blocked tasks. Ours are tiles: the state is
+   a word plus a mark, and only a tile that needs a press gets an orange edge.
+
+Rejected:
+
+1. **A permanent agent side panel inside an editor window** (Cursor, Zed's
+   default). The New Stack's Warp interview calls the side chat panel the
+   weak point of IDE agents; on an OS surface nothing sits on screen with
+   nothing on it, so there is no panel to dock.
+2. **A separate review page.** Warp opens a Code Review panel; Carlton's own
+   design.md removed a separate Agents page because "what needs you is said
+   where you already look". The diff arrives in the column the work was in.
+3. **Auto-approve ("fast-forward").** Warp offers it once you trust an agent.
+   Every write on the glass is a press, and the row says what it changes
+   first ("Reject: puts back 3 added and 1 removed in auto-compact.ts").
+4. **Layout toggles and saved layouts** (Cursor's top-right layout menu). The
+   layout follows the agent; nobody arranges it.
+
 ## Rules
 
 **Everything on the glass is instant.** A surface paints its last known state

@@ -213,7 +213,17 @@ final class AppPaneHost {
         if view.superview !== box {
             view.frame = box.bounds
             box.addSubview(view)
+            Self.tellShown(view, true)
         }
+    }
+
+    /// The page's glass layer (bin/lib/realm_ui/glass) opens on the agent
+    /// tiles each time it is shown and reports to realm-ui whether it has the
+    /// glass, which is what lets the talk key reach the focused agent. A kept
+    /// page never reloads, so it is told here rather than on load.
+    static func tellShown(_ view: WKWebView, _ shown: Bool) {
+        let flag = shown ? "true" : "false"
+        view.evaluateJavaScript("window.__realmGlassShown && window.__realmGlassShown(\(flag)); 0", completionHandler: nil)
     }
 
     /// The surface closed: the page leaves the card and stays loaded. Only the
@@ -221,6 +231,7 @@ final class AppPaneHost {
     /// new card before the old one is torn down.
     func detach(from box: NSView) {
         guard let view = webView, view.superview === box else { return }
+        Self.tellShown(view, false)
         view.removeFromSuperview()
         guardian?.onDismiss = nil
     }

@@ -70,6 +70,7 @@ import glass_search  # noqa: E402
 import call_pill  # noqa: E402
 import kit_snapshot  # noqa: E402
 import hud_accounts  # noqa: E402
+import realm_glass_voice  # noqa: E402
 import app_route  # noqa: E402
 # HUD_REPO_CARDS=off: "show me owner/repo" and a pasted github.com URL go to
 # the model instead of drawing a repo card (bin/lib/repo_card.py).
@@ -2904,6 +2905,11 @@ class Listener:
         # request to leave it with its own limit notice.
         if not relayed and self.accounts_request(said, typed):
             return
+        # Realm is up on the glass with an agent in front: the sentence is
+        # for that agent. It only fills its reply (or opens the palette);
+        # Return is the press that sends (bin/lib/realm_glass_voice.py).
+        if SURFACES and not relayed and self.realm_glass_request(said, typed):
+            return
         # Something pointed at is what "this" means, so the shortcuts that
         # read "this" as the song step aside. On 2026-10-03 three "what is
         # this?" turns with a Chrome tab marked were each answered in 0.2 s
@@ -3184,6 +3190,30 @@ class Listener:
         self.send("w " + json.dumps(answer) + " done=true")
         if not typed:
             self.speak(answer)
+        self.settle("done", self.LEAVE_AFTER)
+        return True
+
+    def realm_glass_request(self, said: str, typed: bool) -> bool:
+        """The talk key to the agent that has the glass, while Realm is up.
+
+        A surface sentence ("close my agents") is still the glass's, so it
+        goes on to surface_request. Anything else is handed to the page,
+        which answers only while it is shown, listening and fresh; when it
+        is not, this returns False and the assistant takes the request."""
+        try:
+            if surface_intent.parse(said) is not None:
+                return False
+            sent = realm_glass_voice.send(said)
+        except Exception as err:  # a fast path must never cost the person their answer
+            self.log("realm glass failed:", err)
+            return False
+        if sent is None:
+            return False
+        line = realm_glass_voice.pill_line(said, sent["to"])
+        req = Request(said=said, spoken_at=self.arrival(), pointed=None, typed=typed)
+        self.remember(req, line, True, "done")
+        self.send("s " + json.dumps(line))
+        self.send("w " + json.dumps(line) + " done=true")
         self.settle("done", self.LEAVE_AFTER)
         return True
 

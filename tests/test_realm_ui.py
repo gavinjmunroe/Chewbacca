@@ -130,7 +130,7 @@ lines = app.layout()
 check("it is a glance, so a click off it takes it down", lines[0] == "glance realm", lines)
 check("it draws the App component bound to the url", any(l.startswith("c realm-app App url=@/realm/url") for l in lines), lines)
 check("it opens centred on glass, at least Realm's 900-point minimum",
-      app.region == "center" and app.chrome == "glass" and app.width >= 900)
+      app.region == "center" and app.chrome == "clear" and app.width >= 900)
 data = app.fetch(surfaces.Context())
 check("fetch hands the server's url to the page", app.model(data, None, {}, None)["/realm/url"] == "http://127.0.0.1:47317/", data)
 broken = app.model(None, "the Realm interface server did not come up", {}, None)

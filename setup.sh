@@ -3021,6 +3021,14 @@ if command -v brew &>/dev/null; then
   _daemon register agent-watch --every 60 --nice 10 -- /usr/bin/python3 "$HOME/.local/bin/kyber-sessions" watch &&
     log "agent alerts on the HUD every minute" || warn "could not schedule agent alerts"
 
+  # The weekly guard false-positive report (reengineer-flat-plan step 7). The
+  # daemon has no weekday schedule, so it runs daily at 9 and the report acts on
+  # Sundays, or on the first run a week after the last one: it ranks guards by
+  # refusals the agent overrode or reran, writes ~/.chewbacca/reports/guard-fp/,
+  # and files the top offender as a work-ledger task for that week.
+  _daemon register guard-fp --at 09:00 --nice 10 -- /usr/bin/python3 "$_svc_root/tools/hookd_replay.py" fp --weekly &&
+    log "guard false-positive report scheduled for Sundays" || warn "could not schedule the guard false-positive report"
+
   # Install the one LaunchAgent last, and fold in any per-job agent an older
   # install left behind, so Login Items ends with a single Chewbacca row.
   "$_mr_node" "$SCRIPT_DIR/bin/chewbacca-daemon" install 2>&1 | while IFS= read -r _line; do log "$_line"; done

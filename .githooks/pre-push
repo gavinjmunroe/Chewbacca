@@ -85,6 +85,10 @@ touched '^(setup\.sh|\.claude/hooks/)' && run "setup hook registration" python3 
 # it. Unchanged guards are remembered, so this costs one guard's replay.
 touched '^(\.claude/hooks/|crates/hookd/|tools/hookd_replay\.py|tests/fixtures/hookd-replay/)' && \
   run "gated guards act only where their gate runs" /usr/bin/python3 tests/test_hookd_replay.py
+touched '^(tools/hookd_replay\.py|tools/work_ledger\.py)' && \
+  run "weekly guard false-positive report" /usr/bin/python3 tests/test_guard_fp.py
+touched '^\.claude/hooks/chatdb-guard\.sh' && run "chatdb-guard" bash tests/chatdb_guard.sh
+touched '^\.claude/hooks/lesson-guard\.sh' && run "lesson-guard" bash tests/lesson_guard.sh
 # The dispatch entry folds every gated guard into one process; a change to a
 # guard's header, hookd or setup's folding can lose a block, so it runs here.
 touched '^(setup\.sh|\.claude/hooks/|crates/hookd/)' && \

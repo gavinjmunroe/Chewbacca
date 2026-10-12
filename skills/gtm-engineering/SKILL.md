@@ -241,6 +241,20 @@ opt-outs that had to be blocklisted before Monday.
   what's working, and keep process words (Togari, Clay inbox, tags, wave
   names) off the page.
 
+## Never call a launch ready without `gtme ready`
+
+- **Never say a launch is ready, good to go, "good until X", "only waiting on
+  X" or "just needs X" until `chewbacca gtme ready --client <name> --drafts
+<drafts.json>` prints READY.** Caleb, 2026-10-12: "DONT TELL ME UR READY IF
+  THIS SHIT IS HAPPENING? FIX CHEWBS BRO UR SUPPOSED TO BE A GTME". That day a
+  Zeutara launch was called good "until Jonah responds" while the live copy
+  graded 25 to 67, 1 of 14 campaigns had been graded, gates 3 to 5 were NOT
+  CHECKED, 104 firm names carried "L.P." and the pre-send receipt had expired.
+  The command grades every draft through all five gates, checks the pre-send
+  receipt and owed replies, and counts NOT CHECKED as a blocker. Report its
+  NOT READY list as it stands. The Stop hook `ready-guard.sh` refuses a
+  readiness claim without a signed READY under 2 hours old.
+
 ## Grading a campaign before it goes out
 
 Run the five gates in [the playbook's grading section](references/demand-gen-playbooks.md#grading-a-campaign-before-it-goes-out)

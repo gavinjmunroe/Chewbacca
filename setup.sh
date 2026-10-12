@@ -2102,6 +2102,13 @@ _register("SessionStart", hooks_dir + "/orphan-reap.sh", timeout=10,
 _register("Stop", hooks_dir + "/scope-guard.sh", timeout=10,
           status="Checking the scope he asked for...")
 
+# A launch is ready only when `chewbacca gtme ready` says READY, signed and
+# under 2 hours old. 2026-10-12: a Zeutara launch was called good "until Jonah
+# responds" with 1 of 14 campaigns graded, gates 3 to 5 NOT CHECKED and an
+# expired pre-send receipt. Caleb: "DONT TELL ME UR READY IF THIS SHIT IS HAPPENING?"
+_register("Stop", hooks_dir + "/ready-guard.sh", timeout=10,
+          status="Checking any launch-ready claim against gtme ready...")
+
 # Every file link in a reply has to open from the session root. 2026-10-11: a
 # render link written relative to ~/Downloads (the shell had cd'd there) gave
 # "Couldn't open that file" when Caleb clicked it.

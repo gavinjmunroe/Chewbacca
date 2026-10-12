@@ -508,6 +508,10 @@ if group "gtme"; then
   # the inbox read dragged a Clay tab onto his screen every run.
   check "gtme done names every owed reply and unread client message, from data" \
     python3 "$ROOT/tests/test_gtme_done.py"
+  # 2026-10-12: a launch was called good "until Jonah responds" with gates NOT
+  # CHECKED, an expired pre-send receipt and "L.P." in the firm names.
+  check "gtme ready says READY only when every campaign passes every gate" \
+    python3 "$ROOT/tests/test_gtme_ready.py"
   check "shipped code works on anyone's machine: no home paths, personal mailboxes or client ids" \
     bash "$ROOT/tests/portable_code.sh" "$ROOT"
   check "a post tagging a client waits for a fresh, clean gtme done" \
@@ -931,6 +935,8 @@ if group "installer"; then
     bash "$ROOT/tests/texts_sync_lock.sh"
   check  "scope-guard refuses a self-chosen cut of scope he set as all" \
     bash "$ROOT/tests/scope_guard.sh"
+  check  "ready-guard refuses a launch-ready claim without a fresh signed gtme ready" \
+    bash "$ROOT/tests/ready_guard.sh"
   check  "link-guard refuses a reply whose file links don't open from the session root" \
     bash "$ROOT/tests/link_guard.sh"
 

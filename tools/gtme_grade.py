@@ -71,6 +71,7 @@ import re
 import subprocess
 import sys
 import time
+import unicodedata
 from collections import Counter
 from pathlib import Path
 
@@ -151,6 +152,12 @@ def repair(text):
     return None
 PLACEHOLDER = re.compile(r"(\[[A-Z][^\]]*\]|\bXXX\b|lorem ipsum|\bTODO\b|(?<!\{)\{(first|company)\w*\}(?!\}))", re.I)
 URL = re.compile(r"^https?://\S+\.\S+", re.I)
+# A legal form at the end of a firm name: L.P., LP, LLC, L.L.C., LLP, Inc., Ltd,
+# GmbH, plc, Corp., S.A., S.a.r.l., AG, B.V., N.V., Pte/Pty Ltd.
+LEGAL_SUFFIX = re.compile(r"(,\s*|\s+)(l\.?\s?p\.?|l\.?\s?l\.?\s?[cp]\.?|inc\.?|incorporated|ltd\.?|limited|gmbh|"
+                          r"plc|corp\.?|corporation|s\.?\s?a\.?|s\.?\s?a\.?\s?r\.?\s?l\.?|a\.?g\.?|b\.?\s?v\.?|"
+                          r"n\.?\s?v\.?|(pte|pty)\.?\s+ltd\.?)\s*$", re.I)
+COMPANY_COLS = {"company", "company_name", "firm", "organization"}
 BASE_FIELDS = {"first_name", "last_name", "full_name", "company", "company_name", "email"}
 
 # 20 seconds read aloud: the pack gives no reading rate. At 4.5 words a second
@@ -626,7 +633,7 @@ def render(text, row, fieldmap):
     return re.sub(r"\{\{(\w+)\}\}", sub, text)
 
 
-def gate_render(camp, rows, gate):
+def gate_render(camp, rows, gate, company_fields=()):
     if rows is None:
         gate.skip("rendering", "no --leads file to render against")
         return
@@ -695,11 +702,22 @@ def gate_render(camp, rows, gate):
     for what, k in problems.items():
         if k:
             gate.fail(f"{k} leads: {what}", LASTLOOK)
-    co = fieldmap.get("company") or fieldmap.get("company_name")
-    if co:
-        suf = sum(1 for r in rows if re.search(r"\b(inc|llc|ltd|lp|gmbh)\.?$", r[co], re.I))
+    # A firm name the copy prints. On 2026-10-12, 104 of 746 Zeutara firm names
+    # carried a legal form ("W Capital Partners, L.P.") or an emoji ("M13 🚀")
+    # and the new first line merged the firm field, so every one would have gone
+    # out verbatim. This was a warning that only matched a bare "lp" or "llc" at
+    # the end, so "L.P." passed; it fails now, because a recipient reads it.
+    company_cols = [c for f, c in fieldmap.items()
+                    if f in ("company", "company_name") or f.lower() in (company_fields or ())]
+    for co in dict.fromkeys(company_cols):
+        suf = [r[co] for r in rows if LEGAL_SUFFIX.search(r[co])]
         if suf:
-            gate.warn(f"{suf} company names end in a legal suffix", "GEX playbook-company-name-cleaning")
+            gate.fail(f"{len(suf)} firm names the copy prints end in a legal form (\"{suf[0]}\"); clean "
+                      f"them before the merge", "GEX playbook-company-name-cleaning")
+        sym = [r[co] for r in rows if any(unicodedata.category(ch) in ("So", "Sk", "Cs") for ch in r[co])]
+        if sym:
+            gate.fail(f"{len(sym)} firm names the copy prints carry an emoji or symbol (\"{sym[0]}\")",
+                      "GEX playbook-company-name-cleaning")
     for name, i, s in steps_all:
         t = s["body"] + s["subject"]
         if INVISIBLE.search(t):
@@ -1164,7 +1182,9 @@ def grade(args):
     gate_list(rows, args, verdicts, suppressed, gates[0])
     gate_copy(camp, rows, gates[1])
     gate_read(args.review, camp, gates[2])
-    gate_render(camp, rows, gates[3])
+    company_fields = {f.partition("=")[0].lower() for f in args.field_map or []
+                      if f.partition("=")[2].lower() in COMPANY_COLS}
+    gate_render(camp, rows, gates[3], company_fields)
     gate_start(camp, args, senders, analytics, gates[4], client)
     sagar_list(rows, gates[0])
     sagar_copy(camp, rows, args, senders, client, gates[1])

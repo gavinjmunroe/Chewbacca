@@ -7,6 +7,8 @@
     gtme setup               connect Clay (if you have it), name each workspace, run the first sync
     gtme brief [--sync]      the morning standup: replies to answer, alarms, credits, top 3 actions
     gtme next                every client's to-do list, each with its command and its gate
+    gtme ready --client NAME --drafts drafts.json   every gate on every draft; READY or NOT READY
+                             and the blockers. The only answer to "is the launch ready?"
     gtme report --client NAME [--week]   the Friday client summary, as markdown and a PDF in ~/Downloads
     gtme rule --client NAME "always/never ..." --who WHO   save a client's standing ruling; brief, next
                              and report flag any recommendation that would cross it
@@ -2236,6 +2238,9 @@ def main(argv=None) -> int:
     if argv and argv[0] == "done":
         import gtme_done
         return gtme_done.main(argv[1:])
+    if argv and argv[0] == "ready":
+        import gtme_ready
+        return gtme_ready.main(argv[1:])
     if argv and argv[0] in ("sender", "find", "batch", "send", "inbox", "reply", "today", "package", "costs",
                             "autosend", "share", "copy", "week"):
         import gtme_solo

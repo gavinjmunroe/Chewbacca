@@ -23,6 +23,17 @@ pricing, packaging, accounts, signal, channel, with signals leading messaging)
 and Maggie's texted process. Add a practitioner to that file only with a source
 per rule, and mark anything unverified.
 
+**Never do something Sagar wouldn't do** (Caleb, 2026-10-12, in caps). Before
+any copy, list or launch change, check it against
+[references/sagar.md](references/sagar.md). On 10-12 a rewrite chased the GEX
+rubric to 90/100 and turned his founder-story email 1 ("I'm Jonah Graham,
+co-founder of Zeutara...") into contrived lines like "one detail [firm] may
+want on this round". A grader score never overrides his shape: email 1 says
+who it is from and what is sold, the founder's story told plainly, casual over
+contrived, 2 variants of 3 messages per offer, and anyone the sender already
+knows gets a text, not a cold email. gtme-grade now scores his sender-first
+opener as passing instead of failing it.
+
 Everything BMA has built is in [references/bma/](references/bma/README.md):
 how the live Togari bot classifies and answers replies, the bar a reply must
 clear before it sends with nobody looking, its scoring rubrics and vendor

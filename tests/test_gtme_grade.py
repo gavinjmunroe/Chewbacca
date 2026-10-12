@@ -301,9 +301,11 @@ expect_fail("gate 2: an em dash refuses", 2,
 expect_fail("gate 2: a spam-list word refuses", 2,
             lambda c: setattr(c, "copy", c.copy.replace("on your fund's site", "on your new site")),
             "spam-list")
-expect_fail("gate 2: a sender-first opener refuses", 2,
+# A sender-first opener is Sagar's rule and passes since 2026-10-12 (test_gtme_ready
+# section 9); an opener that is neither about them nor about who is writing still fails.
+expect_fail("gate 2: an opener about nobody refuses", 2,
             lambda c: setattr(c, "copy", c.copy.replace("{{first_name}}, saw {{signal}} on your fund's site.",
-                                                          "I'm Jane, and we run a fund network.", 1)),
+                                                          "Hope this finds you well.", 1)),
             "line one carries no recipient-specific signal")
 expect_fail("gate 2: two questions refuse", 2,
             lambda c: setattr(c, "copy", c.copy.replace("Worth a look?", "Worth a look? Is Tuesday free?")),

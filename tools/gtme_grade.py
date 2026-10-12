@@ -491,7 +491,15 @@ def score_email(step, idx, rows, gate, label):
     first = sents[0] if sents else ""
     fields = personal_fields(body)
     first_fields = personal_fields(first)
+    # Sagar: "way too vague... in terms of who the message is coming from." His
+    # email 1 opens on the sender, which GEX scores 0 for situation and fails on
+    # line one and the 3:1 ratio. The team's process wins where the playbooks
+    # disagree (SKILL.md), and Caleb, 2026-10-12: "NEVER DO SMTH SAGAR WOULDNT
+    # DO", after a rewrite to pass GEX turned his founder-story copy contrived.
+    sagar_open = idx == 0 and bool(SENDER_FIRST.match(first))
     if first_fields:
+        pts["situation"] = 25
+    elif sagar_open:
         pts["situation"] = 25
     elif SENDER_FIRST.match(first):
         pts["situation"] = 0
@@ -538,7 +546,10 @@ def score_email(step, idx, rows, gate, label):
                   f"starts over", GEX_COPY)
 
     # QA list, every line must pass
-    if idx == 0 and not first_fields:
+    if idx == 0 and not first_fields and sagar_open:
+        gate.note(f"{where}: opens on who it is from, Sagar's rule; GEX wants the recipient first "
+                  f"and the team's process wins where they disagree")
+    elif idx == 0 and not first_fields:
         gate.fail(f"{where}: line one carries no recipient-specific signal "
                   f"(opens: \"{first[:60]}\")", GEX_COPY)
     low = (step["subject"] + "\n" + text).lower()
@@ -558,7 +569,10 @@ def score_email(step, idx, rows, gate, label):
     # The opt-out line is compliance, not pitch, so it never counts as a sender sentence.
     snd = sum(1 for s in sents if re.search(r"\b(i|i'm|we|we're|our|us|me|my)\b", s, re.I)
               and not re.search(r"\byou(r)?\b", s, re.I) and not OPT_OUT.search(s))
-    if (idx == 0 or len(sents) >= 3) and snd and rec < 3 * snd:
+    if (idx == 0 or len(sents) >= 3) and snd and rec < 3 * snd and sagar_open:
+        gate.warn(f"{where}: {rec} recipient sentences to {snd} sender sentences; GEX wants 3:1, "
+                  f"Sagar's email 1 says who it is from, and his process wins", f"{GEX_COPY}; Sagar")
+    elif (idx == 0 or len(sents) >= 3) and snd and rec < 3 * snd:
         gate.fail(f"{where}: {rec} recipient sentences to {snd} sender sentences, under 3:1",
                   GEX_COPY)
     if len(qs) != 1:

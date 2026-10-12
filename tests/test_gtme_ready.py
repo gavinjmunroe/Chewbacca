@@ -294,5 +294,28 @@ for name in ("Creandum AB", "Vaaka Partners Oy", "Erhvervsinvest Management A/S"
 for name in ("Accel", "Creandum", "Lab Ventures", "Oyster Capital", "Kasab", "Third Lake Capital"):
     check(f"plain firm name not flagged: {name}", gtme_grade.LEGAL_SUFFIX.search(name) is None)
 
+# 9. Caleb, 2026-10-12: "NEVER DO SMTH SAGAR WOULDNT DO". Sagar's email 1 opens on
+# who it is from; GEX's recipient-first checks must not fail it, and a
+# recipient-first email that opens on nothing personal still fails.
+body = ("Hi {{first_name}},\n\nI'm Jonah Graham, co-founder of Zeutara. We work with founders on fundraising, "
+        "engineering and GTM.\n\nA company we work with is a Chicago dating app where singles check into venues. "
+        "It has 10,000+ check-ins and is raising a $1M pre-seed SAFE.\n\nWould a short call with the founder be "
+        "useful for you?\n\nJonah Graham\nCo-Founder, Zeutara")
+step = {"subject": "Chicago dating app pre-seed", "body": body, "renders": [body.replace("{{first_name}}", "Ann")],
+        "thread": False}
+g = gtme_grade.Gate(2, "copy")
+gtme_grade.score_email(step, 0, [{"first_name": "Ann"}], g, "A")
+text = " ".join(g.fails)
+check("Sagar's sender-first email 1 is not failed on line one", "line one" not in text, g.fails)
+check("Sagar's sender-first email 1 is not failed on the 3:1 ratio", "3:1" not in text, g.fails)
+check("Sagar's sender-first email 1 is not failed on its score", "scores" not in text, g.fails)
+vague = body.replace("I'm Jonah Graham, co-founder of Zeutara. We work with founders on fundraising, engineering and GTM.",
+                     "Hope this finds you well.")
+step2 = dict(step, body=vague, renders=[vague])
+g = gtme_grade.Gate(2, "copy")
+gtme_grade.score_email(step2, 0, [{"first_name": "Ann"}], g, "A")
+check("an email 1 that opens on nothing personal and not on the sender still fails line one",
+      any("line one" in f for f in g.fails), g.fails)
+
 print(f"\n{'all passed' if not fails else str(fails) + ' failed'}")
 sys.exit(1 if fails else 0)

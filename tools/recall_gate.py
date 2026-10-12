@@ -28,6 +28,7 @@ Whole mode puts every one of those back. Files and pointers on disk never change
 """
 import argparse
 import json
+import math
 import os
 import sys
 import time
@@ -48,6 +49,12 @@ FLOOR = 55.4
 # two days (10/10 to 10/12) and lost 7.7 points of recall@5 doing it, so a
 # day-old reading is the most that can stand for today's index.
 MAX_AGE_S = 24 * 3600
+
+# The floor was set on 65 sealed questions. bench.prepare drops any question
+# whose gold note no longer resolves (a rename, a move to ARCHIVE), so a stamp
+# from a set that has shrunk says nothing about the floor: 3 questions with 2
+# hits read as 66.7% and passed in review. 60 allows a few renames.
+MIN_N = 60
 
 ENV_KEY = "CLAUDE_CODE_DISABLE_AUTO_MEMORY"
 
@@ -83,10 +90,21 @@ def _read_json(path):
 
 
 def _write_json(path, data):
+    """Atomic, and the file keeps its permissions: settings.json is 0600 and
+    holds tokens, and a plain temp file would have come back 0644."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    try:
+        perms = path.stat().st_mode & 0o777
+    except OSError:
+        perms = 0o600
+    tmp = path.with_name(path.name + ".recall-gate.tmp")
+    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, perms)
+    try:
+        os.write(fd, (json.dumps(data, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
+    finally:
+        os.close(fd)
+    os.chmod(str(tmp), perms)
     tmp.replace(path)
 
 
@@ -96,9 +114,13 @@ def decide(stamp, pin=None, now=None):
         return "whole"
     if not isinstance(stamp, dict) or stamp.get("pass") is not True:
         return "whole"
-    if not isinstance(stamp.get("r5"), (int, float)) or stamp["r5"] < FLOOR:
+    r5, n, at = stamp.get("r5"), stamp.get("n"), stamp.get("checked_at")
+    if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+               for v in (r5, n, at)):
         return "whole"
-    age = (now if now is not None else time.time()) - float(stamp.get("checked_at") or 0)
+    if r5 < FLOOR or n < MIN_N:
+        return "whole"
+    age = (now if now is not None else time.time()) - at
     if age < 0 or age > MAX_AGE_S:
         return "whole"
     return "recall"
@@ -127,17 +149,18 @@ def measure():
 
 def check(measure_fn=measure, now=None):
     r5, n, extra = measure_fn()
-    stamp = {"r5": r5, "n": n, "floor": FLOOR, "pass": r5 >= FLOOR,
+    stamp = {"r5": r5, "n": n, "floor": FLOOR, "pass": r5 >= FLOOR and n >= MIN_N,
              "checked_at": now if now is not None else time.time(), **extra}
     _write_json(stamp_path(), stamp)
     return stamp
 
 
-def _settings_env(settings_file, want_on, owned):
+def _settings_env(settings_file, want_on, owned, record):
     """Set or clear CLAUDE_CODE_DISABLE_AUTO_MEMORY; returns whether apply owns it now.
 
     Clears it only when an earlier apply set it, so a value the person set by
-    hand survives whole mode.
+    hand survives whole mode. Ownership is recorded (record(True)) before the
+    write, so a run that dies after setting the key still knows to clear it.
     """
     data = _read_json(settings_file)
     if not isinstance(data, dict):
@@ -146,6 +169,7 @@ def _settings_env(settings_file, want_on, owned):
     if want_on:
         if env.get(ENV_KEY) == "1":
             return owned
+        record(True)
         env[ENV_KEY] = "1"
         data["env"] = env
         _write_json(settings_file, data)
@@ -210,7 +234,9 @@ def apply(now=None, src=None):
     if dst.is_file() and team_index.write(src=Path(src) if src else team_index.SRC, dst=dst, mode=want):
         changed.append("team index")
     settings = claude_home() / "settings.json"
-    owned = _settings_env(settings, want == "recall", bool(prev.get("owns_env")))
+    def record(owns):
+        _write_json(mode_path(), dict(prev, owns_env=owns))
+    owned = _settings_env(settings, want == "recall", bool(prev.get("owns_env")), record)
     if owned != bool(prev.get("owns_env")):
         changed.append("auto memory " + ("off" if owned else "on"))
     if _toggle_startup_block(claude_home() / "CLAUDE.md", want):

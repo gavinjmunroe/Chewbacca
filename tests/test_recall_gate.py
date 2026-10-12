@@ -74,7 +74,44 @@ class GateTests(unittest.TestCase):
         stamp = gate.check(fake(50.0), now=NOW)
         self.assertEqual(set(stamp), {"r5", "n", "floor", "pass", "checked_at", "index", "index_built_at"})
 
+    def test_a_shrunken_sealed_set_or_a_nan_stamp_loads_whole(self):
+        # Review 10/12: 3 resolvable questions with 2 hits read as 66.7% and passed.
+        stamp = gate.check(fake(66.7, n=3), now=NOW)
+        self.assertFalse(stamp["pass"])
+        self.assertEqual(gate.mode(now=NOW + 60), "whole")
+        self.assertEqual(gate.decide({"pass": True, "r5": 70.0, "n": 3, "checked_at": NOW}, None, NOW), "whole")
+        # json.loads takes NaN, and NaN compares false both ways.
+        self.assertEqual(gate.decide({"pass": True, "r5": 70.0, "n": 65, "checked_at": float("nan")}, None, NOW),
+                         "whole")
+        self.assertEqual(gate.decide({"pass": True, "r5": 70.0, "n": 65, "checked_at": "soon"}, None, NOW), "whole")
+        self.assertEqual(gate.decide({"pass": True, "r5": 70.0, "n": 65, "checked_at": NOW}, None, NOW), "recall")
+
     # Applying it
+
+    def test_settings_keep_their_permissions_and_text(self):
+        self.settings.write_text(json.dumps({"env": {"KEEP": "x"}, "name": "Café"}, ensure_ascii=False))
+        self.settings.chmod(0o600)
+        gate.check(fake(60.0), now=NOW)
+        gate.apply(now=NOW + 1)
+        self.assertEqual(self.settings.stat().st_mode & 0o777, 0o600)
+        self.assertIn("Café", self.settings.read_text())
+
+    def test_a_run_that_dies_after_the_settings_write_still_clears_it_later(self):
+        gate.check(fake(60.0), now=NOW)
+        with patch.object(gate, "_toggle_startup_block", side_effect=OSError("disk full")):
+            with self.assertRaises(OSError):
+                gate.apply(now=NOW + 1)
+        self.assertEqual(json.loads(self.settings.read_text())["env"][gate.ENV_KEY], "1")
+        gate.apply(now=NOW + 2)
+        gate.check(fake(40.0), now=NOW + 3)
+        gate.apply(now=NOW + 4)
+        self.assertNotIn(gate.ENV_KEY, json.loads(self.settings.read_text())["env"])
+
+    def test_setup_writes_the_stub_in_recall_mode(self):
+        import agent_runtime
+        gate.check(fake(60.0), now=time.time())
+        path = agent_runtime.write_team_index()
+        self.assertIn("in recall mode", path.read_text())
 
     def test_recall_mode_stubs_the_index_and_turns_auto_memory_off(self):
         whole = self.index.read_text()

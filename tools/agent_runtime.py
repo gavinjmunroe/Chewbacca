@@ -297,7 +297,12 @@ def write_team_index():
     sys.path.insert(0, str(ROOT / 'tools'))
     import team_index
     try:
-        team_index.write(ROOT / 'team/memory/MEMORY.md', team_index_path())
+        import recall_gate
+        mode = recall_gate.mode()
+    except Exception:  # no gate: the index loads whole
+        mode = 'whole'
+    try:
+        team_index.write(ROOT / 'team/memory/MEMORY.md', team_index_path(), mode)
     except OSError:
         return None
     return team_index_path()

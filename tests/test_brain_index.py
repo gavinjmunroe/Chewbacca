@@ -160,9 +160,10 @@ def main():
     # (14 of 89 prompts that day reached brain and got nothing) and the sealed
     # bench could not run.
     import sqlite3 as _sq
-    _db = _sq.connect(os.path.join(brain, ".brain", "index.db"))
-    _db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-    _db.close()
+    if os.path.exists(os.path.join(brain, ".brain", "index.db")):
+        _db = _sq.connect(os.path.join(brain, ".brain", "index.db"))
+        _db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        _db.close()
     for side in ("-wal", "-shm"):
         try:
             os.remove(os.path.join(brain, ".brain", "index.db" + side))
@@ -194,6 +195,15 @@ def main():
         r = subprocess.run(runner + [BRAIN, "status"], env=env, capture_output=True, text=True, timeout=60)
         check(f"{runner[0]}: status with no -wal or -shm still reads",
               r.returncode == 0 and "stale files" in r.stdout, r.stdout + r.stderr[-300:])
+
+    missing = os.path.join(tmp, "nowhere", "index.db")
+    os.makedirs(os.path.dirname(missing))
+    probe = ("import importlib.util as u,os,sys; s=u.spec_from_file_location('b', os.environ['BRAIN_PY_PATH']);"
+             "m=u.module_from_spec(s); sys.argv=['brain']; s.loader.exec_module(m)\n"
+             "try:\n m.open_read(os.environ['MISSING'])\nexcept Exception: pass")
+    subprocess.run([sys.executable, "-I", "-c", probe], env=dict(env, BRAIN_PY_PATH=BRAIN, MISSING=missing),
+                   capture_output=True, text=True, timeout=60)
+    check("open_read never creates a missing index", not os.path.exists(missing))
 
     # Incremental must equal a from-scratch build, vector for vector.
     import numpy as np

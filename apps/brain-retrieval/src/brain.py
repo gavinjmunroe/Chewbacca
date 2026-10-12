@@ -454,7 +454,7 @@ def open_read(path=None, **kw):
     mode=ro first. It cannot create the -shm a WAL database needs, so once the
     last writer has closed and its -wal and -shm are gone it fails with "unable
     to open database file" (every ask on 2026-10-12 09:30). Then a normal
-    connection, which can make the -shm, with query_only so it still cannot
+    connection (mode=rw, never create), which can make the -shm, with query_only so it still cannot
     write.
     """
     path = path or DB
@@ -463,7 +463,8 @@ def open_read(path=None, **kw):
         db.execute("SELECT 1 FROM meta LIMIT 1").fetchall()
         return db
     except sqlite3.OperationalError:
-        db = sqlite3.connect(path, **kw)
+        # mode=rw never creates a missing file, so a missing index stays missing.
+        db = sqlite3.connect(f"file:{path}?mode=rw", uri=True, **kw)
         db.execute("PRAGMA query_only=ON")
         return db
 

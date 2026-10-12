@@ -656,16 +656,20 @@ fn mask_spans(n: Node, src: &[u8], prof: Profile, spans: &mut Vec<(usize, usize)
                         const PLAIN: &[&str] = &["-m", "--message", "-q", "--quiet", "-a", "--all", "--allow-empty",
                             "--dry-run", "-n", "--no-verify", "-s", "--signoff", "-v", "--no-edit", "--"];
                         let mut after_m = false;
+                        // A -m value is consumed whole and never read as a
+                        // flag itself: `-m -m -e` is the message "-m", then -e.
                         let flags_ok = lits.iter().skip(i + 1).all(|l| {
-                            let ok = match l.as_deref() {
-                                _ if after_m => true,
+                            if after_m {
+                                after_m = false;
+                                return l.is_some();
+                            }
+                            after_m = matches!(l.as_deref(), Some("-m" | "--message"));
+                            match l.as_deref() {
                                 Some(x) if x.starts_with("--message=") => true,
                                 Some(x) if x.starts_with('-') => PLAIN.contains(&x),
                                 Some(_) => true, // a pathspec
                                 None => false,
-                            };
-                            after_m = matches!(l.as_deref(), Some("-m" | "--message"));
-                            ok
+                            }
                         });
                         let prefixed = {
                             let mut c = n.walk();
@@ -680,9 +684,13 @@ fn mask_spans(n: Node, src: &[u8], prof: Profile, spans: &mut Vec<(usize, usize)
                         for a in &args {
                             let lit = literal(*a, src);
                             let take = if only_message {
-                                let t = after_m || lit.as_deref().map_or(false, |x| x.starts_with("--message="));
-                                after_m = matches!(lit.as_deref(), Some("-m" | "--message"));
-                                t
+                                if after_m {
+                                    after_m = false;
+                                    true
+                                } else {
+                                    after_m = matches!(lit.as_deref(), Some("-m" | "--message"));
+                                    lit.as_deref().map_or(false, |x| x.starts_with("--message="))
+                                }
                             } else { true };
                             if take && lit.is_some() { spans.push((a.start_byte(), a.end_byte())); }
                         }

@@ -132,7 +132,9 @@ class Mask(unittest.TestCase):
                     "git log -m 'reset --hard' commit",
                     # -e hands the message to $GIT_EDITOR, which can be sh.
                     "GIT_EDITOR=sh git commit -e -m 'git reset --hard'",
-                    "git commit -e -m 'git reset --hard'", "git commit --template=t -m 'git reset --hard'"):
+                    "git commit -e -m 'git reset --hard'", "git commit --template=t -m 'git reset --hard'",
+                    # A -m value is never a flag: here -e is still a flag.
+                    "git commit -m -m -e -m 'git reset --hard'"):
             self.assertTrue(kept(cmd, 'data'), cmd)
 
     def test_redirects_that_write(self):

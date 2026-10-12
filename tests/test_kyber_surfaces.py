@@ -392,6 +392,13 @@ def socket_protocol(tmp: Path) -> None:
         time.sleep(0.05)
     check("the daemon subscribes with listen first", bool(got) and re.fullmatch(r"listen( token=[0-9a-f]{64})?", got[0]) is not None, got[:2])
     d.open_surface("needs-you")
+    # The open's own lines arrive on the reader thread; counted before they
+    # landed, they read as part of the refresh (failed once at load 28,
+    # 2026-10-11, on lines from the open's full draw).
+    deadline = time.time() + 5
+    while not any(x.startswith("r needs-you") for x in got) and time.time() < deadline:
+        time.sleep(0.05)
+    time.sleep(0.2)
     before = len(got)
     d.refresh("needs-you")
     time.sleep(0.2)
@@ -722,8 +729,55 @@ def stale_daemon_is_retired():
         ks.ask, ks.running = real_ask, real_running
 
 
+def first_frame_follows_the_model(tmp: Path):
+    """2026-10-11 17:55: "Show my agents" drew the agents card as a title
+    over an empty status line, about 90 points tall, while it waited on the
+    engine. Its layout follows its model (agents.py _replan), and the daemon
+    laid it out before asking the model, so "Loading..." had a value and no
+    component. The first frame now carries what the model says to draw."""
+
+    class Planned(surfaces.Provider):
+        name = "planned"
+        title = "Planned"
+
+        def __init__(self):
+            super().__init__()
+            self.plan = {}
+
+        def shape(self):
+            return json.dumps(self.plan, sort_keys=True)
+
+        def fetch(self, ctx):
+            return {"rows": 1}
+
+        def layout(self):
+            parts = [surfaces.comp(self.cid("s"), "Screen", title=self.title)]
+            order = []
+            if self.plan.get("note"):
+                parts.append(surfaces.comp(self.cid("note"), "Text", value=surfaces.Bind(self.p("note"))))
+                order.append("note")
+            return parts + [f"> {self.cid('s')} " + " ".join(self.cid(i) for i in order), f"r {self.cid('s')}"]
+
+        def model(self, data, error, values, ctx):
+            out = {self.p("note"): "Loading" if data is None else ""}
+            self.plan = {"note": bool(out[self.p("note")])}
+            return out
+
+    hud = FakeHud()
+    d = ks.Daemon(hud, ctx=Context(), state_path=tmp / "state.json", activity_path=tmp / "activity.jsonl",
+                  badges_path=tmp / "badges.json", spaces=dict(ks.DEFAULT_SPACES), clock=lambda: 0.0,
+                  spawn=lambda fn: None, ingest=lambda c: {}, make=lambda kind, *a: Planned())
+    d.open_surface("agents", save=False)
+    lines = hud.take()
+    check("the first frame draws the component its model asked for",
+          any(line.startswith("c planned-note Text") for line in lines), lines)
+    check("and binds it to the value it was sent", 'd /planned/note "Loading"' in lines, lines)
+
+
 def main() -> int:
     stale_daemon_is_retired()
+    with tempfile.TemporaryDirectory() as d:
+        first_frame_follows_the_model(Path(d))
     payload_parse()
     listener_ignores_surface_actions()
     check("idle glass ingests every five minutes, open glass every minute",

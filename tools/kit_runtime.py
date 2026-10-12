@@ -50,7 +50,9 @@ LABEL = "com.chewbacca.kit-runtime"
 # Three: the current snapshot, the one before it, and one more. Updates run at
 # most every few minutes, so a snapshot is only removed once two newer ones
 # exist, long after any tool that started on it has exited. Guessed, never
-# measured: no tool run has been observed to span two updates.
+# measured. hud-listen does span them: on 2026-10-11 it ran from 17:44 on a
+# snapshot that two updates later was pruned, so it now hands over to the
+# display's next listener when `current` moves (bin/lib/kit_snapshot.py).
 KEEP = 3
 # Gitignored paths in the source checkout that are NOT state a tool reads:
 # other tabs' worktrees, caches, test scratch. Everything else ignored is
@@ -235,8 +237,8 @@ def in_use(snaps: Path) -> set:
     95e730c4 from 18:29, four updates pruned that snapshot under it, and
     "show my agents" failed because the kyber-sessions path it had resolved
     at start no longer existed. Python closes a script once read, so a
-    process can still miss this; that is why hud-listen should also restart
-    on update, and why KEEP stays above one."""
+    process can still miss this; that is why hud-listen hands over on an
+    update (bin/lib/kit_snapshot.py) and why KEEP stays above one."""
     prefix = str(snaps.resolve()) + os.sep
     try:
         out = subprocess.run(["lsof", "-nP", "-Fn"], capture_output=True, text=True, timeout=60).stdout

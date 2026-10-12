@@ -1879,6 +1879,71 @@ def test_orphan_leaves() -> None:
                 pass
 
 
+def test_kit_update_hands_over(m) -> None:
+    """2026-10-11 17:55: hud-listen had run since 17:44 on snapshot 9edc7a8f,
+    from before Realm's interface landed, so "Show my agents" opened the old
+    agents card (an AGENTS title over an empty status line) instead of the
+    realm surface. A listener on a snapshot the kit has moved off hands over
+    once the person is quiet, and never mid-request."""
+    listener = m.Listener("claude -p", False, False)
+    listener.kit_moved = lambda: True
+    check("a moved kit with nobody talking hands over", listener.ready_to_hand_over())
+    listener.asked_at = time.monotonic()
+    check("not within a minute of a request", not listener.ready_to_hand_over())
+    listener.asked_at = time.monotonic() - m.KIT_QUIET_S - 1
+    listener.current = object()
+    check("not while a request is in flight", not listener.ready_to_hand_over())
+    listener.current = None
+    listener.kit_moved = lambda: False
+    check("a current kit keeps its listener", not listener.ready_to_hand_over())
+
+
+def test_kit_update_end_to_end() -> None:
+    """The listener runs from a kit snapshot, the kit swaps `current` to a
+    newer one, and the listener hangs up and exits so the display starts one
+    from the new code. Before the fix it stayed connected for hours."""
+    path, fake, env = _listener_fixture()
+    base = Path(tempfile.mkdtemp(prefix="kit-"))
+    for sha in ("old", "new"):
+        bin_dir = base / "snapshots" / sha / "bin"
+        bin_dir.mkdir(parents=True)
+        (bin_dir / "hud-listen").write_text(BIN.read_text(encoding="utf-8"), encoding="utf-8")
+        (bin_dir / "lib").symlink_to(BIN.parent / "lib")
+        (bin_dir.parent / "tools").symlink_to(BIN.parent.parent / "tools")
+    (base / "current").symlink_to(Path("snapshots") / "old")
+    entry = Path(env["HUD_TEST_ENTRY"])
+    entry.write_text(entry.read_text(encoding="utf-8").replace(
+        repr(str(BIN)), repr(str(base / "snapshots" / "old" / "bin" / "hud-listen"))), encoding="utf-8")
+    env = dict(env, HUD_KIT_CHECK_S="0.3")
+
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    server.bind(path)
+    server.listen(1)
+    server.settimeout(20)
+    process = subprocess.Popen([sys.executable, str(entry), "--model-cmd", fake],
+                               env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+    try:
+        conn, _ = server.accept()
+        time.sleep(1.5)
+        check("it stays while the kit has not moved", process.poll() is None)
+        (base / "current").unlink()
+        (base / "current").symlink_to(Path("snapshots") / "new")
+        try:
+            process.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            pass
+        err = process.stderr.read() if process.poll() is not None and process.stderr else ""
+        check("a listener on an old snapshot exits after the kit moves",
+              process.poll() == 0, f"returncode {process.poll()}")
+        check("it says why", "kit moved" in err, err[-300:])
+        conn.close()
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=10)
+        server.close()
+
+
 def test_routing(m) -> None:
     """The router runs before the model, and only the assistant path reaches it."""
     import tempfile
@@ -2531,6 +2596,9 @@ def main() -> int:
     test_one_listener_per_socket()
     print("an orphan leaves")
     test_orphan_leaves()
+    print("a kit update")
+    test_kit_update_hands_over(module)
+    test_kit_update_end_to_end()
     print()
     if failures:
         print(f"{len(failures)} failed: {', '.join(failures)}")

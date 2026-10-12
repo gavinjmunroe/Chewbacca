@@ -68,6 +68,7 @@ import docs_surface  # noqa: E402
 import hud_events  # noqa: E402
 import glass_search  # noqa: E402
 import call_pill  # noqa: E402
+import kit_snapshot  # noqa: E402
 import hud_accounts  # noqa: E402
 import app_route  # noqa: E402
 # HUD_REPO_CARDS=off: "show me owner/repo" and a pasted github.com URL go to
@@ -174,6 +175,13 @@ def listen_line(socket_path: str) -> str:
 # the talk key into nothing. Seen three times in one evening, 2026-09-21
 # (pids 90698 and 17618 among them).
 STARTED_BY = os.getppid()
+# How often a listener looks for a kit update, and how long the person must
+# have been quiet before it hands over to one. The display's watchdog
+# (ListenerWatchdog.interval, 10 s) starts the new listener, so a handover
+# costs about that long of deafness; a minute after the last request keeps it
+# out of a reply being read aloud. Both guessed, never measured.
+KIT_CHECK_S = float(os.environ.get("HUD_KIT_CHECK_S") or 15.0)
+KIT_QUIET_S = 60.0
 SKILL = Path(__file__).resolve().parent.parent / "skills" / "hud" / "SKILL.md"
 CONTEXT = Path(__file__).resolve().parent / "hud-context"
 # Which voice server reads the replies. `hud-speak` is the Python one
@@ -1565,6 +1573,8 @@ class Listener:
         # utterance spoken during the glow queues instead of racing a second
         # worker, which is the case that was dropped today.
         self.current: Request | None = None
+        # Set once the kit moved and this listener is handing over (watch_kit).
+        self.handing_over = False
         # The request whose model run is under way right now. None during the
         # hold, which is how a stop word spoken during the glow knows there is
         # nothing to stop and must not mark a finished run as cut short.
@@ -1767,10 +1777,22 @@ class Listener:
             # The call watcher, for the same reason: a child of Kyber's tree
             # reads FaceTime's accessibility tree under Kyber's grant.
             threading.Thread(target=self.start_calls, daemon=True).start()
+        if STARTED_BY != 1:
+            # Only a listener a display started: the display starts the next
+            # one. One from launchd or nohup has nobody to bring it back.
+            threading.Thread(target=self.watch_kit, daemon=True).start()
 
         delay = 0.5
         announced = False
         while True:
+            if self.handing_over:
+                print(
+                    "the kit moved to a new snapshot; leaving the socket to "
+                    "the listener the display starts from it",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                return 0
             # Reconnecting is right while the display that started this is
             # alive (`hud close`, a socket blip) and wrong once it has been
             # replaced: the new one spawns its own listener, and this one would
@@ -1832,6 +1854,44 @@ class Listener:
                     self.sock.close()
                 except OSError:
                     pass
+
+    def kit_moved(self) -> bool:
+        return kit_snapshot.moved(Path(__file__))
+
+    def ready_to_hand_over(self, now: float | None = None) -> bool:
+        """The kit moved and the person is quiet: no request running or
+        queued, and none in the last KIT_QUIET_S. A listener that outlives
+        a kit update runs the old snapshot's routing for as long as it lives
+        (bin/lib/kit_snapshot.py: on 2026-10-11 "show my agents" opened the
+        retired agents card, not Realm, from code an update had replaced)."""
+        if self.in_flight():
+            return False
+        at = getattr(self, "asked_at", None)
+        now = time.monotonic() if now is None else now
+        if at is not None and now - at < KIT_QUIET_S:
+            return False
+        return self.kit_moved()
+
+    def watch_kit(self) -> None:
+        while not self.handing_over:
+            time.sleep(KIT_CHECK_S)
+            try:
+                if not self.ready_to_hand_over():
+                    continue
+            except Exception as err:  # noqa: BLE001  a check that breaks never takes the listener down
+                self.log("kit check failed:", err)
+                continue
+            self.hand_over()
+
+    def hand_over(self) -> None:
+        """Hang up so the run loop returns and the display starts a listener
+        from the current snapshot."""
+        self.handing_over = True
+        with self.lock:
+            try:
+                self.sock.shutdown(socket.SHUT_RDWR)
+            except (OSError, AttributeError):
+                pass
 
     def handle(self, line: str) -> None:
         if not line:

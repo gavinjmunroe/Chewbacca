@@ -364,15 +364,21 @@ class Daemon:
             self.push(live, extra=dict(live.values))
             return
         live.sent = {}
+        # The model before the layout: a provider whose components follow its
+        # model (agents.py `_replan`, the doc surface) sets what layout()
+        # draws when model() runs. Laid out first, the agents card's opening
+        # frame was its title over an empty status line, because "Loading…"
+        # had a value and no component yet; on 2026-10-11 at 17:55 that was
+        # all Caleb saw of "Show my agents" while the engine was asked.
+        try:
+            model = p.model(live.data, live.error, live.values, self.ctx)
+        except Exception as err:  # noqa: BLE001  a provider bug shows on its panel, not as a dead daemon
+            model = {p.p("note"): f"This surface hit a bug: {err}"}
         shape = getattr(p, "shape", None)
         live.shape = shape() if callable(shape) else None
         initial = p.initial()
         initial.update({k: v for k, v in live.values.items() if k.startswith(f"/{p.name}/")})
         lines = [head] + p.layout()
-        try:
-            model = p.model(live.data, live.error, live.values, self.ctx)
-        except Exception as err:  # noqa: BLE001  a provider bug shows on its panel, not as a dead daemon
-            model = {p.p("note"): f"This surface hit a bug: {err}"}
         for pointer, value in {**initial, **model}.items():
             lines.append(data_line(pointer, value))
             live.sent[pointer] = json.dumps(value, sort_keys=True)

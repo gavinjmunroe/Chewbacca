@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """chewbacca jobs: one queue for every long or heavy job on this Mac, owned by the Mac, not a tab.
 
-  chewbacca jobs submit [--heavy|--build|--net] [--title T] -- <command...>   queue it (starts now if there's room)
+  chewbacca jobs submit [--heavy|--build|--net] [--title T] [--after ID]... -- <command...>
+                                                                       queue it (starts now if there's room
+                                                                       and every --after job has ended)
   chewbacca jobs list [--all]                                          what's queued, running, paused, done
   chewbacca jobs log <id> [-n N]                                       tail a job's output
   chewbacca jobs kill <id>                                             stop it
@@ -136,7 +138,7 @@ def signal_group(j, sig):
 # --------------------------------------------------------------- commands
 
 def submit(argv):
-    cls, title = "light", None
+    cls, title, after = "light", None, []
     while argv and argv[0] != "--":
         a = argv.pop(0)
         if a == "--heavy":
@@ -147,13 +149,18 @@ def submit(argv):
             cls = "build"
         elif a == "--title":
             title = argv.pop(0)
+        elif a == "--after":
+            after.append(argv.pop(0))
     if not argv or argv[0] != "--" or len(argv) < 2:
-        sys.exit("usage: chewbacca jobs submit [--heavy|--build|--net] [--title T] -- <command...>")
+        sys.exit("usage: chewbacca jobs submit [--heavy|--build|--net] [--title T] [--after ID]... -- <command...>")
+    for dep in after:
+        if not (DIR / dep / "job.json").exists():
+            sys.exit(f"no job {dep} to run after")
     cmd = argv[1:]
     j = {"id": time.strftime("%m%d-%H%M%S-") + uuid.uuid4().hex[:4], "cmd": cmd, "cwd": os.getcwd(),
          "class": cls, "title": title or " ".join(cmd)[:80], "status": "queued",
          "owner": os.environ.get("CLAUDE_SESSION_ID") or os.environ.get("TERM_SESSION_ID") or "",
-         "created": time.time(), "pid": None, "exit": None}
+         "created": time.time(), "pid": None, "exit": None, "after": after}
     save(j)
     tick(quiet=True)
     j = json.loads((DIR / j["id"] / "job.json").read_text())
@@ -237,8 +244,22 @@ def next_build(waiting, all_jobs):
     return min(waiting, key=lambda j: (last.get(source(j), 0), j["created"]))
 
 
+# A job queued --after others starts only once each of them has ended, however
+# it ended. 2026-10-11: four overnight `claude -p` jobs were told in their
+# prompts to wait for the one before; two put the wait in the background, their
+# turn ended, the session exited, and they were marked done having done
+# nothing. A wait belongs to the queue, which outlives every turn.
+ENDED = ("done", "failed", "killed")
+
+
+def blocked(j, by_id):
+    return any(dep in by_id and by_id[dep]["status"] not in ENDED for dep in j.get("after") or [])
+
+
 def _tick():
     all_jobs = jobs()
+    by_id = {j["id"]: j for j in all_jobs}
+    ready = lambda j: not (j["status"] == "queued" and blocked(j, by_id))
     # Reap: a running job whose supervisor is gone without writing a result.
     for j in all_jobs:
         if j["status"] in ("running", "paused") and not alive(j["pid"]):
@@ -250,7 +271,7 @@ def _tick():
     # so the long job is held paused (SIGSTOP) until the build ends, which
     # keeps one CPU-heavy thing running at a time.
     building = [j for j in all_jobs if j["class"] == "build" and j["status"] == "running"]
-    waiting = [j for j in all_jobs if j["status"] == "queued" and j["class"] == "build"]
+    waiting = [j for j in all_jobs if j["status"] == "queued" and j["class"] == "build" and ready(j)]
     if waiting and not building and room_for_heavy():
         nxt = next_build(waiting, all_jobs)
         start(nxt)
@@ -262,7 +283,7 @@ def _tick():
     running = [j for j in all_jobs if j["class"] == "heavy" and j["status"] == "running"]
     # A job cut off mid-turn by a build or a swamped Mac finishes that turn
     # first; after that, the least-run job goes next.
-    waiting = sorted((j for j in all_jobs if j["class"] == "heavy" and j["status"] in ("paused", "queued")),
+    waiting = sorted((j for j in all_jobs if j["class"] == "heavy" and j["status"] in ("paused", "queued") and ready(j)),
                      key=lambda j: (not (j.get("note") in CUT_OFF and j.get("turn_used", 0) < SLICE), ran(j, now), j["created"]))
     if building or must_pause():
         for j in running:
@@ -281,7 +302,7 @@ def _tick():
                 start(nxt)
     running_net = sum(1 for j in all_jobs if j["class"] == "net" and j["status"] == "running")
     for j in sorted((j for j in all_jobs if j["status"] == "queued"), key=lambda j: j["created"]):
-        if j["class"] in ("build", "heavy"):
+        if j["class"] in ("build", "heavy") or not ready(j):
             continue
         if j["class"] == "net":
             if running_net >= MAX_NET:

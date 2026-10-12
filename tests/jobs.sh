@@ -112,4 +112,21 @@ for x in $a1 $a2 $a3 $b1; do "$J" kill "$x" >/dev/null 2>&1; done
 rm -rf "$da" "$db"
 
 [ "$fail" = 0 ] && echo "jobs ok"
+
+# --after: the wait lives in the queue. 2026-10-11, two overnight claude -p jobs
+# backgrounded their own wait, the session ended with the turn, and they were
+# marked done having done nothing.
+first=$("$J" submit -- sleep 2 | cut -d' ' -f1)
+second=$("$J" submit --after "$first" -- sh -c 'echo after' | cut -d' ' -f1)
+check "a job queued --after a running one waits" "$(status "$second")" queued
+settle "$first" done
+"$J" tick >/dev/null
+settle "$second" done
+check "and runs once that one has ended" "$(status "$second")" done
+dead=$("$J" submit -- sh -c 'exit 3' | cut -d' ' -f1)
+settle "$dead" failed
+third=$("$J" submit --after "$dead" -- sh -c 'echo ran' | cut -d' ' -f1)
+settle "$third" done
+check "a failed job still releases what waits on it" "$(status "$third")" done
+check "--after an unknown job is refused" "$("$J" submit --after 0000-nope -- true 2>&1 | grep -c 'no job')" 1
 exit "$fail"

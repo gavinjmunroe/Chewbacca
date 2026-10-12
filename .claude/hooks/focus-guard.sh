@@ -40,6 +40,17 @@ import re, shlex, sys
 cmd = sys.stdin.read()
 if "foreground:" in cmd:
     raise SystemExit
+# The same open from inside a script: subprocess.run(["open","-na",...]) in a
+# python heredoc flashed Chrome at Caleb on 2026-10-11 10:15pm ("STOP FLASH
+# BANFING ME"), because the shell split below only sees the word "python3".
+Q = "[\"\x27]"
+for m in re.finditer(r"[\[(,]\s*" + Q + r"open" + Q + r"\s*,([^\])]*)", cmd):
+    rest = m.group(1)
+    background = re.search(Q + r"-[A-Za-z]*g[A-Za-z]*" + Q, rest)
+    browser_n = re.search(Q + r"-[A-Za-z]*n[A-Za-z]*" + Q, rest) and re.search(r"chrome|safari|arc|brave|firefox|edge|comet", rest, re.I)
+    if browser_n or not background:
+        print("open from a script without -g: " + m.group(0).strip()[:120])
+        raise SystemExit
 # Split on shell operators so "cd x && open http://..." is seen.
 for seg in re.split(r"&&|\|\||;|\||\$\(|`", cmd):
     try:

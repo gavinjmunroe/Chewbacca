@@ -27,3 +27,5 @@ command a guard could match was involved. The launch now runs `--headless=new`
 unless CHEWIE_WEB_VISIBLE=1 (322cb8ae, tests/web_headless.sh), a windowed bridge
 Chrome left running is replaced, and the inbox read uses the API with the
 browser behind `--browser` (86587a58). See [[feedback_fix_the_class_at_the_source]].
+
+**Second hole, 2026-10-11 10:15pm:** a python heredoc ran `subprocess.run(["open","-na","Google Chrome",...])` to open a Gmail compose, the shell split only saw `python3`, and Caleb wrote "STOP FLASH BANFING ME". focus-guard now also reads `"open"` list calls inside scripts. A compose he has to send still opens with `open -g`; tell him it's waiting in the background.

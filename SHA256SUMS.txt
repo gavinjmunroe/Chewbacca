@@ -20,7 +20,7 @@ ca5417881d11f679d1aac8ee8ed3bc81c0a42e1b8118d0d83a98ac3d41dcfedb  .claude/hooks/
 765f6581aa0539cb829ecfb77e49312cb7616c77a6cc0ac83d4d5290984795ae  .claude/hooks/durable-guard.sh
 024bcec24469e60d3c4108857daee436618cb9ffa65fa92094b5eeccf2d962cd  .claude/hooks/env-guard.sh
 83af69b4f337c4d6ca74edad9f826bab984c25ea3be99935a81c29b354d22fe5  .claude/hooks/essay-gate.sh
-e83396e955159aae8782ea1cbe017cc4a32b54d5f9e6042504926c4f8351185c  .claude/hooks/focus-guard.sh
+56fa0a9d7815478fe18e7579c6e6769ab90837273aa97d39e21b562ddb66d9ac  .claude/hooks/focus-guard.sh
 96cc364760df9e58928fe996587986b7491822f3d123ddc734e7e746cf245ae2  .claude/hooks/font-guard.sh
 a1a2beb7ed61ba73bcd5680b3355930066a2e6887b5520bb3c374e6acd204fc0  .claude/hooks/format-and-sync.sh
 c128940f83b0f34530c1f075d998b869c96b43058052195c9ab3ba560053a935  .claude/hooks/fusion-guard.sh

@@ -25,6 +25,12 @@ blocks 'open -na "Google Chrome" --args --profile-directory="Profile 1" https://
 blocks 'cd ~/code && open http://localhost:3000'
 blocks 'FOO=1 /usr/bin/open ~/Downloads/report.pdf'
 blocks 'osascript -e '"'"'tell application "Google Chrome" to activate'"'"
+blocks 'python3 - <<EOF
+import subprocess
+subprocess.run(["open","-na","Google Chrome","--args","--profile-directory=Profile 1",url])
+EOF'
+blocks "python3 -c \"import subprocess; subprocess.run(['open', url])\""
+allows 'python3 -c "import subprocess; subprocess.run([\"open\", \"-g\", url])"'
 allows 'open -g https://app.clay.com/workspaces/1/home'
 allows 'open -g -a "Google Chrome" https://x.example'
 blocks 'open -gna "Google Chrome" --args --new-window https://x.example'

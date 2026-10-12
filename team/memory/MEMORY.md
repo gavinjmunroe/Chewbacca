@@ -300,3 +300,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_every_site_grows_the_api: every site browsed becomes an api-anything op or gets an `api-grow skip` reason; hook names taught ops before a browse, nudges untaught hosts once per session (10/11)
 - feedback_guard_precise_path_never_judges_less: a guard's smarter parse only adds checks, never drops the cwd check; 23 bypasses in 3 reviews on 10/11 (destructive-guard)
 - feedback_hud_ide_tells_a_story: the HUD agents IDE reads like a story, Lemma-level; each glass region has one job, transcript one press away, never a sequence of lines (10/11)
+- feedback_chain_waits_in_the_queue: chain overnight jobs with jobs submit --after ID, never a wait in a claude -p prompt; two quit doing nothing on 10/11

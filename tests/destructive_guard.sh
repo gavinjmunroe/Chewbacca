@@ -67,7 +67,29 @@ t "variable target, dirty"    2 "$T/clean" "W=$T/dirty; git -C \"\$W\" reset --h
 t "unresolved variable"       2 "$T/clean" 'git -C "$NOPE" reset --hard'
 t "variable git, dirty cwd"   2 "$T/dirty" "x=git; W=$T/clean; \$x -C \"\$W\" reset --hard"
 t "override on another piece" 2 "$T/dirty" "DESTRUCTIVE_OK=1 echo x; git reset --hard"
+# Security review of 2232e9d9, 2026-10-11: every shape below exited 0.
+t "harmless call pays for eval" 2 "$T/dirty" "git -C $T/clean restore f; eval 'git reset --hard'"
+t "bare stash pays for sh -c"   2 "$T/dirty" "git -C $T/clean stash; sh -c 'git checkout -- f'"
+t "export shadows a name"       2 "$T/clean" "W=$T/clean; export W=$T/dirty; git -C \"\$W\" reset --hard"
+t "heredoc fed to bash"         2 "$T/dirty" "bash <<EOF
+git reset --hard
+EOF"
+t "quotes split the phrase"     2 "$T/dirty" "sh -c 'git reset --ha\"\"rd'"
+t "checkout -f"                 2 "$T/dirty" "git checkout -f"
+t "checkout tree-ish path"      2 "$T/dirty" "git checkout HEAD f"
+t "switch -f"                   2 "$T/dirty" "git switch -f main"
+t "subshell cd"                 2 "$T/clean" "( cd $T/dirty && git reset --hard )"
+t "pushd"                       2 "$T/clean" "pushd $T/dirty; git reset --hard"
+t "GIT_WORK_TREE prefix"        2 "$T/clean" "GIT_WORK_TREE=$T/dirty GIT_DIR=$T/dirty/.git git reset --hard"
+t "--work-tree space form"      2 "$T/clean" "git --git-dir=$T/dirty/.git --work-tree $T/dirty reset --hard"
+t "sh -c with -C"               2 "$T/clean" "sh -c 'git -C $T/dirty reset --hard'"
+t "eval with cd"                2 "$T/clean" "eval 'cd $T/dirty; git reset --hard'"
+touch "$T/clean/untracked.txt"
+t "clean -f, untracked only"    2 "$T/clean" "git clean -f"
+rm -f "$T/clean/untracked.txt"
 echo "lets through:"
+t "checkout -b from a base"   0 "$T/dirty" "git checkout -b feature2 HEAD"
+t "commit message naming restore" 0 "$T/dirty" "git commit -m 'restore the file' --allow-empty --dry-run"
 # 2026-10-11: a clean worktree reached by cd, -C or a variable was refused
 # because the session's dirty checkout was judged instead (30 in a week).
 t "cd to a clean repo"        0 "$T/dirty" "W=$T/clean; cd \$W && git reset --hard"

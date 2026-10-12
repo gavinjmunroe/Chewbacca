@@ -39,8 +39,19 @@ REASON=$(DG_CMD="$CMD" DG_SID="$SID" DG_CWD="${CWD:-$PWD}" python3 -I - <<'PY'
 import os, re, shlex, subprocess, time
 cmd, sid, cwd = os.environ["DG_CMD"], os.environ["DG_SID"], os.environ["DG_CWD"]
 
-# Split into simple commands; heredoc bodies and quoted text are data.
-body = re.sub(r"<<-?\s*['\"]?(\w+)['\"]?.*?\n\1\s*$", "", cmd, flags=re.S | re.M)
+# Split into simple commands. Heredoc bodies are data, unless a shell or an
+# eval reads them: `bash <<EOF` runs its body (security review, 2026-10-11).
+SHELLS = ("bash", "sh", "zsh", "dash", "ksh", "fish", "eval", "source", ".", "xargs")
+shell_bodies = []
+
+def strip_heredoc(m):
+    opener = re.split(r"&&|\|\||;|\|", m.group(0).split("<<", 1)[0])[-1].split()
+    if opener and os.path.basename(opener[0]) in SHELLS:
+        shell_bodies.append(m.group(0))
+    return ""
+
+body = re.sub(r"^[^\n]*<<-?\s*['\"]?(\w+)['\"]?.*?\n\1\s*$", strip_heredoc, cmd, flags=re.S | re.M)
+body = body + "\n" + "\n".join(b.split("\n", 1)[1] if "\n" in b else b for b in shell_bodies)
 segments = re.split(r"&&|\|\||;|\n|\|", body)
 
 SAFE = ["git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null",
@@ -87,7 +98,7 @@ def filter_guard(where):
         guard += ["-c", f"filter.{name}.required=false"]
     return guard
 
-def repo_dirty(where):
+def repo_dirty(where, untracked=False):
     # `where` comes from the command being checked, so the repo is untrusted:
     # git status runs core.fsmonitor and filter drivers from repo config, which
     # are arbitrary code. Turn them and hooks off. If git can't answer, or the
@@ -107,24 +118,32 @@ def repo_dirty(where):
         return True
     if r.returncode != 0:
         return "not a git repository" not in r.stderr
-    return any(l and not l.startswith("??") for l in r.stdout.splitlines())
+    return any(l and (untracked or not l.startswith("??")) for l in r.stdout.splitlines())
 
 where = cwd
 # Catch-all on the text itself, whatever names git: eval "...", x=git; $x,
-# $(which git), sh -c '...' (security review of f92c31af, 2026-10-10). The
-# word-level parser below can't see through those, so a verb phrase it did not
-# parse decides on the session's cwd when that has work to lose (after the
-# loop). A commit message that mentions one belongs in a -F heredoc, which is
-# stripped above.
-PHRASE = re.compile(r"\b(reset\s+(?:\S+\s+)*--hard|checkout\s+(?:--(?=\s)|\.(?=\s|$|['\";)]))|clean\s+-\w*f|stash\s+(?:drop|clear))")
-phrases = 0  # verb phrases in pieces that carry no override
-# Plain NAME=value segments, so `W=/tmp/wt; git -C "$W" reset --hard` judges
-# /tmp/wt. On 2026-10-11 that shape was refused as "uncommitted work in
-# /Users/joelnewton/$WT": the variable was never read, the session's dirty
-# checkout was judged instead, and a week of real refusals held 30 like it.
-# A value that still holds $ or a backtick after expansion stays unresolved, and an
-# unresolved path is judged dirty, as before.
+# $(which git), sh -c '...' (security reviews of f92c31af, 2026-10-10, and of
+# 2232e9d9, 2026-10-11). The word-level parser below can't see through those,
+# so a verb phrase in a piece it did not parse as that very git call decides
+# on every directory the text names, and on the session's cwd. Quotes are
+# removed first, so 'git reset --ha""rd' is still the phrase.
+PHRASE = re.compile(r"\b(reset\s+(?:\S+\s+)*--hard|checkout\s+(?:--(?=\s)|\.(?=\s|$|[;)])|-f\b|--force\b)|clean\s+-\w*f|stash\s+(?:drop|clear))")
+dequote = lambda text: re.sub(r"[\"'\\]", "", text)
+hidden = 0  # verb phrases no parsed git call accounts for
+# Variables: `W=/tmp/wt; git -C "$W" reset --hard` judges /tmp/wt. On
+# 2026-10-11 that shape was refused as "uncommitted work in
+# /Users/joelnewton/$WT": the session's dirty checkout was judged instead, and
+# a week of real refusals held 30 like it. Only a name assigned exactly once,
+# as a plain NAME=value piece, resolves. Anything else that touches a name
+# (a second assignment, export, read, for, declare) leaves it unresolved, and
+# an unresolved path is judged dirty.
 names = {"HOME": os.path.expanduser("~"), "TMPDIR": os.environ.get("TMPDIR", "/tmp")}
+counts = {}
+for n in re.findall(r"(?<![\w$])([A-Za-z_]\w*)\+?=", cmd):
+    counts[n] = counts.get(n, 0) + 1
+tainted = {n for n, c in counts.items() if c > 1}
+tainted |= set(re.findall(r"\b(?:export|declare|typeset|local|readonly|read|for|select|unset|getopts)\s+(?:-\S+\s+)*([A-Za-z_]\w*)", cmd))
+tainted |= {"PWD", "OLDPWD", "GIT_DIR", "GIT_WORK_TREE"}
 
 def expand(word):
     out = re.sub(r"\$\{(\w+)\}|\$(\w+)", lambda m: names.get(m.group(1) or m.group(2), m.group(0)), word)
@@ -134,12 +153,15 @@ def resolve(path, base):
     path = expand(path)
     return path if os.path.isabs(path) else os.path.join(base, path)
 
-seen = 0  # destructive git verbs the parser saw directly
+targets = {cwd}  # every directory the command names, for the catch-all
 for seg in segments:
     try:
         w = shlex.split(seg)
     except ValueError:
         w = seg.split()
+    # A subshell or group: `( cd x && git reset --hard )` runs inside.
+    while w and w[0] in ("(", "{", "!", "then", "do", "else", "elif", "if", "while", "until"):
+        w = w[1:]
     assigned = []
     while w and ("=" in w[0] and not w[0].startswith("-") or w[0] in ("nice", "-n", "19", "10", "env")):
         assigned.append(w[0])
@@ -147,37 +169,48 @@ for seg in segments:
     if not w:
         for a in assigned:
             key, _, value = a.partition("=")
-            if re.fullmatch(r"[A-Za-z_]\w*", key):
+            if re.fullmatch(r"[A-Za-z_]\w*", key) and key not in tainted:
                 value = expand(value)
                 if "$" not in value and chr(96) not in value:
                     names[key] = value
-                else:
-                    names.pop(key, None)
         continue
     ok_here = "DESTRUCTIVE_OK=1" in assigned
     if ok_here:
         continue  # the override names this command, and only this one
-    phrases += len(PHRASE.findall(seg))
-    if w[0] == "cd" and len(w) > 1:
+    found = len(PHRASE.findall(dequote(seg)))
+    if w[0] in ("cd", "pushd") and len(w) > 1:
         where = resolve(w[1], where)
+        targets.add(where)
+        hidden += found
         continue
     # `command git`, `exec git`, `/usr/bin/git`, `xargs git` all run git.
     while w and w[0] in ("command", "exec", "xargs", "sudo", "time"):
         w = w[1:]
     if not w or os.path.basename(w[0]) != "git":
+        hidden += found
         continue
+    here = where
+    # GIT_DIR / GIT_WORK_TREE in front of git move it somewhere else.
+    for a in assigned:
+        key, _, value = a.partition("=")
+        if key in ("GIT_WORK_TREE", "GIT_DIR"):
+            here = resolve(value[:-5] if key == "GIT_DIR" and value.rstrip("/").endswith(".git") else value, where)
     a = w[1:]
-    # Global options before the verb: -C <dir>, -c k=v, --git-dir=, --work-tree=
+    # Global options before the verb: -C <dir>, -c k=v, --git-dir, --work-tree
     while a and a[0].startswith("-"):
         if a[0] == "-C" and len(a) > 1:
-            where, a = resolve(a[1], where), a[2:]
-        elif a[0] == "-c" and len(a) > 1:
+            here, a = resolve(a[1], here), a[2:]
+        elif a[0] in ("-c", "--git-dir", "--work-tree", "--namespace", "--exec-path") and len(a) > 1:
+            if a[0] == "--work-tree":
+                here = resolve(a[1], here)
             a = a[2:]
         elif a[0].startswith("--work-tree="):
-            where, a = resolve(a[0].split("=", 1)[1], where), a[1:]
+            here, a = resolve(a[0].split("=", 1)[1], here), a[1:]
         else:
             a = a[1:]
+    targets.add(here)
     if not a:
+        hidden += found
         continue
     verb = a[0]
     # 1. another session's worktree
@@ -187,25 +220,34 @@ for seg in segments:
             if m and sid and m.group(1) != sid:
                 print(f"`git worktree remove {p}` targets another Claude session's worktree ({m.group(1)[:8]}), not this one's ({sid[:8]}).")
                 raise SystemExit
+        hidden += found
         continue
+    plain = [x for x in a[1:] if not x.startswith("-")]
     destroys = (
-        (verb == "checkout" and ("--" in a or "." in a[1:]))
+        (verb == "checkout" and ("--" in a or "." in a[1:] or "-f" in a or "--force" in a
+                                 or (len(plain) >= 2 and not {"-b", "-B", "--orphan"} & set(a))))
+        or (verb == "switch" and bool({"-f", "--force", "--discard-changes"} & set(a)))
         or (verb == "restore" and "--staged" not in a)
-        or (verb == "reset" and "--hard" in a)
+        or (verb == "reset" and ("--hard" in a or "--merge" in a or "--keep" in a))
         or (verb == "clean" and any(x.startswith("-") and "f" in x for x in a[1:]))
         or (verb == "stash" and (len(a) == 1 or a[1] in ("drop", "clear") or (a[1] == "push" and "-m" not in a)))
     )
-    if destroys:
-        seen += 1
-    if destroys and repo_dirty(where):
-        print(f"`git {' '.join(a)}` would throw away uncommitted work in {where}, and other tabs share this checkout.")
+    # This call accounts for at most one phrase in its own text; any other
+    # phrase in the piece ($(...), an alias) is hidden.
+    hidden += max(0, found - (1 if destroys and PHRASE.search(" ".join(a)) else 0))
+    if destroys and repo_dirty(here, untracked=(verb == "clean")):
+        print(f"`git {' '.join(a)}` would throw away uncommitted work in {here}, and other tabs share this checkout.")
         raise SystemExit
-# More verb phrases in the text than direct git calls: something the parser
-# can't see runs one (eval, sh -c, $x). Judge the session's cwd, as before.
-if phrases > seen and repo_dirty(cwd):
-    first = PHRASE.search(body)
-    print(f"this runs `{first.group(1) if first else 'a destructive git verb'}`, which would throw away uncommitted work in {cwd}.")
-    raise SystemExit
+# A phrase no parsed git call accounts for: something the parser can't see
+# runs it (eval, sh -c, $x). Judge the cwd and every directory the text names.
+if hidden:
+    for m in re.finditer(r"(?:-C|cd|pushd|--work-tree=?|GIT_WORK_TREE=)\s*(\S+)", dequote(body)):
+        targets.add(resolve(m.group(1).rstrip(";)&|"), cwd))
+    first = PHRASE.search(dequote(body))
+    for t in sorted(targets):
+        if repo_dirty(t, untracked=True):
+            print(f"this runs `{first.group(1) if first else 'a destructive git verb'}`, which would throw away uncommitted work in {t}.")
+            raise SystemExit
 PY
 )
 [ -n "$REASON" ] || exit 0

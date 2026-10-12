@@ -838,10 +838,12 @@ done
         self.assertIsNone(daemon_register.validate({"name": "w", "keepalive": "crash", "argv": ["/bin/true"], "swap": "self"}))
 
     def test_a_plist_adopted_realm_registers_as_self_handover(self):
-        out = node_eval("const d=require(%r);console.log(JSON.stringify(d.serviceFromPlist('com.chewbacca.realm',"
-                        "{ProgramArguments:['/usr/bin/env','python3','/x/realm-engine','run'],KeepAlive:{SuccessfulExit:false},RunAtLoad:true})))"
+        out = node_eval("const d=require(%r);const s=d.serviceFromPlist('com.chewbacca.realm',"
+                        "{ProgramArguments:['/usr/bin/env','python3','/x/realm-engine','run'],KeepAlive:{SuccessfulExit:false},RunAtLoad:true});"
+                        "console.log(JSON.stringify({swap:d.swapOf(s),key:s.swap===undefined,valid:d.validate(s)}))"
                         % str(DAEMON), self.env)
-        self.assertEqual(out["swap"], "self")
+        # Self by label, with no key in the file an older daemon would reject.
+        self.assertEqual(out, {"swap": "self", "key": True, "valid": None})
 
 
 class ListenExecTests(unittest.TestCase):

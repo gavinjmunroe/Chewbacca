@@ -163,7 +163,10 @@ function validate(svc) {
 }
 
 // How a service moves to a new kit. One owner per answer: the registration,
-// or for an adopted realm plist, its label.
+// or for an adopted realm plist, its label. The label is read here rather
+// than written into the file, so a kit moved back to a daemon that doesn't
+// know "self" still loads realm.json instead of dropping it and stopping
+// realm as an orphan (review of c5dba0dc).
 function swapOf(svc) {
   return svc.swap || (SELF_HANDOVER_LABELS.has(svc.adoptedFrom) ? "self" : undefined);
 }
@@ -232,7 +235,6 @@ function serviceFromPlist(label, p) {
     svc.at = slots;
   } else if (p.RunAtLoad) svc.keepalive = true;
   else return null;
-  if (SELF_HANDOVER_LABELS.has(label) && svc.keepalive) svc.swap = "self";
   if (p.EnvironmentVariables) svc.env = p.EnvironmentVariables;
   if (p.WorkingDirectory) svc.cwd = p.WorkingDirectory;
   if (Number.isInteger(p.Nice)) svc.nice = p.Nice;

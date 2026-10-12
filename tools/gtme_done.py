@@ -47,12 +47,29 @@ def client_config(name):
     return {}
 
 
-def replies_owed(threads):
+def acks_path(client):
+    base = os.path.expanduser(os.environ.get("CHEWBACCA_GTM_ACKS", "~/.chewbacca/gtm/acks"))
+    return os.path.join(base, "".join(c if c.isalnum() else "-" for c in client.lower()) + ".json")
+
+
+def load_acks(client):
+    try:
+        return json.load(open(acks_path(client)))
+    except (OSError, ValueError):
+        return {}
+
+
+def replies_owed(threads, acks=None):
     """(lead, kind, when) for each thread whose last message is the lead's reply
-    and needs a person."""
+    and needs a person. `acks` maps a lead to the reply time someone read and
+    marked as needing no answer; a newer reply reopens the thread."""
+    acks = acks or {}
     owed = []
     for t in threads:
         h = (t.get("history") or {}).get("history") or []
+        lead = (t.get("lead_email") or "").lower()
+        if lead in acks and acks[lead] >= (t.get("last_reply_time") or (h[-1].get("time") if h else "") or ""):
+            continue
         if t.get("history_complete") is False:
             # The thread read missed the newest message (clay-inbox, 2026-10-11).
             # The row's own times still say whose word is last.
@@ -144,6 +161,8 @@ def main(argv=None):
     ap.add_argument("--inbox", help="a saved clay-inbox JSON instead of reading it live")
     ap.add_argument("--slack", help="a saved {channel_id: [messages]} JSON instead of reading Slack")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--ack", metavar="EMAIL", action="append",
+                    help="mark this lead's latest reply as read and needing no answer")
     a = ap.parse_args(argv)
     cfg = client_config(a.client)
     slack_cfg = cfg.get("client_slack") or {}
@@ -152,7 +171,17 @@ def main(argv=None):
     try:
         if a.inbox or cfg.get("workspaces"):
             threads = json.load(open(a.inbox)) if a.inbox else fetch_inbox(cfg["workspaces"][0])
-            report["replies_owed"] = replies_owed(threads)
+            if a.ack:
+                rows = {(t.get("lead_email") or "").lower(): t for t in threads}
+                acks = load_acks(a.client)
+                for lead in a.ack:
+                    t = rows.get(lead.lower())
+                    if not t:
+                        raise RuntimeError(f"no thread with {lead}")
+                    acks[lead.lower()] = t.get("last_reply_time") or ""
+                os.makedirs(os.path.dirname(acks_path(a.client)), exist_ok=True)
+                json.dump(acks, open(acks_path(a.client), "w"), indent=1)
+            report["replies_owed"] = replies_owed(threads, load_acks(a.client))
         else:
             # No Clay workspace: the own-inbox path keeps its replies on disk.
             import gtme_operator as op

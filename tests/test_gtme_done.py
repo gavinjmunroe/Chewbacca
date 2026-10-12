@@ -111,4 +111,12 @@ check("a thread with it is complete", ci.complete(row, full) is True)
 src = open(os.path.join(ROOT, "bin", "clay-inbox")).read()
 check("the browser read only runs behind --browser", "if not a.browser:" in src and 'chewie(["goto"' in src.split("if not a.browser:")[1].split("else:")[1])
 
+# A person read the thread and it needs no answer: acked at that reply's time.
+# A newer reply from the lead reopens it.
+inc = dict(thread("ack@fund.example", ("SENT", "Hi")), history_complete=False,
+           last_reply_time="2026-10-09T20:49:08Z", last_sent_time="2026-10-09T08:00:00Z")
+check("an acked thread is not owed", gtme_done.replies_owed([inc], {"ack@fund.example": "2026-10-09T20:49:08Z"}) == [])
+newer = dict(inc, last_reply_time="2026-10-12T09:00:00Z")
+check("a reply newer than the ack reopens it", len(gtme_done.replies_owed([newer], {"ack@fund.example": "2026-10-09T20:49:08Z"})) == 1)
+
 sys.exit(1 if fails else 0)

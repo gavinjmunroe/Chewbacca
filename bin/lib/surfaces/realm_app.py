@@ -64,9 +64,22 @@ class RealmApp(Provider):
 
     def model(self, data, error, values, ctx) -> dict:
         # On glass an empty Text draws nothing, so the note shows only when
-        # something is wrong, and the page only when there is one.
-        return {self.p("url"): (data or {}).get("url", "") if not error else "",
-                self.p("note"): error or ""}
+        # something is wrong, and the page only when there is one. Before the
+        # first fetch the address is the one the server last wrote, so the
+        # opening frame already carries the page Kyber keeps warm instead of
+        # waiting a fetch (a `ps` call) for it; the fetch then confirms it.
+        if error:
+            return {self.p("url"): "", self.p("note"): error}
+        url = (data or {}).get("url", "") if data is not None else _last_url()
+        return {self.p("url"): url, self.p("note"): ""}
+
+
+def _last_url() -> str:
+    try:
+        import realm_ui  # noqa: PLC0415
+        return realm_ui.last_url()
+    except ImportError:
+        return ""
 
 
 def available() -> bool:

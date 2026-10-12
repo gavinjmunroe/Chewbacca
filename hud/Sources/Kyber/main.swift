@@ -155,6 +155,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             presentFatal(error)
         }
 
+        // Realm's own interface loads now, in no window, so opening it is
+        // putting a page that is already painted on the glass (AppPane.swift
+        // has the measurements). Nothing is drawn until a surface asks.
+        RealmAppWarmup.start()
+
         // Start the listener at launch rather than on the first keypress.
         //
         // `prime()` inside it opens the model session and has the prompt read

@@ -415,13 +415,25 @@ def perform(command: Command, run=subprocess.run, ask=None, spawn=subprocess.Pop
         if open_with_preset("oss", {"/oss/q": command.arg}, run=run, ask=ask):
             return Outcome(True, f"Here's what replaces {command.arg}.")
         return Outcome(False, "That surface didn't open.")
-    argv = [tool(KYBER_SURFACES), command.verb, command.name] + ([command.arg] if command.arg else [])
-    try:
-        done = run(argv, capture_output=True, text=True, timeout=CLI_TIMEOUT_S)
-    except (OSError, subprocess.TimeoutExpired):
-        return Outcome(False, "The surfaces didn't answer.")
-    if done.returncode != 0:
-        return Outcome(False, "That surface didn't open.")
+    # The daemon is almost always up, so ask its socket first. Going through
+    # the CLI cost a Python start on every open: 116 to 241 ms from the
+    # sentence to the reply, the layout reaching the display 77 to 202 ms in
+    # (fake-display run, 2026-10-11, load 18 to 35). Only a test that hands in
+    # its own `run` and no `ask` stays off the real socket.
+    reply = None
+    if command.verb in ("open", "close") and (ask is not None or run is subprocess.run):
+        reply = (ask or _ask)({"cmd": command.verb, "name": command.name, "arg": command.arg or ""})
+    if reply is not None:
+        if not reply.get("ok"):
+            return Outcome(False, "That surface didn't open.")
+    else:
+        argv = [tool(KYBER_SURFACES), command.verb, command.name] + ([command.arg] if command.arg else [])
+        try:
+            done = run(argv, capture_output=True, text=True, timeout=CLI_TIMEOUT_S)
+        except (OSError, subprocess.TimeoutExpired):
+            return Outcome(False, "The surfaces didn't answer.")
+        if done.returncode != 0:
+            return Outcome(False, "That surface didn't open.")
     if command.verb == "close":
         return Outcome(True, "Closed." if command.name != "all" else "Cleared.")
     if command.verb == "space":
@@ -440,5 +452,6 @@ def perform(command: Command, run=subprocess.run, ask=None, spawn=subprocess.Pop
               "missing": "Here's what you might be missing.", "person": "They're up.",
               "oss": "The alternatives are up.", "engine": "The engine's up.",
               "code": "What changed is up.", "notes": "Your notes are up.", "github": "GitHub's up.",
-              "meetings": "Your meetings are up.", "agents": "Your agents are up."}
+              "meetings": "Your meetings are up.", "agents": "Your agents are up.",
+              "realm": "Your agents are up."}
     return Outcome(True, spoken.get(command.name, "It's up."))

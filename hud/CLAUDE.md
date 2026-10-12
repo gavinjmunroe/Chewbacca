@@ -1096,6 +1096,36 @@ being true.
 Leave `life` off for anything they will read or act on. A panel that vanishes
 mid-sentence is a bug they will blame on you.
 
+## Instant on the glass
+
+Caleb, 2026-10-11, on Realm's interface: "It takes eternity to load,
+everything on the glass should be INSTANT bro". Every surface paints its last
+known state the moment it is asked for, then refreshes in place. Nothing on
+the open path waits on the network, the engine or a fetch before it draws
+what it already has.
+
+- **Paint what you have first.** A provider's model with no data yet returns
+  the last value it knows (realm_app.py reads the address the server last
+  wrote), never an empty frame that a fetch fills in later. The fetch confirms
+  or corrects it with `d` lines.
+- **Expensive views are made once and kept.** A WKWebView, a model session or
+  anything else that costs more than a frame to build lives for the life of
+  Kyber, is warmed at launch, and is attached to a card on open and detached
+  on close. Closing a surface must not unload it. AppPaneHost (AppPane.swift)
+  is the pattern: realm's page made fresh per opening took 1.6 to 1.8 s to
+  paint on every reopen and 8.1 s on a first open; kept alive it paints in 82
+  to 153 ms, warmed at launch the first open paints in 277 to 480 ms
+  (offscreen WKWebView probe, load 15 to 20). It reloads only for a new
+  address, a new pipe token, a failed load or a dead web content process.
+- **No process start on the open path.** hud-listen asks the surfaces daemon
+  over its socket (surface_intent.perform); the CLI is the fallback when no
+  daemon answers. The CLI start cost 116 to 241 ms per open; the socket 1 to 2.
+- **Budget:** under 150 ms from the ask to pixels on a reopen, under 1 s on
+  the first open after login. A change that adds a step to the open path says
+  what it costs, measured.
+- **Tested:** AppPaneTests "closing and reopening the realm App shows the same
+  page and never loads it again" fails if a reopen loads the page.
+
 ## Updating in real time
 
 Bind a prop to the data model and then push data at it. This is the cheap path

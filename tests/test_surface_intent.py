@@ -142,6 +142,18 @@ def main() -> int:
     check("closing files sends `hud files off`", calls[-1][1:] == ["files", "off"] and out.ok, calls[-1])
     out = si.perform(si.Command("open", "today"), run=lambda argv, **kw: Done(1))
     check("a failed open says so instead of claiming it", not out.ok and "didn't" in out.line, out)
+    before = len(calls)
+    asked = []
+    out = si.perform(si.Command("open", "realm"), run=fake, ask=lambda body: asked.append(body) or {"ok": True})
+    check("an open goes straight to the running daemon's socket, no CLI start",
+          out.ok and asked == [{"cmd": "open", "name": "realm", "arg": ""}] and len(calls) == before, (asked, calls[before:]))
+    out = si.perform(si.Command("close", "realm"), run=fake, ask=lambda body: asked.append(body) or {"ok": True})
+    check("a close does too", out.ok and asked[-1]["cmd"] == "close" and len(calls) == before, asked)
+    out = si.perform(si.Command("open", "realm"), run=fake, ask=lambda body: None)
+    check("with no daemon answering it falls back to the CLI, which starts one",
+          out.ok and calls[-1][1:] == ["open", "realm"], calls[-1])
+    out = si.perform(si.Command("open", "realm"), run=fake, ask=lambda body: {"ok": False, "message": "No surface"})
+    check("a refused open says so", not out.ok and "didn't" in out.line, out)
     class Done:
         def __init__(self, rc=0, out="", err=""):
             self.returncode, self.stdout, self.stderr = rc, out, err

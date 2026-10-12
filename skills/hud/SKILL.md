@@ -553,6 +553,14 @@ then look at something else and say out loud which tile just changed.
 
 ## Rules
 
+**Everything on the glass is instant.** A surface paints its last known state
+the moment it is asked for and refreshes in place; nothing on the open path
+waits on the network, the engine or a fetch. Anything that costs more than a
+frame to build (a web view, a session) is made once, warmed at launch, and
+shown and hidden, never rebuilt on reopen. Budget: 150 ms on a reopen, 1 s on
+the first open after login. hud/CLAUDE.md, "Instant on the glass", has the
+measurements (Caleb, 2026-10-11: "everything on the glass should be INSTANT").
+
 **Do not narrate the panel.** If you drew the chart, do not also describe it in
 the terminal. Say what you put up and where, in one line.
 

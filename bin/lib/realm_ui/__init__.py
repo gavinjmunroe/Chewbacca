@@ -226,6 +226,18 @@ def running() -> Optional[dict]:
     return data
 
 
+def last_url() -> str:
+    """The address the server last wrote, read without checking its pid: what
+    the realm surface's first frame shows while the fetch confirms it. A
+    stale address only means the page loads late, never a wrong page, since
+    the HUD loads nothing but this Mac's loopback."""
+    try:
+        url = json.loads(state_file().read_text()).get("url", "")
+    except (OSError, ValueError, AttributeError):
+        return ""
+    return url if isinstance(url, str) else ""
+
+
 def serve_argv() -> list:
     return [node() or "node", str(HERE / "server.mjs"), "--dist", str(dist_dir()),
             "--realm-home", str(realm_client.realm_home()), "--state", str(state_file()), "--port", str(port())]

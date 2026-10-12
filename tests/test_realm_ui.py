@@ -137,6 +137,17 @@ broken = app.model(None, "the Realm interface server did not come up", {}, None)
 check("an error says so and draws no page", broken["/realm/url"] == "" and "did not come up" in broken["/realm/note"], broken)
 check("no error, no note", app.model(data, None, {}, None)["/realm/note"] == "")
 
+# The first frame, before any fetch, already names the page Kyber keeps warm,
+# read from the state file with no pid check (2026-10-11, "everything on the
+# glass should be INSTANT").
+(TMP / "ui").mkdir(parents=True, exist_ok=True)
+realm_ui.state_file().write_text(json.dumps({"pid": 1, "port": 47317, "url": "http://127.0.0.1:47317/"}))
+check("the opening frame carries the last address before the fetch",
+      app.model(None, None, {}, None) == {"/realm/url": "http://127.0.0.1:47317/", "/realm/note": ""})
+realm_ui.state_file().write_text("not json")
+check("an unreadable state file gives an empty address, not a crash", app.model(None, None, {}, None)["/realm/url"] == "")
+realm_ui.state_file().unlink()
+
 
 def refused():
     raise RuntimeError("Realm's interface is not built; run realm-ui build")
@@ -304,7 +315,7 @@ check("App has an accessibility entry", '"App": Entry(' in a11y)
 bridge_src = (ROOT / "bin" / "lib" / "realm_ui" / "bridge.js").read_text()
 app_swift = (ROOT / "hud" / "Sources" / "KyberKit" / "AppPane.swift").read_text()
 check("the HUD hands the token to the page before it runs, top frame only",
-      "pipeToken(for: url)" in app_swift and ".atDocumentStart, forMainFrameOnly: true" in app_swift)
+      "pipeToken(for: url, file: stateFile)" in app_swift and ".atDocumentStart, forMainFrameOnly: true" in app_swift)
 check("the bridge takes the token off the window", "delete window.__realmUiToken" in (ROOT / "bin" / "lib" / "realm_ui" / "bridge.js").read_text())
 check("Escape stays with the page in a dialog, editor or terminal",
       all(s in bridge_src for s in ('[role="dialog"]', ".cm-editor", ".xterm")))

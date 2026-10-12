@@ -564,7 +564,8 @@ fn redirects_harmless(n: Node, src: &[u8]) -> bool {
                 let harmless = (op == "<" || op == "<&") && stdin
                     || matches!(dest.as_deref(), Some("/dev/null")) && !op.contains('<')
                     // Only stdout, stderr or a close: `exec 3>run.sh` then `>&3` writes a file.
-                    || (op == ">&" || op == "&>" || op == ">>&") && matches!(dest.as_deref(), Some("1" | "2" | "-"));
+                    // `&>1` is a file named 1, so only `>&` dups count.
+                    || op == ">&" && matches!(dest.as_deref(), Some("1" | "2" | "-"));
                 if !harmless {
                     return false;
                 }
@@ -648,7 +649,30 @@ fn mask_spans(n: Node, src: &[u8], prof: Profile, spans: &mut Vec<(usize, usize)
                                 _ => break,
                             }
                         }
-                        data = clean && lits.get(i).map_or(false, |v| v.as_deref() == Some("commit"));
+                        // After commit, only flags that never hand the
+                        // message to a program: `-e` opens $GIT_EDITOR on it
+                        // (GIT_EDITOR=sh runs it), --template and -F read
+                        // files, and a prefix like GIT_EDITOR=x is refused too.
+                        const PLAIN: &[&str] = &["-m", "--message", "-q", "--quiet", "-a", "--all", "--allow-empty",
+                            "--dry-run", "-n", "--no-verify", "-s", "--signoff", "-v", "--no-edit", "--"];
+                        let mut after_m = false;
+                        let flags_ok = lits.iter().skip(i + 1).all(|l| {
+                            let ok = match l.as_deref() {
+                                _ if after_m => true,
+                                Some(x) if x.starts_with("--message=") => true,
+                                Some(x) if x.starts_with('-') => PLAIN.contains(&x),
+                                Some(_) => true, // a pathspec
+                                None => false,
+                            };
+                            after_m = matches!(l.as_deref(), Some("-m" | "--message"));
+                            ok
+                        });
+                        let prefixed = {
+                            let mut c = n.walk();
+                            let found = n.children(&mut c).any(|k| k.kind() == "variable_assignment");
+                            found
+                        };
+                        data = clean && flags_ok && !prefixed && lits.get(i).map_or(false, |v| v.as_deref() == Some("commit"));
                         only_message = true;
                     }
                     if data && output_stays(n, src) {
@@ -723,6 +747,18 @@ fn has_command(n: Node, src: &[u8], names: &[&str]) -> bool {
     found
 }
 
+fn unquoted_paren(n: Node, src: &[u8]) -> bool {
+    if matches!(n.kind(), "word" | "extglob_pattern" | "concatenation") && text(n, src).contains('(') {
+        // A concatenation's quoted parts are fine; check its bare pieces.
+        if n.kind() != "concatenation" {
+            return true;
+        }
+    }
+    let mut c = n.walk();
+    let found = n.children(&mut c).any(|ch| unquoted_paren(ch, src));
+    found
+}
+
 fn has_kind(n: Node, kind: &str) -> bool {
     if n.kind() == kind {
         return true;
@@ -747,10 +783,10 @@ fn run_mask(code: &str, prof: Profile) -> i32 {
     // mask can't follow any of them, so the raw command is read.
     let src = code.as_bytes();
     // zsh reads these as code where bash's grammar sees a word: `=(cmd)`
-    // runs cmd, `~[x]` calls a function, and glob qualifiers `(e:..:)` and
-    // `(+fn)` run code per file. Most already fail the bash parse; this
-    // catches any that don't.
-    if ["=(", "~[", "(e:", "(e{", "(e'", "(+", "(*e", "(^e"].iter().any(|t| code.contains(t)) {
+    // runs cmd, `~[x]` calls a function, and a glob qualifier `*(e:..:)` or
+    // `x(+fn)` runs code per file. Any `(` inside an unquoted word is one of
+    // those to zsh, whatever bash's grammar made of it.
+    if ["=(", "~["].iter().any(|t| code.contains(t)) || unquoted_paren(tree.root_node(), code.as_bytes()) {
         return 3;
     }
     if has_command(tree.root_node(), src, &["exec", "coproc", "trap", "hash", "enable", "unalias", "functions", "autoload"])

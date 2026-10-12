@@ -129,11 +129,15 @@ class Mask(unittest.TestCase):
         # A -c can define an alias that runs its arguments; an unknown verb
         # with commit later isn't a commit.
         for cmd in ("git -c alias.x='!sh -c \"$1\"' x -m 'git reset --hard' commit",
-                    "git log -m 'reset --hard' commit"):
+                    "git log -m 'reset --hard' commit",
+                    # -e hands the message to $GIT_EDITOR, which can be sh.
+                    "GIT_EDITOR=sh git commit -e -m 'git reset --hard'",
+                    "git commit -e -m 'git reset --hard'", "git commit --template=t -m 'git reset --hard'"):
             self.assertTrue(kept(cmd, 'data'), cmd)
 
     def test_redirects_that_write(self):
         for cmd in ('echo "git reset --hard" 1<>run.sh', 'echo "git reset --hard" 1<&3',
+                    'echo "git reset --hard" &>1', 'echo "git reset --hard" &>>2',
                     'echo "git reset --hard" >&3', 'echo "git reset --hard" &>run.sh'):
             self.assertTrue(kept(cmd, 'data'), cmd)
         for cmd in ('echo "git reset --hard" 2>&1', 'echo "git reset --hard" >/dev/null', 'echo "git reset --hard" <in.txt'):
@@ -151,8 +155,13 @@ class Mask(unittest.TestCase):
         # zsh runs a glob qualifier's e:...: as code; bash's grammar can't
         # read one, so the raw command is judged.
         for cmd in ("echo *(e:'git reset --hard':)", 'echo *(e{git reset --hard})', 'ls *(+fn)',
-                    "echo =(git reset --hard)", "echo ~[x] 'git reset --hard'"):
-            self.assertEqual(mask(cmd, 'data')[0], 3, cmd)
+                    "echo =(git reset --hard)", "echo ~[x] 'git reset --hard'",
+                    "echo f(e:'git reset --hard':)", "echo *(N) 'git reset --hard'", "echo @(a|b) 'git reset --hard'"):
+            self.assertTrue(kept(cmd, 'data'), cmd)
+
+    def test_parens_inside_quotes_still_mask(self):
+        # python -c 'print(x)' is the common case; quotes make its parens text.
+        self.assertFalse(kept("echo 'print(git reset --hard)'", 'data'))
 
     def test_zsh_profiles(self):
         cmd = "api-anything add x y --match path=/graphql; zsh -c 'for path in a; do :; done'"

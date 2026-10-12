@@ -198,8 +198,11 @@ class DispatchTests(unittest.TestCase):
         argv = []
         for name in ('vercel-guard.sh', 'destructive-guard.sh', 'zsh-guard.sh', 'skill-gate.sh'):
             argv += ['--guard', 'Bash', '5', str(HOOKS / name)]
+        # vercel-guard refuses only for a user who turned Vercel off (17d3e607).
+        (self.temp / 'h/.chewbacca/policy').mkdir(parents=True)
+        (self.temp / 'h/.chewbacca/policy/no-vercel').write_text('Deploy to Railway.\n')
         env = dict(os.environ, CHEWBACCA_HOME=str(self.temp / 'ch'), CHEWBACCA_LOG_DIR=str(self.temp / 'logs'),
-                   HOOKD_LOG='off', ZSH_GUARD_SHELL='zsh')
+                   HOOKD_LOG='off', ZSH_GUARD_SHELL='zsh', HOME=str(self.temp / 'h'))
         run = lambda c: subprocess.run([str(HOOKD), 'dispatch'] + argv, input=payload(c, cwd=str(repo)),  # noqa: E731
                                        text=True, capture_output=True, env=env, timeout=60)
         self.assertEqual(run('npx vercel --prod').returncode, 2)
@@ -326,6 +329,8 @@ class SetupFoldTests(unittest.TestCase):
         settings = self.run_setup()
         command = [h['command'] for e, h in self.folded(settings, 'PreToolUse') if e.get('matcher') == 'Bash'][0]
         (self.bin / 'hookd').unlink()
+        (self.home / '.chewbacca/policy').mkdir(parents=True, exist_ok=True)
+        (self.home / '.chewbacca/policy/no-vercel').write_text('Deploy to Railway.\n')
         env = {'HOME': str(self.home), 'PATH': os.environ.get('PATH', ''),
                'CHEWBACCA_HOME': str(self.home / '.chewbacca'), 'CHEWBACCA_LOG_DIR': str(self.home / 'logs')}
         result = subprocess.run(['/bin/sh', '-c', command], input=payload('npx vercel --prod'),

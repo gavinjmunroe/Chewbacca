@@ -23,14 +23,14 @@ type hook_init >/dev/null 2>&1 && hook_init vercel-guard.sh 5
 # workspace in the message.
 
 set -uo pipefail
-POLICY="$HOME/.chewbacca/policy/no-vercel"
-[ -f "$POLICY" ] || exit 0
 command -v jq >/dev/null 2>&1 || exit 0
 cmd="$(jq -r '.tool_input.command // empty' 2>/dev/null)"
 [ -n "$cmd" ] || exit 0
 printf '%s' "$cmd" | grep -qE '(^[[:space:]]*|[;&|(][[:space:]]*)(npx[[:space:]]+(-y[[:space:]]+)?)?vercel([[:space:]]|$)' || exit 0
 printf '%s' "$cmd" | grep -qE 'vercel[[:space:]]+(remove|rm|project[[:space:]]+(rm|remove|ls)|ls|list|whoami|inspect|logout)\b' && exit 0
 
+POLICY="$HOME/.chewbacca/policy/no-vercel"
+[ -f "$POLICY" ] || exit 0
 why="$(head -c 600 "$POLICY" 2>/dev/null | tr '\n' ' ')"
 echo "vercel-guard: Vercel is turned off on this Mac ($POLICY). ${why:-Deploy somewhere else.} Removing an existing Vercel project is still allowed." >&2
 exit 2

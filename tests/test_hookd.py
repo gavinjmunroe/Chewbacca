@@ -119,6 +119,10 @@ class HookdTests(unittest.TestCase):
         guard = HOOKS / 'vercel-guard.sh'
         home = self.temp / 'home3'
         (home / '.local/bin').mkdir(parents=True)
+        # vercel-guard refuses only for a user who turned Vercel off (17d3e607).
+        for h in (home, self.temp):
+            (h / '.chewbacca/policy').mkdir(parents=True, exist_ok=True)
+            (h / '.chewbacca/policy/no-vercel').write_text('Deploy to Railway.\n')
         shutil.copy(HOOKD, home / '.local/bin/hookd')
         env = dict(self.env, HOME=str(home), CHEWBACCA_LOG_DIR=str(self.temp / 'logs'))
         run = lambda c, e: subprocess.run(['bash', str(guard)], input=payload(c), text=True,  # noqa: E731

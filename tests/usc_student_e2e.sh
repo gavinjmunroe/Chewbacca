@@ -165,7 +165,15 @@ rm -rf "$T/chrome/Profile 2"
 mkdir -p "$T/chrome/Default"
 /usr/bin/python3 -c 'import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute("create table cookies(host_key text, name text, encrypted_value blob, last_access_utc int)"); c.execute("insert into cookies values (?,?,?,?)", (".google.com","NID",b"",1)); c.commit()' "$T/chrome/Default/Cookies"
 touch -t 202601010000 "$T/chrome/Default/Cookies"
+# Chrome's Local State says which profile holds the school account. With no
+# cookies anywhere, the sign-in page must open THERE, not in Default
+# (2026-10-11: Default was a personal Gmail profile and USC sign-on failed).
+mkdir -p "$T/chrome/Profile 3"
+printf '{"profile":{"info_cache":{"Default":{"user_name":"me@gmail.com"},"Profile 3":{"user_name":"trojan@usc.edu"}}}}' > "$T/chrome/Local State"
+export CHEWBACCA_SIGNIN_WAIT=1
 out="$(chewbacca usc lockin 2>&1)"; rc=$?
+grep -q -- '--profile-directory=Profile 3' "$T/opened" && ok "sign-in opens in the profile signed into usc.edu" \
+  || no "sign-in did not use the school profile: $(cat "$T/opened")"
 [ "$rc" = 3 ] && printf '%s' "$out" | grep -q '^BLOCKED: Brightspace' && ! printf '%s' "$out" | grep -q 'Quit Chrome' \
   && ok "signed out says BLOCKED in one line" || no "signed-out lockin: rc=$rc $out"
 chewbacca usc lockin >/dev/null 2>&1

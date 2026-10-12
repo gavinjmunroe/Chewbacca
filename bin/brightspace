@@ -69,7 +69,28 @@ def pick_profile():
             continue
         if at and at > best_at:
             best, best_at = db.parent.name, at
+    if best_at == -1:
+        return school_profile() or best
     return best
+
+
+def school_profile():
+    """The profile signed into a school account, from Chrome's own Local State.
+
+    With every Brightspace cookie expired, the old fallback was Default, and on
+    2026-10-11 that opened the sign-in page in Caleb's personal Gmail profile:
+    USC single sign-on failed there, while the "Work" profile signed in to
+    Brightspace with no password the moment it was asked.
+    """
+    domain = os.environ.get("CHEWBACCA_SCHOOL_DOMAIN", "@usc.edu").lower()
+    try:
+        info = json.loads((CHROME_DIR / "Local State").read_text())["profile"]["info_cache"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    for directory, meta in info.items():
+        if str((meta or {}).get("user_name", "")).lower().endswith(domain):
+            return directory
+    return None
 
 
 PROFILE = pick_profile()

@@ -261,12 +261,35 @@ def open_signin():
         pass
     if os.environ.get("CHEWBACCA_NO_OPEN"):
         return False
-    shown = subprocess.run(["open", "-g", "-a", "Google Chrome", "https://brightspace.usc.edu/d2l/home"],
-                           check=False).returncode == 0
+    # In the profile signed into the student's school account. A plain
+    # launch lands in whichever profile was used last, which for Caleb was his
+    # personal one, where USC sign-on fails.
+    try:
+        profile = load_tool("brightspace").PROFILE
+    except Exception:
+        profile = None
+    args = ["open", "-g", "-na", "Google Chrome", "--args"]
+    if profile:
+        args.append(f"--profile-directory={profile}")
+    shown = subprocess.run(args + ["https://brightspace.usc.edu/d2l/home"], check=False).returncode == 0
     if shown:
         SIGNIN_STAMP.parent.mkdir(parents=True, exist_ok=True)
         SIGNIN_STAMP.touch()
     return shown
+
+
+def wait_for_session():
+    # 20s: the Work profile went from the sign-in page to the Brightspace home
+    # in about 4s on 2026-10-11, and Chrome writes cookies to disk lazily.
+    deadline = time.time() + float(os.environ.get("CHEWBACCA_SIGNIN_WAIT", "20"))
+    while time.time() < deadline:
+        try:
+            if load_tool("brightspace").has_session_cookies():
+                return True
+        except Exception:
+            pass
+        time.sleep(2)
+    return False
 
 
 def blocked(bs, why):
@@ -285,6 +308,11 @@ def blocked(bs, why):
         return 3
     if "no Brightspace session" in why or not has_cookies:
         opened = open_signin()
+        # USC single sign-on usually finishes on its own in the school
+        # profile, so give it the time a redirect takes before calling it
+        # blocked. Only a real password or Duo prompt should reach the student.
+        if opened and wait_for_session():
+            return "retry"
         print("BLOCKED: Brightspace isn't signed in in Chrome yet. "
               + ("It's open in Chrome now: sign in once with your USC NetID, then rerun."
                  if opened else "Sign in once at https://brightspace.usc.edu in Chrome, then rerun."))
@@ -293,14 +321,15 @@ def blocked(bs, why):
     return 3
 
 
-def lockin(apply, out, days):
+def lockin(apply, out, days, retried=False):
     bs = load_tool("brightspace-sync")
     today = dt.date.today().isoformat()
     try:
         client = bs.Client()
         courses = bs.courses(client)
     except bs.Stop as e:
-        return blocked(bs, str(e))
+        r = blocked(bs, str(e))
+        return lockin(apply, out, days, True) if r == "retry" and not retried else (3 if r == "retry" else r)
     if not courses:
         print("Brightspace shows no courses for this term yet.")
         return 1
@@ -312,7 +341,8 @@ def lockin(apply, out, days):
     try:
         due = bs.due_items(client, days)
     except bs.Stop as e:
-        return blocked(bs, str(e))
+        r = blocked(bs, str(e))
+        return lockin(apply, out, days, True) if r == "retry" and not retried else (3 if r == "retry" else r)
 
     print(f"{term}: {len(by_code)} courses from your Brightspace enrollment")
     for code, e in by_code.items():
@@ -363,7 +393,8 @@ def lockin(apply, out, days):
         try:
             n = bs.sync_files(client, c, ns)
         except bs.Stop as e:
-            return blocked(bs, str(e))
+            r = blocked(bs, str(e))
+            return lockin(apply, out, days, True) if r == "retry" and not retried else (3 if r == "retry" else r)
         total += n
         # A lecture and its lab share a code and a folder: one line per course.
         per_code[c["code"]] = per_code.get(c["code"], 0) + n

@@ -24,3 +24,9 @@ the first one: "Wait this is a highk goated ux." `.claude/hooks/interface-first.
 150+ line UI page Write until the interface skill is loaded, and design-gate
 now renders a standalone .html from disk instead of skipping it. See
 [[feedback_tasteful_editorial_is_the_new_slop]].
+
+Exam morning, 2026-10-12: he wanted to close the tab and be "super dialed", so
+the time-blocked plan for the day went onto the app's home screen (blocks with
+the current one highlighted from the clock, what to drill in each, the exam at
+the end). Put the day's plan inside the practice app, not only in chat, so the
+tab with the agent can close.

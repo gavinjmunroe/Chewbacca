@@ -618,7 +618,8 @@ def plan_steps(plan: dict, clay_connected: bool) -> list[dict]:
          "cost": "a few credits for one row; the full price is known after it", "gate": "needs your approval",
          "command": "chewbacca clay route run-empty-rows"},
         {"do": f"Send a small test: {test} contacts, 3 emails each", "cost": "no credits; uses your sending inboxes",
-         "gate": "needs your approval (it sends email)", "command": "chewbacca clay route start-campaign"},
+         "gate": "needs your ok in chat (it sends email); the agent starts it",
+         "command": "chewbacca clay campaign-status ws=<ws> campaign=<cam_id> status=START --allow-writes"},
     ]
     return steps
 

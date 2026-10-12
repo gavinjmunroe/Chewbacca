@@ -2430,7 +2430,7 @@
   },
   {
    "name": "setCampaignStatus",
-   "description": "WRITE, bundle-derived (contract setCampaignStatus). Pause or stop a campaign; starting is refused by chewbacca clay.",
+   "description": "WRITE, bundle-derived (contract setCampaignStatus). Start, pause or stop a campaign; chewbacca clay starts only a graded draft.",
    "request": {
     "method": "PATCH",
     "url": "https://api.clay.com/v3/workspaces/1372623/clay-sequencer/campaigns/cam_example/status",
@@ -2497,8 +2497,8 @@
      "type": "string",
      "required": true,
      "example": "PAUSED",
-     "pattern": "PAUSED|STOPPED",
-     "hint": "PAUSED or STOPPED"
+     "pattern": "START|PAUSED|STOPPED",
+     "hint": "START, PAUSED or STOPPED"
     }
    ],
    "readOnly": false,

@@ -941,7 +941,10 @@ async function readback(op, args) {
   else if (rb.expect === "contains-all") { const all = leaves(got); ok = [].concat(want).every((w) => all.includes(String(w).toLowerCase())); }
   else if (rb.expect === "equals") {
     const seen = [rb.path, `campaign.${rb.path}`, `data.${rb.path}`].map((p) => pluck(got, p)).find((x) => x !== undefined);
-    ok = seen !== undefined && String(seen) === String(want);
+    // A START lands as whatever Clay calls a running campaign, never "START",
+    // so the readback only asks that it left draft.
+    if (rb.path === "status" && String(want).toUpperCase() === "START") ok = seen !== undefined && String(seen).toLowerCase() !== "draft";
+    else ok = seen !== undefined && String(seen).toLowerCase() === String(want).toLowerCase();
   }
   return { op: rb.op, check: rb.expect, ok: !!ok, run: cmd };
 }
@@ -992,8 +995,8 @@ function deepFreeze(v) {
 // before the send. Moved here from launch-guard.sh on 2026-10-10: three reviews
 // in a row found shell commands the hook's parser read differently from the
 // shell, so the check runs in the code that sends, where nothing is parsed.
-// A campaign START is never sent from here at all (see refuseStart); starting
-// or resuming is a click Caleb makes in Clay after he runs gtme-grade.
+// A campaign START (campaign-status status=START) needs a passing launch grade
+// on that campaign, and draftOnly makes sure it is still a draft.
 // Live, the verifier runs with a scrubbed environment and the passwd HOME, so a
 // caller's env can't point it at another key, receipt directory or fixture;
 // fixture mode (never reaches Clay) passes the test environment through.
@@ -1008,6 +1011,11 @@ function gradeGate(op, request, args) {
     ws = process.env.CLAY_WORKSPACE_ID || "1372623";
     if (!cid) return "add-leads changes a live campaign's segment; name it with campaign=cam_... so its grade can be checked";
     action = "add-leads";
+  } else if (isStart(op, args)) {
+    ws = args.ws;
+    cid = args.campaign;
+    if (!ws || !cid) return "a START names ws= and campaign= so its grade can be checked";
+    action = "launch";
   } else {
     return null;
   }
@@ -1073,8 +1081,14 @@ function noteChatApproval(name, rec) {
 // campaign-update and campaign-sequence touch only DRAFT campaigns. On a live
 // one, a new base segment emails whoever is in it and a sequence edit changes
 // mail already queued; those go through add-leads and its grade instead.
+function isStart(op, args) {
+  return op.name === "campaign-status" && String(args.status ?? "").trim().toUpperCase() === "START";
+}
+
+// A START goes only to a draft too: on a draft it is a launch, the one action
+// its grade covers; on a paused or stopped campaign Clay would resume it.
 function draftOnly(op, args) {
-  if (!["campaign-update", "campaign-sequence"].includes(op.name)) return null;
+  if (!["campaign-update", "campaign-sequence"].includes(op.name) && !isStart(op, args)) return null;
   let status;
   if (FIXTURES) {
     status = process.env.CHEWBACCA_CLAY_TEST_CAMPAIGN_STATUS || "draft";
@@ -1088,7 +1102,10 @@ function draftOnly(op, args) {
       return "could not read the campaign's status";
     }
   }
-  return status === "draft" ? null : `${args.campaign} is ${status}; only a draft campaign can be edited here`;
+  if (status === "draft") return null;
+  return isStart(op, args)
+    ? `${args.campaign} is ${status}; only a draft is started from here, so a START is always a launch and never a resume`
+    : `${args.campaign} is ${status}; only a draft campaign can be edited here`;
 }
 
 const SELF_APPROVED = new Set(["reply"]);
@@ -1165,14 +1182,16 @@ async function runOp(name, kv, flags) {
   if (norm.error) out({ ok: false, op: name, class: "input", reason: norm.error }, EXIT.usage);
   const bad = badArg(norm.values, op);
   if (bad) out({ ok: false, op: name, class: "input", reason: bad }, EXIT.usage);
-  // A campaign START (a launch or a resume) is never sent from here, approved,
-  // graded or not: launch vs resume is decided by Clay at send time, so no
-  // receipt can be bound to what it does (security review, 2026-10-10). Kept in
-  // code as well as in the registry's refuse_values, so editing one is not enough.
-  if (name === "campaign-status" && String(args.status ?? "").trim().toUpperCase() === "START") {
-    out({ ok: false, op: name, class: "refused", gate: op.gate, reason: "starting or resuming a campaign is never sent from here; Caleb runs gtme-grade, then presses Start in the Clay UI himself" }, EXIT.refused);
-  }
-  // A value this kit never sends (a campaign START) is refused before anything else.
+  // A campaign START is sent from here, by the agent, never handed to a person
+  // as a click (Caleb, 2026-10-12: "Never tell anyone to press anything in clay
+  // themselves"). The 2026-10-10 review's objection was that Clay decides
+  // launch vs resume at send time, so no grade could be bound to it. That is
+  // closed by only ever starting a DRAFT: after approval and right before the
+  // send, draftOnly reads the campaign and refuses anything else, so a START
+  // here is always a launch, and gradeGate checks a passing launch grade plus
+  // the pre-send gate on that same campaign. A paused campaign is never resumed
+  // from here.
+  // A value this kit never sends is refused before anything else.
   for (const [k, banned] of Object.entries(op.refuse_values || {})) {
     if (args[k] !== undefined && banned[String(args[k])]) {
       out({ ok: false, op: name, class: "refused", gate: op.gate, reason: banned[String(args[k])] }, EXIT.refused);

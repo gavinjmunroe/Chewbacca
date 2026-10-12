@@ -132,6 +132,9 @@ def refused(code, out, needle):
     return code != 0 and out.get("ok") is False and needle.lower() in json.dumps(out).lower()
 
 
+# Since 2026-10-12 the agent sends a START itself (Caleb: "Never tell anyone to
+# press anything in clay themselves"), but only to a draft, only with a passing
+# launch grade and pre-send gate, and only with a person's ok.
 for graded in (False, True):
     for person in (False, True):
         e = Env()
@@ -139,37 +142,35 @@ for graded in (False, True):
         e.campaign("cam_alpha")
         if graded:
             e.grade("cam_alpha", "launch")
-            e.grade("cam_alpha", "resume", status="draft")
         open(os.path.join(e.clay_fx, "api-anything", "setCampaignStatus.json"), "w").write(json.dumps(SENT))
         code, out = e.clay(*START, "--allow-writes", answer="campaign-status" if person else None)
-        check(f"START refused ({'with' if graded else 'without'} a receipt, "
-              f"{'with' if person else 'without'} a person at the terminal)",
-              refused(code, out, "never sent from here"), out)
+        name = (f"START {'sent' if graded and person else 'refused'} ({'with' if graded else 'without'} a receipt, "
+                f"{'with' if person else 'without'} a person's ok)")
+        if graded and person:
+            check(name, sends(code, out), out)
+        elif not person:
+            check(name, refused(code, out, "did not approve"), out)
+        else:
+            check(name, refused(code, out, "no passing grade"), out)
+# A resume grade never covers a START, and a START never reaches a paused campaign.
+e = Env()
+e.presend()
+e.grade("cam_alpha", "resume", status="paused")
+open(os.path.join(e.clay_fx, "api-anything", "setCampaignStatus.json"), "w").write(json.dumps(SENT))
+e.env["CHEWBACCA_CLAY_TEST_CAMPAIGN_STATUS"] = "paused"
+code, out = e.clay(*START, "--allow-writes", answer="campaign-status")
+check("START refused on a paused campaign (that would be a resume)", refused(code, out, "never a resume"), out)
+# No pre-send gate receipt: the launch grade alone is not enough.
+e = Env()
+e.grade("cam_alpha", "launch")
+open(os.path.join(e.clay_fx, "api-anything", "setCampaignStatus.json"), "w").write(json.dumps(SENT))
+code, out = e.clay(*START, "--allow-writes", answer="campaign-status")
+check("START refused without a pre-send gate receipt", refused(code, out, "pre-send gate"), out)
 e = Env()
 code, out = e.clay(*START, "--dry-run")
-check("START refused even as a dry run", refused(code, out, "never sent from here"), out)
-
-# Each refusal holds alone: a registry without refuse_values still refuses in code.
-lib = tempfile.mkdtemp()
-for f in os.listdir(os.path.join(ROOT, "library", "clay-api")):
-    src = os.path.join(ROOT, "library", "clay-api", f)
-    if os.path.isfile(src):
-        shutil.copy(src, lib)
-reg = json.load(open(os.path.join(lib, "registry.json")))
-for o in reg["ops"]:
-    if o["name"] == "campaign-status":
-        o.pop("refuse_values", None)
-json.dump(reg, open(os.path.join(lib, "registry.json"), "w"))
-e = Env()
-e.env["CHEWBACCA_CLAY_LIB"] = lib
-e.grade("cam_alpha", "launch")
-code, out = e.clay(*START, "--allow-writes", answer="campaign-status")
-check("START refused in code even when the registry's refusal is removed", refused(code, out, "never sent from here"), out)
-reg_text = open(os.path.join(ROOT, "library", "clay-api", "registry.json")).read()
-cs = next(o for o in json.loads(reg_text)["ops"] if o["name"] == "campaign-status")
-check("the repo registry still refuses START itself", "START" in (cs.get("refuse_values") or {}).get("status", {}), cs)
-check("the repo spec still allows only PAUSED or STOPPED",
-      '"pattern": "PAUSED|STOPPED"' in open(os.path.join(ROOT, "library", "clay-api", "clay.json")).read())
+check("a START dry run shows the request and sends nothing", code == 0 and out.get("sent") is False, out)
+check("the repo spec allows START, PAUSED or STOPPED",
+      '"pattern": "START|PAUSED|STOPPED"' in open(os.path.join(ROOT, "library", "clay-api", "clay.json")).read())
 
 e = Env()
 open(os.path.join(e.clay_fx, "api-anything", "setCampaignStatus.json"), "w").write(json.dumps(SENT))

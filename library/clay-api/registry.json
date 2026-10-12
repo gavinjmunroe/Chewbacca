@@ -1785,7 +1785,7 @@
         "campaign",
         "status"
       ],
-      "summary": "Pause or stop a campaign (status=PAUSED|STOPPED). START is refused here: a start or resume goes through launch-guard and a person in the UI.",
+      "summary": "Start, pause or stop a campaign (status=START|PAUSED|STOPPED). START goes only to a DRAFT (a launch, never a resume) and only with a passing gtme-grade --action launch and a fresh pre-send gate on it; the agent sends it, nobody clicks Start in Clay.",
       "surfaces": [
         {
           "type": "api-anything",
@@ -1797,11 +1797,6 @@
           }
         }
       ],
-      "refuse_values": {
-        "status": {
-          "START": "starting or resuming a campaign is never sent from here; it needs a full pre_send_gate.py pass (launch-guard) and a person in the Clay UI"
-        }
-      },
       "evidence": {
         "source": "bundle",
         "file": "app-pcUNqd80.js",
@@ -2048,12 +2043,6 @@
       "gate": "write:schema",
       "route": "clay-go column-settings --table {table} --column {column}",
       "why": "native column config with tokens bound to row fields; untaught as an API write"
-    },
-    {
-      "name": "start-campaign",
-      "gate": "write:campaign-state",
-      "route": "clay-go campaign --campaign {campaign}",
-      "why": "launch-guard.sh refuses a start without a full pre-send gate pass, and agents never press it"
     }
   ],
   "untaught_writes": [],

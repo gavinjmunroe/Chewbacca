@@ -411,7 +411,7 @@ case "$tool" in
     cmdlower="$(printf '%s' "$cmd" | tr '[:upper:]' '[:lower:]' | tr -s ' \t\n' '   ')"
     if printf '%s' "$cmdlower" | grep -qE 'chewie|jev-browse|peekaboo|mac-use|cliclick|osascript' &&
        printf '%s' "$cmdlower" | grep -qE "$WORDS" && ! chat_ok launch; then
-      refuse "a UI click can't be tied to one action on one campaign; a person presses Start in the Clay UI."
+      refuse "a UI click can't be tied to one action on one campaign; start a graded draft with chewbacca clay campaign-status ws=<ws> campaign=<cam_id> status=START instead."
     fi
     # Cheap first look: a command that never mentions Clay (quotes and
     # backslashes removed) is not this hook's business.
@@ -473,7 +473,7 @@ MSG
   mcp__peekaboo__*)
     case "$tool" in *click*|*type*|*hotkey*)
       printf '%s' "$lower" | grep -qE "$WORDS" && ! chat_ok launch &&
-        refuse "a click on screen can't be tied to one action on one campaign; a person presses Start in the Clay UI." ;;
+        refuse "a click on screen can't be tied to one action on one campaign; start a graded draft with chewbacca clay campaign-status ws=<ws> campaign=<cam_id> status=START instead." ;;
     esac
     exit 0
     ;;
@@ -497,7 +497,7 @@ MSG
         # review of cccc94ea). A chat ok opens Clay clicks only beside a fresh,
         # unchanged pre-send gate pass.
         if { printf '%s' "$last" | grep -qiE 'clay\.com' || printf '%s' "$lower" | grep -qE "$WORDS"; } && ! chat_ok launch; then
-          refuse "a browser click on a Clay page can't be tied to one action on one campaign; a person presses Start in the Clay UI."
+          refuse "a browser click on a Clay page can't be tied to one action on one campaign; start a graded draft with chewbacca clay campaign-status ws=<ws> campaign=<cam_id> status=START instead."
         fi
         ;;
     esac

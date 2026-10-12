@@ -7,8 +7,8 @@ it had touched a live campaign. Applied to Zeutara on 2026-10-10 it found, among
 other things, 362 of 1,778 messages sent from 30 inboxes the pre-send gate had
 never seen (two of them on domains the client refused on 10-04), because the
 gate read a sender file and the campaigns carried their own sender list. A rule
-that is only written down does not run. This runs them before Caleb presses
-Start in Clay, and `chewbacca clay` refuses add-leads without a pass from here.
+that is only written down does not run. This runs them before any launch, and
+`chewbacca clay` refuses a START or add-leads without a pass from here.
 
     gtme-grade --campaign cam_x --action launch --leads send.csv --suppress sent.csv \\
                --senders sender-accounts.json --warmup-start 2026-10-02 \\
@@ -53,10 +53,10 @@ and of the campaign's own state (sequence, variants, settings, senders), all
 signed with an HMAC key kept 0600 outside the repo and outside ~/.chewbacca
 (~/Library/Application Support/chewbacca/gtme-grade.key, made on first use).
 `--verify` re-checks one receipt against the current files and a fresh read of
-the campaign. `chewbacca clay` calls it on an add-leads request's own
-workspace, campaign and audience, after the person approves and before it
-sends, and refuses on any mismatch or error. A campaign START is never sent by
-the kit: Caleb runs this, reads the verdict, and presses Start in Clay himself.
+the campaign. `chewbacca clay` calls it on an add-leads or START request's own
+workspace, campaign (and audience), after approval and before it sends, and
+refuses on any mismatch or error. The agent sends the START itself, only to a
+draft (Caleb, 2026-10-12: nobody is told to press anything in Clay).
 Local --copy grades never write a receipt, since nothing ties them to a Clay
 campaign. Nothing else is written. This never sends, never edits a
 campaign and never spends a credit: Clay is only read through `chewbacca clay`.
@@ -1407,7 +1407,10 @@ def presend_ok():
         r = json.loads(PRESEND.read_text())
     except (OSError, ValueError):
         return "no pre-send gate receipt (scripts/pre_send_gate.py with every check on)"
-    if r.get("full") is not True:
+    # full_but_lines is every check except the personal first line, for a
+    # sequence that carries no per-lead line (the 10-12 signal-split drafts).
+    # launch-guard already accepted it for a launch; this matches it.
+    if r.get("full") is not True and r.get("full_but_lines") is not True:
         return "the last pre-send gate pass skipped a check"
     t = r.get("time")
     if not isinstance(t, int) or not (0 <= time.time() - t < RECEIPT_TTL_S):
@@ -1426,9 +1429,9 @@ def presend_ok():
 
 def verify_request(ws, cid, action, audience=None):
     """What a check asks: a grade for this action, plus the pre-send gate; for
-    add-leads (the one write chewbacca clay gates on a grade) the audience must
-    also be this campaign's own base segment. There is no `start`: Clay decides
-    launch vs resume at send time, so a START is never sent by the kit."""
+    add-leads the audience must also be this campaign's own base segment. A
+    START is checked as `launch`: chewbacca clay sends one only to a draft, so
+    it can never be a resume."""
     if action not in ACTIONS:
         return f"unknown action {action!r}"
     try:

@@ -96,7 +96,12 @@ class SendPathTests(unittest.TestCase):
         with mock.patch.object(run_plan, '_applescript', side_effect=AssertionError('ran')):
             with self.assertRaises(run_plan.PlanError):
                 run_plan.run_query({'name': 'app_data',
-                                    'script': 'tell application "Messages" to send "x" to buddy "y"'})
+                                    'script': 'tell application "Messages" to send "x" to buddy "y"'},
+                                   approved=True)
+            # Any script, sending or not, needs the confirm: no word list
+            # proves AppleScript only reads.
+            with self.assertRaises(run_plan.PlanError):
+                run_plan.run_query({'name': 'app_data', 'script': 'run script "x"'})
 
     def test_mail_send_honors_no_send(self):
         sys.path.insert(0, str(ROOT / 'mac/lib'))

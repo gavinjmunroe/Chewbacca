@@ -92,7 +92,7 @@ def _applescript(script):
     return subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
 
 
-def run_query(q):
+def run_query(q, approved=False):
     name = q["name"]
     if name == "texts":
         args = ["texts", "--days", str(q.get("days", 7)), "--json"]
@@ -106,8 +106,13 @@ def run_query(q):
         a = ["web", "read"] + ([q["url"]] if q.get("url") else [])
         return _chewie(*a).stdout
     if name == "app_data":
-        # A query reads. An AppleScript that sends is an action, and actions
-        # are confirm-gated; a query was not, so it could send (2026-10-11).
+        # Arbitrary AppleScript can do anything an action can, a send included,
+        # and no word list proves a script only reads (security review of
+        # 41ac5668). So it is confirm-gated like the actions, and a script
+        # that says send is refused even then: sending has its own actions.
+        if not approved:
+            raise PlanError("an app_data query runs arbitrary AppleScript, so it is "
+                            "confirm-gated like an action. Re-run with --yes to approve.")
         if re.search(r"\bsend\b", q["script"], re.I):
             raise PlanError("an app_data query cannot send; use send_text or send_email")
         return _applescript(q["script"]).stdout
@@ -184,7 +189,7 @@ def main():
         t0 = _time.time()
         print(f"query: {q['name']} ...", file=sys.stderr)
         try:
-            out = run_query(q)
+            out = run_query(q, approved)
             ms = int((_time.time() - t0) * 1000)
             size = len(out or "")
             results[q["name"]] = out

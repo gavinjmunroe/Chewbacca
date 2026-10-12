@@ -1338,6 +1338,25 @@ PY
   fi
 fi
 
+# chewbacca-bashparse (crates/bashparse) reads a shell command with
+# tree-sitter-bash so destructive-guard, load-guard and zsh-guard can tell a
+# command from a word inside data. Unlike hookd it has two pinned crates, so
+# the first build needs the network (12 s wall, 30 s CPU cold on 2026-10-12,
+# M-series, release). No cargo, no network, no binary: those guards read the raw
+# command, exactly as before.
+if [ -z "${CHEWBACCA_SUITE:-}" ] && command -v cargo >/dev/null 2>&1 && [ -f "$SCRIPT_DIR/crates/bashparse/Cargo.toml" ]; then
+  if CARGO_TARGET_DIR="$HOME/.chewbacca/build/bashparse" cargo build --quiet --release --locked \
+       --manifest-path "$SCRIPT_DIR/crates/bashparse/Cargo.toml" 2>/dev/null &&
+     [ "$("$HOME/.chewbacca/build/bashparse/release/chewbacca-bashparse" --probe 2>/dev/null)" = "chewbacca-bashparse 1" ]; then
+    mkdir -p "$HOME/.local/bin"
+    install -m 755 "$HOME/.chewbacca/build/bashparse/release/chewbacca-bashparse" "$HOME/.local/bin/chewbacca-bashparse.new" &&
+      mv -f "$HOME/.local/bin/chewbacca-bashparse.new" "$HOME/.local/bin/chewbacca-bashparse"
+    log "chewbacca-bashparse built to ~/.local/bin/chewbacca-bashparse"
+  else
+    warn "chewbacca-bashparse did not build; the shell guards read commands as before."
+  fi
+fi
+
 # Merge drivers for SHA256SUMS.txt and the README counts block. On 2026-10-09
 # about ten tabs pushed main and nearly every merge stopped on those two
 # generated files. .gitattributes names the drivers; git config holds the

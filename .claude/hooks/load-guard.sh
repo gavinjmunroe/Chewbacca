@@ -53,6 +53,21 @@ tool="$(printf '%s' "$payload" | jq -r '.tool_name // empty' 2>/dev/null)"
 cmd="$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null)"
 [ -n "$cmd" ] || exit 0
 
+# chewbacca-bashparse (crates/bashparse, tree-sitter-bash) blanks the words
+# the shell hands to a command that only prints, searches or lists them
+# (echo, grep, which, ls, command -v, a commit message), when that output
+# goes nowhere but the screen. Everything below then reads that text, so it
+# refuses a subset of what it did; the parse's own finds are added further
+# down. No binary, a parse error, or anything decided at run time: the raw
+# command, exactly as before. Measured 2026-10-12 over 7 days: 29 of
+# load-guard's 54 refusals were lookups like `which ffmpeg` and
+# `grep -E 'transcri|whisper'`, whose quoted | the old split cut through.
+bp="${CHEWBACCA_BASHPARSE:-$HOME/.local/bin/chewbacca-bashparse}"
+raw_cmd="$cmd"
+if [ -x "$bp" ] && masked="$(printf '%s' "$cmd" | "$bp" --mask load 2>/dev/null)"; then
+  cmd="$masked"
+fi
+
 # Test against the command with its DATA stripped out, not the raw text.
 #
 # On 2026-09-22, an hour after this hook shipped, it blocked a python heredoc
@@ -123,6 +138,63 @@ esac
 if [ "$heavy" = 0 ] && printf '%s' "$nohd" | grep -qiE 'python[0-9.]*[^|;&]*(import|-m) *(mlx_whisper|whisper|torch)'; then
   heavy=1
 fi
+# What the parse adds: a heavy tool the shell really runs where the text
+# above can't see it, behind xargs or timeout, inside `bash -c '...'` or
+# `$( )`, or in a heredoc fed to a shell. Before 2026-10-12 `bash -c
+# 'ffmpeg -i a b'` and `cat ids | xargs yt-transcript` under load both passed.
+# Only where it could change the answer: a busy machine, or a fan-out (the
+# two cases that refuse). On a quiet machine this python costs 0.1 s of CPU
+# per call for nothing (0.107 to 0.216 s measured 2026-10-12, load 8).
+parse_running=""
+busy="${LOAD_GUARD_LOAD:-$(uptime | grep -oE 'load averages?: *[0-9.]+' | grep -oE '[0-9.]+$')}"
+busy="${busy%%.*}"
+if [ -x "$bp" ] && { [ "${busy:-0}" -ge 8 ] 2>/dev/null || printf '%s' "$raw_cmd" | grep -qE 'xargs|parallel|&'; } &&
+   facts="$(printf '%s' "$raw_cmd" | "$bp" 2>/dev/null)" && [ -n "$facts" ]; then
+  parse_running=$(LG_FACTS="$facts" python3 -I - <<'PY'
+import json, os, re
+heavy = {"whisper", "mlx_whisper", "mlx-whisper", "yt-transcript", "ffmpeg",
+         "llama-cli", "llama-server", "stable-diffusion", "comfyui", "upscayl",
+         "handbrakecli", "blender", "nalana", "ollama"}
+ASK = {"--version", "-version", "--help", "-help", "-h", "-encoders", "-decoders", "-codecs", "-formats", "-filters"}
+QUIET = {"-b", "-hide_banner", "--background"}
+wrap = {"nice", "time", "env", "nohup", "caffeinate", "exec", "sudo", "command",
+        "timeout", "gtimeout", "xargs", "parallel", "noglob"}
+try:
+    facts = json.loads(os.environ.get("LG_FACTS") or "null") or {}
+except ValueError:
+    facts = {}
+for c in facts.get("commands", []):
+    words = [c.get("name")] + list(c.get("args") or [])
+    if words[:2] == ["command", "-v"] or words[:1] in (["which"], ["type"]):
+        continue
+    while words and words[0] is not None and (os.path.basename(words[0]) in wrap or "=" in words[0]
+                                               or words[0].startswith("-") or words[0].isdigit()):
+        words = words[1:]
+    if not words or words[0] is None:
+        continue
+    first = os.path.basename(words[0]).lower()
+    # Asked only for a version, help or a capability list: exits at once.
+    # Same rule as chewbacca-bashparse --mask load.
+    args = words[1:]
+    if args and None not in args and any(a in ASK for a in args) and (
+            all(a in ASK or a in QUIET for a in args)
+            or (len(args) == 2 and not args[0].startswith("-") and args[1] in ("--help", "-h", "-help"))):
+        continue
+    rest = " ".join(w for w in words[1:] if w)
+    # Same bar as the text check above: ollama only when it runs a model,
+    # blender and nalana only in the background (-b). `ollama list` at load
+    # 99 was refused by the first cut of this (corpus replay, 2026-10-12).
+    if first == "ollama" and args[:1] != ["run"]:
+        continue
+    if first in ("blender", "nalana") and not ({"-b", "--background"} & set(a for a in args if a)):
+        continue
+    if first in heavy or (first.startswith("python") and re.search(r"(import|-m)\s*(mlx_whisper|whisper|torch)", rest, re.I)):
+        print("yes")
+        break
+PY
+)
+fi
+[ "$parse_running" = "yes" ] && heavy=1
 [ "$heavy" = 1 ] || exit 0
 
 # Reading about it is not running it. submit-guard learned this the hard way
@@ -133,7 +205,7 @@ fi
 # yt-transcript {}` starts with cat, so the guard exempted the exact command
 # that caused the incident it was written for. A leading verb does not
 # describe a pipeline.
-if ! printf '%s' "$cmd" | grep -qE '[|;&]|xargs|parallel'; then
+if [ "$parse_running" != "yes" ] && ! printf '%s' "$cmd" | grep -qE '[|;&]|xargs|parallel'; then
   case "$lower" in
     cat\ *|less\ *|head\ *|tail\ *|grep\ *|rg\ *|wc\ *|ls\ *|find\ *|echo\ *) exit 0 ;;
   esac
@@ -218,7 +290,7 @@ for seg in re.split(r"[;|&\n]|\b(?:do|then|else)\b", text):
         print("yes"); break
 PY
 )
-  [ "$running" = "yes" ] || exit 0
+  [ "$running" = "yes" ] || [ "$parse_running" = "yes" ] || exit 0
 fi
 
 cores=$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 8)

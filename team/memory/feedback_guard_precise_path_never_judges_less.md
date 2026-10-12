@@ -30,3 +30,14 @@ execute (descriptions, heredoc bodies fed to data commands). If that isn't
 enough, add an explicit, narrow override the agent types on the one command.
 Run a regression review against the baseline version before landing, with the
 baseline's exit code next to the new one. Related: [[feedback_denylist_gate_is_a_backstop]], [[feedback_a_silent_guard_proves_nothing]].
+
+2026-10-12, step 5 of the reengineer: the shape that held for a real parser
+(tree-sitter-bash, crates/bashparse) is a MASK. The parser only blanks spans
+it proves never run (an echo or grep argument whose output stays on screen, a
+commit message), and the guard runs its unchanged old regex on what's left.
+A parse error or anything decided at run time (eval, alias, exec, a function,
+hash -p) returns the raw text. Two holes still got in on the first cut and
+were only found by replaying 1,500 real calls side by side with main: a
+redirect tree-sitter hangs on a statement around `cd x && echo y >> f`, and a
+pipe from a `{ }` group. Check every ancestor, never just the parent, and
+replay against main (`hookd_replay.py ab`) before landing.

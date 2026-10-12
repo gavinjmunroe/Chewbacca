@@ -1066,6 +1066,8 @@ if group "installer"; then
     /usr/bin/python3 "$ROOT/tests/test_hookd_dispatch.py"
   check  "hookd writes the agent board's rows exactly as the Python terminal hook does" \
     /usr/bin/python3 "$ROOT/tests/test_hookd_terminal.py"
+  check  "the bash parser only drops refusals of words the shell never runs, and the guards' suites hold with it" \
+    /usr/bin/python3 "$ROOT/tests/test_bashparse.py"
 
   check  "committed checksums describe the committed tree" \
     python3 "$ROOT/tools/committed_checksums.py"

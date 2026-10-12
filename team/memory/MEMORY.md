@@ -302,7 +302,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_offscreen_render_was_blank: every HUD_LINES_FILE render of a tall panel was a blank card until 10/11 (ImageRenderer draws ScrollView as nothing); fixed + tallPanelRenders; look at every render
 - feedback_ledger_update_by_source_key: close ledger tasks by source_key from parsed JSON, never a grepped id; a grep marked the wrong active task done (10/11)
 - feedback_every_site_grows_the_api: every site browsed becomes an api-anything op or gets an `api-grow skip` reason; hook names taught ops before a browse, nudges untaught hosts once per session (10/11)
-- feedback_guard_precise_path_never_judges_less: a guard's smarter parse only adds checks, never drops the cwd check; 23 bypasses in 3 reviews on 10/11 (destructive-guard)
+- feedback_guard_precise_path_never_judges_less: a guard's smarter parse only adds checks, never drops the cwd check; 23 bypasses in 3 reviews on 10/11 (destructive-guard); a parser may only MASK data, then the old regex reads the rest (10/12)
 - feedback_gate_words_see_the_whole_payload: hookd gate words match the whole payload; `path` hid in transcript_path, a U+0130 case fold spelled a gated word, and Write turns backslash-u escapes into characters (10/12)
 - feedback_hud_ide_tells_a_story: the HUD agents IDE reads like a story, Lemma-level; each glass region has one job, transcript one press away, never a sequence of lines (10/11)
 - feedback_chain_waits_in_the_queue: chain overnight jobs with jobs submit --after ID, never a wait in a claude -p prompt; two quit doing nothing on 10/11

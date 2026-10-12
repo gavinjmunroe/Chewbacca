@@ -9,7 +9,9 @@ H="$ROOT/.claude/hooks/zsh-guard.sh"
 export ZSH_GUARD_SHELL=zsh
 pass=0; fail=0
 t() { # name, expected_exit, command
-  out=$(printf '{"tool_name":"Bash","tool_input":{"command":%s}}' "$(python3 -c 'import json,sys;print(json.dumps(sys.argv[1]))' "$3")" | bash "$H" 2>&1 >/dev/null)
+  # A here-string, not a pipe: the guard exits before reading stdin when the
+  # shell isn't zsh, and under pipefail the writer's SIGPIPE made that 141.
+  out=$(bash "$H" 2>&1 >/dev/null <<<"$(printf '{"tool_name":"Bash","tool_input":{"command":%s}}' "$(python3 -c 'import json,sys;print(json.dumps(sys.argv[1]))' "$3")")")
   rc=$?
   if [ "$rc" = "$2" ]; then pass=$((pass+1)); else echo "  FAIL $1 (exit $rc, wanted $2) $out"; fail=$((fail+1)); fi
 }

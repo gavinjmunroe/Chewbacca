@@ -12,6 +12,12 @@ Two checks, both read-only on the transcripts:
             the tool result), with samples, so false positives can be judged
             on real calls instead of imagined ones.
 
+  ab        Run every real call a guard's gate lets in through two copies of
+            the hooks (main's and a branch's) side by side, and list where
+            their exit codes differ. A change that only adds checks shows
+            new-only refusals and no old-only ones; one that drops a false
+            positive shows each dropped refusal for a person to judge.
+
   corpus    Write a sanitized sample of real Bash shapes to a fixture, so the
             parity check runs in the suite without anyone's transcripts.
 
@@ -19,6 +25,7 @@ Two checks, both read-only on the transcripts:
     hookd_replay.py parity --corpus tests/fixtures/hookd-replay/bash.jsonl [--only NAME] [--jobs 4] [--fail-fast]
     hookd_replay.py refusals --days 7 [--samples 5] [--json]
     hookd_replay.py corpus --days 7 --out tests/fixtures/hookd-replay/bash.jsonl
+    hookd_replay.py ab --old <main>/.claude/hooks --new .claude/hooks --only zsh-guard.sh [--new-env K=V]
 """
 import argparse
 import collections
@@ -371,6 +378,61 @@ def refusals(args):
     return 0
 
 
+def ab(args):
+    """Old hooks and new hooks over the same real calls, worst case, exit
+    codes side by side. Only calls the OLD guard's gate lets in are replayed,
+    plus every call the new gate lets in, so a gate change shows too."""
+    if args.corpus:
+        calls = corpus_calls(args.corpus)
+    else:
+        calls = [payload for payload, _ in bash_calls(args.days)]
+        random.Random(11).shuffle(calls)
+    scratch = tempfile.mkdtemp(prefix='hookd-ab-')
+    calls = worst_case(calls, scratch)
+    base = dict(os.environ, CHEWBACCA_HOME=scratch, HOOKD_LOG='off', HOOKD_INNER='1',
+                CHEWBACCA_LOG_DIR=os.path.join(scratch, 'logs'), LOAD_GUARD_LOAD=str(args.load),
+                ZSH_GUARD_SHELL='zsh')
+    old_env = dict(base, **dict(kv.split('=', 1) for kv in (args.old_env or [])))
+    new_env = dict(base, **dict(kv.split('=', 1) for kv in (args.new_env or [])))
+    out = {}
+    for name in args.only:
+        old, new = Path(args.old) / name, Path(args.new) / name
+        todo = []
+        for script in (old, new):
+            verdicts = subprocess.run([args.hookd, 'decide', str(script), '--jsonl'],
+                                      input='\n'.join(json.dumps(p) for p in calls) + '\n',
+                                      text=True, capture_output=True, timeout=600).stdout.split()
+            todo.append({i for i, v in enumerate(verdicts) if v != 'skip'})
+        picked = sorted(todo[0] | todo[1])
+        if args.limit:
+            picked = picked[:args.limit]
+
+        def one(i):
+            payload = calls[i]
+            o = run_body(old, payload, old_env)[0] if i in todo[0] else 0
+            n = run_body(new, payload, new_env)[0] if i in todo[1] else 0
+            return i, o, n
+        rows = []
+        with ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:
+            for i, o, n in pool.map(one, picked):
+                rows.append((i, o, n))
+        diff = [{'command': calls[i]['tool_input']['command'], 'old': o, 'new': n} for i, o, n in rows if o != n]
+        out[name] = {'replayed': len(rows), 'old_refused': sum(1 for _, o, _ in rows if o == 2),
+                     'new_refused': sum(1 for _, _, n in rows if n == 2),
+                     'old_only': [d for d in diff if d['old'] == 2], 'new_only': [d for d in diff if d['new'] == 2],
+                     'other': [d for d in diff if 2 not in (d['old'], d['new'])]}
+    shutil.rmtree(scratch, ignore_errors=True)
+    if args.json:
+        print(json.dumps(out, indent=1))
+        return 0
+    for name, row in out.items():
+        print(f"{name}: {row['replayed']} calls, refused old {row['old_refused']} new {row['new_refused']}, "
+              f"old-only {len(row['old_only'])}, new-only {len(row['new_only'])}, other {len(row['other'])}")
+        for d in row['old_only'][:args.samples] + row['new_only'][:args.samples]:
+            print(f"   {d['old']}->{d['new']}  {d['command'][:140]!r}")
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest='mode', required=True)
@@ -397,8 +459,24 @@ def main(argv=None):
     r.add_argument('--days', type=float, default=7)
     r.add_argument('--samples', type=int, default=5)
     r.add_argument('--json', action='store_true')
+    a = sub.add_parser('ab')
+    a.add_argument('--days', type=float, default=7)
+    a.add_argument('--old', required=True, help="the baseline hooks dir, e.g. main's .claude/hooks")
+    a.add_argument('--new', default=str(ROOT / '.claude/hooks'))
+    a.add_argument('--only', action='append', required=True, help='guard file name; repeatable')
+    a.add_argument('--old-env', action='append', help='K=V for the old run only')
+    a.add_argument('--new-env', action='append', help='K=V for the new run only')
+    # 99, as parity's worst case: every load-guard rule that needs a busy
+    # machine is live, so a difference anywhere in it shows.
+    a.add_argument('--load', type=float, default=99)
+    a.add_argument('--corpus', help='replay a fixture instead of the transcripts')
+    a.add_argument('--limit', type=int, default=0)
+    a.add_argument('--jobs', type=int, default=4)
+    a.add_argument('--samples', type=int, default=10)
+    a.add_argument('--hookd', default=shutil.which('hookd') or str(ROOT / 'crates/hookd/target/release/hookd'))
+    a.add_argument('--json', action='store_true')
     args = parser.parse_args(argv)
-    return {'parity': parity, 'refusals': refusals, 'corpus': corpus}[args.mode](args)
+    return {'parity': parity, 'refusals': refusals, 'corpus': corpus, 'ab': ab}[args.mode](args)
 
 
 if __name__ == '__main__':

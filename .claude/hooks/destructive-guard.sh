@@ -35,6 +35,19 @@ CMD=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty')
 SID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty')
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty')
 [ -n "$CMD" ] || exit 0
+# chewbacca-bashparse (crates/bashparse, tree-sitter-bash) blanks the words
+# handed to a command that only prints, searches or stores them (echo,
+# printf, grep, rg, work-ledger, a git commit -m message) when that output
+# goes nowhere but the screen: not piped on, not captured by $( ), not
+# written to a file. Everything below reads that text and is unchanged, so
+# it refuses a subset of what it did. No binary, a parse error, or anything
+# decided at run time (eval, source, alias, a command name that expands):
+# the raw command, exactly as before. Measured 2026-10-12: a work-ledger
+# note quoting `reset --hard origin/main` was refused as if it ran it.
+BP="${CHEWBACCA_BASHPARSE:-$HOME/.local/bin/chewbacca-bashparse}"
+if [ -x "$BP" ] && MASKED="$(printf '%s' "$CMD" | "$BP" --mask data 2>/dev/null)" && [ -n "$MASKED" ]; then
+  CMD="$MASKED"
+fi
 # DESTRUCTIVE_OK=1 counts only as a leading assignment on the very command
 # it lets through, decided per piece below. A substring check let "echo
 # DESTRUCTIVE_OK=1; git reset --hard" through (security review, 2026-10-10),

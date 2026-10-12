@@ -426,6 +426,9 @@ def send(to, subject, text, dry_run=False, runner=subprocess.run):
     # so a session that set it to stay safe could still send mail here.
     if os.environ.get("CHEWBACCA_NO_SEND"):
         return 3, {"ok": False, "error": "sending is disabled (CHEWBACCA_NO_SEND)"}
+    refused = _send_refusal("email", to, text)
+    if refused:
+        return 6, {"ok": False, "error": refused}
     try:
         p = runner(argv, capture_output=True, text=True, timeout=60)
     except FileNotFoundError:
@@ -441,6 +444,25 @@ def send(to, subject, text, dry_run=False, runner=subprocess.run):
     if isinstance(reply, dict) and reply.get("success") is False:
         return 1, {"ok": False, "error": str(reply.get("error") or "send failed")}
     return 0, {"ok": True, "id": row_id(key)}
+
+
+def _send_refusal(channel, to, text):
+    """tools/send_approval.py's answer for this exact message: None when a
+    person's press approved it, else why nothing was sent. Loaded by path like
+    verdicts.py; when it can't load, nothing sends."""
+    try:
+        import importlib.util
+        mod = sys.modules.get("chewbacca_send_approval")
+        if mod is None:
+            here = os.path.dirname(os.path.realpath(__file__))
+            spec = importlib.util.spec_from_file_location(
+                "chewbacca_send_approval", os.path.join(here, "../../tools", "send_approval.py"))
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            sys.modules["chewbacca_send_approval"] = mod
+    except Exception as err:
+        return "the send approval check couldn't load (%s), so nothing was sent" % err
+    return mod.refusal(channel, to, text)
 
 
 def _chewbacca_verdicts():

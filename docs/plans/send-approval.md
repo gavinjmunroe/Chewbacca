@@ -56,6 +56,30 @@ No press, an agent can send from a shell (worst first):
 - A plan's `app_data` query refuses an AppleScript that sends.
 - `tests/test_send_paths.py`: the inventory as a test.
 
+## Landed 2026-10-12 (reengineer step 12)
+
+- `tools/send_approval.py` holds every press rule once; `bin/lib/send-approval.js`
+  runs it for Node and writes the same token for kit_confirm. There is no mint
+  command. A token is bound to channel, address and text, single use, 15 minutes.
+- Presses: a token kit_confirm minted after its code checked out; a send under
+  Kyber.app or `kyber-surfaces run` with no agent above it (the HUD bridge,
+  until the HUD lane mints at its own buttons); `CHEWBACCA_SEND_CODE` set to a
+  code take() drew on the person's screen for that exact message; `send` typed
+  at a terminal no agent's process tree owns.
+- Sinks that call take(): people send (iMessage and WhatsApp itself, the rest
+  through their child), mac-db's iMessage path (now `<to> <text> [--json]`
+  only), Mail.app through email_reader, gmail.py, slack.py, matrix.py, and a
+  plan's send_text and send_email (`--yes` approves the plan, never the send).
+- `tests/test_send_paths.py` asserts every listed sink calls take(), with a
+  NOT_YET list that may only shrink. `tests/test_send_approval.py` proves each
+  sink refuses with no press and sends once with one, and fails on the old code.
+
+Not yet: Clay `reply` and gtme (GTM lane, mid-launch), the HUD surfaces minting
+at their own buttons (HUD lane), and the raw tools an agent can still call
+directly (`mac messages send`, `wacli send`, an osascript to Messages). A guard
+on those needs an own-handles allowlist first, since "text me" is a raw
+`mac messages send` to Caleb's own number.
+
 ## Migration order
 
 1. One module per runtime, `send_approval.py` and `send-approval.js`, with

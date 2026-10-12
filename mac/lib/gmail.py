@@ -456,6 +456,9 @@ def send(to, subject, text, dry_run=False):
         return {"ok": True, "dry_run": True, "to": to}
     if os.environ.get("CHEWBACCA_NO_SEND"):
         return {"ok": False, "error": "sending is disabled (CHEWBACCA_NO_SEND)"}
+    refused = _send_refusal("email", to, text)
+    if refused:
+        return {"ok": False, "error": refused}
     ACCOUNT["cfg"] = sending_account(to)
     try:
         out = gws(args)
@@ -463,6 +466,25 @@ def send(to, subject, text, dry_run=False):
         return {"ok": True, "id": j.get("id")}
     except Exception as err:
         return {"ok": False, "error": str(err)[:200]}
+
+
+def _send_refusal(channel, to, text):
+    """tools/send_approval.py's answer for this exact message: None when a
+    person's press approved it, else why nothing was sent. Loaded by path like
+    verdicts.py; when it can't load, nothing sends."""
+    try:
+        import importlib.util
+        mod = sys.modules.get("chewbacca_send_approval")
+        if mod is None:
+            here = os.path.dirname(os.path.realpath(__file__))
+            spec = importlib.util.spec_from_file_location(
+                "chewbacca_send_approval", os.path.join(here, "../../tools", "send_approval.py"))
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            sys.modules["chewbacca_send_approval"] = mod
+    except Exception as err:
+        return "the send approval check couldn't load (%s), so nothing was sent" % err
+    return mod.refusal(channel, to, text)
 
 
 def _chewbacca_verdicts():

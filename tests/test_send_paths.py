@@ -7,6 +7,11 @@ including one that sends, with no confirm at all. This test is the inventory
 as code: a new file that sends without being listed here fails it, so no send
 path can be added quietly. The approval-as-a-type plan that replaces the
 per-path gates is docs/plans/send-approval.md.
+
+2026-10-12: the test flipped from "listed" to "every sink calls take()". A sink
+gated 'take' must call tools/send_approval.py right before it hands a message
+over (tests/test_send_approval.py proves each one refuses with no press).
+NOT_YET names the sinks that don't yet, and why, so the gap is on the page.
 """
 import os
 from pathlib import Path
@@ -29,16 +34,18 @@ SINK = re.compile(
 # path -> the gate the code must still contain. NO_SEND means the
 # CHEWBACCA_NO_SEND switch; the rest name the press or limit that stands in.
 KNOWN = {
-    'mac/lib/run_plan.py': 'CHEWBACCA_NO_SEND',
-    'mac/lib/email_reader.py': 'CHEWBACCA_NO_SEND',
-    'mac/lib/gmail.py': 'CHEWBACCA_NO_SEND',
-    'mac/lib/slack.py': 'CHEWBACCA_NO_SEND',
-    'mac/lib/matrix.py': 'CHEWBACCA_NO_SEND',
-    'bin/lib/people/send.js': 'CHEWBACCA_NO_SEND',
-    'bin/mac-db': 'CHEWBACCA_NO_SEND',
+    'mac/lib/run_plan.py': 'take',
+    'mac/lib/email_reader.py': 'take',
+    'mac/lib/gmail.py': 'take',
+    'mac/lib/slack.py': 'take',
+    'mac/lib/matrix.py': 'take',
+    'bin/lib/people/send.js': 'take',
+    'bin/mac-db': 'take',
     'tools/gtme_solo.py': 'CHEWBACCA_NO_SEND',
     'bin/chewbacca-clay': 'CHEWBACCA_NO_SEND',
-    'bin/lib/mcp-writes.js': 'CHEWBACCA_NO_SEND',
+    # kit_confirm: the six-digit code on the person's screen is the press, and
+    # this is where it mints the approval `people send` then takes.
+    'bin/lib/mcp-writes.js': 'mints',
     # A HUD button press delivered over hud.sock, person re-checked fresh.
     'bin/lib/surfaces/whatsapp.py': 'press',
     'bin/lib/surfaces/walks.py': 'press',
@@ -48,6 +55,27 @@ KNOWN = {
     # sends through the CLIs above and their gates. No sink of its own.
     'bin/hud-listen': 'prompt text',
 }
+
+
+# Sinks that still send without take(), each with the reason. Shrinking this
+# is the rest of docs/plans/send-approval.md; growing it fails the test.
+NOT_YET = {
+    # Clay `reply` and gtme sends: the GTM tab was mid-launch in
+    # bin/chewbacca-clay on 2026-10-12. Clay writes already need Caleb's ok.
+    'bin/chewbacca-clay': 'migration step 5, GTM lane',
+    'tools/gtme_solo.py': 'migration step 6, GTM lane',
+    # HUD surfaces send on a button press over hud.sock; they mint once the
+    # HUD lane adopts send_approval.mint. Until then take() counts a send
+    # under `kyber-surfaces run` with no agent above it as that press.
+    'bin/lib/surfaces/whatsapp.py': 'HUD lane',
+    'bin/lib/surfaces/walks.py': 'HUD lane',
+    # Replies only to the user's own handles: never another person.
+    'bin/text-command': 'own handles',
+    # No sink of its own: prompt text naming `mac messages send`.
+    'bin/hud-listen': 'prompt text',
+}
+NOT_YET_COUNT = 6
+TAKE_CALL = re.compile(r'_send_refusal\(|approval\.take\(')
 
 
 def sinks():
@@ -79,6 +107,25 @@ class SendPathTests(unittest.TestCase):
                 continue
             if gate == 'CHEWBACCA_NO_SEND':
                 self.assertIn('CHEWBACCA_NO_SEND', path.read_text(errors='replace'), rel)
+
+    def test_every_sink_calls_take(self):
+        for rel, gate in KNOWN.items():
+            if rel in NOT_YET:
+                continue
+            text = (ROOT / rel).read_text(errors='replace')
+            if gate == 'mints':
+                self.assertIn('mintPressed(', text, rel)
+                continue
+            self.assertEqual(gate, 'take', rel + ' sends without take() and is not in NOT_YET')
+            self.assertRegex(text, TAKE_CALL, rel)
+        self.assertEqual(len(NOT_YET), NOT_YET_COUNT, 'NOT_YET only shrinks: move a sink to take() instead')
+        self.assertTrue(set(NOT_YET) <= set(KNOWN))
+
+    def test_only_press_handlers_mint(self):
+        out = subprocess.run(['git', 'grep', '-l', '-E', r'mintPressed\(|send_approval\.mint\(|\bsa\.mint\(',
+                              '--', 'bin', 'tools', 'mac', 'apps', 'skills'],
+                             cwd=ROOT, capture_output=True, text=True).stdout.split()
+        self.assertEqual(sorted(out), ['bin/lib/mcp-writes.js', 'bin/lib/send-approval.js'])
 
     def test_a_plan_cannot_send_with_no_send_set(self):
         sys.path.insert(0, str(ROOT / 'mac/lib'))

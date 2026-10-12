@@ -21,6 +21,7 @@ const { db, nowISO } = require("./db");
 const { textsReader, resolvePerson, printable } = require("./texts");
 const { findPerson } = require("./lookup");
 const { quietFor } = require("./quiet-hours");
+const approval = require("../send-approval");
 
 const { APPS, BRIDGED } = require("./apps");
 // Loaded up front and guarded, so a missing file can never throw after a
@@ -285,6 +286,13 @@ function dispatchUnlogged(via, to, text, flags) {
         };
     }
   }
+  // The apps sent from right here need this message's press now; email,
+  // Slack and the bridged chats hand it to gmail.py, slack.py and matrix.py,
+  // which take it themselves (tools/send_approval.py).
+  if (via === "imessage" || via === "whatsapp") {
+    const ok = approval.take(via, to, text);
+    if (!ok.ok) return { code: 6, err: ok.err };
+  }
   if (via === "imessage" && flags.room)
     return run("osascript", [
       ...GROUP_SCRIPT.flatMap((l) => ["-e", l]),
@@ -387,6 +395,7 @@ function sendRoom(d, name, text, via, flags, P) {
     say(`  would send to ${where}`);
     say(`  ${P(text)}`);
     say(c.dim(`  to send: add --to ${P(to)}`));
+    approvalLine(flags, r.source, to, text);
     return;
   }
   // SAME GATE AS AN UNSAVED 1:1. A room is found by its display name, and any
@@ -410,6 +419,16 @@ function sendRoom(d, name, text, via, flags, P) {
       )}`,
     );
   say(`${c.grn("sent")} to ${where}`);
+}
+
+// --approval-binding on a dry run: one JSON line naming the exact channel and
+// address the send would hand over, so a press handler (kit_confirm) can mint
+// the approval for what the person saw. It approves nothing by itself.
+function approvalLine(flags, channel, to, text) {
+  if (flags["approval-binding"])
+    process.stdout.write(
+      "approval-binding " + JSON.stringify({ channel, to, text }) + "\n",
+    );
 }
 
 function cmdSend(argv) {
@@ -501,6 +520,7 @@ function cmdSend(argv) {
           `  ${quietLine} A send now is refused; queue it in people texts drafts.`,
         ),
       );
+    approvalLine(flags, app, to, text);
     return;
   }
   if (quiet && !flags["after-hours"])

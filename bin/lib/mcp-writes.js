@@ -40,6 +40,7 @@ try {
   verdicts = { sendRow() {} };
 }
 const crypto = require("node:crypto");
+const approvals = require("./send-approval");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -693,9 +694,24 @@ function outward(bin) {
         const argv = ["send", p.to, p.text];
         if (p.via) argv.push("--via", p.via);
         if (p.subject) argv.push("--subject", p.subject);
-        const r = await run(B("people"), [...argv, "--dry-run"]);
+        const r = await run(B("people"), [
+          ...argv,
+          "--approval-binding",
+          "--dry-run",
+        ]);
         if (r.code !== 0 || !/would send to/.test(r.out))
           throw new Error(`can't address that: ${said(r)}`);
+        // The exact channel and address people send will hand the message to,
+        // which is what confirm's approval is minted for.
+        const bound = /^approval-binding (\{.*\})$/m.exec(r.out);
+        let approval = null;
+        try {
+          approval = bound ? JSON.parse(bound[1]) : null;
+        } catch {
+          approval = null;
+        }
+        if (!approval || approval.text !== String(p.text).trim())
+          throw new Error("people send didn't say where this would go");
         // An address the store can't tie to the person (on WhatsApp or Slack
         // the sender picks their own name) sends only with --to repeating it.
         // That is never filled in here: kit_confirm has to be handed the same
@@ -704,15 +720,21 @@ function outward(bin) {
         return {
           argv,
           dry: [...argv, "--dry-run"],
-          preview: r.out,
+          preview: r.out.replace(/^approval-binding .*\n?/m, ""),
           bind: recipientLine(r.out),
           needsTo: unsaved ? unsaved[1].trim() : null,
+          approval,
         };
       },
       async recheck(d) {
         return recipientLine((await run(B("people"), d.dry)).out);
       },
-      send: (d) => run(B("people"), d.argv, { timeout: 60000 }),
+      // The confirmed code is the person's press; this is the one place it
+      // becomes an approval, for the exact channel, address and text drafted.
+      send: (d) => {
+        approvals.mintPressed(d.approval.channel, d.approval.to, d.approval.text, "kit_confirm");
+        return run(B("people"), d.argv, { timeout: 60000 });
+      },
     },
     "gtm.clay_write": {
       async draft(p) {
@@ -808,6 +830,7 @@ function createWrites({ bin, registryFile, choicesFor }) {
         dry: d.dry,
         bind: d.bind,
         needsTo: d.needsTo || null,
+        approval: d.approval || null,
         at: Date.now(),
         used: false,
       });

@@ -311,6 +311,9 @@ def send(target, text, dry_run=False, path=None):
                 "token": "present" if token_for(found["workspace"]) else "missing"}
     if os.environ.get("CHEWBACCA_NO_SEND"):
         return {"ok": False, "error": "sending is disabled (CHEWBACCA_NO_SEND)"}
+    refused = _send_refusal("slack", target, text)
+    if refused:
+        return {"ok": False, "error": refused}
     token = token_for(found["workspace"])
     if not token and shutil.which(SLACKCLI) and slackcli_signed_in(found.get("workspace")):
         return send_slackcli(found, text)
@@ -339,6 +342,25 @@ def send(target, text, dry_run=False, path=None):
         workspace = auth.get("team_id") if auth["ok"] else ""
     return {"ok": True, "id": row_id(workspace or "", reply.get("channel") or channel, reply.get("ts")),
             "channel": reply.get("channel") or channel}
+
+
+def _send_refusal(channel, to, text):
+    """tools/send_approval.py's answer for this exact message: None when a
+    person's press approved it, else why nothing was sent. Loaded by path like
+    verdicts.py; when it can't load, nothing sends."""
+    try:
+        import importlib.util
+        mod = sys.modules.get("chewbacca_send_approval")
+        if mod is None:
+            here = os.path.dirname(os.path.realpath(__file__))
+            spec = importlib.util.spec_from_file_location(
+                "chewbacca_send_approval", os.path.join(here, "../../tools", "send_approval.py"))
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            sys.modules["chewbacca_send_approval"] = mod
+    except Exception as err:
+        return "the send approval check couldn't load (%s), so nothing was sent" % err
+    return mod.refusal(channel, to, text)
 
 
 def _chewbacca_verdicts():

@@ -88,6 +88,25 @@ def _chewie(*args):
     return subprocess.run([BIN, *args], capture_output=True, text=True)
 
 
+def _send_refusal(channel, to, text):
+    """tools/send_approval.py's answer for this exact message: None when a
+    person's press approved it, else why nothing was sent. Loaded by path like
+    verdicts.py; when it can't load, nothing sends."""
+    try:
+        import importlib.util
+        mod = sys.modules.get("chewbacca_send_approval")
+        if mod is None:
+            here = os.path.dirname(os.path.realpath(__file__))
+            spec = importlib.util.spec_from_file_location(
+                "chewbacca_send_approval", os.path.join(here, "../../tools", "send_approval.py"))
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            sys.modules["chewbacca_send_approval"] = mod
+    except Exception as err:
+        return "the send approval check couldn't load (%s), so nothing was sent" % err
+    return mod.refusal(channel, to, text)
+
+
 def _chewbacca_verdicts():
     """tools/verdicts.py, the kit's verdict log, loaded by path so no module
     here can shadow it; None when it isn't there. `chewbacca why --verdicts`
@@ -176,6 +195,13 @@ def run_action(a, approved):
     if name in ("send_text", "send_email") and os.environ.get("CHEWBACCA_NO_SEND"):
         _send_row(name, "held", a, "CHEWBACCA_NO_SEND")
         raise PlanError("sending is disabled (CHEWBACCA_NO_SEND)")
+    # --yes approves the plan, never a send: an agent passes --yes itself. The
+    # send step stops here until a person's press approves this exact message.
+    if name in ("send_text", "send_email"):
+        refused = _send_refusal("imessage" if name == "send_text" else "email", a["to"], a["body"])
+        if refused:
+            _send_row(name, "failed", a, "no press")
+            raise PlanError(refused)
     if name == "send_text":
         r = _applescript(
             f'tell application "Messages" to send "{a["body"]}" to buddy "{a["to"]}"')

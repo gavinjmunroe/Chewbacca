@@ -116,6 +116,7 @@ put(os.path.join(FB, "people"), f"""
     # A thread no saved card owns, as `people send --dry-run` prints one.
     if [ "$2" = "Unsaved Person" ] && [ "${{@: -1}}" = "--dry-run" ]; then
       printf '  would send to Unsaved Person via whatsapp, 15550001111@s.whatsapp.net, not a saved contact\\n  %s\\n  to send: add --to 15550001111@s.whatsapp.net\\n' "$3"
+      printf 'approval-binding {{"channel":"whatsapp","to":"15550001111@s.whatsapp.net","text":"%s"}}\\n' "$3"
       exit 0
     fi
     exec {os.path.join(ROOT, "bin", "people")!r} "$@"

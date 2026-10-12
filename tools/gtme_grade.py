@@ -32,6 +32,16 @@ campaign before it goes out"):
   5 start      tracking, schedule, opt-out, the senders the campaign actually
                carries, mailboxes per domain, warmup age, live bounce rate.
 
+Sagar Tiwari's review runs inside gates 1 and 2, each line cited "[Sagar <date>
+<source>]": the subject is stacked concrete nouns about the offer, never
+"Question"; email 1 says who it is from (person and company) and what is sold;
+signals lead messaging; warm relationships get a text, not a cold email; nobody
+is emailed twice. --sender-name, --sender-company, --offer and --signal supply
+what the copy alone cannot show, and --client fills the first two from
+clients.json (principal, sender_company or name). His rules that are judgement,
+not data, live with their quotes in
+skills/gtm-engineering/references/sagar.md.
+
 Every check that could not run prints NOT CHECKED and fails its gate, because a
 skipped rule never counts as a pass (lastlook, same section). Exit 0 only when
 all five gates pass, 1 when any fails, 2 on bad arguments.
@@ -834,6 +844,211 @@ def gate_start(camp, args, senders, analytics, gate, client):
             gate.note(f"live: {sent} sent, under the 50-send floor for a bounce verdict")
 
 
+# -------------------------------------------------------------------- Sagar
+# Sagar Tiwari runs BMA's outbound. These are his rules that can be read off the
+# data, each cited to where he said it; the quotes and the rules that need
+# judgement are in skills/gtm-engineering/references/sagar.md. The transcript is
+# "Outbound change management review", Sagar teaching Maggie and Mike the six
+# variables, file dated 2026-03-19.
+SAGAR_SUBJ = "Sagar 2026-03-19 transcript, subject lines; Zeutara subjects re-cut 2026-10-11"
+SAGAR_VAGUE = "Sagar 2026-03-19 transcript, his kill of Kevin's copy"
+SAGAR_SIGNALS = "Sagar 2026-03-19 transcript, signals leading messaging"
+SAGAR_WARM = "Sagar 2026-03-19 transcript, relationship column; amber-outbound ask 2026-09-17"
+SAGAR_TWICE = "Sagar 2026-10-06 Zeutara DECISIONS no-double-email"
+SAGAR_FIRM = "Sagar 2025-03-05 Slack maple-smartlead, dedupe at the company level"
+SAGAR_ORDER = "Sagar 2026-10-04 Zeutara DECISIONS strongest-first"
+SAGAR_SHAPE = "Sagar 2026-10-04 Slack zeutara-amber, 2 variants of 3 messages"
+
+# Subjects that name no offer. "Question" is the one Zeutara actually shipped
+# from 9/28 to 10/11, from a "one word question" brief, until the subjects were
+# re-cut to Sagar's stacked nouns ("Chicago dating app pre-seed").
+GENERIC_SUBJECTS = {
+    "question", "quick question", "a question", "question for you", "quick q", "hi", "hello",
+    "hey", "hi there", "hey there", "intro", "introduction", "quick intro", "intro call",
+    "following up", "follow up", "follow-up", "checking in", "touching base", "curious",
+    "idea", "an idea", "quick idea", "thoughts", "quick thought", "partnership",
+    "opportunity", "quick chat", "chat", "call", "meeting", "connect", "let's connect",
+    "update", "quick update", "hello from us",
+}
+# Words that carry no offer. A subject made only of these, pronouns and
+# connectives names nothing a reader could picture.
+EMPTY_WORDS = set("""
+a an the and or of to for with about from on in at by re fwd fw your you our my we us i me it
+this that these those quick question questions idea ideas thought thoughts intro introduction
+hi hello hey chat call meeting connect connecting following follow up checking touching base
+curious update opportunity partnership help time minute minutes info information reaching out
+share sharing regarding hope well just some new great quick note something few one two
+""".split())
+VAGUE = re.compile(r"\b(solutions?|services|offerings?|capabilities|synerg\w*|value[- ]add|"
+                   r"best[- ]in[- ]class|next level|grow your business|help (you|companies|teams) grow|"
+                   r"consulting)\b", re.I)
+SIGNAL_COL = re.compile(r"(signal|segment|trigger|why_now|intent|cohort|sector_match|thesis_match)")
+LAST_SENT_COL = re.compile(r"(last_sent|last_emailed|last_contacted|zeutara_last_sent)")
+RELATION_COL = re.compile(r"^(relationship\w*|degree|connection_degree|warmth|warm|known)$")
+WARM_VALUE = re.compile(r"^(1|1st|first|first degree|direct|known|warm|friend|yes|true)$", re.I)
+TIER_COL = ("tier", "fit_tier", "priority")
+SENDER_NAME_FIELD = re.compile(r"\{\{sender_\w*name\w*\}\}", re.I)
+SENDER_CO_FIELD = re.compile(r"\{\{sender_\w*compan\w*\}\}", re.I)
+
+
+def content_words(text):
+    """Words that could name something, lowercased, merge fields kept whole."""
+    toks = re.findall(r"\{\{\w+\}\}|[a-z0-9$%]+", (text or "").lower())
+    return [t for t in toks if t.startswith("{{") or (len(t) >= 3 and t not in EMPTY_WORDS)]
+
+
+def overlaps(a, b):
+    """True when two word lists share a word, by its first five letters, so
+    "round" meets "rounds" and "payments" meets "payment"."""
+    stems = {w[:5] for w in b if not w.startswith("{{")}
+    return any(not w.startswith("{{") and w[:5] in stems for w in a)
+
+
+def subject_problem(subject):
+    """Why a subject fails Sagar's rule, or ''. He wants the offer stacked as
+    concrete nouns: "Clay, private equity, Structify. That sticks out to me in
+    the subject line. It also is just more real." """
+    norm = re.sub(r"^(re|fwd?|fw)\s*:\s*", "", (subject or "").strip().lower())
+    norm = re.sub(r"[^\w\s'{}-]", "", norm).strip()
+    if not norm:
+        return "is empty"
+    if norm in GENERIC_SUBJECTS:
+        return f"\"{subject}\" is a generic word that names no offer"
+    if len(norm.split()) < 2:
+        return f"\"{subject}\" is one word, and one word cannot stack the offer's nouns"
+    if not content_words(norm):
+        return f"\"{subject}\" carries no concrete noun"
+    return ""
+
+
+def offer_for(camp, args, client):
+    """The offer in concrete nouns: --offer, else a clients.json offer whose name
+    or alias is in the campaign name and which carries a `pitch`."""
+    if args.offer:
+        return args.offer
+    name = (camp.get("name") or "").lower()
+    for o in (client or {}).get("offers", []):
+        names = [o.get("name", "")] + list(o.get("aliases") or [])
+        if o.get("pitch") and any(n and n.lower() in name for n in names):
+            return o["pitch"]
+    return None
+
+
+def sagar_list(rows, gate):
+    """His list rules, on the rows. No rows means gate 1 already says NOT CHECKED."""
+    if not rows:
+        return
+    keys = rows[0].keys()
+    last = next((k for k in keys if LAST_SENT_COL.search(k)), None)
+    if last:
+        sent = sum(1 for r in rows if r[last])
+        if sent:
+            gate.fail(f"{sent} leads already carry a last-sent date; refills never email anyone "
+                      f"twice", SAGAR_TWICE)
+    rel = next((k for k in keys if RELATION_COL.match(k)), None)
+    if rel is None:
+        gate.warn("no relationship-to-sender column, so nobody filtered out the people the sender "
+                  "already knows (\"you know these 26 people directly. There's no need for you to "
+                  "send an email. You should just personally text them.\")", SAGAR_WARM)
+    else:
+        warm = sum(1 for r in rows if WARM_VALUE.match(r[rel]))
+        if warm:
+            gate.fail(f"{warm} leads are marked as known to the sender in {rel}; they get a "
+                      f"personal text, not a cold email", SAGAR_WARM)
+    ecol = col(rows, "email", "email_address", "work_email")
+    if ecol:
+        doms = Counter(r[ecol].lower().split("@")[-1] for r in rows if "@" in r[ecol])
+        multi = {d: c for d, c in doms.items() if c > 1 and d not in FREE}
+        if multi:
+            gate.warn(f"{len(multi)} companies carry more than one lead (worst {max(multi.values())}); "
+                      f"Sagar dedupes at the company level", SAGAR_FIRM)
+    tier = col(rows, *TIER_COL)
+    if tier:
+        tiers = sorted({r[tier] for r in rows if r[tier]})
+        if len(tiers) > 1:
+            gate.warn(f"one start mixes tiers {tiers[:4]}; the strongest fits go first and the "
+                      f"weaker fill after, order never cut", SAGAR_ORDER)
+
+
+def sagar_copy(camp, rows, args, senders, client, gate):
+    """His copy rules, on email 1 of every variant."""
+    firsts = [(v["name"], v["steps"][0]) for v in camp["variants"] if v["steps"]]
+    if not firsts:
+        return
+    offer = offer_for(camp, args, client)
+    offer_words = content_words(offer) if offer else []
+    if offer is None:
+        gate.skip("what is sold, in concrete nouns", "no --offer (or clients.json offer pitch); "
+                  "Sagar: \"It's impossible to sell consulting services outbound without anything "
+                  "specific because no one will trust you\"")
+    names = [n for n in [args.sender_name, (client or {}).get("principal")] if n]
+    by_id = {s.get("id"): s for s in senders or [] if s.get("id")}
+    attached = [by_id[i] for i in camp["sender_ids"] if i in by_id] if camp["sender_ids"] else (senders or [])
+    names += [a.get("displayname") or a.get("display_name") or "" for a in attached]
+    names = sorted({n.strip() for n in names if n and n.strip()})
+    company = args.sender_company or (client or {}).get("sender_company") or (client or {}).get("name")
+    many = len(firsts) > 1
+    for vname, st in firsts:
+        where = f"variant {vname} email 1" if many else "email 1"
+        text = st["subject"] + "\n" + st["body"]
+        low = text.lower()
+        why = subject_problem(st["subject"])
+        if why:
+            gate.fail(f"{where}: subject {why}; Sagar's subjects stack the offer's concrete nouns, "
+                      f"like \"Chicago dating app pre-seed\"", SAGAR_SUBJ)
+        else:
+            subj = content_words(st["subject"])
+            target = offer_words or content_words(st["body"])
+            if not overlaps(subj, target):
+                msg = (f"{where}: subject \"{st['subject']}\" shares no word with "
+                       f"{'the offer' if offer_words else 'the email it opens'}")
+                if offer_words:
+                    gate.fail(msg, SAGAR_SUBJ)
+                else:
+                    gate.warn(msg, SAGAR_SUBJ)
+        if offer_words and not overlaps(content_words(st["body"]), offer_words):
+            gate.fail(f"{where} never names the offer (\"{offer}\"); Kevin's copy died as \"way too "
+                      f"vague, both in terms of who we're targeting and in terms of who the message "
+                      f"is coming from\"", SAGAR_VAGUE)
+        if SENDER_NAME_FIELD.search(text) or any(n.lower() in low for n in names):
+            pass
+        elif names:
+            gate.fail(f"{where} never says who it is from (looked for {names[:3]}); \"way too vague "
+                      f"... in terms of who the message is coming from\"", SAGAR_VAGUE)
+        else:
+            gate.skip(f"{where} sender name", "no --sender-name, client principal or sender display "
+                      "name to look for")
+        if company is None:
+            gate.skip(f"{where} sender company", "no --sender-company or --client naming the company "
+                      "the email comes from")
+        elif not (SENDER_CO_FIELD.search(text) or company.lower() in low):
+            gate.fail(f"{where} never names the company it comes from ({company})", SAGAR_VAGUE)
+        vague = sorted({m.group(0).lower() for m in VAGUE.finditer(st["body"])})
+        if vague:
+            gate.warn(f"{where} sells in abstractions {vague}; name the thing, the number, the "
+                      f"customer", SAGAR_VAGUE)
+
+    # Signals lead messaging: the list was cut by a reason to write now, or
+    # email 1 says something only this recipient could be told.
+    per_lead = any(personal_fields(st["body"]) for _, st in firsts)
+    sig = col(rows or [], *[k for k in (rows[0].keys() if rows else []) if SIGNAL_COL.search(k)])
+    split = bool(sig and all(r[sig] for r in rows))
+    if per_lead or args.signal or split:
+        gate.note("signals lead messaging: " + ("email 1 carries a per-lead line" if per_lead else
+                  f"--signal {args.signal!r}" if args.signal else f"every lead carries {sig}"))
+    elif rows is None:
+        gate.skip("signals leading messaging", "email 1 has no per-lead line, and with no --leads "
+                  "and no --signal nothing shows the list was cut by a signal")
+    else:
+        gate.warn("signals leading messaging: no lead carries a signal or segment field and email 1 "
+                  "has no per-lead line, so this is a list plus copy (\"you should not look at ICP "
+                  "builds and messaging ... as two distinct things\")", SAGAR_SIGNALS)
+    shapes = [len(v["steps"]) for v in camp["variants"]]
+    if len(shapes) != 2 or any(n != 3 for n in shapes):
+        gate.warn(f"{len(shapes)} variant(s) of {shapes} messages; Sagar's weekly launch is 2 variants "
+                  f"of 3 messages per offer", SAGAR_SHAPE)
+
+
 # ------------------------------------------------------------------- driver
 
 def sha(path):
@@ -928,6 +1143,8 @@ def grade(args):
     gate_read(args.review, camp, gates[2])
     gate_render(camp, rows, gates[3])
     gate_start(camp, args, senders, analytics, gates[4], client)
+    sagar_list(rows, gates[0])
+    sagar_copy(camp, rows, args, senders, client, gates[1])
     passed = all(g.passed for g in gates)
     return camp, gates, passed, inputs
 
@@ -1236,6 +1453,14 @@ def main(argv=None):
     ap.add_argument("--refuse-sender", action="append", help="regex of inbox addresses the client refused")
     ap.add_argument("--client", help="client name in ~/.chewbacca/gtm/clients.json "
                                      "(refused_senders, primary_domain)")
+    ap.add_argument("--sender-name", help="the person the email comes from (else --client's principal "
+                                          "or the senders' display names)")
+    ap.add_argument("--sender-company", help="the company the email comes from (else --client's "
+                                             "sender_company or name)")
+    ap.add_argument("--offer", help="what is sold, in concrete nouns (\"dating app pre-seed round\"); "
+                                    "email 1 and its subject must name it")
+    ap.add_argument("--signal", help="the signal this campaign's leads were cut on, when no leads "
+                                     "column carries it")
     ap.add_argument("--icp-titles", help="comma list of title words that match the ICP")
     ap.add_argument("--icp-fit-column", help="column holding a yes/no ICP fit per row")
     ap.add_argument("--review", help="JSON recording the recipient read: campaign, reviewer, "

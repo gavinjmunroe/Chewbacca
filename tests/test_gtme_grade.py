@@ -31,7 +31,7 @@ Worth a look?
 
 Reply stop and I'll stop.
 
-Jane Doe
+Jane Doe, Northwind Partners
 100 Main Street, Suite 2, Springfield
 ---
 Delay: 3
@@ -129,7 +129,8 @@ class Case:
         args = {**src, "--leads": d / "leads.csv",
                 "--senders": d / "senders.csv", "--suppress": d / "suppress.csv",
                 "--review": d / "review.json",
-                "--icp-titles": "partner,principal"}
+                "--icp-titles": "partner,principal",
+                "--sender-company": "Northwind Partners", "--offer": "payments seed rounds"}
         argv = [sys.executable, str(TOOL), "--json"]
         for k, v in args.items():
             if k not in self.drop:
@@ -223,7 +224,8 @@ for f in (c.home / ".chewbacca" / "state" / "gtme-grade").glob("*"):
 p = subprocess.run([sys.executable, str(TOOL), "--campaign-json", str(c.dir / "campaign.json"),
                     "--action", "launch", "--leads", str(c.dir / "leads.csv"), "--senders",
                     str(c.dir / "senders.csv"), "--suppress", str(c.dir / "suppress.csv"),
-                    "--review", str(c.dir / "review.json"), "--icp-titles", "partner,principal"],
+                    "--review", str(c.dir / "review.json"), "--icp-titles", "partner,principal",
+                    "--sender-company", "Northwind Partners", "--offer", "payments seed rounds"],
                    capture_output=True, text=True, timeout=60,
                    env=dict(c.env, GTME_GRADE_INPUT_ROOTS=str(c.home)))
 check("an input outside the allowed roots gets no receipt",
@@ -391,6 +393,135 @@ def refused(c):
 expect_fail("gate 5: a client-refused inbox refuses", 5, refused, "refused")
 expect_fail("gate 5: the primary domain refuses", 5,
             lambda c: c.extra.extend(["--primary-domain", "outreach-one.example.test"]), "primary domain")
+
+# Sagar's review, folded into gates 1 and 2. The subjects are the real ones from
+# 2026-10-11: Zeutara shipped "Question" from 9/28 until the subjects were re-cut
+# to his stacked nouns, "Chicago dating app pre-seed" among them.
+def subject(s):
+    return lambda c: setattr(c, "copy", c.copy.replace("Subject: your payments seed checks",
+                                                       f"Subject: {s}"))
+
+
+def lines(out, n, kind):
+    g = gate(out, n) if "gates" in out else {"fails": [], "warnings": [], "not_checked": []}
+    return [x for x in g[kind] if "Sagar" in x or kind == "not_checked"]
+
+
+for bad in ("Question", "Quick question", "Hi", "Intro"):
+    expect_fail(f"Sagar: subject \"{bad}\" refuses", 2, subject(bad), "names no offer")
+expect_fail("Sagar: a one-word subject refuses even when it is a noun", 2, subject("Payments"),
+            "one word cannot stack")
+
+c = Case()
+subject("Chicago dating app pre-seed")(c)
+c.extra += ["--offer", "Chicago dating app pre-seed round"]
+c.drop.add("--offer")
+rc, out = c.run()
+check("Sagar: subject \"Chicago dating app pre-seed\" passes every gate",
+      rc == 0 and out.get("pass") is True and not lines(out, 2, "fails"),
+      json.dumps([g for g in out.get("gates", []) if not g["pass"]])[:600])
+
+expect_fail("Sagar: a subject about something other than the offer refuses", 2,
+            subject("Chicago dating app raise"), "shares no word with the offer")
+expect_fail("Sagar: email 1 that never names the offer refuses", 2,
+            lambda c: c.extra.extend(["--offer", "mortgage underwriting software"])
+            or c.drop.add("--offer"), "never names the offer")
+expect_fail("Sagar: no --offer is NOT CHECKED, never a pass", 2, lambda c: c.drop.add("--offer"),
+            "NOT CHECKED what is sold")
+expect_fail("Sagar: email 1 that never names its company refuses", 2,
+            lambda c: setattr(c, "copy", c.copy.replace("Jane Doe, Northwind Partners", "Jane Doe", 1)),
+            "never names the company")
+expect_fail("Sagar: no sender company anywhere is NOT CHECKED", 2,
+            lambda c: c.drop.add("--sender-company"), "NOT CHECKED email 1 sender company")
+expect_fail("Sagar: email 1 that never names the sender refuses", 2,
+            lambda c: setattr(c, "copy", c.copy.replace("Jane Doe, Northwind Partners", "Northwind Partners", 1)),
+            "never says who it is from")
+
+
+def no_signal(c):
+    c.copy = c.copy.replace("{{first_name}}, saw {{signal}} on your fund's site.",
+                            "{{first_name}}, saw your fund's site.", 1)
+    for row in c.leads:
+        del row[5]
+
+
+c = Case()
+no_signal(c)
+rc, out = c.run()
+check("Sagar: no signal field and no per-lead line in email 1 warns 'signals leading messaging'",
+      any("signals leading messaging" in x for x in lines(out, 2, "warnings")), lines(out, 2, "warnings"))
+c = Case()
+no_signal(c)
+c.leads[0][5] = "segment"
+for i, row in enumerate(c.leads[1:]):
+    row[5] = "backs payments seed"
+rc, out = c.run()
+check("Sagar: a list cut by a segment field does not warn on signals",
+      not any("signals leading" in x for x in lines(out, 2, "warnings")), lines(out, 2, "warnings"))
+c = Case()
+rc, out = c.run()
+check("Sagar: a per-lead line in email 1 does not warn on signals",
+      not any("signals leading" in x for x in lines(out, 2, "warnings")), lines(out, 2, "warnings"))
+c = Case()
+no_signal(c)
+c.drop.add("--leads")
+rc, out = c.run()
+check("Sagar: no leads and no per-lead line leaves signals NOT CHECKED",
+      any("signals leading messaging" in x for x in gate(out, 2)["not_checked"]), gate(out, 2)["not_checked"])
+
+c = Case()
+c.copy = c.copy.replace("You keep every decision", "Our consulting services and solutions mean you keep every decision")
+rc, out = c.run()
+check("Sagar: abstract offer words in email 1 warn", any("abstractions" in x for x in lines(out, 2, "warnings")),
+      lines(out, 2, "warnings"))
+
+
+def relation(c, value):
+    c.leads[0].append("relationship")
+    for row in c.leads[1:]:
+        row.append("cold")
+    c.leads[2][-1] = value
+
+
+expect_fail("Sagar: a lead the sender knows directly refuses (text them instead)", 1,
+            lambda c: relation(c, "1st"), "known to the sender")
+c = Case()
+relation(c, "2nd")
+rc, out = c.run()
+check("Sagar: second-degree and cold leads pass the relationship check",
+      rc == 0 and not lines(out, 1, "fails") and not any("relationship" in x for x in lines(out, 1, "warnings")),
+      lines(out, 1, "fails") + lines(out, 1, "warnings"))
+c = Case()
+rc, out = c.run()
+check("Sagar: no relationship column warns", any("relationship-to-sender" in x for x in lines(out, 1, "warnings")),
+      lines(out, 1, "warnings"))
+
+
+def last_sent(c):
+    c.leads[0].append("zeutara_last_sent")
+    for row in c.leads[1:]:
+        row.append("")
+    c.leads[1][-1] = "2026-10-06"
+
+
+expect_fail("Sagar: a lead with a last-sent date refuses", 1, last_sent, "last-sent date")
+c = Case()
+c.leads.append(["dee@fundone.example.test", "Dee", "Fund One", "Partner", "valid", "your Ledgerly seed",
+                "https://fundone.example.test/portfolio"])
+rc, out = c.run()
+check("Sagar: two leads at one company warn (dedupe at the company level)",
+      any("company level" in x for x in lines(out, 1, "warnings")), lines(out, 1, "warnings"))
+
+sys.path.insert(0, str(ROOT / "tools"))
+import gtme_grade as G  # noqa: E402
+
+check("Sagar: subject_problem passes the 10-11 Zeutara subjects",
+      not any(G.subject_problem(s) for s in ("Chicago dating app pre-seed", "Payments identity seed round",
+                                             "Medtech regulatory AI pre-seed", "Mushroom coffee brand raise")),
+      [G.subject_problem(s) for s in ("Chicago dating app pre-seed", "Payments identity seed round")])
+check("Sagar: subject_problem refuses what shipped before",
+      all(G.subject_problem(s) for s in ("Question", "Quick question", "Hi", "Intro", "Re: Question",
+                                         "Quick thought for you")))
 
 # The Clay document shape converts: spintax, lead fields, threading
 doc = {"id": "cam_test", "name": "t", "settings": SETTINGS, "sequence": [

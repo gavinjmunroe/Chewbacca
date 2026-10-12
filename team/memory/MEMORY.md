@@ -280,6 +280,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_we_good_means_closeout_first: "we good?" = run closeout, answer once with what landed + whose files fail; a yes then no drew "Wtfffff" (10/10)
 - feedback_dev_set_must_contain_the_failure: check the dev set holds the failure before tuning; brain recall dev 80% fell to 43% sealed (10/10)
 - feedback_workers_never_wait_on_tail: a subagent waiting on `tail -f` of a backgrounded suite stalls forever; run long suites in the foreground (10/10)
+- feedback_headless_job_waits_in_shell: a `claude -p` job that backgrounds its wait ends with its turn and shows done with zero work; waits go in the chain's shell, check the report file not the status (10/11)
 - feedback_ported_logic_fix_both_copies: reply classification lives in togari-platform reply-intent.ts and tools/gtme_reply.py; fix both the same hour, same test
 - feedback_bma_amber_push_to_main: BMA and Amber repos (togari-platform too) push straight to main, never a PR (Karthik via Caleb, 10/11); tests are the review
 - feedback_build_for_everyone: everything built into Chewbacca works for any user; per-user values from their config, never literals; tests/portable_code.sh refuses them (10/11)

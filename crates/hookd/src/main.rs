@@ -39,6 +39,9 @@ fn run_guard(script: &Path, args: &[String], payload: &[u8]) -> i32 {
     let child = Command::new("/bin/bash")
         .arg(script)
         .args(args)
+        // The guard's own first line hands it to hookd unless this is set,
+        // so a guard run by hookd runs its body instead of looping back.
+        .env("HOOKD_INNER", "1")
         .stdin(Stdio::piped())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())

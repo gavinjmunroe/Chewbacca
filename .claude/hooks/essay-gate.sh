@@ -2,6 +2,7 @@
 # hookd skips this guard for a Bash call that names none of these words,
 # each one its first check requires. Proven by tools/hookd_replay.py.
 # gate: gws
+[ -z "${HOOKD_INNER:-}" ] && [ -x "$HOME/.local/bin/hookd" ] && exec "$HOME/.local/bin/hookd" gate "$0" "$@"
 # Timing, logging, a watchdog and an output cap. See lib.sh.
 # shellcheck source=/dev/null
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" 2>/dev/null || true
@@ -33,7 +34,7 @@ slop="$root/bin/slop-check"
 [ -x "$slop" ] || slop="$(command -v slop-check 2>/dev/null)"
 [ -n "$slop" ] || exit 0
 
-text="$(CMD="$cmd" /usr/bin/python3 - <<'PY'
+text="$(CMD="$cmd" /usr/bin/python3 -I - <<'PY'
 import json, os, re
 cmd = os.environ["CMD"]
 blobs = []

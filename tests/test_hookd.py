@@ -109,6 +109,24 @@ class HookdTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertFalse(self.marker.exists())
 
+    def test_a_gated_kit_guard_hands_itself_to_hookd(self):
+        # Live settings run ~/.claude/hooks/<guard>.sh directly, so the guard's
+        # own first line is the front door; no settings change is needed.
+        guard = HOOKS / 'vercel-guard.sh'
+        home = self.temp / 'home3'
+        (home / '.local/bin').mkdir(parents=True)
+        shutil.copy(HOOKD, home / '.local/bin/hookd')
+        env = dict(self.env, HOME=str(home), CHEWBACCA_LOG_DIR=str(self.temp / 'logs'))
+        run = lambda c, e: subprocess.run(['bash', str(guard)], input=payload(c), text=True,  # noqa: E731
+                                          capture_output=True, env=e, timeout=30).returncode
+        self.assertEqual(run('ls -la', env), 0)
+        self.assertEqual(run('npx vercel --prod', env), 2)
+        trace = (self.temp / 'trace.tsv').read_text()
+        self.assertIn('vercel-guard.sh\tskip\t0', trace)
+        self.assertIn('vercel-guard.sh\trun\t2', trace)
+        bare = dict(env, HOME=str(self.temp))  # no hookd: the guard runs itself
+        self.assertEqual(run('npx vercel --prod', bare), 2)
+
     def test_ungated_scripts_register_unchanged(self):
         plain = self.temp / 'plain.sh'
         plain.write_text('#!/bin/bash\nexit 0\n')

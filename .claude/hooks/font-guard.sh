@@ -2,6 +2,7 @@
 # hookd skips this guard for a Bash call that names none of these words,
 # each one its first check requires. Proven by tools/hookd_replay.py.
 # gate: font
+[ -z "${HOOKD_INNER:-}" ] && [ -x "$HOME/.local/bin/hookd" ] && exec "$HOME/.local/bin/hookd" gate "$0" "$@"
 # PreToolUse on Write, Edit and Bash: refuse code that asks for a macOS font
 # that is downloadable but not on this Mac.
 #

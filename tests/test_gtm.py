@@ -1047,7 +1047,9 @@ def gmail_msg(mid: str, frm: str, to: str, subject: str, body: str, date: str, i
     parts = [{"mimeType": "text/plain", "body": {"data": enc(body)}}]
     if ics:
         parts.append({"mimeType": "text/calendar", "filename": "invite.ics", "body": {"data": enc("BEGIN:VCALENDAR")}})
-    return {"id": mid, "labelIds": ["SENT"] if sent else ["INBOX"],
+    from email.utils import parsedate_to_datetime
+    ms = int(parsedate_to_datetime(date).timestamp() * 1000)
+    return {"id": mid, "labelIds": ["SENT"] if sent else ["INBOX"], "internalDate": str(ms),
             "payload": {"mimeType": "multipart/mixed", "parts": parts, "headers": [
                 {"name": "From", "value": frm}, {"name": "To", "value": to}, {"name": "Subject", "value": subject},
                 {"name": "Date", "value": date}, {"name": "Message-ID", "value": f"<{mid}@mail.example>"}]}}
@@ -1104,6 +1106,20 @@ def test_meetings_from_the_mail(tmp: Path):
     graph.db.close()
     import gtm_mailbox
     ok(not gtm_mailbox.ADDRESS.match("a@b.example OR in:anywhere"), "a crafted address never reaches a Gmail search")
+    one = {"clients": [{"name": "Solo"}]}
+    ok(gtm_mailbox.inboxes_for(one, gi.client_id(one["clients"][0]), ["default", "me@home.example"]) == [],
+       "one client with no mailboxes named reads nothing, not the owner's own Gmail")
+    # A backdated Date header can't move an "accept" after our invite: order is Gmail's receive time.
+    invite = gtm_mailbox.to_message(gmail_msg("i1", "pat@client.example", "x@lp.example", "Invitation: Call",
+                                              "Call Thursday at 2pm", "Thu, 08 Oct 2026 09:00:00 -0700",
+                                              ics=True, sent=True), "x@lp.example")
+    accept = gmail_msg("a1", "x@lp.example", "pat@client.example", "Accepted: Call", "has accepted",
+                       "Fri, 09 Oct 2026 09:00:00 -0700")
+    accept["internalDate"] = str(int(invite["time"] and 1759900000000))  # received before the invite
+    msg = gtm_mailbox.to_message(accept, "x@lp.example")
+    found = {"status": "confirmed", "evidence": "calendar_accept"}
+    ok(gtm_mailbox.trusted([msg, invite], msg, found) == "proposed",
+       "an accept received before our invite confirms nothing")
 
 
 def main():

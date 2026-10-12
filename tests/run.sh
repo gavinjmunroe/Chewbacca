@@ -501,6 +501,8 @@ if group "gtme"; then
   # follow-ups, replies sorted. A fake gws; nothing reaches Gmail or the network.
   check "gtme own-inbox path finds, freezes, sends only an approved batch, sorts replies" \
     python3 "$ROOT/tests/test_gtme_solo.py"
+  check "no code pins a model confidence at 1.0, Jev scores it" \
+    python3 "$ROOT/tests/test_no_pinned_confidence.py"
   check "outbound waiting on him shows in needs-you, sent and expired batches don't" \
     python3 "$ROOT/tests/test_ingest_gtme.py"
   # Paid lookups through treg: one priced first, every call tagged and capped,
@@ -936,6 +938,10 @@ if group "installer"; then
   # the gate refuses once, clears on load, and never loops.
   check  "skill-gate enforces graph-engineering once per prompt" \
     bash "$ROOT/tests/skill_gate.sh"
+
+  # A whole UI page waits for the interface skill (flat card grid, 2026-10-11).
+  check  "interface-first refuses a UI page written before the skill" \
+    bash "$ROOT/tests/interface_first.sh" "$ROOT"
 
   # closeout fans out by group; a regex that finds none falls back to a
   # 9 to 14 minute sequential run (BACKLOG 116).

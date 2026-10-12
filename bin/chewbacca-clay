@@ -1083,6 +1083,20 @@ function draftOnly(op, args) {
   return status === "draft" ? null : `${args.campaign} is ${status}; only a draft campaign can be edited here`;
 }
 
+const SELF_APPROVED = new Set(["reply"]);
+
+function unfinishedReply(args) {
+  let data = args.reply_data;
+  if (typeof data === "string") {
+    try { data = JSON.parse(data); } catch { return "reply_data is not JSON"; }
+  }
+  const body = String((data && data.email_body) || "");
+  if (!body.trim()) return "the reply body is empty";
+  if (/\[NEED|\{\{|\[INSERT|\[TODO/i.test(body)) return "the reply still has a placeholder in it";
+  if (/[\u2013\u2014]/.test(body)) return "the reply has a long dash in it";
+  return null;
+}
+
 function personApproves(name, request) {
   const prompt = approvalPrompt(name, request);
   if (FIXTURES && process.env.CHEWBACCA_CLAY_TTY_TRANSCRIPT) fs.writeFileSync(process.env.CHEWBACCA_CLAY_TTY_TRANSCRIPT, prompt);
@@ -1188,7 +1202,17 @@ async function runOp(name, kv, flags) {
     if (prep.error) refuse(prep.error);
     const before = fingerprint(prep);
     const shownHash = sha256(showable({ op: name, request }));
-    const yes = personApproves(name, request);
+    // A reply answers a person who wrote first, in their own thread, from the
+    // inbox they wrote to. Caleb, 2026-10-11, after 16 investors sat a weekend
+    // unanswered behind this prompt: "clay replies NEVER need human
+    // confirmation." The body still has to be finished: a placeholder, a
+    // template token or a long dash in it is refused before anything is sent.
+    const selfApproved = SELF_APPROVED.has(name);
+    if (selfApproved) {
+      const unfinished = unfinishedReply(args);
+      if (unfinished) refuse(`${unfinished}; nothing was sent`);
+    }
+    const yes = selfApproved ? true : personApproves(name, request);
     if (yes === null) refuse("a write needs Caleb's ok: him typing the op name at a terminal, or a prompt from him in chat within the last 2 hours (his standing \"do everything yourself\")");
     if (!yes) refuse("the person at the terminal did not approve this payload");
     afterApprovalTestHook();

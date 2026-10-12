@@ -82,6 +82,31 @@ where the data comes from. All four of those are written down here, once.
 
 Steps 1 to 3 are lookups and should cost almost nothing. That is the point.
 
+## A tool someone practises with is a session, never a page of cards
+
+2026-10-11, a guitar midterm study app the night before the exam: five tabs
+(plan, performance, note finder, quiz, cheat sheet) over grids of cards,
+tables and colored-stripe tips. Every check passed and Caleb said "Terrible ux
+bro ru serious a flat html grid?". The interface skill had been named for the
+prompt and never loaded, so nobody chose a template; the page defaulted to a
+dashboard of everything.
+
+The rebuild that worked: a setlist home (one loud line, one button, the five
+pieces as rows with a progress ring each), then one piece at a time full
+screen around a drawn guitar neck that lights the note being played, a staff
+strip that scrolls under a playhead, one round play button, a count-in, and a
+rating sheet after each run that moves the ring. The written review used the
+same neck as the answer surface: tap where the note lives.
+
+- Name the template before writing markup. Study, drill and rehearse requests
+  are **Practice session** in references/taxonomy.md.
+- Show the content as itself. The instrument, not a table about the
+  instrument. One object carried through every screen.
+- One thing on screen at a time. Reference material belongs inside the step
+  that needs it, never on its own tab.
+- `interface-first.sh` refuses a 150+ line UI page written before this skill
+  is loaded.
+
 ## Pick the stance from the reader, not from taste
 
 On 2026-09-27 Amber Circles passed ux-lint, axe, layout-check and design-gate

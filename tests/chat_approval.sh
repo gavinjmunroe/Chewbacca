@@ -17,7 +17,7 @@ dir="$T/state/clay-chat-approval"
 mine="$dir/s1.json"
 
 payload() { # $1 prompt; a real payload shape from the 2026-10-10 probe
-  python3 -c 'import json,sys; print(json.dumps({"session_id":"s1","transcript_path":"/x/s1.jsonl","cwd":"/x","prompt_id":"p1","permission_mode":sys.argv[2],"hook_event_name":"UserPromptSubmit","prompt":sys.argv[1]}))' "$1" "${2:-bypassPermissions}"
+  python3 -c 'import json,os,sys; print(json.dumps({"session_id":"s1","transcript_path":os.environ.get("TP","/x/s1.jsonl"),"cwd":"/x","prompt_id":"p1","permission_mode":sys.argv[2],"hook_event_name":"UserPromptSubmit","prompt":sys.argv[1]}))' "$1" "${2:-bypassPermissions}"
 }
 # Caleb at a desktop tab: attended, nothing above the session's claude (pid 1).
 say() { payload "$1" | env -u CHEWBACCA_LAUNCHED_BY CHEWBACCA_STATE_DIR="$T/state" CLAUDE_CODE_SESSION_ATTENDED=1 CLAUDE_PID=1 bash "$H"; }
@@ -45,6 +45,12 @@ expect "wait" no
 expect "don't send yet" no
 expect "pause the campaigns" no
 expect "hold off on the waves till Sagar looks" no
+expect "not yet" no
+expect "hold off till Sagar looks at the campaigns" no
+# 17:47, 2026-10-11: another tab's "hold off" about a website video stopped every
+# outreach write on the machine. A soft stop counts only when it is about outreach.
+expect "Long term we'll want the text on diff types of things organically popping up in the video, but hold off on that for now we might refactor like crazy" yes
+expect "not yet sure abt the logo colors" yes
 
 rm -rf "$dir"; say "Lock in bro"
 python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); sys.exit(0 if r["v"]==2 and r["interactive"] is True and r["session_id"]=="s1" else 1)' "$mine" &&
@@ -136,4 +142,26 @@ rm -rf "$dir"; say "The coordinator sent a message:
 check "a cross-session message after a lead-in line never approves" no
 rm -rf "$dir"; say "From what I can tell the build is fine, do it urself"
 check "a one-line prompt that merely starts with From still approves" yes
+# 17:12, 2026-10-11: a jobs notice resumed Caleb's own VS Code tab headless
+# (ATTENDED=0 for one turn). That turn is refused, but the tab is not
+# remembered as launched: his next typed prompt there still counts.
+rm -rf "$dir"; say "do everything yourself"
+payload "You ended your turn while your Swift build job was queued" | env -u CHEWBACCA_LAUNCHED_BY CHEWBACCA_STATE_DIR="$T/state" CLAUDE_CODE_SESSION_ATTENDED=0 CLAUDE_PID=1 bash "$H"
+check "a headless resume of his tab never approves" no
+if [ -e "$dir/launched/s1" ]; then echo "FAIL  a headless resume remembered his tab as launched"; fail=1; else echo "ok    a headless resume is not remembered"; fi
+say "Do everything we can so tmr morning is just launch campaigns"
+check "his next typed prompt in that tab approves" yes
+# Marks the old hook wrote (a bare timestamp) heal when the transcript shows the
+# session was never seeded by chewbacca launch, and hold when it was.
+python3 -c 'import json,sys; print(json.dumps({"type":"user","message":{"role":"user","content":sys.argv[1]}}))' "Make chewbs a gtme" > "$T/plain.jsonl"
+python3 -c 'import json,sys; print(json.dumps({"type":"user","message":{"role":"user","content":sys.argv[1]}}))' "$SEED" > "$T/seeded.jsonl"
+rm -rf "$dir"; mkdir -p "$dir/launched"; echo 1791700000 > "$dir/launched/s1"
+TP="$T/plain.jsonl" payload "do it" | env -u CHEWBACCA_LAUNCHED_BY CHEWBACCA_STATE_DIR="$T/state" CLAUDE_CODE_SESSION_ATTENDED=1 CLAUDE_PID=1 bash "$H"
+check "an old mark on a never-seeded tab heals and approves" yes
+rm -rf "$dir"; mkdir -p "$dir/launched"; echo 1791700000 > "$dir/launched/s1"
+TP="$T/seeded.jsonl" payload "do it" | env -u CHEWBACCA_LAUNCHED_BY CHEWBACCA_STATE_DIR="$T/state" CLAUDE_CODE_SESSION_ATTENDED=1 CLAUDE_PID=1 bash "$H"
+check "an old mark on a seeded session holds" no
+rm -rf "$dir"; mkdir -p "$dir/launched"; echo 1791700000 > "$dir/launched/s1"
+say "do it"
+check "an old mark with no readable transcript holds (fails closed)" no
 exit $fail

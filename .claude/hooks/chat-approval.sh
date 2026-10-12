@@ -134,8 +134,47 @@ def nested():
     return None
 
 
+def seeded_by_launch():
+    """True when this session's first prompt was a chewbacca launch seed. Read
+    from the transcript, which no tool call here writes."""
+    path = str(payload.get("transcript_path") or "")
+    try:
+        with open(path) as f:
+            for _, line in zip(range(400), f):
+                try:
+                    d = json.loads(line)
+                except ValueError:
+                    continue
+                m = d.get("message") or {}
+                if d.get("type") == "user" and isinstance(m.get("content"), str):
+                    return SEED_LINE in m["content"]
+    except OSError:
+        return None
+    return None
+
+
+def mark_stands():
+    """A remembered mark holds when it says why (v2) or when the session was
+    seeded by chewbacca launch. On 2026-10-11 a jobs notice resumed Caleb's own
+    VS Code tab headless at 17:12 (ATTENDED=0 for that one turn), the old hook
+    remembered the whole tab as launched, and every prompt he typed there after
+    stopped counting: the 8 Monday drafts could not be fixed. A one-off headless
+    turn is refused on its own env, so it never needs remembering."""
+    try:
+        body = open(launched_mark).read().strip()
+    except OSError:
+        return False
+    if body.startswith("{"):
+        return True
+    seeded = seeded_by_launch()
+    if seeded is False:
+        remove(launched_mark)
+        return False
+    return True  # unreadable transcript: fail closed
+
+
 def why_not_caleb():
-    if launched_mark and os.path.exists(launched_mark):
+    if launched_mark and os.path.exists(launched_mark) and mark_stands():
         return "remembered launched session"
     if INJECTED.search(prompt) or CROSS.search(prompt):
         return "injected"
@@ -143,23 +182,27 @@ def why_not_caleb():
         return "launched"
     if os.environ.get("CHEWBACCA_LAUNCHED_BY") or os.environ.get("CHEWBACCA_AGENT_LAUNCHED"):
         return "launched"
+    # Headless turns carry their marker every time, so they are refused turn by
+    # turn and never remembered (see mark_stands).
     if os.environ.get("CLAUDE_CODE_SESSION_ATTENDED") == "0":
-        return "launched"
+        return "headless"
     n = nested()
     if n is None:
         return "process tree unreadable"
     if n:
-        return "launched"
+        return "headless"
     return None
 
 
 why = why_not_caleb()
 if why:
-    # Neither approves nor stops: the prompt is not his. A launched session is
-    # remembered, so its later desktop turns (no env marker) never count either.
+    # Neither approves nor stops: the prompt is not his. A kit-launched session
+    # is remembered, so its later desktop turns (no env marker) never count.
     if why == "launched" and launched_mark:
         os.makedirs(launched_dir, exist_ok=True)
-        open(launched_mark, "w").write(str(int(time.time())))
+        open(launched_mark, "w").write(json.dumps({"at": int(time.time()), "why": "chewbacca launch"}))
+        remove(mine)
+    if why == "headless":
         remove(mine)
     raise SystemExit(0)
 
@@ -167,11 +210,16 @@ if why:
 # me what to do" is not a stop: the version that read any "never" or "don't" as
 # one refused a blocklist write he had plainly asked for (2026-10-10).
 STOP = re.compile(
-    r"^\s*(stop|wait|pause|hold (on|off|up)|cancel|no)\b[\s!.]*$"
+    r"^\s*(stop|wait|pause|hold (on|off|up)|cancel|no|not yet)\b[\s!.]*$"
     r"|\b(stop|pause|cancel|hold off on|halt)\s+(the\s+)?(sending|sends?|launch(es|ing)?|campaigns?|waves?|emails?|outreach|clay)\b"
-    r"|\b(don'?t|do not|never)\s+(send|launch|start|email|press start)\b"
-    r"|\bhold off\b|\bnot yet\b",
+    r"|\b(don'?t|do not|never)\s+(send|launch|start|email|press start)\b",
     re.I)
+# A bare "hold off" or "not yet" inside a longer message is a stop only when the
+# message is about the outreach. On 2026-10-11 at 17:47 "hold off on that for
+# now we might refactor like crazy", about a website video in another tab,
+# stopped every Clay write on the machine the night before Monday's launch.
+SOFT_STOP = re.compile(r"\bhold off\b|\bnot yet\b", re.I)
+WORK = re.compile(r"\b(send(s|ing)?|launch(es|ing)?|campaigns?|waves?|emails?|outreach|clay|sequences?|leads?|start)\b", re.I)
 
 # A stop holds until he says to go again: without this, "stop sending" followed
 # by "what's the status?" renewed the ok on the very next prompt (security
@@ -179,7 +227,7 @@ STOP = re.compile(
 # a missed one fails safe: the work stays paused and the agent says so.
 RESUME = re.compile(r"\b(go|resume|continue|unpause|keep going|do it|do everything|send|launch|start|yourself|urself)\b", re.I)
 
-if STOP.search(prompt):
+if STOP.search(prompt) or (SOFT_STOP.search(prompt) and WORK.search(prompt)):
     # Every tab's ok goes, since `chewbacca clay` honors any of them.
     for p in glob.glob(os.path.join(recdir, "*.json")):
         remove(p)

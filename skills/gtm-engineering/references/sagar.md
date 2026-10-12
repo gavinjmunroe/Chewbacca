@@ -2,10 +2,26 @@
 
 Sagar Tiwari runs outbound at Blue Modern Advisory and is the GTM engineer this
 kit measures itself against. This page holds every rule of his found on disk
-and in Slack as of 2026-10-11, each with his words and where he said them. The
-rules that can be read off a campaign's data run as code in
-`tools/gtme_grade.py` (gates 1 and 2, cited `[Sagar <date> <source>]`). The
-rest need judgement and live here, so the next campaign is built the way he
+and in Slack as of 2026-10-11, each with his words and where he said them.
+
+They are rules for all outbound, for every client this kit runs: Firm
+Foundation, Chewbacca's own, a solo founder with one Gmail, an agency client in
+Clay. Several were stated during the Zeutara engagement, and that engagement
+is cited as the evidence (the "Question" subject it shipped, the double emails
+it nearly sent), never as the scope.
+
+The rules that can be read off the data run as code, in two places that share
+one function (`sagar_email` in `tools/gtme_grade.py`):
+
+- **A Clay campaign**: `gtme-grade`, gates 1 and 2, each line cited
+  `[Sagar <date> <source>]`.
+- **The own-inbox path**: `chewbacca gtme copy` refuses to save, and
+  `chewbacca gtme batch` refuses to build, a first email that fails his review.
+  The sender name, company and offer come from the client's plan (`gtme
+sender --company`, the plan's offer) and `~/.chewbacca/gtm/clients.json`
+  (`sender_company`, `principal`), never from a name written into the code.
+
+The rest need judgement and live here, so the next campaign is built the way he
 would build it before anything is graded.
 
 ## Sources

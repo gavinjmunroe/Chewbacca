@@ -883,7 +883,9 @@ VAGUE = re.compile(r"\b(solutions?|services|offerings?|capabilities|synerg\w*|va
                    r"best[- ]in[- ]class|next level|grow your business|help (you|companies|teams) grow|"
                    r"consulting)\b", re.I)
 SIGNAL_COL = re.compile(r"(signal|segment|trigger|why_now|intent|cohort|sector_match|thesis_match)")
-LAST_SENT_COL = re.compile(r"(last_sent|last_emailed|last_contacted|zeutara_last_sent)")
+# Any "<client> last sent" field matches: the first one built was Zeutara's
+# audience field on 2026-10-06, and every client gets its own.
+LAST_SENT_COL = re.compile(r"(last_sent|last_emailed|last_contacted)")
 RELATION_COL = re.compile(r"^(relationship\w*|degree|connection_degree|warmth|warm|known)$")
 WARM_VALUE = re.compile(r"^(1|1st|first|first degree|direct|known|warm|friend|yes|true)$", re.I)
 TIER_COL = ("tier", "fit_tier", "priority")
@@ -916,7 +918,9 @@ def subject_problem(subject):
         return f"\"{subject}\" is a generic word that names no offer"
     if len(norm.split()) < 2:
         return f"\"{subject}\" is one word, and one word cannot stack the offer's nouns"
-    if not content_words(norm):
+    # A merge field is the recipient, not the offer: "{{company}} question" was
+    # the kit's own default subject until 2026-10-11 and named nothing sold.
+    if not [w for w in content_words(norm) if not w.startswith("{{")]:
         return f"\"{subject}\" carries no concrete noun"
     return ""
 
@@ -970,79 +974,98 @@ def sagar_list(rows, gate):
                       f"weaker fill after, order never cut", SAGAR_ORDER)
 
 
+def sagar_email(subject, body, offer=None, names=(), company=None, where="email 1"):
+    """Sagar's rules on one first email, for any client and any sending path
+    (a Clay campaign here, an own-inbox batch in gtme_solo). Returns
+    {"fails": [(msg, src)], "skips": [(what, why)], "warns": [(msg, src)]}."""
+    out = {"fails": [], "skips": [], "warns": []}
+    text = (subject or "") + "\n" + (body or "")
+    low = text.lower()
+    offer_words = content_words(offer) if offer else []
+    if not offer:
+        out["skips"].append(("what is sold, in concrete nouns", "no offer given; Sagar: \"It's impossible "
+                             "to sell consulting services outbound without anything specific because no "
+                             "one will trust you\""))
+    why = subject_problem(subject)
+    if why:
+        out["fails"].append((f"{where}: subject {why}; Sagar's subjects stack the offer's concrete nouns, "
+                             f"like \"Chicago dating app pre-seed\"", SAGAR_SUBJ))
+    elif not overlaps(content_words(subject), offer_words or content_words(body)):
+        msg = (f"{where}: subject \"{subject}\" shares no word with "
+               f"{'the offer' if offer_words else 'the email it opens'}")
+        out["fails" if offer_words else "warns"].append((msg, SAGAR_SUBJ))
+    if offer_words and not overlaps(content_words(body), offer_words):
+        out["fails"].append((f"{where} never names the offer (\"{offer}\"); Kevin's copy died as \"way "
+                             f"too vague, both in terms of who we're targeting and in terms of who the "
+                             f"message is coming from\"", SAGAR_VAGUE))
+    names = sorted({n.strip() for n in names if n and n.strip()})
+    if not (SENDER_NAME_FIELD.search(text) or any(n.lower() in low for n in names)):
+        if names:
+            out["fails"].append((f"{where} never says who it is from (looked for {names[:3]}); \"way too "
+                                 f"vague ... in terms of who the message is coming from\"", SAGAR_VAGUE))
+        else:
+            out["skips"].append((f"{where} sender name", "no sender name to look for"))
+    if not company:
+        out["skips"].append((f"{where} sender company", "nothing names the company the email comes from"))
+    elif not (SENDER_CO_FIELD.search(text) or company.lower() in low):
+        out["fails"].append((f"{where} never names the company it comes from ({company})", SAGAR_VAGUE))
+    vague = sorted({m.group(0).lower() for m in VAGUE.finditer(body or "")})
+    if vague:
+        out["warns"].append((f"{where} sells in abstractions {vague}; name the thing, the number, the "
+                             f"customer", SAGAR_VAGUE))
+    return out
+
+
+def signals_lead(per_lead, signal=None, rows=None):
+    """('ok', why), ('skip', why) or ('warn', msg): was the list cut by a
+    reason to write now, or does email 1 say something only this recipient
+    could be told?"""
+    sig = col(rows or [], *[k for k in (rows[0].keys() if rows else []) if SIGNAL_COL.search(k)])
+    if per_lead:
+        return "ok", "email 1 carries a per-lead line"
+    if signal:
+        return "ok", f"the list was cut on {signal!r}"
+    if sig and all(r[sig] for r in rows):
+        return "ok", f"every lead carries {sig}"
+    if rows is None:
+        return "skip", ("email 1 has no per-lead line, and with no leads and no named signal nothing "
+                        "shows the list was cut by a signal")
+    return "warn", ("signals leading messaging: no lead carries a signal or segment field and email 1 "
+                    "has no per-lead line, so this is a list plus copy (\"you should not look at ICP "
+                    "builds and messaging ... as two distinct things\")")
+
+
 def sagar_copy(camp, rows, args, senders, client, gate):
     """His copy rules, on email 1 of every variant."""
     firsts = [(v["name"], v["steps"][0]) for v in camp["variants"] if v["steps"]]
     if not firsts:
         return
     offer = offer_for(camp, args, client)
-    offer_words = content_words(offer) if offer else []
-    if offer is None:
-        gate.skip("what is sold, in concrete nouns", "no --offer (or clients.json offer pitch); "
-                  "Sagar: \"It's impossible to sell consulting services outbound without anything "
-                  "specific because no one will trust you\"")
     names = [n for n in [args.sender_name, (client or {}).get("principal")] if n]
     by_id = {s.get("id"): s for s in senders or [] if s.get("id")}
     attached = [by_id[i] for i in camp["sender_ids"] if i in by_id] if camp["sender_ids"] else (senders or [])
     names += [a.get("displayname") or a.get("display_name") or "" for a in attached]
-    names = sorted({n.strip() for n in names if n and n.strip()})
     company = args.sender_company or (client or {}).get("sender_company") or (client or {}).get("name")
     many = len(firsts) > 1
+    skipped = set()
     for vname, st in firsts:
-        where = f"variant {vname} email 1" if many else "email 1"
-        text = st["subject"] + "\n" + st["body"]
-        low = text.lower()
-        why = subject_problem(st["subject"])
-        if why:
-            gate.fail(f"{where}: subject {why}; Sagar's subjects stack the offer's concrete nouns, "
-                      f"like \"Chicago dating app pre-seed\"", SAGAR_SUBJ)
-        else:
-            subj = content_words(st["subject"])
-            target = offer_words or content_words(st["body"])
-            if not overlaps(subj, target):
-                msg = (f"{where}: subject \"{st['subject']}\" shares no word with "
-                       f"{'the offer' if offer_words else 'the email it opens'}")
-                if offer_words:
-                    gate.fail(msg, SAGAR_SUBJ)
-                else:
-                    gate.warn(msg, SAGAR_SUBJ)
-        if offer_words and not overlaps(content_words(st["body"]), offer_words):
-            gate.fail(f"{where} never names the offer (\"{offer}\"); Kevin's copy died as \"way too "
-                      f"vague, both in terms of who we're targeting and in terms of who the message "
-                      f"is coming from\"", SAGAR_VAGUE)
-        if SENDER_NAME_FIELD.search(text) or any(n.lower() in low for n in names):
-            pass
-        elif names:
-            gate.fail(f"{where} never says who it is from (looked for {names[:3]}); \"way too vague "
-                      f"... in terms of who the message is coming from\"", SAGAR_VAGUE)
-        else:
-            gate.skip(f"{where} sender name", "no --sender-name, client principal or sender display "
-                      "name to look for")
-        if company is None:
-            gate.skip(f"{where} sender company", "no --sender-company or --client naming the company "
-                      "the email comes from")
-        elif not (SENDER_CO_FIELD.search(text) or company.lower() in low):
-            gate.fail(f"{where} never names the company it comes from ({company})", SAGAR_VAGUE)
-        vague = sorted({m.group(0).lower() for m in VAGUE.finditer(st["body"])})
-        if vague:
-            gate.warn(f"{where} sells in abstractions {vague}; name the thing, the number, the "
-                      f"customer", SAGAR_VAGUE)
-
-    # Signals lead messaging: the list was cut by a reason to write now, or
-    # email 1 says something only this recipient could be told.
-    per_lead = any(personal_fields(st["body"]) for _, st in firsts)
-    sig = col(rows or [], *[k for k in (rows[0].keys() if rows else []) if SIGNAL_COL.search(k)])
-    split = bool(sig and all(r[sig] for r in rows))
-    if per_lead or args.signal or split:
-        gate.note("signals lead messaging: " + ("email 1 carries a per-lead line" if per_lead else
-                  f"--signal {args.signal!r}" if args.signal else f"every lead carries {sig}"))
-    elif rows is None:
-        gate.skip("signals leading messaging", "email 1 has no per-lead line, and with no --leads "
-                  "and no --signal nothing shows the list was cut by a signal")
+        res = sagar_email(st["subject"], st["body"], offer, names, company,
+                          f"variant {vname} email 1" if many else "email 1")
+        for msg, src in res["fails"]:
+            gate.fail(msg, src)
+        for msg, src in res["warns"]:
+            gate.warn(msg, src)
+        for what, why in res["skips"]:
+            if what not in skipped:
+                skipped.add(what)
+                gate.skip(what, why)
+    state, msg = signals_lead(any(personal_fields(st["body"]) for _, st in firsts), args.signal, rows)
+    if state == "ok":
+        gate.note("signals lead messaging: " + msg)
+    elif state == "skip":
+        gate.skip("signals leading messaging", msg)
     else:
-        gate.warn("signals leading messaging: no lead carries a signal or segment field and email 1 "
-                  "has no per-lead line, so this is a list plus copy (\"you should not look at ICP "
-                  "builds and messaging ... as two distinct things\")", SAGAR_SIGNALS)
+        gate.warn(msg, SAGAR_SIGNALS)
     shapes = [len(v["steps"]) for v in camp["variants"]]
     if len(shapes) != 2 or any(n != 3 for n in shapes):
         gate.warn(f"{len(shapes)} variant(s) of {shapes} messages; Sagar's weekly launch is 2 variants "

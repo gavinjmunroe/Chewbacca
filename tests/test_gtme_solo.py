@@ -65,7 +65,8 @@ class Solo(unittest.TestCase):
         self.threads.write_text("{}")
         self.env = {"GTME_HOME": str(self.tmp / "home"), "GTME_FIXTURES": str(self.tmp / "fx"),
                     "CHEWBACCA_GWS_BIN": str(gws), "FAKE_GWS_LOG": str(self.log),
-                    "FAKE_GWS_THREADS": str(self.threads), "GTME_NOW": "2026-10-12T16:00:00+00:00"}
+                    "FAKE_GWS_THREADS": str(self.threads), "GTME_NOW": "2026-10-12T16:00:00+00:00",
+                    "GTME_CLIENTS": str(self.tmp / "clients.json")}
         self.old = {k: os.environ.get(k) for k in list(self.env) + ["CHEWBACCA_NO_SEND"]}
         os.environ.update(self.env)
         os.environ.pop("CHEWBACCA_NO_SEND", None)
@@ -171,7 +172,49 @@ class Solo(unittest.TestCase):
             self.assertNotIn("{{", m["body"] + m["subject"])
         role = next(m for m in b["mails"] if m["to"] == "hello@rollhouse.test")
         self.assertIn("Roll House team", role["body"])
-        self.assertIn("We help owners with bookkeeping", role["body"])
+        self.assertIn("At Dana Co, we help owners with bookkeeping", role["body"])
+        self.assertEqual(role["subject"], "bookkeeping for small bakeries")
+
+    # Sagar's first-email review, the same one gtme-grade runs on a campaign.
+    # "Question" is the subject a real campaign shipped until 2026-10-11.
+    def set_subject(self, subject):
+        plan = json.loads((self.d / "plan.json").read_text())
+        plan["copy"][0]["subject"] = subject
+        (self.d / "plan.json").write_text(json.dumps(plan))
+
+    def test_a_question_subject_refuses_the_whole_batch(self):
+        self.ready()
+        for subject in ("Question", "Quick question", "{{company}} question"):
+            self.set_subject(subject)
+            self.assertEqual(self.run_cli("batch", "--client", "Dana Co"), 2, subject)
+            self.assertFalse(list((self.d / "batches").glob("*.json")), subject)
+        self.set_subject("bakery bookkeeping")
+        self.assertIsNotNone(self.batch())
+
+    def test_a_first_email_that_never_names_its_company_refuses_the_batch(self):
+        self.ready()
+        plan = json.loads((self.d / "plan.json").read_text())
+        plan["copy"][0]["body"] = plan["copy"][0]["body"].replace("At Dana Co, we", "We")
+        (self.d / "plan.json").write_text(json.dumps(plan))
+        self.assertEqual(self.run_cli("batch", "--client", "Dana Co"), 2)
+        self.run_cli("sender", "--client", "Dana Co", "--company", "Crumb Books")
+        self.assertEqual(self.run_cli("batch", "--client", "Dana Co"), 2)
+        plan = json.loads((self.d / "plan.json").read_text())
+        plan["copy"][0]["body"] = plan["copy"][0]["body"].replace("We help", "At Crumb Books, we help")
+        (self.d / "plan.json").write_text(json.dumps(plan))
+        self.assertIsNotNone(self.batch())
+
+    def test_the_sender_company_comes_from_clients_json_for_any_client(self):
+        self.ready()
+        (self.tmp / "clients.json").write_text(json.dumps(
+            {"clients": [{"name": "Dana Co", "sender_company": "Crumb Books"}]}))
+        self.assertEqual(self.run_cli("batch", "--client", "Dana Co"), 2)
+
+    def test_copy_refuses_a_question_subject(self):
+        seq = self.tmp / "seq.json"
+        seq.write_text(json.dumps([{"step": 1, "day": 0, "subject": "Question",
+                                    "body": "Hi {{first_name}}, Dana Co does bookkeeping for small bakeries."}]))
+        self.assertEqual(self.run_cli("copy", "--client", "Dana Co", "--file", str(seq)), 2)
 
     def test_a_personal_line_without_a_source_link_is_held(self):
         self.ready()
@@ -473,7 +516,8 @@ class Solo(unittest.TestCase):
         seq.write_text(json.dumps([{"step": 1, "day": 0, "subject": "{{company}} hours", "body": "Hi {{first_name}}."},
                                    {"step": 2, "day": 3, "subject": "", "body": "One more \u2014 note."}]))
         self.assertEqual(self.run_cli("copy", "--client", "Dana Co", "--file", str(seq)), 2)
-        seq.write_text(json.dumps([{"step": 1, "day": 0, "subject": "{{company}} hours", "body": "Hi {{first_name}}."},
+        seq.write_text(json.dumps([{"step": 1, "day": 0, "subject": "{{company}} bakery bookkeeping",
+                                    "body": "Hi {{first_name}}. Dana Co does bookkeeping for small bakeries."},
                                    {"step": 2, "day": 3, "subject": "", "body": "One more note."}]))
         self.assertEqual(self.run_cli("copy", "--client", "Dana Co", "--file", str(seq), "--require-line"), 0)
         plan = json.loads((self.d / "plan.json").read_text())

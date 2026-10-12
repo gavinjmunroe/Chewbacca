@@ -551,14 +551,33 @@ def buyers(ans: dict) -> str:
     return head
 
 
+SUBJECT_FILLER = {"a", "an", "the", "and", "or", "of", "for", "to", "with", "so", "that", "we", "our",
+                  "your", "in", "on", "by", "then", "each", "who"}
+
+
+def subject_from(text: str) -> str:
+    """The offer's first four words, lowercased, minus leading and trailing
+    filler: "bookkeeping for small bakeries". Sagar's subjects stack the
+    offer's nouns (references/sagar.md); the old default, "{{company}}
+    question", named nothing sold and is what gtme-grade now refuses."""
+    toks = re.findall(r"[A-Za-z0-9$%'-]+", (text or "").lower())
+    while toks and toks[0] in SUBJECT_FILLER:
+        toks.pop(0)
+    toks = toks[:4]
+    while toks and toks[-1] in SUBJECT_FILLER:
+        toks.pop()
+    return " ".join(toks) or "{{company}}"
+
+
 def draft_copy(ans: dict, cta: str) -> list[dict]:
     sell = (ans.get("sell") or "what we do").rstrip(".")
     proof = (ans.get("proof") or "").rstrip(".")
     sender = ans.get("sender") or "{{your first name}}"
     line2 = f"{proof}." if proof else "We'd prove it on a small test before you pay anything."
+    who = f"At {ans['name']}, we" if ans.get("name") else "We"
     return [
-        {"step": 1, "day": 0, "subject": "{{company}} " + (ans.get("topic") or "question").lower()[:30],
-         "body": f"Hi {{{{first_name}}}},\n\n{{{{signal_line}}}}\n\nWe help {buyers(ans)} "
+        {"step": 1, "day": 0, "subject": subject_from(ans.get("topic") or sell),
+         "body": f"Hi {{{{first_name}}}},\n\n{{{{signal_line}}}}\n\n{who} help {buyers(ans)} "
                  f"with {sell[:1].lower() + sell[1:]}. {line2}\n\n{cta}\n\n{sender}"},
         {"step": 2, "day": 3, "subject": "", "body": f"Hi {{{{first_name}}}}, one more thought: most "
                  f"{buyers(ans)} we talk to lose time on this every week. Happy to show you "

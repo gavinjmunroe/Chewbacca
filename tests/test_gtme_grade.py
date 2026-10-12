@@ -498,7 +498,7 @@ check("Sagar: no relationship column warns", any("relationship-to-sender" in x f
 
 
 def last_sent(c):
-    c.leads[0].append("zeutara_last_sent")
+    c.leads[0].append("northwind_last_sent")
     for row in c.leads[1:]:
         row.append("")
     c.leads[1][-1] = "2026-10-06"

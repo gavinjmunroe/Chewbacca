@@ -420,6 +420,16 @@ def fill(text: str, lead: dict) -> str:
     return re.sub(r"\n{3,}", "\n\n", out).strip()
 
 
+def unsign(body: str, sign: str) -> str:
+    """The draft's own sign-off line taken off the end, since the footer signs.
+    Only a final line: a bare replace also ate the name inside "At Dana Co, we
+    help", sending "At  Co" (found 2026-10-11)."""
+    lines = body.rstrip().split("\n")
+    if lines and lines[-1].strip() == sign:
+        lines.pop()
+    return "\n".join(lines).strip()
+
+
 def footer(sender: dict) -> str:
     return f"{sender['name']}\n{sender['address']}\n\n{OPT_OUT}"
 
@@ -441,6 +451,30 @@ def problems(mail: dict) -> list[str]:
     if mail.get("line") and not re.match(r"https?://", mail.get("line_source") or ""):
         out.append("the personal line has no public source link")
     return out
+
+
+def sagar_review(plan: dict, step1: dict) -> tuple[list[str], list[str]]:
+    """Sagar's first-email rules (tools/gtme_grade.py sagar_email), the same
+    ones gtme-grade runs on a campaign, on this client's step 1 as it will go
+    out: the subject stacks the offer's nouns, the email says who it is from
+    and what is sold. Returns (refusals, warnings). Who the email comes from
+    and what it sells come from the plan and ~/.chewbacca/gtm/clients.json,
+    never from a name written into this file."""
+    import gtme_grade
+    sender = plan.get("sender") or {}
+    client = gtme_grade.load_client(plan.get("client")) or {}
+    company = sender.get("company") or client.get("sender_company") or plan.get("client")
+    offer = (plan.get("offer") or {}).get("what_you_sell") or (plan.get("answers") or {}).get("sell")
+    names = [sender.get("name"), (plan.get("answers") or {}).get("sender"), client.get("principal")]
+    sign = "\n".join(x for x in (sender.get("name"), sender.get("address")) if x)
+    res = gtme_grade.sagar_email(step1.get("subject") or "", f"{step1.get('body') or ''}\n\n{sign}",
+                                 offer, [n for n in names if n], company, "email 1")
+    bad = [f"{m} [{src}]" for m, src in res["fails"]]
+    bad += [f"NOT CHECKED {what}: {why}" for what, why in res["skips"]]
+    warns = [f"{m} [{src}]" for m, src in res["warns"]]
+    if "{{signal_line}}" not in (step1.get("body") or "") and not gtme_grade.personal_fields(step1.get("body") or ""):
+        warns.append(f"email 1 has no per-lead line, so nothing in it is a signal [{gtme_grade.SAGAR_SIGNALS}]")
+    return bad, warns
 
 
 def lines_from(path: str | None) -> dict[str, dict]:
@@ -509,6 +543,11 @@ def cmd_batch(a) -> int:
                       f"`chewbacca gtme sender --client \"{a.client}\" --name \"...\" --address \"...\"` first.")
     if op.utc_now().weekday() >= 5 and not a.weekend:
         raise Refused("It's the weekend. Cold email goes out Monday to Friday, in their business hours.")
+    step1 = next((c for c in plan.get("copy") or [] if c.get("step") == 1), {})
+    refusals, warns = sagar_review(plan, step1)
+    if refusals:
+        raise Refused("No batch. Email 1 fails Sagar's review, the same one gtme-grade runs on a campaign: "
+                      + "; ".join(refusals) + ". Fix the copy with `chewbacca gtme copy`.")
     room = max(0, today_cap(a.client) - sent_today(a.client))
     d = cdir(a.client)
     lines = lines_from(a.lines)
@@ -521,7 +560,7 @@ def cmd_batch(a) -> int:
         if len(mails) >= room:
             break
         lead, c = f["lead"], steps[f["step"]]
-        body = fill(c["body"], lead).replace(sign, "").strip()
+        body = unsign(fill(c["body"], lead), sign)
         mail = {"to": lead["email"], "step": f["step"], "subject": f["subject"], "lead": lead,
                 "thread": f["thread"], "message_id": f["message_id"], "body": f"{body}\n\n{footer(sender)}"}
         bad = problems(mail)
@@ -547,7 +586,7 @@ def cmd_batch(a) -> int:
         lead = {k: r.get(k, "") for k in ("company", "name", "email", "website", "role_inbox")}
         lead["line"] = (extra.get("line") or "").strip()
         c = steps[1]
-        body = fill(c["body"], lead).replace(sign, "").strip()
+        body = unsign(fill(c["body"], lead), sign)
         mail = {"to": addr, "step": 1, "subject": fill(c["subject"], lead), "lead": lead,
                 "line": lead["line"], "line_source": extra.get("source") or "",
                 "body": f"{body}\n\n{footer(sender)}"}
@@ -571,7 +610,7 @@ def cmd_batch(a) -> int:
     frozen = json.dumps([{k: m[k] for k in ("to", "step", "subject", "body")} for m in mails], sort_keys=True)
     bid = hashlib.sha256(frozen.encode()).hexdigest()[:10]
     batch = {"id": bid, "made_at": op.stamp(), "client": a.client, "mails": mails, "held": held,
-             "inbox": a.inbox or sender.get("inbox") or ""}
+             "inbox": a.inbox or sender.get("inbox") or "", "warnings": warns}
     if mails:
         op.write_json(d / "batches" / f"{bid}.json", batch)
     if a.json:
@@ -587,6 +626,8 @@ def cmd_batch(a) -> int:
         print(m["body"])
     for m in held:
         print(f"\nHeld, not in the batch: {m['to']}: {'; '.join(m['held_for'])}")
+    for w in warns:
+        print(f"\nWarning: {w}")
     if mails:
         print(f"\nBatch {bid}: {len(mails)} emails, exactly as above. Nothing has been sent. "
               f"Say ok and this batch goes out from your Gmail, spaced a minute or so apart. "
@@ -921,6 +962,8 @@ def cmd_copy(a) -> int:
             bad.append(f"step {n} is {len(body.split())} words, over {MAX_WORDS}")
         if n == 1 and not c.get("subject"):
             bad.append("step 1 needs a subject")
+        if n == 1 and c.get("subject"):
+            bad += sagar_review(plan, c)[0]
     if bad:
         raise Refused("Not saved: " + "; ".join(bad) + ".")
     plan["copy"] = [{k: c.get(k, "") for k in ("step", "day", "subject", "body")} for c in seq]
@@ -1047,7 +1090,7 @@ def cmd_reply(a) -> int:
 def cmd_sender(a) -> int:
     plan = plan_of(a.client)
     s = plan.get("sender") or {}
-    for k in ("name", "address", "email", "inbox"):
+    for k in ("name", "address", "email", "inbox", "company"):
         v = getattr(a, k)
         if v:
             s[k] = v.strip()
@@ -1070,7 +1113,7 @@ def main(argv=None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("sender", help="the name and mailing address every email signs with")
     p.add_argument("--client", required=True)
-    for k in ("name", "address", "email", "inbox"):
+    for k in ("name", "address", "email", "inbox", "company"):
         p.add_argument(f"--{k}")
     p = sub.add_parser("find", help="each company's email and a fact, from its own website")
     p.add_argument("--client", required=True)

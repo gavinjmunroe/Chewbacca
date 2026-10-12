@@ -680,7 +680,7 @@ class Daemon:
     def command(self, body: dict) -> dict:
         cmd = body.get("cmd")
         if cmd == "ping":
-            return {"ok": True}
+            return {"ok": True, "code": CODE}
         if cmd == "open":
             msg = self.open_surface(str(body.get("name", "")), body.get("at") or None, body.get("preset") or None,
                                     arg=str(body.get("arg") or ""))
@@ -831,11 +831,32 @@ def ask(body: dict, path: str = CONTROL, timeout: float = 30.0) -> dict | None:
         return None
 
 
+# Which copy of the kit this process runs from. The kit runtime swaps
+# ~/.chewbacca/kit/current to a new snapshot every few minutes, but a daemon
+# keeps running the snapshot it started from. On 2026-10-11 at 5:51pm one
+# started that morning was still serving; it had never heard of the realm
+# surface, its snapshot had been pruned under it, and "Show me my agents"
+# answered "That surface didn't open."
+CODE = str(Path(__file__).resolve().parent.parent)
+
+
 def running() -> bool:
     return bool(ask({"cmd": "ping"}, timeout=2.0))
 
 
+def retire_stale() -> None:
+    """Stop a daemon running other code than this copy, so the next start is current."""
+    reply = ask({"cmd": "ping"}, timeout=2.0)
+    if not reply or reply.get("code") == CODE:
+        return
+    ask({"cmd": "quit"}, timeout=5.0)
+    deadline = time.monotonic() + 5
+    while running() and time.monotonic() < deadline:
+        time.sleep(0.1)
+
+
 def start_daemon() -> bool:
+    retire_stale()
     if running():
         return True
     # One starter at a time. hud-listen starts the daemon as it comes up, and

@@ -695,7 +695,35 @@ def payload_parse() -> None:
         check("a forged, doubled or unquoted row opens nothing", d.open == {}, list(d.open))
 
 
+def stale_daemon_is_retired():
+    """2026-10-11 5:51pm: a daemon from that morning's kit snapshot answered
+    "That surface didn't open." for the realm surface it had never heard of."""
+    sent = []
+    alive = {"up": True}
+
+    def fake_ask(body, timeout=2.0):
+        sent.append(body["cmd"])
+        if body["cmd"] == "quit":
+            alive["up"] = False
+            return {"ok": True}
+        return {"ok": True} if alive["up"] else None  # an old daemon's ping has no code
+
+    real_ask, real_running = ks.ask, ks.running
+    ks.ask, ks.running = fake_ask, lambda: alive["up"]
+    try:
+        ks.retire_stale()
+        check("a daemon on other code is told to quit", sent == ["ping", "quit"] and not alive["up"], sent)
+        sent.clear()
+        alive["up"] = True
+        ks.ask = lambda body, timeout=2.0: (sent.append(body["cmd"]) or {"ok": True, "code": ks.CODE})
+        ks.retire_stale()
+        check("a daemon on this code is left running", sent == ["ping"], sent)
+    finally:
+        ks.ask, ks.running = real_ask, real_running
+
+
 def main() -> int:
+    stale_daemon_is_retired()
     payload_parse()
     listener_ignores_surface_actions()
     check("idle glass ingests every five minutes, open glass every minute",

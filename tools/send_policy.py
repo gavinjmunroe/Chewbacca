@@ -119,10 +119,13 @@ def quiet_record(name, when=None, rules=None):
     local = when.astimezone(tz)
     day = DAYS[local.weekday()]
     yesterday = DAYS[(local.weekday() + 6) % 7]
-    by_day = rule.get("after_by_day") or {}
+    by_day = rule.get("after_by_day")
+    by_day = by_day if isinstance(by_day, dict) else {}
 
     def cutoff(d):
-        return _minutes(by_day.get(d, rule.get("after")))
+        # Same as quietFor's `after_by_day[day] ?? after`: a null day falls back.
+        v = by_day.get(d)
+        return _minutes(v if v is not None else rule.get("after"))
 
     rec = {"minute": local.hour * 60 + local.minute}
     if cutoff(day) is not None:
@@ -195,7 +198,8 @@ def ask(action, facts, env=None):
     facts = dict(facts or {})
     when = facts.pop("at", None)
     if isinstance(when, str):
-        when = datetime.datetime.fromisoformat(when)
+        # 3.9's fromisoformat rejects a trailing Z.
+        when = datetime.datetime.fromisoformat(when[:-1] + "+00:00" if when.endswith("Z") else when)
     if action == "text":
         return ask_raw("text", text_context(env=env, when=when, **facts))
     if action == "clay_write":
@@ -281,18 +285,10 @@ def main(argv=None):
         print(json.dumps(got))
         return {"allow": 0, "deny": 3}.get(got["decision"], 4)
 
-    if a.kind == "text":
-        got = ask("text", {"channel": a.channel, "name": a.name, "direct": not a.group,
-                           "after_hours": a.after_hours, "address_owned": False if a.unowned else None,
-                           "to_confirmed": a.to_confirmed, "at": a.at})
-    elif a.kind == "cold":
-        got = ask("cold_email", {"client": a.client, "to": a.to, "weekend": a.weekend})
-    else:
-        got = ask("clay_write", {"op": a.op, "start": a.start, "allow_writes": a.allow_writes,
-                                 "person_ok": a.person_ok,
-                                 "reply_finished": True if a.reply_finished else (False if a.op == "reply" else None),
-                                 "campaign_status": a.campaign_status,
-                                 "grade_pass": True if a.grade_pass else None})
+    try:
+        got = _could(a)
+    except Exception as e:  # bad facts or a bad --at: a no, with the reason
+        got = {"decision": "deny", "rules": [], "errors": ["bad facts: %s" % e]}
     if a.json:
         print(json.dumps(got, indent=2))
     elif got["decision"] == "allow":
@@ -306,6 +302,22 @@ def main(argv=None):
         for e in got.get("errors") or []:
             print("  error                %s" % e)
     return {"allow": 0, "deny": 3}.get(got["decision"], 4)
+
+
+def _could(a):
+    if a.kind == "text":
+        got = ask("text", {"channel": a.channel, "name": a.name, "direct": not a.group,
+                           "after_hours": a.after_hours, "address_owned": False if a.unowned else None,
+                           "to_confirmed": a.to_confirmed, "at": a.at})
+    elif a.kind == "cold":
+        got = ask("cold_email", {"client": a.client, "to": a.to, "weekend": a.weekend})
+    else:
+        got = ask("clay_write", {"op": a.op, "start": a.start, "allow_writes": a.allow_writes,
+                                 "person_ok": a.person_ok,
+                                 "reply_finished": True if a.reply_finished else (False if a.op == "reply" else None),
+                                 "campaign_status": a.campaign_status,
+                                 "grade_pass": True if a.grade_pass else None})
+    return got
 
 
 if __name__ == "__main__":

@@ -451,8 +451,11 @@ def _policy_refusal(channel, env):
     here = os.path.dirname(os.path.realpath(__file__))
     if here not in sys.path:
         sys.path.insert(0, here)
-    import send_policy
-    return send_policy.why_not(send_policy.ask_raw("text", send_policy.text_context(channel, env=env)))
+    try:
+        import send_policy
+        return send_policy.why_not(send_policy.ask_raw("text", send_policy.text_context(channel, env=env)))
+    except Exception as e:  # a policy module that won't load is a clean no, never a crash
+        return "The send policy couldn't be asked (%s). Nothing was sent." % e
 
 
 def take(channel, to, text, subject="", show=None, tty=None, env=None, chain=False, exe=exe_path):

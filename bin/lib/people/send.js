@@ -525,7 +525,8 @@ function cmdSend(argv) {
   const said = new Set((verdict.rules || []).map((r) => r.id));
   const policyOther =
     verdict.decision === "deny" &&
-    ((verdict.errors || []).length ||
+    (said.size === 0 ||
+      (verdict.errors || []).length ||
       [...said].some((id) => !["no-send", "quiet-hours", "unowned-address"].includes(id)));
   const policyLine = `The send policy says no: ${[
     ...(verdict.rules || []).map((r) => `${r.reason} (${r.id})`),

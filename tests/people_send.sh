@@ -115,6 +115,11 @@ printf '#!/bin/sh\ncat >/dev/null\necho %s\nexit 3\n' \
 out="$(CHEWBACCA_SENDPOLICY="$STUB" "$P" send "sendy solo" "x" --to 15550102@s.whatsapp.net 2>&1)" &&
   fail "a policy quiet-hours no went through"
 grep -q "quiet hours. Nothing was sent" <<<"$out" || fail "the policy's quiet-hours no was not named"
+# A deny that names no rule is still a no (a review found it went to dispatch).
+printf '#!/bin/sh\ncat >/dev/null\necho %s\nexit 3\n' "'{\"decision\":\"deny\",\"rules\":[],\"errors\":[]}'" >"$STUB"
+out="$(CHEWBACCA_SENDPOLICY="$STUB" "$P" send "sendy solo" "x" --to 15550102@s.whatsapp.net 2>&1)" &&
+  fail "a rule-less policy no went through"
+grep -q "CHEWBACCA_NO_SEND" <<<"$out" && fail "a rule-less policy no reached the dispatcher"
 # No binary at all: the inline checks stand alone, exactly as before.
 out="$(CHEWBACCA_SENDPOLICY=/nonexistent/chewbacca-sendpolicy "$P" send "sendy solo" "x" --to 15550102@s.whatsapp.net 2>&1)"
 grep -q "CHEWBACCA_NO_SEND" <<<"$out" || fail "with no policy binary the send did not reach the dispatch gate"

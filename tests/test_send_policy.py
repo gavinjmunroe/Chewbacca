@@ -115,9 +115,22 @@ class Text(unittest.TestCase):
         self.assertEqual(self.ask()["decision"], "allow")
 
     def test_quiet_matches_people_send(self):
-        """Every half hour of a week, the policy and quietFor agree."""
-        start = datetime.datetime(2026, 10, 5, 0, 0, tzinfo=UTC)
+        """Every half hour of a week, the policy and quietFor agree, on
+        Sagar's rule and on the odd shapes a review found (a null day falls
+        back to `after`, a non-object after_by_day is ignored, DST ends)."""
+        odd = [
+            [{"name": "Sagar Tiwari", "tz": "America/Los_Angeles", "after": "23:00", "after_by_day": {"Fri": None}}],
+            [{"name": "Sagar Tiwari", "tz": "America/Los_Angeles", "after": "22:00", "after_by_day": ["Fri"]}],
+            [{"name": "Sagar Tiwari", "tz": "Europe/London", "until": "09:30", "after_by_day": {"Sun": "20:00"}}],
+        ]
+        for rules, start in [(SAGAR, datetime.datetime(2026, 10, 5, tzinfo=UTC))] + \
+                [(r, datetime.datetime(2026, 10, 27, tzinfo=UTC)) for r in odd]:
+            with self.subTest(rules=rules):
+                self.parity(rules, start)
+
+    def parity(self, rules, start):
         times = [start + datetime.timedelta(minutes=30 * i) for i in range(7 * 48)]
+        SAGAR = rules  # noqa: N806
         js = subprocess.run(
             ["node", "-e", """
               const { quietFor } = require(process.argv[1]);
@@ -133,6 +146,10 @@ class Text(unittest.TestCase):
         self.assertEqual(sum(want), sum(got))
         self.assertEqual(want, got)
         self.assertGreater(sum(got), 0)
+
+    def test_z_suffix_on_39(self):
+        with mock.patch.object(sp, "quiet_rules", lambda: SAGAR):
+            self.assertIn("quiet-hours", ids(self.ask(name="Sagar Tiwari", direct=True, at="2026-10-07T06:30:00Z")))
 
     def test_quiet_spots(self):
         """The same seven instants tests/people_send.sh checks: -QQ-Q-Q."""
@@ -224,6 +241,13 @@ class Take(unittest.TestCase):
         self.assertIn("no-send", str(e.exception))
         self.assertEqual(len(sa.status()["tokens"]), 1)
         self.assertEqual(sa.take("imessage", "+15550100", "hi", env={}, chain=None), "kit_confirm")
+
+    def test_unloadable_policy_is_a_clean_no(self):
+        with mock.patch.object(sa, "_policy_refusal", wraps=sa._policy_refusal), \
+                mock.patch.dict(sys.modules, {"send_policy": None}):
+            with self.assertRaises(sa.NoApproval) as e:
+                sa.take("imessage", "+15550100", "hi", env={}, chain=None)
+        self.assertIn("couldn't be asked", str(e.exception))
 
     def test_no_binary_takes_as_before(self):
         sa.mint("imessage", "+15550100", "hi", "kit_confirm")

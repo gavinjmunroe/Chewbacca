@@ -510,6 +510,19 @@ test("the file view never shows keys, tokens or keychains, even under home", asy
   const { server, call } = await serve(dir);
   try {
     assert.equal((await call(`/glass/file?path=${encodeURIComponent(join(dir, ".env"))}`)).status, 403);
+    // Outside any checkout, or ignored by it, nothing is shown either.
+    writeFileSync(join(dir, ".gitignore"), "build/\n");
+    mkdirSync(join(dir, "build"));
+    writeFileSync(join(dir, "build/out.js"), "x\n");
+    assert.equal((await call(`/glass/file?path=${encodeURIComponent(join(dir, "build/out.js"))}`)).status, 403);
+    const loose = realpathSync(mkdtempSync(join(dir, "..", "loose-")));
+    writeFileSync(join(loose, "notes.txt"), "hi\n");
+    const outside = await serve(loose);
+    try {
+      assert.equal((await outside.call(`/glass/file?path=${encodeURIComponent(join(loose, "notes.txt"))}`)).status, 403);
+    } finally {
+      outside.server.close();
+    }
   } finally {
     server.close();
   }

@@ -16,7 +16,7 @@
 import { readFileSync, statSync, realpathSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
-import { isAbsolute, join, normalize, sep } from "node:path";
+import { dirname, isAbsolute, join, normalize, sep } from "node:path";
 import { timingSafeEqual } from "node:crypto";
 
 // A file the stage will read. The stage shows a window of lines around a
@@ -57,6 +57,24 @@ const SECRET_PATH = /(^|\/)(\.ssh|\.gnupg|\.aws|\.netrc|\.config\/gcloud|Library
 
 export function secretPath(path) {
   return SECRET_PATH.test(String(path));
+}
+
+/** Whether git tracks a place for this file: inside a work tree and not
+ *  ignored. The stage shows files an agent is editing in a checkout, so this
+ *  is the allowlist; an ignored file (a `.env`, a build output) is never shown. */
+export function inCheckout(file, git = "git") {
+  const dir = dirname(file);
+  try {
+    execFileSync(git, ["-C", dir, "rev-parse", "--is-inside-work-tree"], { stdio: "ignore" });
+  } catch {
+    return false;
+  }
+  try {
+    execFileSync(git, ["-C", dir, "check-ignore", "-q", file], { stdio: "ignore" });
+    return false; // exit 0: ignored
+  } catch {
+    return true; // exit 1: not ignored
+  }
 }
 
 /** A unified diff of one hunk, the way git writes it, for `git apply`. */
@@ -204,7 +222,7 @@ export function handleGlass(
   if (route === "GET /glass/file") {
     const file = underHome(url.searchParams.get("path") ?? "", home);
     if (!file) return json(res, 404, { error: "not found" }), true;
-    if (secretPath(file)) return json(res, 403, { error: "not shown" }), true;
+    if (secretPath(file) || !inCheckout(file)) return json(res, 403, { error: "not shown" }), true;
     let st;
     try {
       st = statSync(file);

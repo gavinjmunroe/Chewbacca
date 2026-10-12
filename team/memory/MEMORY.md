@@ -274,6 +274,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_dev_set_must_contain_the_failure: check the dev set holds the failure before tuning; brain recall dev 80% fell to 43% sealed (10/10)
 - feedback_workers_never_wait_on_tail: a subagent waiting on `tail -f` of a backgrounded suite stalls forever; run long suites in the foreground (10/10)
 - feedback_ported_logic_fix_both_copies: reply classification lives in togari-platform reply-intent.ts and tools/gtme_reply.py; fix both the same hour, same test
+- feedback_bma_amber_push_to_main: BMA and Amber repos (togari-platform too) push straight to main, never a PR (Karthik via Caleb, 10/11); tests are the review
 - feedback_too_many_tabs_one_goal: 13 tabs on "make chewb perfect" made it worse (load 33, push races); about four lanes, one tab each
 - feedback_land_workflow_traps: checksums.py hashes the index (add first), never chain cleanup with ;, DESTRUCTIVE_OK=1 must lead, zsh file lists need arrays (10/10)
 - feedback_site_research_pass: Every site starts with the kit pass (api-anything pulls every page, brand-grab, ux-pick, crafts, STEAL, COPY); site-gate research refuses without it (10/10)

@@ -34,7 +34,11 @@ RULES = [
     # file) is not the figure of speech either: on 2026-10-11 three replies
     # naming bin/realm-engine and realm-morning-report.md were refused and
     # Caleb saw each one twice.
-    ("banned-word", r"(?<![-_/.\w])realms?(?![-_/.\w])|(?i:\bthe realm of\b)", "Banned word."),
+    # Lowercase too: "the realm server" is still the product. Of the 72
+    # banned-word flags in a week of real replies (2026-10-11), 46 were Realm
+    # or realm meaning Carlton's engine and none was the figure of speech. The
+    # filler is the phrase: "realm of", "in the realm".
+    ("banned-word", r"(?i:\brealms? of\b|\bin (?:the|this|that|a|our|your) realms?\b)", "Banned word."),
     ("em-dash", r"—", "Em dash. Use a colon, period, or comma."),
     ("ing-clause", r", (?:highlighting|underscoring|showcasing|demonstrating|reflecting|emphasizing|showing) (?:the|his|her|their|its|a|an)\b",
      "Superficial -ing clause."),

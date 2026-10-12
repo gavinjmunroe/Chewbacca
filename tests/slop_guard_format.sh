@@ -39,7 +39,7 @@ fi
 
 # Realm is Carlton's agent engine; six replies naming it were refused on
 # 2026-10-10. The proper noun passes, the figure of speech still does not.
-printf 'Realm runs the agents.\n' >"$TMP/realm-name.md"
+printf 'Realm runs the agents. The realm origin-guard server restarted.\n' >"$TMP/realm-name.md"
 printf 'This is in the realm of possibility.\n' >"$TMP/realm-figure.md"
 # Captured first: prose-check exits 1 when it flags, and pipefail would turn
 # a found flag into a failed pipe.

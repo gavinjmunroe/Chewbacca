@@ -1026,6 +1026,8 @@ if group "installer"; then
   check  "the browser gate refuses pixels on a browser until the DOM is tried" \
     bash "$ROOT/tests/browser_ux_guard.sh" "$ROOT"
     bash "$ROOT/tests/focus_guard.sh" "$ROOT"
+  check  "font-guard refuses code that names a not-installed macOS font" \
+    /usr/bin/python3 "$ROOT/tests/test_font_guard.py"
 
   check  "committed checksums describe the committed tree" \
     python3 "$ROOT/tools/committed_checksums.py"

@@ -1728,6 +1728,13 @@ _register("PreToolUse", hooks_dir + "/focus-guard.sh", timeout=10,
           matcher="Bash",
           status="Checking nothing jumps to the front of the screen...")
 
+# "Downloading font Nanum Brush Script" popped over Caleb's work at 7:11pm on
+# 2026-10-11 ("permission should never be asked to download things"). Refuses
+# code that names a macOS font that is downloadable but not installed.
+_register("PreToolUse", hooks_dir + "/font-guard.sh", timeout=10,
+          matcher="Write|Edit|MultiEdit|Bash",
+          status="Checking no font download pops up...")
+
 # Stage 8 of graph-engineering, knowledge fusion, which the skill calls the #1
 # cause of useless graphs and which this machine kept skipping. On 2026-09-21 a
 # session wrote a paying client's name into the notes off a FIRST NAME match

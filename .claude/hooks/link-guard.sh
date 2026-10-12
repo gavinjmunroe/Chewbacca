@@ -81,6 +81,12 @@ def turn_texts(p):
             continue
         if is_boundary(o):
             break
+        # A refused reply is followed by a Stop hook feedback row. The retry is
+        # judged on its own: counting the refused text too meant one bad link
+        # refused every corrected retry, 6 times in a row on 2026-10-11.
+        if o.get("type") == "user" and "Stop hook feedback" in json.dumps(
+                (o.get("message") or {}).get("content") or ""):
+            break
         if o.get("type") != "assistant" or o.get("isSidechain"):
             continue
         for b in (o.get("message") or {}).get("content") or []:

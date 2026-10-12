@@ -40,7 +40,17 @@ probe "the 2026-10-11 render link, relative to the drifted cwd" 2 \
 probe "a ../ folder link off the drifted cwd" 2 \
   "Kit in [logo-helmet/](../code/work/TTS-Dev/blender/logo-helmet/)"
 probe "a broken link in a mid-turn update" 2 "All good, [notes](notes.md)" "$T"
+# A corrected retry after a refusal: the refused text sits above a Stop hook
+# feedback row and must not be held against the retry (2026-10-11, 6 loops).
+T3="$TMP/t3.jsonl"
+{
+  jq -cn --arg c "$ROOT" '{type:"attachment",cwd:$c}'
+  jq -cn '{type:"user",message:{role:"user",content:"give him the md"}}'
+  jq -cn '{type:"assistant",message:{content:[{type:"text",text:"Here: [md](../Downloads/x.md)"}]}}'
+  jq -cn '{type:"user",isMeta:true,message:{role:"user",content:"Stop hook feedback:\n[link-guard.sh]: refusing"}}'
+} > "$T3"
 echo "lets through:"
+probe "a corrected retry after a refusal" 0 "Fixed: [notes](notes.md)" "$T3"
 probe "relative to the session root" 0 \
   "v16: [render](Downloads/TTS%20logo%20helmet%20nalana%20v16.png) and [kit](code/work/TTS-Dev/blender/logo-helmet/)"
 probe "a line anchor on a real file" 0 "See [notes.md:3](notes.md#L3)"

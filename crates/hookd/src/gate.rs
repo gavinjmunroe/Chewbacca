@@ -113,11 +113,29 @@ pub fn decide(head: &str, payload: &[u8]) -> Verdict {
     if tool_name(payload) != Some("Bash") {
         return Verdict::Run;
     }
-    if words.iter().any(|w| contains_ci(payload, w.as_bytes())) {
+    if spelled_around(payload) || words.iter().any(|w| contains_ci(payload, w.as_bytes())) {
         Verdict::Run
     } else {
         Verdict::Skip
     }
+}
+
+/// Shapes where the command bash runs can hold a word the raw JSON text does
+/// not: a backslash-newline continuation (`ope\` newline `n` runs `open`),
+/// a \uXXXX escape of an ASCII character, and bash's $'\x6f' quoting. A
+/// security review of 30ea0c7a (2026-10-11) named the first. Any of them
+/// runs the guard; none appeared in 35,016 real calls, so it costs nothing.
+pub fn spelled_around(payload: &[u8]) -> bool {
+    let has = |needle: &[u8]| payload.windows(needle.len()).any(|w| w == needle);
+    // JSON for a backslash then a newline: \\ then \n.
+    if has(br"\\\n") || has(b"$'") {
+        return true;
+    }
+    payload.windows(6).any(|w| {
+        w.starts_with(b"\\u00")
+            && matches!(w[4], b'2'..=b'7')
+            && w[5].is_ascii_hexdigit()
+    })
 }
 
 #[cfg(test)]
@@ -193,6 +211,16 @@ mod tests {
         assert_eq!(gate_words(head).unwrap(), vec!["sqlite3", "chat.db", "attributedbody"]);
         assert_eq!(decide(head, &bash("cp ~/Library/Messages/chat.db x")), Verdict::Run);
         assert_eq!(decide(head, &bash("git status")), Verdict::Skip);
+    }
+
+    #[test]
+    fn a_word_spelled_around_the_text_runs_the_guard() {
+        let head = "# gate: open\n";
+        // bash joins ope + n across a backslash-newline into open.
+        assert_eq!(decide(head, &bash("ope\\\nn -a Safari")), Verdict::Run);
+        assert_eq!(decide(head, b"{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"\\u006fpen x\"}}"), Verdict::Run);
+        assert_eq!(decide(head, &bash("$'\\x6fpen' x")), Verdict::Run);
+        assert_eq!(decide(head, &bash("ls -la")), Verdict::Skip);
     }
 
     #[test]

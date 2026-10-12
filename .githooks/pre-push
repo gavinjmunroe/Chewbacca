@@ -85,6 +85,12 @@ touched '^(setup\.sh|\.claude/hooks/)' && run "setup hook registration" python3 
 # it. Unchanged guards are remembered, so this costs one guard's replay.
 touched '^(\.claude/hooks/|crates/hookd/|tools/hookd_replay\.py|tests/fixtures/hookd-replay/)' && \
   run "gated guards act only where their gate runs" /usr/bin/python3 tests/test_hookd_replay.py
+# The dispatch entry folds every gated guard into one process; a change to a
+# guard's header, hookd or setup's folding can lose a block, so it runs here.
+touched '^(setup\.sh|\.claude/hooks/|crates/hookd/)' && \
+  run "one hookd dispatch answers like separate hooks" /usr/bin/python3 tests/test_hookd_dispatch.py
+touched '^(\.claude/hooks/terminal-loop\.sh|crates/hookd/|mac/lib/terminal(_events)?\.py)' && \
+  run "hookd's board rows match the Python terminal hook" /usr/bin/python3 tests/test_hookd_terminal.py
 # Six team notes reached main with no index line on 2026-10-10 and the
 # team_memory test sat red for a day: only the full suite ran it.
 touched '^team/memory/' && run "team memory index matches its files" bash tests/team_memory.sh

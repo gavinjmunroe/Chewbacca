@@ -9,11 +9,19 @@
 //!
 //!     hookd gate <guard-script> [args...]   payload on stdin, exit code as the guard's
 //!     hookd decide <guard-script>           prints run or skip, for the replay check
+//!     hookd dispatch --guard <matcher> <timeout> <script> ...
+//!                                           every gated guard of one event, one process
+//!                                           (see dispatch.rs)
+//!     hookd terminal-event <terminal-loop.sh>   the agent board's Pre/Post rows, or the
+//!                                           script when only Python can say (terminal.rs)
 //!
 //! It never fails a tool call on its own account. Anything it can't decide,
 //! including its own panic, runs the guard.
 
+mod dispatch;
 mod gate;
+mod json;
+mod terminal;
 
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
@@ -27,7 +35,7 @@ use gate::{decide, Verdict, HEAD_BYTES};
 /// 60 bytes, so 2 MB is ~35,000 hook events, a busy day across ten tabs.
 const LOG_MAX_BYTES: u64 = 2 * 1024 * 1024;
 
-fn head_of(script: &Path) -> String {
+pub(crate) fn head_of(script: &Path) -> String {
     let mut buf = Vec::with_capacity(HEAD_BYTES);
     if let Ok(file) = File::open(script) {
         let _ = file.take(HEAD_BYTES as u64).read_to_end(&mut buf);
@@ -113,10 +121,104 @@ fn gate(args: &[String]) -> i32 {
     code
 }
 
+/// What setup.sh asks before it registers a dispatch entry. An older hookd
+/// answers an unknown verb with usage and exit 0, which would skip every
+/// guard, so setup registers dispatch only when this exact line comes back.
+const DISPATCH_PROBE: &str = "hookd dispatch 1";
+
+fn dispatch(args: &[String]) -> i32 {
+    if args.first().map(String::as_str) == Some("--probe") {
+        println!("{DISPATCH_PROBE}");
+        return 0;
+    }
+    let started = Instant::now();
+    let guards = match dispatch::parse_args(args) {
+        Ok(guards) => guards,
+        Err(err) => {
+            // setup.sh wrote this entry; a malformed one is a bug there. Not
+            // a refusal: the host shows a non-blocking error and goes on, as
+            // it would for a guard that failed to start.
+            eprintln!("hookd dispatch: {err}");
+            return 1;
+        }
+    };
+    let mut payload = Vec::new();
+    let _ = std::io::stdin().read_to_end(&mut payload);
+    let results = match std::panic::catch_unwind(|| dispatch::run(&guards, &payload, started)) {
+        Ok(results) => results,
+        // A crash here would be a non-blocking error to the host, which lets
+        // the call through every guard at once. Run them all, plainly, one by
+        // one, and keep any block.
+        Err(_) => {
+            let codes: Vec<i32> = guards.iter().map(|g| run_guard(&g.script, &[], &payload)).collect();
+            return if codes.contains(&2) { 2 } else { codes.into_iter().find(|c| *c != 0).unwrap_or(0) };
+        }
+    };
+    for (guard, (verdict, outcome, at)) in guards.iter().zip(&results) {
+        trace(&guard.script, *verdict, outcome.code, at.as_micros());
+    }
+    let outcomes: Vec<dispatch::Outcome> = results.into_iter().map(|(_, o, _)| o).collect();
+    let merged = std::panic::catch_unwind(|| dispatch::merge(&outcomes))
+        .unwrap_or_else(|_| dispatch::crude(&outcomes));
+    let _ = std::io::stdout().write_all(&merged.stdout);
+    let _ = std::io::stderr().write_all(&merged.stderr);
+    merged.code
+}
+
+/// setup.sh writes ~/.chewbacca/hookd-terminal-event only when the installed
+/// hookd prints this, and terminal-loop.sh hands itself over only when that
+/// file is there: an older hookd answers an unknown verb with exit 0 and the
+/// board would silently get no rows.
+const TERMINAL_PROBE: &str = "hookd terminal-event 1";
+
+/// Is `chewie` where terminal-loop.sh looks for it? Without it the script
+/// writes nothing, so neither may hookd.
+fn chewie_installed(home: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    // [ -x ] as the script tests it: a file with an execute bit.
+    let runnable = |p: PathBuf| std::fs::metadata(p).map(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+        .unwrap_or(false);
+    let on_path = std::env::var_os("PATH").map(|p| std::env::split_paths(&p).any(|d| runnable(d.join("chewie"))))
+        .unwrap_or(false);
+    on_path || runnable(home.join(".local/bin/chewie"))
+}
+
+fn terminal_event(args: &[String]) -> i32 {
+    if args.first().map(String::as_str) == Some("--probe") {
+        println!("{TERMINAL_PROBE}");
+        return 0;
+    }
+    let Some(script) = args.first().map(PathBuf::from) else {
+        eprintln!("usage: hookd terminal-event <terminal-loop.sh>");
+        return 0;
+    };
+    let started = Instant::now();
+    let mut payload = Vec::new();
+    let _ = std::io::stdin().read_to_end(&mut payload);
+    let home = std::env::var_os("HOME").filter(|h| !h.is_empty()).map(PathBuf::from);
+    // Set but empty, Python's Path("") writes under the working directory;
+    // that's its call, not this one's.
+    let memory_var = std::env::var_os("BOB_MEMORY_DIR");
+    let odd_memory = memory_var.as_ref().map(|m| m.is_empty()).unwrap_or(false);
+    let memory = memory_var.filter(|m| !m.is_empty()).map(PathBuf::from);
+    let fast = home.as_deref().filter(|h| !odd_memory && chewie_installed(h)).and_then(|h| {
+        std::panic::catch_unwind(|| terminal::handle(&payload, memory.clone(), h)).ok().flatten()
+    });
+    let (verdict, code) = match fast {
+        // Written here; the script (and its Python) never starts.
+        Some(()) => (Verdict::Skip, 0),
+        None => (Verdict::Run, run_guard(&script, &args[1..], &payload)),
+    };
+    trace(&script, verdict, code, started.elapsed().as_micros());
+    code
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     match args.get(1).map(String::as_str) {
         Some("gate") => exit(gate(&args[2..])),
+        Some("dispatch") => exit(dispatch(&args[2..])),
+        Some("terminal-event") => exit(terminal_event(&args[2..])),
         Some("decide") => {
             let Some(script) = args.get(2) else { exit(0) };
             let head = head_of(Path::new(script));
@@ -137,6 +239,6 @@ fn main() {
             }
         }
         Some("--version") => println!("hookd {}", env!("CARGO_PKG_VERSION")),
-        _ => eprintln!("usage: hookd gate <guard-script> [args...] | hookd decide <guard-script>"),
+        _ => eprintln!("usage: hookd gate <guard-script> [args...] | hookd decide <guard-script> | hookd dispatch --guard <matcher> <timeout> <script> ..."),
     }
 }

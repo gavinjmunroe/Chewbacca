@@ -1290,6 +1290,14 @@ if [ -z "${CHEWBACCA_SUITE:-}" ] && command -v cargo >/dev/null 2>&1 && [ -f "$S
     warn "hookd did not build; guards run directly, as before."
   fi
 fi
+# terminal-loop.sh hands its Pre/Post rows to hookd only behind this marker,
+# written only for a binary that answers the probe (an older hookd answers an
+# unknown verb with exit 0, and the agent board would get no rows).
+if [ "$("$HOME/.local/bin/hookd" terminal-event --probe 2>/dev/null)" = "hookd terminal-event 1" ]; then
+  mkdir -p "$HOME/.chewbacca" && : > "$HOME/.chewbacca/hookd-terminal-event"
+else
+  rm -f "$HOME/.chewbacca/hookd-terminal-event"
+fi
 
 # chewbacca-writelog (crates/writelog) answers write-log in Rust and reads the
 # brain from an FSEvents journal instead of running git status before and
@@ -2187,6 +2195,94 @@ if _skip:
         if not h[_event]:
             del h[_event]
     print("Hooks skipped by ~/.chewbacca/skip-hooks: " + ", ".join(sorted(_skip)))
+
+# One hookd for every gated guard sharing a matcher (crates/hookd/src/
+# dispatch.rs). On 2026-10-12 twenty gated PreToolUse entries each cost the
+# host a shell, a bash start and a hookd start, ~6 ms of CPU apiece, to say
+# "skip" before every Bash call; the 13 on matcher Bash now answer in one
+# process. Each guard keeps its timeout. Built after the skip list,
+# so a skipped guard is never folded in, and only when the installed hookd
+# answers the probe: an older binary answers an unknown verb with exit 0,
+# which would skip every guard. Without the binary at call time the entry
+# runs hookd-fallback.sh, every guard, ungated.
+import subprocess as _sp
+_hookd = os.path.expanduser("~/.local/bin/hookd")
+_GATED = 'H="$HOME/.local/bin/hookd"; [ -x "$H" ] && exec "$H" gate '
+_DISPATCH = 'H="$HOME/.local/bin/hookd"; [ -x "$H" ] && exec "$H" dispatch '
+
+
+def _probe():
+    try:
+        r = _sp.run([_hookd, "dispatch", "--probe"], capture_output=True, text=True, timeout=10)
+    except (OSError, _sp.SubprocessError):
+        return False
+    return r.returncode == 0 and r.stdout.strip() == "hookd dispatch 1"
+
+
+def _foldable(entry):
+    """(matcher, timeout, script) for an entry that is one gated guard."""
+    hooks = entry.get("hooks") or []
+    if len(hooks) != 1 or set(entry) - {"hooks", "matcher"}:
+        return None
+    hook = hooks[0]
+    # A status line is cosmetic and gated guards answer in milliseconds, so
+    # it is dropped; async or any other key keeps the entry as it is.
+    if set(hook) - {"type", "command", "timeout", "statusMessage"} or hook.get("type", "command") != "command":
+        return None
+    command = str(hook.get("command", ""))
+    if not command.startswith(_GATED):
+        return None
+    script = shlex.split(command)[-1]
+    if gated(script) != command:
+        return None
+    # The host's own default when a hook names none (Claude Code docs).
+    return entry.get("matcher") or "", int(hook.get("timeout") or 60), script
+
+
+_dispatching = _probe()
+
+
+def _dispatch_entry(matcher, guards):
+    # Every guard here shares the entry's matcher, so the host's own matching
+    # (regex, legacy names, tool families) decides when they run, exactly as
+    # it did per guard; inside, each is '*'. A security review of the first
+    # version (2026-10-12) found its in-process matcher anchored where the
+    # host's regex is not, and blind to the host's tool aliases.
+    argv = " ".join("--guard '*' %d %s" % (t, shlex.quote(sc)) for t, sc in guards)
+    fallback = shlex.quote(hooks_dir + "/hookd-fallback.sh")
+    entry = {"hooks": [{
+        "type": "command",
+        "command": _DISPATCH + argv + "; exec /bin/bash " + fallback + " " + argv,
+        # Longest guard plus the second of grace hookd gives each one plus
+        # slack for hookd itself, so the host never kills the whole answer.
+        "timeout": max(t for t, _ in guards) + 3,
+    }]}
+    if matcher not in ("", "*"):
+        entry["matcher"] = matcher
+    return entry
+
+
+for _event in ("PreToolUse", "PostToolUse"):
+    if _event not in h:
+        continue
+    # An earlier run's dispatch entry is rebuilt from what is registered now.
+    entries = [e for e in h[_event] if not any(str(x.get("command", "")).startswith(_DISPATCH)
+                                               for x in e.get("hooks", []))]
+    folded = [(e, _foldable(e)) for e in entries]
+    groups = {}
+    for _, g in folded:
+        if g:
+            groups.setdefault(g[0], []).append(g[1:])
+    out, placed = [], set()
+    for e, g in folded:
+        if not _dispatching or not g or len(groups[g[0]]) < 2:
+            out.append(e)
+        elif g[0] not in placed:
+            placed.add(g[0])
+            out.append(_dispatch_entry(g[0], groups[g[0]]))
+    h[_event] = out
+    for m in placed:
+        print(f"{_event}: {len(groups[m])} gated guards on matcher {m or '*'} answer through one hookd")
 
 # The file now holds an Anthropic key and a GitHub PAT. Write it atomically so
 # a crash cannot truncate it, and 0600 so it is not world-readable.

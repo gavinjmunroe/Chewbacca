@@ -1062,6 +1062,10 @@ if group "installer"; then
     /usr/bin/python3 "$ROOT/tests/test_hookd.py"
   check  "a gated guard acts only on calls its gate words run, replayed over 800 real calls" \
     /usr/bin/python3 "$ROOT/tests/test_hookd_replay.py"
+  check  "one hookd dispatch answers every gated guard the way separate hooks did" \
+    /usr/bin/python3 "$ROOT/tests/test_hookd_dispatch.py"
+  check  "hookd writes the agent board's rows exactly as the Python terminal hook does" \
+    /usr/bin/python3 "$ROOT/tests/test_hookd_terminal.py"
 
   check  "committed checksums describe the committed tree" \
     python3 "$ROOT/tools/committed_checksums.py"

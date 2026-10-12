@@ -55,6 +55,8 @@ def run_one(command, payload, env, timeout=30):
 
 
 def name_of(command):
+    if '"$H" dispatch ' in command:
+        return f'hookd dispatch ({command.split("; exec /bin/bash")[0].count("--guard ")} guards)'
     for part in command.split():
         if part.endswith(('.sh', '.py', '.js')):
             return Path(part).name
@@ -75,6 +77,11 @@ def main(argv=None):
     settings = json.loads(Path(args.settings).read_text())
     events = args.event or ['PreToolUse', 'PostToolUse']
     scratch = tempfile.mkdtemp(prefix='hook-bench-')
+    # The machine's hookd capability marker (setup.sh writes it after probing
+    # the binary), so terminal-loop.sh takes the path it takes for real.
+    marker = Path.home() / '.chewbacca/hookd-terminal-event'
+    if marker.exists():
+        Path(scratch, marker.name).touch()
     env = dict(os.environ, CHEWBACCA_HOME=scratch,
                CHEWBACCA_WRITE_LOG=os.path.join(scratch, 'write-log.tsv'),
                CHEWBACCA_SESSION_STATE=os.path.join(scratch, 'session-state'))

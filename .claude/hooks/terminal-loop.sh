@@ -1,4 +1,11 @@
 #!/bin/bash
+# hookd writes the PreToolUse and PostToolUse rows itself (crates/hookd/src/
+# terminal.rs) and hands anything else back to the lines below. This cost
+# 0.08 s of CPU and 96 ms before and after every tool call until 2026-10-12
+# (tools/hook_bench.py). Only when setup.sh has checked the installed hookd
+# knows the verb: an older one would answer with exit 0 and write nothing.
+[ -z "${HOOKD_INNER:-}" ] && [ -x "$HOME/.local/bin/hookd" ] && [ -e "${CHEWBACCA_HOME:-$HOME/.chewbacca}/hookd-terminal-event" ] &&
+  exec "$HOME/.local/bin/hookd" terminal-event "$0" "$@"
 # Claude Code -> the terminal loop.
 #
 # Not sourcing lib.sh on purpose: its helpers read stdin, and the event JSON

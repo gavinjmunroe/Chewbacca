@@ -45,6 +45,25 @@ git("config", "user.name", "Ada Owner")
 (repo / "config.txt").write_text("key = AKIAABCDEFGHIJKLMNOP\nsupport@acme.com is fine\n")
 git("add", "-A")
 git("commit", "-q", "-m", "first")
+# A conflict resolved in a merge: the resolved text exists only in the merge.
+git("checkout", "-q", "-b", "side")
+(repo / "merge.txt").write_text("side\n")
+git("add", "merge.txt")
+git("commit", "-q", "-m", "side")
+git("checkout", "-q", "main")
+(repo / "merge.txt").write_text("main\n")
+git("add", "merge.txt")
+git("commit", "-q", "-m", "main")
+subprocess.run(["git", "merge", "-q", "side"], cwd=repo, env=env, capture_output=True)
+(repo / "merge.txt").write_text("resolved: she was diagnosed in May\n")
+git("add", "merge.txt")
+git("commit", "-q", "--no-edit")
+(repo / "merge.txt").write_text("clean now\n")
+(repo / "dump.json").write_text('{"to": "3105550142"}\n{"to": "(310)555-0142"}\n{"id": "4105550199"}\n')
+git("add", "merge.txt", "dump.json")
+git("commit", "-q", "-m", "clean the merge")
+subprocess.run(["git", "commit", "-q", "--allow-empty", "-m", "rebased"], cwd=repo, check=True,
+               env=dict(env, GIT_COMMITTER_NAME="Ada Owner", GIT_COMMITTER_EMAIL="ada.personal@ownermail.com"))
 git("rm", "-q", "notes/old.md")
 git("commit", "-q", "-m", "drop the note Bobby asked about, 310-555-0142")
 git("remote", "add", "origin", str(origin))
@@ -100,6 +119,23 @@ check("an author address that isn't a noreply is listed",
       any(h["kind"] == "author" and h["found"] == "Ada Owner <a***@ownermail.com>" for h in hits), [h for h in hits if h["kind"] == "author"])
 check("a commit message is read too",
       any(h["path"] == "(commit message)" and h["kind"] == "phone" for h in hits), [h for h in hits if h["path"] == "(commit message)"])
+check("a file resolved in a merge commit is read",
+      any(h["kind"] == "health" and h["path"] == "merge.txt" for h in hits), [h for h in hits if h["path"] == "merge.txt"])
+check("a store phone with no separators is found, an unknown digit run is not",
+      sum(1 for h in hits if h["path"] == "dump.json" and h["kind"] == "phone") == 2
+      and not any("0199" in h["found"] for h in hits), [h for h in hits if h["path"] == "dump.json"])
+check("a committer address is listed too",
+      any(h["kind"] == "author" and "a***@ownermail.com" in h["found"] and "Ada Owner" in h["found"]
+          and h["found"].startswith("Ada Owner <a***") for h in hits)
+      and any("ada.personal" not in h["found"] and h["kind"] == "author" for h in hits)
+      and len([h for h in hits if h["kind"] == "author"]) >= 2, [h for h in hits if h["kind"] == "author"])
+busy = tmp / "busy"
+busy.mkdir()
+(busy / "mine.txt").write_text("x")
+refused = subprocess.run([sys.executable, str(TOOL), "--repo", str(repo), "--out", str(busy), "--people-db", str(db)],
+                         capture_output=True, text=True, env=env)
+check("a folder holding other files is never locked down or written",
+      refused.returncode == 2 and oct(busy.stat().st_mode & 0o777) != "0o700" and not (busy / "hits.jsonl").exists())
 check("findings are never written inside the repo", inside.returncode == 2 and not (repo / "scan").exists())
 
 import shutil  # noqa: E402

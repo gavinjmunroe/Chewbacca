@@ -53,7 +53,11 @@ ROOT = Path(__file__).resolve().parent.parent
 # guessed ceiling above that.
 MAX_BLOB = 5 * 1024 * 1024
 
-PHONE_RE = re.compile(r"(?<![\w.])(?:\+?1[\s.-]?)?\(?([2-9]\d{2})\)?[\s.-](\d{3})[\s.-](\d{4})(?![\w])")
+PHONE_RE = re.compile(r"(?<![\w.])(?:\+?1[\s.-]?)?(?:\(([2-9]\d{2})\)\s?|([2-9]\d{2})[\s.-])(\d{3})[\s.-](\d{4})(?![\w])")
+# Ten or eleven bare digits: everywhere in ids and timestamps, so a hit only
+# when the number is in the people store. 941 of 1,170 store phones are
+# written this way (review, 10/13), and a dump of the store looks like this.
+BARE_PHONE_RE = re.compile(r"(?<![\w.])\+?1?([2-9]\d{9})(?!\d)")
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 NOT_PERSONAL_EMAIL = re.compile(
     r"(noreply|no-reply|example\.(com|org|net)|@test\.|@localhost|\.invalid$|\.test$|@users\.noreply\.github\.com"
@@ -100,7 +104,9 @@ def people_from_db(path: Path) -> Tuple[Set[str], Set[str], Set[str]]:
         full = full_name(name or "")
         if full:
             names.add(full)
-        for raw in re.split(r"[,;\s]+", phone or ""):
+        # Split only between numbers: "+1 310 555 0142" is one number, and a
+        # whitespace split made four pieces and loaded none (3 rows, 10/13).
+        for raw in re.split(r"[,;/]+", phone or ""):
             d = re.sub(r"\D", "", raw)[-10:]
             if len(d) == 10:
                 phones.add(d)
@@ -147,6 +153,29 @@ def course_codes(ledger: Path) -> Set[str]:
 
 # ── reading the repo ────────────────────────────────────────────────────────
 
+UNSCANNED: List[str] = []
+
+
+def pr_heads(repo: Path) -> List[str]:
+    """GitHub also serves refs/pull/*: a deleted branch stays readable there
+    after fetch.prune drops it here. The ones whose commits are on this Mac
+    are scanned; the rest are counted as not scanned, never guessed at.
+    Read only: ls-remote writes no ref."""
+    try:
+        out = subprocess.run(["git", "-C", str(repo), "ls-remote", "origin", "refs/pull/*"],
+                             capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        UNSCANNED.append("refs/pull/* (ls-remote failed)")
+        return []
+    have = []
+    for line in out.stdout.splitlines():
+        sha, _, ref = line.partition("\t")
+        ok = subprocess.run(["git", "-C", str(repo), "cat-file", "-e", sha + "^{commit}"],
+                            capture_output=True).returncode == 0
+        (have if ok else UNSCANNED).append(sha if ok else ref)
+    return have
+
+
 def head_files(repo: Path, rev: str) -> Dict[str, str]:
     """path -> blob at rev."""
     out = {}
@@ -161,7 +190,10 @@ def head_files(repo: Path, rev: str) -> Dict[str, str]:
 def history_blobs(repo: Path, refs: List[str]) -> Dict[str, Tuple[str, str]]:
     """blob -> (path, oldest commit that wrote it), over every commit on refs."""
     seen: Dict[str, Tuple[str, str]] = {}
-    log = git(repo, "log", "--raw", "--no-renames", "--no-abbrev", "--reverse", "--format=commit %H", *refs)
+    # -m: a merge that resolved a conflict holds the only copy of the
+    # resolved file, and plain --raw lists no merge at all (review, 10/13:
+    # 159 merges on origin/main).
+    log = git(repo, "log", "-m", "--raw", "--no-renames", "--no-abbrev", "--reverse", "--format=commit %H", *refs)
     commit = ""
     for line in log.splitlines():
         if line.startswith("commit "):
@@ -242,12 +274,16 @@ def scan_text(text: str, path: str, sig: Signals) -> List[dict]:
         if len(line) > 4000:
             line = line[:4000]
         for m in PHONE_RE.finditer(line):
-            d = "".join(m.groups())
+            d = "".join(g for g in m.groups() if g)
             if d in sig.phones:
                 store_contacts += 1
                 add("phone", i, mask(m.group(0)), "high", "a number in your people store")
             elif not re.search(r"\d{4}-\d{2}-\d{2}|\b(sha|0x|v\d)", line, re.I):
                 add("phone", i, mask(m.group(0)), "review", "phone-shaped")
+        for m in BARE_PHONE_RE.finditer(line):
+            if m.group(1) in sig.phones:
+                store_contacts += 1
+                add("phone", i, mask(m.group(0)), "high", "a number in your people store, digits only")
         for e in EMAIL_RE.findall(line):
             el = e.lower()
             if el in sig.emails:
@@ -310,20 +346,23 @@ def scan(repo: Path, sig: Signals, refs: List[str], tip: str, log=print) -> dict
                 hits.append({**h, "path": path, "commit": commit, "where": "tip" if commit is None else "history"})
     # Commit messages and author addresses go public with the history too.
     authors: Counter = Counter()
-    log = git(repo, "log", "--format=%H%x00%an%x00%ae%x00%B%x01", *refs)
+    log = git(repo, "log", "--format=%H%x00%an%x00%ae%x00%cn%x00%ce%x00%B%x01", *refs)
     for rec in log.split("\x01"):
         parts = rec.strip("\n").split("\x00")
-        if len(parts) < 4:
+        if len(parts) < 6:
             continue
-        sha, name, email, body = parts[0].strip(), parts[1], parts[2], parts[3]
-        authors[(name, email)] += 1
+        sha, body = parts[0].strip(), parts[5]
+        # The committer goes public too: a rebase or cherry-pick of someone
+        # else's commit leaves your address there.
+        authors[(parts[1], parts[2])] += 1
+        authors[(parts[3], parts[4])] += 1
         for h in scan_text(body, "(commit message)", sig):
             if h["kind"] != "brain":
                 hits.append({**h, "path": "(commit message)", "commit": sha, "where": "history"})
     for (name, email), n in authors.items():
         if email and not NOT_PERSONAL_EMAIL.search(email):
             hits.append({"kind": "author", "line": 0, "found": f"{name} <{mask(email)}>", "severity": "review",
-                         "why": f"author of {n} commit(s); public with the history", "path": "(commit author)",
+                         "why": f"author or committer of {n} commit(s); public with the history", "path": "(commit author)",
                          "commit": None, "where": "history"})
     return {"tip": tip, "refs": refs, "files": len(files), "older_versions": len(old), "hits": hits,
             "skipped": skipped}
@@ -360,6 +399,8 @@ def summary(result: dict) -> str:
         if len(ranked) > 60:
             lines.append(f"- ... {len(ranked) - 60} more files, all in hits.jsonl")
         lines.append("")
+    if UNSCANNED:
+        lines += ["## Not scanned (on GitHub, not on this Mac)", ""] + [f"- `{u}`" for u in UNSCANNED[:40]] + [""]
     if result["skipped"]:
         lines += ["## Not read (over 5 MB)", ""] + [f"- `{s['path']}` ({s['bytes']:,} bytes)" for s in result["skipped"][:30]]
     return "\n".join(lines) + "\n"
@@ -382,13 +423,17 @@ def main(argv: List[str]) -> int:
     if out == repo or repo in out.parents:
         print("public_scan: --out must be outside the repo; the findings hold the content", file=sys.stderr)
         return 2
+    ours = {"hits.jsonl", "SUMMARY.md"}
+    if out.exists() and any(p.name not in ours for p in out.iterdir()):
+        print(f"public_scan: {out} holds other files; pick an empty folder for the findings", file=sys.stderr)
+        return 2
     names, phones, emails = people_from_db(Path(args.people_db).expanduser())
     if args.names:
         names |= {n for n in (full_name(x) for x in Path(args.names).read_text().splitlines()) if n}
     owner = owner_names(repo) | {n for n in (full_name(x) for x in args.owner) if n}
     names -= owner
     sig = Signals(names, phones, emails, owner, course_codes(Path(args.coursework).expanduser()))
-    refs = ["--all"] if args.all_refs else ["--remotes=origin"]
+    refs = ["--all"] if args.all_refs else ["--remotes=origin", "--tags"] + pr_heads(repo)
     try:
         tip = git(repo, "rev-parse", "--short", "origin/main").strip()
         result = scan(repo, sig, refs, "origin/main", log=lambda s: print(s, file=sys.stderr))

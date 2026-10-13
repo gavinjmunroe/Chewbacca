@@ -40,6 +40,7 @@ import {
   FileView,
   Review,
   TestsView,
+  eventsAfter,
   useNow,
   type Session,
 } from "./GlassLayer";
@@ -213,23 +214,25 @@ export function Story({
   // buffer and are replayed after it, so none is lost to the history's
   // answer (a permission_request lost there would leave the agent waiting
   // with no Allow on the glass).
-  // The session it was last read for: a re-read of the same one (Retry, or
-  // a reconnect) keeps the story on screen until the fresh read lands, so a
-  // realm-ui handover never blanks it.
-  const readFor = useRef("");
+  // A reconnect (link.gen) reads forward from the newest event the story
+  // already told and tells what the gap held, onto the story on screen: never
+  // a rebuild from history, which ends at the sessions list's lastEventSeq
+  // (polled every 30 s) and rewound a settled turn to Working (review of the
+  // 10/13 change). One catch-up per reconnect, set up by the effect below.
+  const catchUp = useRef<(() => void) | null>(null);
   const gen = link?.gen ?? 0;
+  useEffect(() => {
+    if (gen > 0) catchUp.current?.();
+  }, [gen]);
   useEffect(() => {
     let alive = true;
     let ready = false;
     const buffer: Stored[] = [];
-    if (readFor.current !== session.id) {
-      readFor.current = session.id;
-      setStory(emptyStory());
-      setLoaded(false);
-      setReviewEmpty(false);
-      lastSeq.current = 0;
-      settleSeen.current = 0;
-    }
+    setStory(emptyStory());
+    setLoaded(false);
+    setReviewEmpty(false);
+    lastSeq.current = 0;
+    settleSeen.current = 0;
     const noteLive = (stored: Stored) => {
       if (stored.event.type === "user_message") {
         setReviewEmpty(false);
@@ -243,7 +246,6 @@ export function Story({
       if (!alive) return;
       let s = fromHistory(list);
       lastSeq.current = list.at(-1)?.seq ?? 0;
-      settleSeen.current = 0;
       for (const stored of buffer.sort((a, b) => a.seq - b.seq)) {
         if (stored.seq <= lastSeq.current) continue;
         lastSeq.current = stored.seq;
@@ -263,6 +265,25 @@ export function Story({
       if (alive) setLoadFault(r.fault);
       settle([]);
     });
+    catchUp.current = () => {
+      // The first read still in flight covers the gap itself.
+      if (!ready) return;
+      ready = false;
+      const from = lastSeq.current;
+      void within(eventsAfter(session.id, from), "engine-down", HISTORY_ANSWER_MS).then((r) => {
+        if (!alive) return;
+        const fresh: Stored[] = [];
+        for (const stored of [...(r.ok ? r.value : []), ...buffer].sort((a, b) => a.seq - b.seq)) {
+          if (stored.seq <= lastSeq.current) continue;
+          lastSeq.current = stored.seq;
+          noteLive(stored);
+          fresh.push(stored);
+        }
+        buffer.length = 0;
+        ready = true;
+        if (fresh.length) setStory((s0: unknown) => fresh.reduce((s, e) => tell(s, e), s0));
+      });
+    };
     const off = rpc().on("session.event", (ev) => {
       const stored = ev as unknown as Stored;
       if (stored.sessionId !== session.id) return;
@@ -277,9 +298,10 @@ export function Story({
     });
     return () => {
       alive = false;
+      catchUp.current = null;
       off();
     };
-  }, [session.id, attempt, gen]);
+  }, [session.id, attempt]);
 
   // The turn as it stands under the engine answering now: one its restart
   // cut off is told as that, never "Starting on it" forever (turn.mjs
@@ -337,13 +359,16 @@ export function Story({
   // running in its own app counts from the prompt its transcript holds;
   // anything else has no clock, never a guessed one.
   const running = Boolean(turn && isRunning(turn)) && b !== "done";
-  const clockTurn = st.agent.ran
-    ? turn
-    : outside?.since
-      ? TurnOf.asked("", outside.since)
-      : null;
-  const now = useNow(shown && Boolean(clockTurn && isRunning(clockTurn)) && running);
-  const ticking = clockTurn ? clock(clockTurn, now) : null;
+  // A tab's own turn only when realm's engine isn't the one running it: a
+  // realm session's transcript also lives in ~/.claude, and read as a tab it
+  // said "runs as a background job" under realm's own Allow (review, 10/13).
+  const away = st.agent.ran ? null : outside;
+  const clockTurn = st.agent.ran ? turn : away?.since ? TurnOf.asked("", away.since) : null;
+  const live = Boolean(clockTurn && isRunning(clockTurn)) && (st.agent.ran ? running : true);
+  const now = useNow(shown && live);
+  const clocked = clockTurn ? clock(clockTurn, now) : null;
+  // A working clock only while it ticks: one that can't is a frozen lie.
+  const ticking = clocked && (clocked.tone !== "running" || live) ? clocked : null;
 
   // Allow is pressable only while the whole request is on screen: none of it
   // below a fold or past the figure's edge.
@@ -609,12 +634,12 @@ export function Story({
             Stop
           </button>
         )}
-        {!stoppable && outside && (
+        {!stoppable && away && (
           // Realm's Stop reaches only turns its engine runs; this one runs in
           // its tab's own app. One line on where to stop it instead of a
           // button that can't (steal list 11, 10/12 "still rough").
           <span className="story-elsewhere" role="note">
-            {stopElsewhere(outside.where)}
+            {stopElsewhere(away.where)}
           </span>
         )}
         <button

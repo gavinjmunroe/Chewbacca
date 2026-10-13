@@ -16,8 +16,10 @@
 // does, for its own origin:
 //   1. Origin must be exactly this server's origin, and Host must be this
 //      server's address (a rebinding page sends its own name as Host).
-//   2. The page must offer `realm.<token>`, where <token> is minted at every
-//      start of this server and written only to the 0600 state file. Nothing
+//   2. The page must offer `realm.<token>`, where <token> is minted when no
+//      generation before this one on the port left a fresh one (keptToken:
+//      a land hands it to the next copy, a stop or a day rotates it), and
+//      written only to the 0600 state file. Nothing
 //      here serves it: the HUD reads that file and hands it to its own web
 //      view before the page runs (AppPane.swift), so another local account
 //      that can reach this port still cannot learn it. The engine's own token
@@ -257,14 +259,25 @@ function handleLaunch(req, res, { path, token, origin, launch }) {
  *  page shown during a land redialed with the old one and was refused until
  *  it reloaded. A file anyone else could read, or for another port, mints a
  *  new one; `realm-ui stop` removes the file, so stopping rotates it. */
-export function keptToken(state, port, { uid = process.getuid?.() } = {}) {
+// How long one pipe token lives across generations. A day means Kyber
+// reloads its kept page at most once a day for rotation, against every land
+// before 10/13 (main moved 10+ times on 10/12). Guessed, never measured.
+export const TOKEN_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+export function keptToken(state, port, { uid = process.getuid?.(), now = Date.now() } = {}) {
+  return kept(state, port, { uid, now })?.token ?? null;
+}
+
+function kept(state, port, { uid = process.getuid?.(), now = Date.now() } = {}) {
   if (!state) return null;
   try {
     const st = statSync(state);
     if ((st.mode & 0o077) !== 0 || (uid !== undefined && st.uid !== uid)) return null;
     const saved = JSON.parse(readFileSync(state, "utf8"));
     if (saved.port !== port || typeof saved.token !== "string") return null;
-    return /^[A-Za-z0-9_-]{32,}$/.test(saved.token) ? saved.token : null;
+    const minted = Number(saved.minted);
+    if (!Number.isFinite(minted) || now - minted > TOKEN_MAX_AGE_MS || minted > now) return null;
+    return /^[A-Za-z0-9_-]{32,}$/.test(saved.token) ? { token: saved.token, minted } : null;
   } catch {
     // Expected: no server has run here yet.
     return null;
@@ -317,7 +330,9 @@ export function start({
   // file view and a hunk put back. Same token as the pipe.
   // Settled before the first request can arrive. A fixed port (the daemon
   // always passes --port) keeps the last generation's token.
-  token ??= (port ? keptToken(state, port) : null) ?? randomBytes(24).toString("base64url");
+  const handed = token ? null : port ? kept(state, port) : null;
+  const minted = handed?.minted ?? Date.now();
+  token ??= handed?.token ?? randomBytes(24).toString("base64url");
   const glass = glassState();
   const launch = launchCodes();
   const index = join(root, "index.html");
@@ -469,6 +484,7 @@ export function start({
             token,
             dist: root,
             started: new Date().toISOString(),
+            minted,
           }) + "\n",
           { mode: 0o600 },
         );

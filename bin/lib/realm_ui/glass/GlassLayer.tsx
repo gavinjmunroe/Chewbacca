@@ -296,6 +296,26 @@ export function useNow(live: boolean): number {
   return now;
 }
 
+// A reconnect's catch-up reads a page of events at a time, up to ten (4,000
+// events), the same window the story reads its history in (Story.tsx). One
+// 400-event page took at most 4.8 ms on the live engine at load 16 (10/11).
+const CATCH_UP_PAGE = 400;
+const CATCH_UP_PAGES = 10;
+
+/** Every event of a session after `after`, oldest first: what a
+ *  reconnect's gap held. */
+export async function eventsAfter(id: string, after: number): Promise<Stored[]> {
+  let out: Stored[] = [];
+  let from = after;
+  for (let page = 0; page < CATCH_UP_PAGES; page++) {
+    const list = (await rpc().call("sessions.events", { id, afterSeq: from, limit: CATCH_UP_PAGE })) as unknown as Stored[];
+    out = out.concat(list);
+    if (list.length < CATCH_UP_PAGE) break;
+    from = list.at(-1)?.seq ?? from;
+  }
+  return out;
+}
+
 /** The page's line to the engine (link.mjs): steady, a handover the glass
  *  rides out, or down. `gen` moves on every reconnect, `bootAt` is when the
  *  engine now answering booted. One watcher for the page. */
@@ -454,7 +474,14 @@ export function GlassLayer({
     });
     const offEvent = rpc().on("session.event", (ev) => {
       const stored = ev as unknown as Stored;
-      rereading.current.get(stored.sessionId)?.push(stored);
+      // An agent catching up after a reconnect takes its live events in seq
+      // order with the gap's, once the gap is read.
+      const waiting = rereading.current.get(stored.sessionId);
+      if (waiting && stored.seq > 0) {
+        waiting.push(stored);
+        return;
+      }
+      if (stored.seq > (stepped.current.get(stored.sessionId) ?? 0)) stepped.current.set(stored.sessionId, stored.seq);
       setAgents((prev) => {
         const was = prev[stored.sessionId] ?? (emptyAgent());
         const now = step(was, stored);
@@ -493,11 +520,16 @@ export function GlassLayer({
 
   // Every reconnect (link.gen): the list again, and every agent whose turn
   // was still going read again from its log, since the events of the gap
-  // never came. A read swaps in whole once it answers, with the live events
-  // that landed meanwhile stepped on top, so no tile blanks while it reads.
+  // never came. It reads forward from the newest event the agent stepped and
+  // steps the gap and the live events that landed meanwhile on in seq order,
+  // so no tile blanks or rewinds while it reads.
   // Before 10/13 nothing re-read: a turn that settled in the gap read
   // Working until the page reloaded.
   const rereading = useRef(new Map<string, Stored[]>());
+  // The newest stored event each agent has stepped: where its catch-up reads
+  // from. The sessions list's lastEventSeq is up to 30 s old when shown and
+  // never refreshed while hidden (review, 10/13).
+  const stepped = useRef(new Map<string, number>());
   const agentsRef = useRef(agents);
   agentsRef.current = agents;
   const sessionsNow = useRef(sessions);
@@ -510,25 +542,20 @@ export function GlassLayer({
       const s = sessionsNow.current[id];
       if (!s) continue;
       rereading.current.set(id, []);
-      void settle(
-        rpc().call("sessions.events", {
-          id,
-          afterSeq: Math.max(0, (s.lastEventSeq ?? 0) - SEED_EVENTS),
-          limit: SEED_EVENTS * 4,
-        }),
-        "engine-down",
-        ENGINE_ANSWER_MS,
-      ).then((r) => {
+      const from = stepped.current.get(id) ?? s.lastEventSeq ?? 0;
+      void settle(eventsAfter(id, from), "engine-down", ENGINE_ANSWER_MS).then((r) => {
         const live = rereading.current.get(id) ?? [];
         rereading.current.delete(id);
-        if (!r.ok) return;
-        const read = r.value as Stored[];
-        const last = read.at(-1)?.seq ?? 0;
-        let fresh = emptyAgent();
-        for (const ev of read) fresh = step(fresh, ev);
-        for (const ev of live) if (ev.seq > last) fresh = step(fresh, ev);
-        // A read that starts mid-turn holds no ask: keep what we had.
-        if (fresh.turn) setAgents((prev) => ({ ...prev, [id]: fresh }));
+        let last = from;
+        const gap: Stored[] = [];
+        for (const ev of [...(r.ok ? r.value : []), ...live].sort((x, y) => x.seq - y.seq)) {
+          if (ev.seq <= last) continue;
+          last = ev.seq;
+          gap.push(ev);
+        }
+        if (!gap.length) return;
+        stepped.current.set(id, last);
+        setAgents((prev) => ({ ...prev, [id]: gap.reduce((a, ev) => step(a, ev), prev[id] ?? emptyAgent()) }));
       });
     }
   }, [booted, link.gen, load]);
@@ -562,6 +589,8 @@ export function GlassLayer({
         }
         let a = emptyAgent();
         for (const ev of r.value as Stored[]) a = step(a, ev);
+        const readTo = (r.value as Stored[]).at(-1)?.seq ?? 0;
+        if (readTo > (stepped.current.get(s.id) ?? 0)) stepped.current.set(s.id, readTo);
         if (a.turn)
           // Never over anything a live event already stepped.
           // A live delta can leave an entry with no turn yet (seq -1 events

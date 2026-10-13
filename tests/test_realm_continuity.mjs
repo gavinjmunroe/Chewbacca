@@ -187,8 +187,8 @@ test("a tab's live process says which app runs it; a dead pid says nothing", () 
 
 test("the story offers Stop only for realm's turn, and the reason otherwise", () => {
   const story = read("Story.tsx");
-  assert.match(story, /!stoppable && outside &&/);
-  assert.match(story, /stopElsewhere\(outside\.where\)/);
+  assert.match(story, /!stoppable && away &&/);
+  assert.match(story, /stopElsewhere\(away\.where\)/);
   assert.match(read("GlassLayer.tsx"), /where: tr\.where \?\? null/);
 });
 
@@ -262,7 +262,14 @@ test("a finished turn, an imported tab and a turn after the boot are left alone"
 test("the story and tiles re-read on every reconnect and judge by the engine's boot", () => {
   const story = read("Story.tsx");
   const layer = read("GlassLayer.tsx");
-  assert.match(story, /\[session\.id, attempt, gen\]/);
+  // A reconnect catches up forward from what the story already told, never
+  // rebuilds from the list's lastEventSeq (which rewound a settled turn).
+  assert.match(story, /eventsAfter\(session\.id, from\)/);
+  assert.match(story, /const from = lastSeq\.current;/);
+  assert.doesNotMatch(story, /\[session\.id, attempt, gen\]/);
+  assert.match(layer, /const from = stepped\.current\.get\(id\)/);
+  // Realm's own session is never told as a tab running elsewhere.
+  assert.match(story, /const away = st\.agent\.ran \? null : outside;/);
   assert.match(
     story,
     /cutByRestart\(told0\.agent, bootAt, session\.agentKind\)/,
@@ -388,6 +395,8 @@ test("a new realm-ui generation on the same port keeps the pipe token", async ()
   chmodSync(state, 0o600);
   assert.equal(keptToken(state, port + 1), null);
   assert.equal(keptToken(state, port), one.token);
+  // A day on, it rotates: Kyber reloads at most once a day for it.
+  assert.equal(srv.keptToken(state, port, { now: Date.now() + srv.TOKEN_MAX_AGE_MS + 1 }), null);
 });
 
 // ------------------------------------------------------- 5. the rebuild

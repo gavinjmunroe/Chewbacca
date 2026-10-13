@@ -29,8 +29,8 @@
 export const REDIAL_MS = 50;
 // How long a drop may last before it's said. Measured 10/13, headless
 // WebKit, scratch engine, realm-ui moved the way chewbacca-daemon's overlap
-// swap does it: drop to reconnected took 54 to 127 ms across 8 handovers,
-// and 496 and 824 ms on the first handover of each run, at 1440 and 1246.
+// swap does it: drop to reconnected took 51 to 127 ms on later handovers,
+// and 496 to 928 ms on the first of each run (6 runs, 1440 and 1246).
 // An engine SIGTERM and cold boot took 2.2 to 2.3 s from the kill to the
 // story naming it. 3 s holds every handover quiet and says anything longer.
 export const GRACE_MS = 3_000;

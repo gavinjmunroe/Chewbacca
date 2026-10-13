@@ -515,6 +515,12 @@ gone = realm_ui.prune_assets(assets, started) if hasattr(realm_ui, "prune_assets
 left = sorted(p.name for p in assets.iterdir() if not p.name.startswith("."))
 check("a rebuild keeps this build and the last one, and drops older", gone == ["index-ANCIENT.js"]
       and left == ["Lazy-OLD.js", "index-NEW.js", "index-OLD.js"], (gone, left))
+first = TMP / "assets-first"
+first.mkdir(parents=True, exist_ok=True)
+(first / "Lazy-LIVE.js").write_text("x")
+os.utime(first / "Lazy-LIVE.js", (1000, 1000))
+gone = realm_ui.prune_assets(first, _t.time()) if hasattr(realm_ui, "prune_assets") else None
+check("the first build with no record keeps what a kept page runs", gone == [] and (first / "Lazy-LIVE.js").exists(), gone)
 vite = (ROOT / "bin" / "lib" / "realm_ui" / "vite.config.mjs").read_text()
 check("vite keeps dist between builds", "emptyOutDir: false" in vite)
 

@@ -228,7 +228,10 @@ def prune_assets(assets: Path, started: float) -> list:
     try:
         last = set(json.loads(record.read_text()).get("current", []))
     except (OSError, ValueError, AttributeError):
-        last = set()
+        # No record: the first build since dist stopped being emptied. What
+        # is there is the build a kept page may be running, so all of it
+        # stays this once (review, 10/13).
+        last = set(names)
     # A second of slack: some filesystems keep mtimes to the second.
     current = sorted(n for n in names if (assets / n).stat().st_mtime >= started - 1)
     keep = set(current) | last

@@ -963,18 +963,52 @@ tests/test_realm_steal.mjs and its frame in the ux-apply rehearsal:
   is named ("Claude hit its usage limit"), and anything with a pipe, code or
   link is "It stopped with an error". The provider's words are the
   transcript's.
+- **10, live timer (10/13):** a turn has one start time, set by its ask and
+  carried through every beat (turn.mjs `since`, `carry`). The story says
+  "Working for 42s", "Waiting on you for 1m 05s" or "Took 1m 24s"; a
+  working or waiting tile counts the same up in its corner. A tab running in
+  its own app counts from its own prompt (tab_truth.mjs `since`). No known
+  start, no clock: never a guessed one. Clocks tick only while shown.
 - **11, Stop and Escape:** Stop is a door on the story while his engine runs
   the turn (sessions.interrupt). Escape in his composer is his interrupt;
   elsewhere in the transcript it steps back to the story (nav.mjs escapeOn).
+  A turn running in a Claude Code tab's own app (VS Code, a terminal, a
+  headless job) gets one line where Stop would sit, read from
+  ~/.claude/sessions/<pid>.json ("This one runs in VS Code, so stop it
+  there."), never a Stop that can't reach it and never keys sent into
+  another app's window.
 - **12, review bar:** the review's bar stays put and counts ("2 files, 8
   changes to decide") with Next change; only the hunks scroll, and each
   hunk's Keep and Reject ride sticky at its top.
 - **13, same keys everywhere:** Return is every call's first press.
 
 Not done, on purpose: 2 (his sidebar's Needs you is on screen now and
-answers in place), 1, 7 and 10 of his frame (done by c5d9f458). Not done
-yet: 3 (a seven-day filter), 5 (Cmd+K on the tiles), 10 (a live timer:
-the typed turn has no start time), 14, 15.
+answers in place), 1 and 7 of his frame (done by c5d9f458). Not done
+yet: 3 (a seven-day filter), 5 (Cmd+K on the tiles), 14, 15.
+
+### The glass keeps going when what's under it moves (10/13)
+
+- **A land never blinks it.** realm-ui swaps overlap: the new copy binds the
+  same port beside the old one (listen_exec.py, `CHEWBACCA_LISTEN_FD`) and
+  keeps the pipe token from the 0600 state file for a day, so Kyber keeps
+  its page and the page's redial lands. link.mjs redials after 50 ms and
+  hides his "Connection lost" for a 3 s grace; past it the banner shows.
+  Measured headless 10/13: no banner, notice or blank frame across 14
+  handovers at 1440 and 1246, drop to back 51 to 928 ms, against a
+  page stuck on "Connection lost" plus a 403 talk-key notice until Kyber
+  reloaded it before.
+- **A reconnect catches up, never rebuilds.** The story and the tiles read
+  forward from the newest event they told; a rebuild from the sessions
+  list's lastEventSeq (polled every 30 s) rewound a settled turn.
+- **An engine restart is said.** Realm's boot settles every live turn with a
+  synthetic idle. turn.mjs `cutByRestart` tells a turn its engine ran, begun
+  before the boot (daemon.info startedAt), that still reads running, or a
+  Claude/Codex turn settled with no usage line, as "Realm's engine restarted
+  mid-turn" with Ask again. Imported tab copies (no init, no status) and
+  other agents' Done turns are left alone.
+- **A rebuild costs no visible load.** The server tells the page its build's
+  entry (/glass/events); a page on an older build reloads itself only while
+  off the glass, once per build. dist keeps the last two builds' assets.
 
 Also clever, not ranked: Cursor sends separate user-facing and model-facing tool errors ("Tool call failed" goes to the model); Claude.app and the Claude Code ext warn before an expensive re-read ("Your next message re-reads all {tokens} tokens. Compact first"); Claude.app moves keyboard focus to the next row when you dismiss one; Notion queues navigation commands until the page is ready (`sendOrQueueNavigationCommand`) and keeps the current URL on reload; Linear's `applicable(ctx)` hides "Go to X" while you are on X.
 

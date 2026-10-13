@@ -540,6 +540,8 @@ if group "gtme"; then
     python3 "$ROOT/tests/test_no_pinned_confidence.py"
   check "outbound waiting on him shows in needs-you, sent and expired batches don't" \
     python3 "$ROOT/tests/test_ingest_gtme.py"
+  check "Slack DMs and @-mentions that ask him show in needs-you; bots, answered DMs and slacrawl's file don't move" \
+    python3 "$ROOT/tests/test_ingest_slack.py"
   # Paid lookups through treg: one priced first, every call tagged and capped,
   # treg's own charge recorded, budget enforced. A fake treg on 127.0.0.1.
   check "gtme paid lookups price one first, tag, cap and meter every call" \

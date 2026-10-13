@@ -288,7 +288,7 @@ iMessage", "Draft in Mail").
 | iMessage | live: chat.db, read only, `attributedBody` decoded                                                                            | on a press, to the 1:1 thread resolved fresh, read back with `mac messages history` |
 | Mail     | live: unread mail from people via `mac mail unread`                                                                           | drafts only                                                                         |
 | WhatsApp | not yet: `wacli doctor` on 2026-10-04 says not authenticated, 0 messages; it needs the QR scanned on his phone                | not built until reads are verified                                                  |
-| Slack    | not yet: no Slack CLI on this Mac, and the Slack MCP is a connector an agent session holds, not something the daemon can call | not built                                                                           |
+| Slack    | live since 2026-10-13: DMs, group DMs and channel @-mentions from slacrawl's store, read from a copy (bin/lib/ingest_slack.py) | not from the glass yet: `chewbacca slack` sends on a person's press                 |
 
 A new network is an ingester that writes Message and Thread nodes with
 `props.network` set, Persons fused through the people store, and nothing in

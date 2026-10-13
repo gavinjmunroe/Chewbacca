@@ -864,6 +864,14 @@ def chats(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
     return ingest_chats.chats(graph, ctx, ids, days=days)
 
 
+def slack(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
+    """Slack DMs, group DMs and channel @-mentions, from slacrawl's store
+    (ingest_slack.slack). No store is an empty snapshot with a note."""
+    import ingest_slack  # noqa: PLC0415
+
+    return ingest_slack.slack(graph, ctx, ids, days=days)
+
+
 def gtme(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
     """Cold emails waiting for the person's ok and leads waiting on a reply,
     from chewbacca gtme's own files (ingest_gtme.gtme). No client set up is
@@ -876,7 +884,7 @@ def gtme(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
 INGESTERS = {
     "imessage": imessage, "mail": mail, "coursework": coursework, "calendar": calendar,
     "backlog": backlog, "people": people_tasks, "reminders": reminders, "agents": agents,
-    "whatsapp": whatsapp, "meetings": meetings, "chats": chats, "gtme": gtme,
+    "whatsapp": whatsapp, "meetings": meetings, "chats": chats, "gtme": gtme, "slack": slack,
 }
 
 
@@ -904,7 +912,7 @@ def ingest_all(graph: Graph, ctx, days: int = 7, only: list[str] | None = None,
 
 # Meetings ride the message window too: a meeting's snippet and transcript
 # words are other people's words, kept no longer than a text is.
-MESSAGE_SOURCES = ("imessage", "mail", "whatsapp", "meetings", "chats")
+MESSAGE_SOURCES = ("imessage", "mail", "whatsapp", "meetings", "chats", "slack")
 
 
 def dumps(report: dict) -> str:

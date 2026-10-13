@@ -1070,6 +1070,9 @@ if group "installer"; then
   # races were lost four times running.
   check  "chewbacca land pushes only your files, survives a lost race, fixes the manifest" \
     bash "$ROOT/tests/land.sh" "$ROOT"
+  # 2026-10-13: a pre-push test's `git -C <temp> init` inherited the hook's
+  # GIT_DIR and set core.bare on the shared checkout, twice in an hour.
+  check  "a git hook's tests never re-initialise the repo it pushes from" bash "$ROOT/tests/githooks_git_env.sh"
 
   # Caleb, 2026-10-10: "Build a tool so you can launch your own session!"
   check  "chewbacca launch seeds a named session, marks it launched, opens it in the desktop app" \

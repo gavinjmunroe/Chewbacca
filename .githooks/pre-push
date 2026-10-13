@@ -15,6 +15,9 @@
 set -uo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT" || exit 0
+# Nothing below may inherit the hook's GIT_DIR: see scrub-git-env.sh.
+# shellcheck source=/dev/null
+. "$ROOT/.githooks/scrub-git-env.sh"
 
 ZERO=0000000000000000000000000000000000000000
 CHANGED=""

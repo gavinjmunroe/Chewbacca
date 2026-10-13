@@ -96,7 +96,17 @@ cmd_test() {
   elif [ -d "$d/tests" ]; then
     # test_*.py are hermetic. Anything else in tests/ (browser.py) needs a
     # running server and Playwright, so it is left to `apps run` plus a manual call.
-    cd "$d" && exec python3 -m pytest -q tests/test_*.py
+    # Stock /usr/bin/python3 (3.9) ships no pytest, so where it is missing uv
+    # fetches it into a throwaway env, the same fallback tests/run.sh uses
+    # (`chewbacca apps test site` failed "No module named pytest" on 10/13).
+    cd "$d" || exit 1
+    if python3 -c 'import pytest' 2>/dev/null; then
+      exec python3 -m pytest -q tests/test_*.py
+    elif command -v uv >/dev/null 2>&1; then
+      exec uv run --no-project --with pytest python -m pytest -q tests/test_*.py
+    fi
+    echo "chewbacca apps: pytest is not installed (pip install pytest, or install uv)" >&2
+    exit 1
   else
     echo "chewbacca apps: $(basename "$d") has no tests yet" >&2
     exit 1

@@ -1459,7 +1459,17 @@ fi
 if group "hooks"; then
   check "brain-recall speaks only over the cosine bar" bash "$ROOT/tests/brain_recall.sh"
   check "the memory indexes stop loading whole only while recall holds its sealed floor" /usr/bin/python3 "$ROOT/tests/test_recall_gate.py"
-  check "brain index is incremental and a slow model load no longer silences recall" python3 "$ROOT/tests/test_brain_index.py"
+  # The test runs brain.py under `python3 -I`, which sees only the
+  # interpreter's own site-packages. On a Mac whose numpy lives in the user
+  # site (~/Library/Python/3.9, this one on 10/13) 10 of 12 cases died on
+  # "No module named numpy" before and after every brain change, so that is a
+  # missing dependency to name, not a red. Quarantined: ledger task
+  # "brain index test needs numpy under python3 -I" (owner: brain-retrieval lane).
+  if python3 -I -c 'import numpy' 2>/dev/null; then
+    check "brain index is incremental and a slow model load no longer silences recall" python3 "$ROOT/tests/test_brain_index.py"
+  else
+    skip "brain index is incremental" "numpy not importable by python3 -I"
+  fi
   check "brain-rerank falls back to stage one on any model failure and caches only the ranking" python3 "$ROOT/tests/test_brain_rerank.py"
   check "a long hub folder cannot fill brain's top 5 for an unrelated question" python3 "$ROOT/tests/test_brain_hubs.py"
   check "brain ranks by fused rank with best chunk and one feedback round" python3 "$ROOT/tests/test_brain_fusion.py"

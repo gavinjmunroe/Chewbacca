@@ -640,6 +640,8 @@ class Daemon:
             with self.lock:
                 if self.open.get(live.provider.name) is live:
                     live.values.update(result.updates)
+                    if result.relayout:
+                        self.draw(live, full=True)
                     self.push(live, extra={status: result.line, **result.updates})
             if result.opens:
                 self.open_surface(result.opens, arg=result.opens_arg, preset=result.preset)

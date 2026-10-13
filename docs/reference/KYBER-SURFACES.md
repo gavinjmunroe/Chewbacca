@@ -463,6 +463,45 @@ through the daemon with fake gws, mac and people on PATH; and
 `tests/test_capture_consent.py` holds that the consent line is drawn before
 any audio is written.
 
+## Outbound
+
+`outbound` (`bin/lib/surfaces/outbound.py`, `surfaces.outbound.Outbound`,
+region top, `chrome=window`) replaces Clay's campaign pages for someone who has
+never opened Clay. One campaign, five tabs on a Segmented nav, and a tab press
+redraws the layout (`Result.relayout`):
+
+- **Flow**: the nine steps from offer to booked call as a Diagram, the first
+  waiting step filled, and any step in plain words: what it is, where it
+  happens, who does it, what goes wrong, what Chewbacca checks.
+- **Email**: every step of the sequence word for word, with Clay's tokens shown
+  as what they stand for (`[First name]`, `[AI line: Opener]`, `[one of: a /
+  b]`), its delay and thread, the copy rules checked (words against 100, links
+  in email 1, personal fields, the closing question), and Clay's spam checker
+  on a press.
+- **People**: leads in the campaign, where they are now, how they replied, and
+  what an open does and does not prove. Clay counts opens, not who opened.
+- **Numbers**: sent, replies without out-of-office, reply rate, bounce rate,
+  unsubscribes and booked, per day and per inbox, against the benchmarks in
+  `skills/gtm-engineering/references/demand-gen-playbooks.md`.
+- **Ask**: a question about the campaign, or a change to an email, answered by
+  `claude -p` with Read only (`osgraph_runs.TOOLSET`) in
+  `~/.chewbacca/gtm/outbound-ask/` over a 0600 snapshot of the last fetch.
+  A drafted change is kept only if it names a real, editable step, and shows
+  as a Diff.
+
+Sources: the Clay plugin's CLI, signed in (`campaigns list`, `get`,
+`analytics`, `sequence spam-check`), and the private
+`~/.chewbacca/gtm/outbound.json`: the label, which campaign to show, the
+team's notes until Clay is connected, and `apply_allowed`. Each missing source
+is named on the panel; with no Clay the notes are shown and say they are not
+live. Nothing sends, launches, enrolls or pays. Apply is the one write, a
+`campaigns sequence edit` refused unless `apply_allowed` is true, and read back
+with `get` before it says it landed.
+Aliases: `clay`, `campaign`, `campaigns`, `cold-email`, `cold-emails`,
+`sequence`. Spoken: "show me my campaign", "pull up clay", "open the cold
+emails". `tests/test_surface_outbound.py` runs against a fake `clay` in the
+shapes the CLI's own `--help` prints.
+
 ## Agents
 
 `agents` (`bin/lib/surfaces/agents.py`, `surfaces.agents.Agents`, region

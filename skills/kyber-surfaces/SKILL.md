@@ -23,7 +23,7 @@ kyber-surfaces close all
 ```
 
 Kinds: `needs-you`, `missing`, `today`, `tasks`, `conversations`, `people`,
-`person <name>`, `space <name>`, `music`, `files`, `meetings`, `doc`, `setup`. `kyber-surfaces list` shows
+`person <name>`, `space <name>`, `music`, `files`, `meetings`, `doc`, `setup`, `outbound`. `kyber-surfaces list` shows
 what is open and where; `activity` shows what the panels did.
 
 `setup` answers "set up chewbacca" and "what's left to set up": the steps

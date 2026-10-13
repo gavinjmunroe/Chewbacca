@@ -692,8 +692,10 @@ struct SurfaceChrome: ViewModifier {
         let square = RoundedRectangle(cornerRadius: Self.windowRadius, style: .continuous)
         return content
             // Sentences in the system mono; titles, labels and numbers set
-            // their own pixel face (`Typeface`). Applies to every Text that
-            // names a size and no design.
+            // their own pixel face (`Typeface`). It replaces the design of
+            // every Text inside, an explicit `.rounded` included (measured in
+            // the review of f89ddf3), so a Text that needs another face sets
+            // `.fontDesign(nil)` after its font, as `pixelFont` does.
             .fontDesign(.monospaced)
             .background {
                 ZStack(alignment: .top) {
@@ -1200,9 +1202,12 @@ struct CaptionLabel: View {
 
     var body: some View {
         if chrome == .window {
-            Text(text.uppercased())
+            // textCase, not uppercased(): VoiceOver reads the words, not
+            // "U S" for "us". Half a point is one pixel on a 2x screen.
+            Text(text)
+                .textCase(.uppercase)
                 .pixelFont(11)
-                .kerning(0.4)
+                .kerning(0.5)
                 .foregroundStyle(Color.black)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)

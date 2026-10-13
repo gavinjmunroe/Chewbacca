@@ -1846,6 +1846,8 @@ if group "hud"; then
     python3 "$ROOT/tests/test_surface_whatsapp.py"
   check  "meetings reads Anarlog only through its CLI, first run is a state, and action items stay guesses" \
     python3 "$ROOT/tests/test_surface_meetings.py"
+  check  "outbound reads Clay only, refuses Apply unless allowed and reads it back, and the Ask model is Read-only" \
+    python3 "$ROOT/tests/test_surface_outbound.py"
   check  "native capture deletes each chunk once transcribed, writes 0600 meetings in Anarlog's shapes, and marks every summary a guess" \
     python3 "$ROOT/tests/test_meeting_capture.py"
   check  "room-capture and meeting_capture parse" python3 -m py_compile "$ROOT/bin/room-capture" "$ROOT/bin/lib/meeting_capture.py"

@@ -66,6 +66,9 @@ class Result:
     preset: dict = field(default_factory=dict)
     # Re-read the sources now (a sent reply changes what is waiting).
     reingest: bool = False
+    # Draw the layout again: for a surface whose layout() depends on its own
+    # state, such as which tab is showing.
+    relayout: bool = False
 
 
 Runner = Callable[[list], "tuple[int, str, str]"]
@@ -288,7 +291,7 @@ def note_for(data, error: str | None, empty: str, stale_at: datetime | None = No
 
 KINDS = ("needs-you", "missing", "today", "tasks", "conversations", "people", "person", "space", "music", "files",
          "oss", "engine", "code", "notes", "github", "whatsapp", "meetings", "agents", "apps", "dash-notes",
-         "doc", "setup", "realm")
+         "doc", "setup", "realm", "outbound")
 # Kinds that need an argument: `person karthik`, `space school`, `engine ollama-models`.
 # `oss` is not one: it opens empty, and "what replaces Notion" seeds its query
 # with the preset {"/oss/q": "Notion"} instead.
@@ -298,7 +301,7 @@ PARAMETRIC = ("person", "space", "engine")
 def make(kind: str, arg: str = "") -> Provider:
     """A provider instance. Walk surfaces read the graph; music and files are
     thin surfaces over their own CLI and folder."""
-    from . import agents, apps, code, engine, files, github, meetings, music, notes, oss, setup, walks, whatsapp  # noqa: PLC0415  cycle-free lazy load
+    from . import agents, apps, code, engine, files, github, meetings, music, notes, oss, outbound, setup, walks, whatsapp  # noqa: PLC0415  cycle-free lazy load
     if kind == "realm":
         from . import realm_app  # noqa: PLC0415  Carlton's own interface, served by bin/realm-ui
 
@@ -322,6 +325,7 @@ def make(kind: str, arg: str = "") -> Provider:
         "music": music.Music, "files": files.Files,
         "code": code.Code, "notes": notes.Notes, "github": github.GitHub, "whatsapp": whatsapp.WhatsApp,
         "meetings": meetings.Meetings, "agents": agents.Agents, "apps": apps.Apps, "setup": setup.Setup,
+        "outbound": outbound.Outbound,
     }
     if kind == "person":
         return walks.Person(arg)
@@ -357,6 +361,8 @@ ALIASES = {
     "vscode": "agents", "vs-code": "agents", "claude": "agents", "sessions": "agents", "agent": "agents",
     "agent-sessions": "agents", "carlton": "realm", "realm-app": "realm",
     "set-up": "setup", "onboarding": "setup", "onboard": "setup", "welcome": "setup",
+    "clay": "outbound", "campaign": "outbound", "campaigns": "outbound", "cold-email": "outbound",
+    "cold-emails": "outbound", "sequence": "outbound",
 }
 
 

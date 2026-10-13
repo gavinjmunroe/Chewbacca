@@ -19,6 +19,7 @@ struct SegmentedView: View {
     let onPick: (String) -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.hudChrome) private var chrome
     @Namespace private var lane
 
     static func options(_ json: [JSON]) -> [Option] {
@@ -38,29 +39,28 @@ struct SegmentedView: View {
             ForEach(options) { option in
                 let isOn = option.id == selected
                 Button { onPick(option.id) } label: {
-                    HStack(spacing: 5) {
-                        Text(option.label)
-                            .font(.system(size: 11.5, weight: isOn ? .semibold : .medium))
-                        if let count = option.count {
-                            Text(count)
-                                .font(.system(size: 10, weight: .semibold))
-                                .monospacedDigit()
-                                .foregroundStyle(isOn ? HUD.ink : HUD.faint)
-                                .contentTransition(.numericText())
-                        }
+                    Group {
+                        if chrome == .window { windowLabel(option, isOn: isOn) } else { cardLabel(option, isOn: isOn) }
                     }
-                    .foregroundStyle(isOn ? HUD.ink : HUD.dim)
                     .padding(.horizontal, 10)
                     .frame(maxWidth: .infinity, minHeight: HitTarget.minimum)
                     .background {
                         // One selection pill that travels between lanes,
                         // rather than each lane fading its own in: the eye
-                        // follows one thing moving.
+                        // follows one thing moving. A window's is a white
+                        // tile, the inverted mark its nodes use.
                         if isOn {
-                            Capsule()
-                                .fill(.white.opacity(0.14))
-                                .padding(.vertical, 8)
-                                .matchedGeometryEffect(id: "lane", in: lane)
+                            if chrome == .window {
+                                Rectangle()
+                                    .fill(HUD.ink.opacity(0.96))
+                                    .padding(.vertical, 6)
+                                    .matchedGeometryEffect(id: "lane", in: lane)
+                            } else {
+                                Capsule()
+                                    .fill(.white.opacity(0.14))
+                                    .padding(.vertical, 8)
+                                    .matchedGeometryEffect(id: "lane", in: lane)
+                            }
                         }
                     }
                     .contentShape(Rectangle())
@@ -70,9 +70,50 @@ struct SegmentedView: View {
                 .accessibilityAddTraits(isOn ? .isSelected : [])
             }
         }
-        .padding(.horizontal, 2)
-        .background(.white.opacity(0.05), in: Capsule())
+        .padding(.horizontal, chrome == .window ? 4 : 2)
+        .background {
+            if chrome == .window {
+                Rectangle().fill(Color.black.opacity(0.4))
+                    .overlay { Rectangle().strokeBorder(.white.opacity(0.3), lineWidth: 1) }
+            } else {
+                Capsule().fill(.white.opacity(0.05))
+            }
+        }
         .animation(Motion.snappy(reduced: reduceMotion), value: selected)
+    }
+
+    private func cardLabel(_ option: Option, isOn: Bool) -> some View {
+        HStack(spacing: 5) {
+            Text(option.label)
+                .font(.system(size: 11.5, weight: isOn ? .semibold : .medium))
+            if let count = option.count {
+                Text(count)
+                    .font(.system(size: 10, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(isOn ? HUD.ink : HUD.faint)
+                    .contentTransition(.numericText())
+            }
+        }
+        .foregroundStyle(isOn ? HUD.ink : HUD.dim)
+    }
+
+    /// Pixel caps, black on the white tile when picked. The count sits at
+    /// half strength so the name still leads.
+    private func windowLabel(_ option: Option, isOn: Bool) -> some View {
+        HStack(spacing: 6) {
+            Text(option.label)
+                .textCase(.uppercase)
+                .pixelFont(11)
+                .kerning(0.5)
+            if let count = option.count {
+                Text(count)
+                    .pixelFont(11)
+                    .opacity(0.55)
+                    .contentTransition(.numericText())
+            }
+        }
+        .lineLimit(1)
+        .foregroundStyle(isOn ? Color.black : HUD.dim)
     }
 }
 

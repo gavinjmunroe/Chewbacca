@@ -286,6 +286,35 @@ struct SnapshotTests {
         #expect(drawn > 0.25, "a window covered only \(drawn) of the frame")
     }
 
+    /// The window's `.fontDesign(.monospaced)` swaps custom fonts for the
+    /// system mono, and `.fontDesign(nil)` after the font is what keeps the
+    /// pixel face (Typeface.swift). `swift test` has no app bundle, so the
+    /// face is registered here from the repo's own copy, and the shield is
+    /// judged by pixels: shielded must match the face drawn with no design
+    /// around it, and unshielded must not.
+    @Test("the pixel face survives the window's mono design")
+    func pixelFaceIsShielded() throws {
+        let font = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Fonts/DepartureMono-Regular.otf")
+        if NSFont(name: Typeface.pixelName, size: 11) == nil {
+            CTFontManagerRegisterFontsForURL(font as CFURL, .process, nil)
+        }
+        try #require(NSFont(name: Typeface.pixelName, size: 11) != nil, "Departure Mono did not register")
+        func word(_ shield: Bool, inMono: Bool) -> NSBitmapImageRep? {
+            let text = Text("OUTBOUND 0123").font(.custom(Typeface.pixelName, fixedSize: 11))
+            let shielded = Group { if shield { text.fontDesign(nil) } else { text } }
+            return render(
+                shielded.foregroundStyle(.black).padding(4).background(.white)
+                    .fontDesign(inMono ? .monospaced : nil))
+        }
+        let plain = try #require(word(false, inMono: false)?.tiffRepresentation)
+        let kept = try #require(word(true, inMono: true)?.tiffRepresentation)
+        let swapped = try #require(word(false, inMono: true)?.tiffRepresentation)
+        #expect(kept == plain, "the shielded pixel face drew differently from the face itself")
+        #expect(swapped != plain, "an unshielded face was not swapped, so this test no longer proves the shield")
+    }
+
     @Test("a bracketed surface draws", arguments: Ground.allCases)
     func bracketDraws(ground: Ground) {
         let drawn = coverage(

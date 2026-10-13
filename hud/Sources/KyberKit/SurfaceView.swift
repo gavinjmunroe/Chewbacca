@@ -220,9 +220,20 @@ public struct SurfaceView: View {
                             // Nothing outside a window sets a design, so this
                             // only undoes the window's mono (`pixelFont`).
                             .fontDesign(nil)
-                            .kerning(chrome == .window ? 0.6 : 0.4)
+                            // Half a point is one pixel on a 2x screen, so the
+                            // pixel face stays on its grid.
+                            .kerning(chrome == .window ? 0.5 : 0.4)
+                            // The title strip is a fixed 37 points: a second
+                            // line would run under its rule (review of f89ddf3).
+                            .lineLimit(chrome == .window ? 1 : nil)
+                            .truncationMode(.tail)
                             .foregroundStyle(HUD.ink)
                             .modifier(Stagger(part: .title))
+                    } else if chrome == .window {
+                        // The strip is drawn whether or not there is a title,
+                        // so an untitled window keeps its line empty rather
+                        // than putting the first row under the rule.
+                        Color.clear.frame(height: SurfaceCard.titleLine)
                     }
                     ForEach(element.children, id: \.self) { child in
                         node(child, ancestors: ancestors)
@@ -557,10 +568,17 @@ public struct SurfaceView: View {
                 Button {
                     store.fire(action, from: element.id, payload: payload)
                 } label: {
-                    Text(p["label"]?.display ?? "")
-                        .font(.system(size: 12, weight: .medium))
+                    if chrome == .window {
+                        Text(p["label"]?.display ?? "")
+                            .textCase(.uppercase)
+                            .pixelFont(11)
+                            .kerning(0.5)
+                    } else {
+                        Text(p["label"]?.display ?? "")
+                            .font(.system(size: 12, weight: .medium))
+                    }
                 }
-                .buttonStyle(HUDButtonStyle(primary: primary)))
+                .buttonStyle(HUDButtonStyle(primary: primary, window: chrome == .window)))
 
         case "Checkbox":
             let pointer = boundPointer(element)
@@ -583,7 +601,7 @@ public struct SurfaceView: View {
             let pointer = boundPointer(element)
             let options = (p["options"]?.arrayValue ?? []).map(\.display)
             return AnyView(
-                LabeledControl(label: p["label"]?.display ?? "") {
+                LabeledControl(label: p["label"]?.display ?? "", window: chrome == .window) {
                     // A menu with a drawn label rather than a Picker: the
                     // system pop-up is 22 points tall and cannot be made
                     // taller, and the whole 44-point label opens this one.
@@ -606,7 +624,7 @@ public struct SurfaceView: View {
                         }
                         .padding(.horizontal, 10)
                         .frame(maxWidth: .infinity, minHeight: HitTarget.minimum)
-                        .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 9))
+                        .modifier(InputBox(window: chrome == .window, focused: false))
                         .contentShape(Rectangle())
                     }
                     .menuStyle(.button)
@@ -623,10 +641,11 @@ public struct SurfaceView: View {
             let pointer = boundPointer(element)
             let numeric = p["kind"]?.stringValue == "number"
             return AnyView(
-                LabeledControl(label: p["label"]?.display ?? "") {
+                LabeledControl(label: p["label"]?.display ?? "", window: chrome == .window) {
                     HUDField(
                         placeholder: p["placeholder"]?.display ?? "",
                         takeFocus: editingField && keyboardFocus?.component == element.id,
+                        window: chrome == .window,
                         text: Binding(
                             get: { p["value"]?.display ?? "" },
                             set: { next in
@@ -817,6 +836,7 @@ struct HUDField: View {
     let placeholder: String
     /// Keyboard mode pressed this field: it takes the keys (bd_2026-Code-yw6).
     var takeFocus = false
+    var window = false
     @Binding var text: String
     @FocusState private var focused: Bool
 
@@ -827,30 +847,59 @@ struct HUDField: View {
             .focused($focused)
             .padding(.horizontal, 10)
             .frame(maxWidth: .infinity, minHeight: HitTarget.minimum)
-            .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 9))
-            .overlay {
-                RoundedRectangle(cornerRadius: 9)
-                    .strokeBorder(focused ? HUD.accent.opacity(0.7) : .white.opacity(0.12))
-            }
+            .modifier(InputBox(window: window, focused: focused))
             .contentShape(Rectangle())
             .onTapGesture { focused = true }
             .onChange(of: takeFocus) { _, next in focused = next }
     }
 }
 
+/// The box a Field or a Select sits in. A card's is rounded with the accent on
+/// focus; a window's is square, black under a white rim, and focus brightens
+/// the rim, because a window keeps colour for the tones.
+struct InputBox: ViewModifier {
+    let window: Bool
+    let focused: Bool
+
+    func body(content: Content) -> some View {
+        if window {
+            content
+                .background(Color.black.opacity(0.45), in: Rectangle())
+                .overlay { Rectangle().strokeBorder(.white.opacity(focused ? 0.85 : 0.3), lineWidth: 1) }
+        } else {
+            content
+                .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 9))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 9)
+                        .strokeBorder(focused ? HUD.accent.opacity(0.7) : .white.opacity(0.12))
+                }
+        }
+    }
+}
+
 /// A label above its control, so a narrow panel does not squeeze the input.
 struct LabeledControl<Content: View>: View {
     let label: String
+    var window = false
     @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(label)
-                .font(.system(size: 10.5))
-                .foregroundStyle(.secondary)
-                // The control carries this as its own name; read here as
-                // well, every field would be announced twice.
-                .accessibilityHidden(true)
+        VStack(alignment: .leading, spacing: window ? 5 : 3) {
+            if window {
+                Text(label)
+                    .textCase(.uppercase)
+                    .pixelFont(11)
+                    .kerning(0.5)
+                    .foregroundStyle(HUD.faint)
+                    // The control carries this as its own name; read here as
+                    // well, every field would be announced twice.
+                    .accessibilityHidden(true)
+            } else {
+                Text(label)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
             content
         }
     }
@@ -858,8 +907,30 @@ struct LabeledControl<Content: View>: View {
 
 struct HUDButtonStyle: ButtonStyle {
     let primary: Bool
+    var window = false
 
     func makeBody(configuration: Configuration) -> some View {
+        if window {
+            // TypeSafe's window button: a square, a one-point rim and the hard
+            // drop the window has. Primary is inverted, white with black type,
+            // the way `fill:true` marks the one node that matters.
+            configuration.label
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(primary ? AnyShapeStyle(HUD.ink.opacity(0.96)) : AnyShapeStyle(Color.black.opacity(0.5)),
+                            in: Rectangle())
+                .overlay { Rectangle().strokeBorder(.white.opacity(primary ? 1 : 0.34), lineWidth: 1) }
+                .background { Rectangle().fill(Color.black.opacity(0.6)).offset(x: 2, y: 2) }
+                .foregroundStyle(primary ? Color.black : HUD.ink)
+                .frame(minWidth: HitTarget.minimum, minHeight: HitTarget.minimum)
+                .contentShape(Rectangle())
+                .modifier(PressScale(pressed: configuration.isPressed))
+        } else {
+            card(configuration)
+        }
+    }
+
+    private func card(_ configuration: Configuration) -> some View {
         configuration.label
             .padding(.horizontal, 12)
             .padding(.vertical, 5)
@@ -1030,7 +1101,8 @@ struct MetricView: View {
                         .foregroundStyle(HUD.faint)
                 }
             }
-            Text(label.uppercased())
+            Text(label)
+                .textCase(.uppercase)
                 .font(.system(
                     size: 9, weight: .semibold, design: chrome == .window ? .monospaced : .default))
                 .kerning(0.9)
@@ -1066,7 +1138,8 @@ struct TableView: View {
                 Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 5) {
                     GridRow {
                         ForEach(columns, id: \.self) { column in
-                            Text(column.label.uppercased())
+                            Text(column.label)
+                                .textCase(.uppercase)
                                 .font(.system(size: 8.5, weight: .semibold))
                                 .kerning(0.9)
                                 .foregroundStyle(

@@ -166,6 +166,11 @@ enum Prose {
 struct ProseBlockView: View {
     let block: Prose.Block
     var caret = false
+    @Environment(\.hudChrome) private var chrome
+
+    /// Bullets, numbers and quote bars: the accent on a card, ink in a
+    /// window, which keeps colour for the tones.
+    private var mark: Color { chrome == .window ? HUD.ink : HUD.accent }
 
     var body: some View {
         switch block {
@@ -185,7 +190,7 @@ struct ProseBlockView: View {
                 ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                     HStack(alignment: .firstTextBaseline, spacing: 9) {
                         Circle()
-                            .fill(HUD.accent.opacity(0.85))
+                            .fill(mark.opacity(0.85))
                             .frame(width: 5, height: 5)
                             .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
                         ProseText(text: item, caret: caret && index == items.count - 1)
@@ -200,7 +205,7 @@ struct ProseBlockView: View {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text("\(index + 1).")
                             .font(.system(size: 12, weight: .semibold).monospacedDigit())
-                            .foregroundStyle(HUD.accent.opacity(0.9))
+                            .foregroundStyle(mark.opacity(0.9))
                             .frame(minWidth: 18, alignment: .trailing)
                         ProseText(text: item, caret: caret && index == items.count - 1)
                     }
@@ -210,7 +215,7 @@ struct ProseBlockView: View {
         case .quote(let text):
             HStack(alignment: .top, spacing: 10) {
                 RoundedRectangle(cornerRadius: 1)
-                    .fill(HUD.accent.opacity(0.6))
+                    .fill(mark.opacity(0.6))
                     .frame(width: 2)
                 ProseText(text: text, caret: caret, tone: HUD.dim)
             }

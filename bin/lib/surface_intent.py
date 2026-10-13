@@ -96,6 +96,7 @@ NOUNS = {
     # Kyber HUD the only place I work"). "Show me Claude" stays with the
     # model, which can ask whether that is a person.
     "agents": r"(?:realm sessions|realm agents|the engine's sessions)",
+    "outbound": r"(?:outbound|clay|clay campaigns?|campaigns?|cold emails?|cold email campaigns?|email campaigns?|sequence)",
     # "Show me the built in hud apps" went to genui on 2026-10-05, and the
     # model drew six boxes that named two surfaces that do not exist.
     "apps": r"(?:(?:built ?in |kyber |hud )*(?:hud )?apps|(?:all )?(?:the )?surfaces|launcher|launchpad|everything (?:kyber|the hud) (?:has|can do))",
@@ -141,12 +142,14 @@ CLOSE = re.compile(
     r"^(?:close|hide|take down|dismiss|get rid of) (?:my |the )?"
     r"(?P<what>day|today|calendar|messages|texts|mail|email|inbox|conversations|tasks|to ?dos?|people|"
     r"music|player|downloads|files|needs you|missing|notes|github|prs|code|changes|meetings|calls|granola|agents|"
+    r"outbound|clay|campaign|campaigns|"
     r"all(?: the)? surfaces|surfaces|everything)(?: surface| panel)?$")
 CLOSE_NAMES = {"day": "today", "calendar": "today", "texts": "conversations", "messages": "conversations",
                "mail": "conversations", "email": "conversations", "inbox": "conversations",
                "player": "music", "downloads": "files", "needs you": "needs-you", "todo": "tasks",
                "todos": "tasks", "to do": "tasks", "to dos": "tasks", "prs": "github", "changes": "code",
-               "calls": "meetings", "granola": "meetings"}
+               "calls": "meetings", "granola": "meetings", "clay": "outbound", "campaign": "outbound",
+               "campaigns": "outbound"}
 # "Show me Karthik", "pull up Sagar Tiwari": a name, cased as a name, after a
 # show verb. Lowercase words never count, so "show me the weather" is not a
 # person before the graph is even asked.
@@ -453,5 +456,6 @@ def perform(command: Command, run=subprocess.run, ask=None, spawn=subprocess.Pop
               "oss": "The alternatives are up.", "engine": "The engine's up.",
               "code": "What changed is up.", "notes": "Your notes are up.", "github": "GitHub's up.",
               "meetings": "Your meetings are up.", "agents": "Your agents are up.",
-              "realm": "Your agents are up."}
+              "realm": "Your agents are up.",
+              "outbound": "The campaign's up."}
     return Outcome(True, spoken.get(command.name, "It's up."))

@@ -84,10 +84,14 @@ language on Kyber's glass. Square corners, a black title strip with the title
 in pixel caps (Departure Mono, shipped in `Fonts/`), a hard offset drop and a
 halftone wash. It is drawn in black and white. Untoned parts are ink, never
 cyan; `good`, `warn` and `bad` turn into full-strength green, yellow and red,
-and they are the only colour on the panel, so spend them on what changed.
-Headings and captions become inverted chips, Diagram nodes become square
-tiles with a tone pip in the corner, and `fill:true` inverts the one node that
-matters. Sentences are set in the system mono.
+and apart from the system's own Checkbox they are the only colour on the
+panel, so spend them on what changed. Headings and captions become inverted
+chips, Diagram nodes become square tiles with a tone pip in the corner, and
+`fill:true` inverts the one node that matters. Buttons, Fields, Selects, row
+buttons and Segmented tabs are square with a one-point rim and pixel caps; a
+primary Button and the picked tab are inverted, white with black type.
+Sentences are set in the system mono. The title is one line, because the strip
+is a fixed 37 points: keep it under about 35 characters at `w=300`.
 
 `glass` is a glance with no window at all: no card, no title bar, no pill
 buttons, no edge. The content sits on an edgeless frosted field that fades

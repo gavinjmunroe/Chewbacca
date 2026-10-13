@@ -409,7 +409,10 @@ def from_ledger(rows: Iterable[dict], day: str) -> tuple[list, list, set]:
         if status == "done" and (r.get("updated_at") or "")[:10] == day:
             receipts.append(Item(RECEIPT, key=f"ledger:{r['id']}", text=title, source="ledger",
                                  proof=clip(plain(r.get("evidence") or ""), 80), state="done"))
-        elif status in ("queued", "active", "blocked"):
+        elif status in ("queued", "active", "blocked") and (r.get("owner") or "").lower() in ("", "caleb"):
+            # An agent-owned task is the agents' work even when its words
+            # mention a call: on 10/13 the inbox's own follow-up ("calls as
+            # 'ur call' with no take") drew as one of his decisions.
             said = " ".join([title, r.get("next_action") or "", r.get("reason") or ""])
             if LEDGER_CALL.search(said):
                 text = re.sub(r"^\s*decide\s*:\s*", "", title, flags=re.I)
@@ -505,7 +508,13 @@ def build_feed(day: str | None = None, home: Path | None = None, repo: Path | No
             continue
         reason = why_not_drawn(item)
         (feed.held.append((item, reason)) if reason else feed.decisions.append(item))
+    seen = set()
     for item in job_receipts + ledger_receipts:
+        # One row per key. On 10/13 one stopped job drew twice in a build
+        # taken while the queue was writing; never reproduced, made impossible.
+        if item.key in seen:
+            continue
+        seen.add(item.key)
         reason = why_not_drawn(item)
         (feed.held.append((item, reason)) if reason else feed.receipts.append(item))
     # Calls with a click first (BLOCKED lines), then newest first.

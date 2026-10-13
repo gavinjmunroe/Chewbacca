@@ -98,10 +98,13 @@ def world(tmp: Path) -> Path:
         ("t3", "Ship the showcase pages", "done", "", "docs/showcases landed 2a796bd7"),
         ("t4", "Write the README hero", "done", "", ""),
         ("t5", "Refactor the jobs runner", "queued", "", ""),
+        ("t6", "Agents write a take on every call", "queued", "calls come as 'ur call' with no take", ""),
     ]
     for tid, title, status, nxt, evidence in rows:
+        owner = "claude" if tid == "t6" else ""
         con.execute("insert into tasks values (?,?,?,?,?,?,?,?,?,?,?)",
-                    (tid, "/x", f"k-{tid}", title, status, "", nxt, evidence, "", f"{DAY}T09:00:00", f"{DAY}T09:00:00"))
+                    (tid, "/x", f"k-{tid}", title, status, owner, nxt, evidence, "", f"{DAY}T09:00:00",
+                     f"{DAY}T09:00:00"))
     con.commit()
     con.close()
 
@@ -141,6 +144,8 @@ def main() -> int:
           any("PR candidates for Carlton" in t and r == "no recommendation" for t, r in held.items()), held)
     check("a ledger decision with no matching take is held",
           held.get("wipe the personal gold sets from git history") == "no recommendation", held)
+    check("an agent-owned ledger task is never one of his calls, whatever its words say",
+          not any("Agents write a take" in t for t in list(held) + texts), list(held))
     check("a done ledger task with no evidence is held as a receipt without proof",
           held.get("Write the README hero") == "no proof", held)
     check("a fenced code line is never a call", not any("fenced line" in t for t in list(held) + texts))

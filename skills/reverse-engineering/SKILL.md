@@ -82,14 +82,16 @@ Then:
 4. When channels are dynamic (Claude.app: 1,333 of 1,340), take REA's line
    and column and read the minified source there, the way the Notion case
    study does.
-5. Websites: don't run REA's static analyzer on a site's chunks. The 39
-   Next.js chunks of uselemma.ai (1.6 MB) timed out at 6 min 40 s with 4
-   parsed and left a worker running; grep found the same three `/api/` routes
-   in 0.02 s. For a live click's request, REA's CDP capture (start Chrome with
-   a throwaway profile and a debug port in the background, then
-   `list-browser-targets` and `inspect-web-page --observation-ms 10000
-   --include-json-body-shapes`) can feed api-anything, but api-anything's own
-   capture does that job first.
+5. Websites: use grep, not REA. The 39 Next.js chunks of uselemma.ai
+   (1.6 MB) timed out at 6 min 40 s with 4 parsed and left a worker running;
+   grep found the same three `/api/` routes in 0.02 s. On 2026-10-13 REA's
+   browser tools were tried on the three things api-anything couldn't learn
+   (LibCal's room names, LibCal's grid endpoint, YC's x-inertia-version):
+   fetching the page and grepping answered all 3 in 0.2 to 0.6 s with the
+   value; `inspect-web-page` took 16 s each, held 2 of 3 somewhere in up to
+   410 KB of Evidence and missed the YC value, which sits in an HTML
+   attribute; `analyze-web-bundle` found 0 of 3; a reload during observation
+   failed every time (`target_unavailable`). REA stays off the web path.
 6. Runtime tools (Electron/Node inspector, process capture, LLDB, Frida, adb)
    run or touch the real program with Caleb's permissions. REA's own security
    page says it is not a sandbox. Use them only on a target he named.

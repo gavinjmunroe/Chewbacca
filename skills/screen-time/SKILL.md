@@ -12,6 +12,15 @@ triggers: >-
     screen-time --only dev                       dev and AI apps, this week vs last
     screen-time --only dev --png ~/Downloads/x.png   the shareable card
     screen-time --app com.google.Chrome --json   any bundle ids
+    screen-time --sites                          Chrome's hours split by site, every profile
+
+`--sites` is the answer to "where do my Chrome hours go" and the meter for
+which site the OS replaces next (docs/plans/OS-COVERAGE.md). It reads copies
+of each profile's History, never the live file, and gives each foreground
+second to the newest page opened before it. Never quote Chrome's own
+visit_duration: on 10/7 to 10/13 it put 19.5 h on google.com inside 14.3 h of
+Chrome in front. Say that a tab parked on one page between switches gets the
+time, so a site with minutes but 3 visits was a tab left open.
 
 ## Never do
 

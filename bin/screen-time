@@ -7,6 +7,7 @@
   screen-time --end 2026-10-09      the 7 days ending on that date (default today)
   screen-time --days 14             a longer window
   screen-time --json                machine-readable
+  screen-time --sites               Chrome's time split by site, from copies of its History
   screen-time --png out.png         render a Settings > Screen Time style card
 
 Reads /app/usage in ~/Library/Application Support/Knowledge/knowledgeC.db, which
@@ -19,6 +20,7 @@ the path for tests.
 from __future__ import annotations
 
 import argparse
+import bisect
 import datetime as dt
 import html
 import json
@@ -29,6 +31,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from urllib.parse import urlsplit
 
 DB = Path(os.environ.get("SCREEN_TIME_DB") or
           Path.home() / "Library/Application Support/Knowledge/knowledgeC.db")
@@ -226,6 +229,113 @@ def render_png(page: str, out: Path) -> None:
         sys.exit(f"screen-time: Chrome exited cleanly but wrote no image at {out}")
 
 
+CHROME_DIR = Path(os.environ.get("SCREEN_TIME_CHROME_DIR") or
+                  Path.home() / "Library/Application Support/Google/Chrome")
+CHROME_EPOCH = 11644473600  # Chrome's visit_time counts microseconds from 1601-01-01
+
+
+def chrome_visits(start_ts: float, end_ts: float) -> tuple[list[tuple[float, str, str]], dict[str, str]]:
+    """Every navigation in [start_ts, end_ts) across Chrome profiles, as
+    (unix time, host, profile name), oldest first, plus {profile dir: name}.
+
+    Reads a COPY of each History file: Chrome holds the live one locked while
+    it runs, and a reader must never take a lock on a file Chrome owns."""
+    names: dict[str, str] = {}
+    try:
+        cache = json.loads((CHROME_DIR / "Local State").read_text())["profile"]["info_cache"]
+        names = {d: v.get("name") or d for d, v in cache.items()}
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    out: list[tuple[float, str, str]] = []
+    lo, hi = int((start_ts + CHROME_EPOCH) * 1e6), int((end_ts + CHROME_EPOCH) * 1e6)
+    with tempfile.TemporaryDirectory() as tmp:
+        for hist in sorted(CHROME_DIR.glob("*/History")):
+            prof = hist.parent.name
+            copy = Path(tmp) / f"{prof}.db"
+            try:
+                shutil.copyfile(hist, copy)
+                for ext in ("-wal", "-journal"):
+                    if hist.with_name("History" + ext).exists():
+                        shutil.copyfile(hist.with_name("History" + ext), Path(str(copy) + ext))
+                con = sqlite3.connect(f"file:{copy}?mode=ro", uri=True)
+                rows = con.execute(
+                    "select v.visit_time, u.url from visits v join urls u on u.id = v.url"
+                    " where v.visit_time >= ? and v.visit_time < ?", (lo, hi)).fetchall()
+                con.close()
+            except (OSError, sqlite3.DatabaseError):
+                continue
+            for vt, url in rows:
+                host = (urlsplit(url or "").hostname or "").removeprefix("www.")
+                if host:
+                    out.append((vt / 1e6 - CHROME_EPOCH, host, names.get(prof, prof)))
+    out.sort()
+    return out, names
+
+
+def chrome_foreground(start_ts: float, end_ts: float) -> list[tuple[float, float]]:
+    """Chrome's foreground intervals from /app/usage, clipped to the window."""
+    if not DB.exists():
+        sys.exit(f"screen-time: no Screen Time database at {DB}")
+    con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
+    try:
+        rows = con.execute(
+            "select ZSTARTDATE + ?, ZENDDATE + ? from ZOBJECT where ZSTREAMNAME = '/app/usage'"
+            " and ZVALUESTRING = 'com.google.Chrome' and ZENDDATE + ? > ? and ZSTARTDATE + ? < ?",
+            (APPLE_EPOCH, APPLE_EPOCH, APPLE_EPOCH, start_ts, APPLE_EPOCH, end_ts)).fetchall()
+    except sqlite3.DatabaseError as exc:
+        sys.exit(f"screen-time: cannot read {DB}: {exc}. The app running this may need Full Disk Access.")
+    finally:
+        con.close()
+    return [(max(s, start_ts), min(e, end_ts)) for s, e in rows if e > s]
+
+
+def sites(end: dt.date, days: int) -> dict:
+    """Chrome's foreground time split by site.
+
+    Each foreground second goes to the site of the most recent navigation in
+    any profile before it. Chrome's own visit_duration is no use for this: on
+    10/7 to 10/13 it summed to 19.5 h for google.com alone inside 14.3 h of
+    Chrome in front, because a tab left open in the background keeps counting.
+    The cost of this rule: a tab switch with no navigation keeps the earlier
+    site, so a tab parked on one page between switches gets the time (that
+    week a Branches page left open got 93 minutes from 3 visits)."""
+    start = end - dt.timedelta(days=days - 1)
+    start_ts = dt.datetime.combine(start, dt.time()).timestamp()
+    end_ts = dt.datetime.combine(end + dt.timedelta(days=1), dt.time()).timestamp()
+    visits, _ = chrome_visits(start_ts - 86400, end_ts)  # a day back finds the page already open
+    times = [v[0] for v in visits]
+    secs: dict[str, float] = {}
+    profiles: dict[str, dict[str, float]] = {}
+    counts: dict[str, int] = {}
+    for t, host, _prof in visits:
+        if t >= start_ts:
+            counts[host] = counts.get(host, 0) + 1
+    fg = chrome_foreground(start_ts, end_ts)
+    unknown = 0.0
+    for s, e in fg:
+        i = bisect.bisect_right(times, s) - 1
+        t = s
+        while t < e:
+            nxt = min(times[i + 1] if i + 1 < len(times) else e, e)
+            if i < 0:
+                unknown += nxt - t
+            else:
+                host, prof = visits[i][1], visits[i][2]
+                secs[host] = secs.get(host, 0) + nxt - t
+                profiles.setdefault(host, {})[prof] = profiles.get(host, {}).get(prof, 0) + nxt - t
+            t = nxt
+            i += 1
+    total = sum(e - s for s, e in fg)
+    ranked = sorted(secs, key=secs.get, reverse=True)
+    return {
+        "start": start.isoformat(), "end": end.isoformat(),
+        "chrome_minutes": round(total / 60), "unattributed_minutes": round(unknown / 60),
+        "method": "foreground time from /app/usage, each second to the newest navigation before it",
+        "sites": [{"site": h, "minutes": round(secs[h] / 60, 1), "visits": counts.get(h, 0),
+                   "profile": max(profiles[h], key=profiles[h].get)} for h in ranked],
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="screen-time", description=__doc__.splitlines()[0])
     ap.add_argument("--only", choices=["dev"], help="preset filter: dev = coding and AI apps")
@@ -236,9 +346,22 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--html", metavar="PATH", help="write the card as HTML")
     ap.add_argument("--png", metavar="PATH", help="render the card to a PNG")
     ap.add_argument("--title", default=None, help="caption above the chart")
+    ap.add_argument("--sites", action="store_true",
+                    help="split Chrome's time by site (reads copies of Chrome's History)")
     a = ap.parse_args(argv)
     if a.days < 1:
         ap.error("--days must be at least 1")
+    if a.sites:
+        end = dt.date.fromisoformat(a.end) if a.end else dt.date.today()
+        r = sites(end, a.days)
+        if a.json:
+            print(json.dumps(r, indent=2))
+            return 0
+        print(f"{r['start']} to {r['end']}: Chrome {fmt(r['chrome_minutes'])} in front")
+        for x in r["sites"][:20]:
+            print(f"  {fmt(x['minutes']):>8}  {x['site']}  ({x['visits']} visits, {x['profile']})")
+        print("  Each second goes to the newest page opened before it; a tab parked on one page gets its time.")
+        return 0
     apps = set(a.app) | (set(DEV) if a.only == "dev" else set())
     end = dt.date.fromisoformat(a.end) if a.end else dt.date.today()
     s = summarize(end, a.days, apps or None)

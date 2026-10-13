@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 """chewbacca jobs: one queue for every long or heavy job on this Mac, owned by the Mac, not a tab.
 
-  chewbacca jobs submit [--heavy|--build|--net] [--title T] [--after ID]... [--writes DIR]... -- <command...>
+  chewbacca jobs submit [--heavy|--build|--net] [--title T] [--after ID]... [--writes DIR]... [--once] -- <command...>
                                                                        queue it (starts now if there's room
                                                                        and every --after job has ended);
                                                                        --writes names a folder it writes
                                                                        in a repo tabs work in, so the
                                                                        write-log never credits its files
-                                                                       to a tab's call
+                                                                       to a tab's call; --once never runs
+                                                                       it again after a restart
   chewbacca jobs list [--all]                                          what's queued, running, paused, done
   chewbacca jobs log <id> [-n N]                                       tail a job's output
   chewbacca jobs kill <id>                                             stop it
+  chewbacca jobs retry <id>                                            queue an ended job again
   chewbacca jobs tick                                                  admit, pause, resume, reap (launchd runs this every 30 s)
 
 Not `jobs`: that's a zsh and bash builtin, so a bare `jobs submit` never
@@ -59,6 +61,15 @@ read-modify-write inside one transaction. ~/.chewbacca/jobs/<id>/ keeps out.log
 and a job.json mirror for readers. A job's supervisor
 is `chewbacca-jobs _run <id>`, so a tab closing never orphans it, and orphan-reap leaves
 it alone.
+
+A RESTART. A job that was running or paused when the Mac went down goes back
+in the queue and runs again from the top; nothing reruns it from a checkpoint,
+so a job resumes where it was only if its command skips work it already did
+(the creator transcriber does). Its out.log says it was rerun. --once opts a
+job out (anything that must never run twice), and a job running at every
+boot stops being rerun after MAX_RESTARTS. 2026-10-12 22:21: the Mac failed
+to wake from hibernation and restarted, and the first tick after boot marked
+the transcription, 222 of 779 videos in, failed with "supervisor gone".
 """
 import fcntl
 import json
@@ -83,6 +94,10 @@ MAX_NET = 4
 SLICE = float(os.environ.get("JOBS_SLICE") or 15 * 60)
 CUT_OFF = ("yielded to a build", "machine busy")
 NICE = {"heavy": 19, "build": 10, "net": 10, "light": 0}
+# Reruns after a restart before a job is left failed. Guessed, never measured:
+# one restart a night is what 10/12 saw; a job running at every boot because
+# it brings the Mac down itself must not get a fourth try.
+MAX_RESTARTS = 3
 
 
 # ------------------------------------------------------------ machine state
@@ -175,6 +190,58 @@ def write():
     return statedb.write(db())
 
 
+_BOOT = None
+
+
+def boot_time():
+    """When this Mac last booted, in epoch seconds, or 0 where that can't be
+    read. CHEWBACCA_BOOT_TIME is the tests' seam for a restart."""
+    global _BOOT
+    if _BOOT is None:
+        _BOOT = _env("CHEWBACCA_BOOT_TIME")
+        if _BOOT is None:
+            try:
+                out = subprocess.run(["/usr/sbin/sysctl", "-n", "kern.boottime"],
+                                     capture_output=True, text=True, timeout=5).stdout
+                m = re.search(r"sec\s*=\s*(\d+)", out)
+                _BOOT = float(m.group(1)) if m else 0.0
+            except (OSError, subprocess.TimeoutExpired):
+                _BOOT = 0.0
+    return _BOOT
+
+
+_SESSION = None
+
+
+def boot_session():
+    """This boot's id (kern.bootsessionuuid), or "" where that can't be read.
+    CHEWBACCA_BOOT_SESSION is the tests' seam."""
+    global _SESSION
+    if _SESSION is None:
+        _SESSION = os.environ.get("CHEWBACCA_BOOT_SESSION")
+        if _SESSION is None:
+            try:
+                _SESSION = subprocess.run(["/usr/sbin/sysctl", "-n", "kern.bootsessionuuid"],
+                                          capture_output=True, text=True, timeout=5).stdout.strip()
+            except (OSError, subprocess.TimeoutExpired):
+                _SESSION = ""
+    return _SESSION
+
+
+def before_boot(j):
+    """The job's supervisor was started before this boot, so it is gone and
+    its saved pid may now belong to anything. Pids wrapped all the way round
+    here in under three hours on 10/12 (the daemon was pid 2414 at 22:25 and
+    5668 at 00:58), so after a restart alive(pid) says nothing about the job.
+    The boot id decides, not the clock: a clock stepped forward after boot
+    moves kern.boottime with it and would make a job from this boot look
+    older (review, 10/13). Jobs started before the id was recorded fall back
+    to the start time."""
+    if j.get("boot") and boot_session():
+        return j["boot"] != boot_session()
+    return bool(j.get("started")) and j["started"] < boot_time()
+
+
 def alive(pid):
     try:
         os.kill(pid, 0)
@@ -185,7 +252,21 @@ def alive(pid):
         return True
 
 
+def group_alive(pgid):
+    """Anything left in the job's process group. The supervisor leads it, and
+    a killed supervisor can leave its command still running in it."""
+    try:
+        os.killpg(pgid, 0)
+        return True
+    except (ProcessLookupError, TypeError):
+        return False
+    except PermissionError:
+        return True
+
+
 def signal_group(j, sig):
+    if before_boot(j):
+        return
     try:
         os.killpg(j["pid"], sig)
     except (ProcessLookupError, PermissionError, TypeError):
@@ -195,7 +276,7 @@ def signal_group(j, sig):
 # --------------------------------------------------------------- commands
 
 def submit(argv):
-    cls, title, after, wrote = "light", None, [], []
+    cls, title, after, wrote, once = "light", None, [], [], False
     while argv and argv[0] != "--":
         a = argv.pop(0)
         if a == "--heavy":
@@ -210,8 +291,10 @@ def submit(argv):
             after.append(argv.pop(0))
         elif a == "--writes":
             wrote.append(os.path.realpath(os.path.expanduser(argv.pop(0))))
+        elif a == "--once":
+            once = True
     if not argv or argv[0] != "--" or len(argv) < 2:
-        sys.exit("usage: chewbacca jobs submit [--heavy|--build|--net] [--title T] [--after ID]... [--writes DIR]... -- <command...>")
+        sys.exit("usage: chewbacca jobs submit [--heavy|--build|--net] [--title T] [--after ID]... [--writes DIR]... [--once] -- <command...>")
     for dep in after:
         if db().execute("SELECT 1 FROM jobs WHERE id = ?", (dep,)).fetchone() is None:
             sys.exit(f"no job {dep} to run after")
@@ -220,6 +303,8 @@ def submit(argv):
          "class": cls, "title": title or " ".join(cmd)[:80], "status": "queued",
          "owner": os.environ.get("CLAUDE_SESSION_ID") or os.environ.get("TERM_SESSION_ID") or "",
          "created": time.time(), "pid": None, "exit": None, "after": after, "writes": wrote}
+    if once:
+        j["once"] = True
     with write():
         save(j)
     tick(quiet=True)
@@ -236,7 +321,7 @@ def start(j, started=None):
                          start_new_session=True, cwd=j["cwd"] if os.path.isdir(j["cwd"]) else None)
     if started is not None:
         started.append(p.pid)
-    j.update(status="running", pid=p.pid, started=time.time(), turn=time.time(), ran=0)
+    j.update(status="running", pid=p.pid, started=time.time(), turn=time.time(), ran=0, boot=boot_session())
     save(j)
 
 
@@ -323,7 +408,10 @@ def _run(job_id):
             wl.background_mark("end", os.getpid(), roots)
     with write():
         j = get(job_id)
-        if j["status"] != "killed":
+        # Only this run's own supervisor writes its result: a job killed and
+        # retried while this one still waited on its command belongs to the
+        # new run now (review, 10/13).
+        if j["status"] != "killed" and j.get("pid") in (None, os.getpid()):
             j.update(status="done" if code == 0 else "failed", exit=code, ended=time.time())
             save(j)
     tick(quiet=True)  # a slot just opened
@@ -411,11 +499,39 @@ def _adopt_old_writes():
             save(mirror)
 
 
+def note_in_log(j, line):
+    try:
+        with open(DIR / j["id"] / "out.log", "a") as f:
+            f.write(f"\n--- {line} ---\n")
+    except OSError:
+        pass
+
+
+def restarted(j):
+    when = time.strftime("%H:%M", time.localtime(boot_time()))
+    n = j.get("restarts", 0) + 1
+    j["restarts"] = n
+    if j.get("once") or n > MAX_RESTARTS:
+        why = "submitted --once" if j.get("once") else f"already rerun {MAX_RESTARTS} times"
+        j.update(status="failed", ended=time.time(), note=f"the Mac restarted at {when}; not rerun, {why}")
+    else:
+        j.update(status="queued", pid=None, turn=None, turn_used=0,
+                 note=f"the Mac restarted at {when}; rerun {n} of {MAX_RESTARTS}")
+    note_in_log(j, j["note"])
+    save(j)
+
+
 def _tick(machine, started):
     _adopt_old_writes()
     all_jobs = jobs()
     by_id = {j["id"]: j for j in all_jobs}
     ready = lambda j: not (j["status"] == "queued" and blocked(j, by_id))
+    # A restart: every running or paused job was started before this boot,
+    # so its supervisor is gone whatever its saved pid says now. Each goes
+    # back in the queue, where --after and the budget treat it like new.
+    for j in all_jobs:
+        if j["status"] in ("running", "paused") and before_boot(j):
+            restarted(j)
     # Reap: a running job whose supervisor is gone without writing a result.
     for j in all_jobs:
         if j["status"] in ("running", "paused") and not alive(j["pid"]):
@@ -486,6 +602,20 @@ def log(argv):
     print("".join(p.read_text(errors="replace").splitlines(True)[-n:]).rstrip("\n") if p.exists() else "(no output yet)")
 
 
+def retry(argv):
+    with write():
+        j = get(argv[0])
+        if j["status"] not in ENDED:
+            sys.exit(f"{j['id']} is {j['status']}, not ended")
+        if j.get("pid") and not before_boot(j) and group_alive(j["pid"]):
+            sys.exit(f"{j['id']} is still stopping (pid {j['pid']}); retry once it has exited")
+        j.update(status="queued", pid=None, exit=None, turn=None, turn_used=0, restarts=0, note="retried")
+        note_in_log(j, f"retried at {time.strftime('%H:%M')}")
+        save(j)
+    tick(quiet=True)
+    print(f"{j['id']} {get(j['id'])['status']}")
+
+
 def kill(argv):
     with write():
         j = get(argv[0])
@@ -500,5 +630,5 @@ def kill(argv):
 if __name__ == "__main__":
     DIR.mkdir(parents=True, exist_ok=True)
     cmd, rest = (sys.argv[1], sys.argv[2:]) if len(sys.argv) > 1 else ("list", [])
-    {"submit": submit, "list": list_jobs, "log": log, "kill": kill,
+    {"submit": submit, "list": list_jobs, "log": log, "kill": kill, "retry": retry,
      "tick": lambda a: tick(), "_run": lambda a: _run(a[0])}.get(cmd, lambda a: sys.exit(__doc__))(rest)

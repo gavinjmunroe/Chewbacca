@@ -952,6 +952,8 @@ if group "installer"; then
     bash "$ROOT/tests/orphan_reap.sh"
   check  "jobs queue admits, pauses and resumes heavy work against the machine" \
     bash "$ROOT/tests/jobs.sh"
+  check  "after a restart, queued and running jobs run again and the daemon's services come back" \
+    /usr/bin/python3 "$ROOT/tests/test_reboot.py"
   check  "ten tabs writing jobs, drafts, the tab board and the ledger at once lose nothing" \
     /usr/bin/python3 "$ROOT/tests/test_state_stress.py"
   check  "chewbacca ig shapes posts from Instagram's posts query" \

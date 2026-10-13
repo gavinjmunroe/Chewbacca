@@ -479,10 +479,33 @@ function appRunning(app) {
 // down until this changes, the way launchd left it down until the next login.
 // Infinity was tried first and JSON turned it into null, so any daemon restart
 // (a kit update every few hours) brought back an engine Caleb had stopped.
+// CHEWBACCA_BOOT_TIME (epoch seconds) is the tests' seam for a restart.
 function bootTime() {
+  const fake = Number(process.env.CHEWBACCA_BOOT_TIME);
+  if (process.env.CHEWBACCA_BOOT_TIME && Number.isFinite(fake)) return Math.floor(fake);
   const r = spawnSync("/usr/sbin/sysctl", ["-n", "kern.boottime"], { encoding: "utf8" });
   const m = /sec\s*=\s*(\d+)/.exec(r.stdout || "");
   return m ? Number(m[1]) : 0;
+}
+
+// This boot's id (kern.bootsessionuuid), stamped on every start so a pid
+// saved before a restart is never mistaken for ours. The clock can't decide
+// it: stepping the clock moves kern.boottime too (review, 10/13).
+// CHEWBACCA_BOOT_SESSION is the tests' seam.
+let SESSION;
+function bootSession() {
+  if (SESSION === undefined) {
+    SESSION = process.env.CHEWBACCA_BOOT_SESSION
+      ?? String(spawnSync("/usr/sbin/sysctl", ["-n", "kern.bootsessionuuid"], { encoding: "utf8" }).stdout || "").trim();
+  }
+  return SESSION;
+}
+
+// Started before this boot. Entries from before the id was stamped fall back
+// to the start time.
+function beforeBoot(st, boot) {
+  if (st.bootId && bootSession()) return st.bootId !== bootSession();
+  return Boolean(boot && st.lastStart && st.lastStart < boot * 1000);
 }
 
 // The last time an --at slot came due, at or before now.
@@ -560,6 +583,7 @@ function launch(svc, overlap = false) {
 function start(svc, st, children, boot) {
   const now = Date.now();
   st.lastStart = now;
+  st.bootId = bootSession();
   if (svc.app) {
     // `open --env` hands the app a PATH; LaunchServices otherwise gives it
     // /usr/bin:/bin only, and on 2026-09-21 that left the HUD unable to find
@@ -673,11 +697,17 @@ function stopGroups(pids) {
 // and still running the same program is ours; anything else is a reused pid.
 // The exception is a keepalive service the last daemon handed over on a kit
 // move: it keeps serving, and this daemon adopts it and swaps it.
-function reapOrphans(state, services = [], adopted = new Map()) {
+// Nothing started before this boot is still running, so a pid saved then
+// names a stranger now: pids wrapped all the way round here in under three
+// hours on 2026-10-12 (pid 2414 at 22:25, 5668 at 00:58), and a stranger
+// running the same program (python3, sleep) passed ours() and was stopped,
+// or adopted as a handed-over service.
+function reapOrphans(state, services = [], adopted = new Map(), boot = bootTime()) {
   const now = Date.now();
   const keep = new Set(services.filter((s) => s.keepalive && !s.app).map((s) => s.name));
   const stop = [];
   for (const [name, st] of Object.entries(state)) {
+    if (beforeBoot(st, boot)) continue;
     if (!ours(st)) continue;
     if (st.handover && now - st.handover < HANDOVER_MAX_S * 1000 && keep.has(name)) { adopted.set(name, st.pid); continue; }
     stop.push(st.pid);
@@ -764,7 +794,7 @@ function swapTick(services, state, ctx) {
     if (!st.pid) {
       // The old copy died during the swap: the new one is all there is.
       greens.delete(name);
-      st.pid = g.pid; st.lastStart = g.since; st.argv0 = path.basename(svc.argv[0]); st.shared = Boolean(svc.listen);
+      st.pid = g.pid; st.lastStart = g.since; st.bootId = bootSession(); st.argv0 = path.basename(svc.argv[0]); st.shared = Boolean(svc.listen);
       Object.assign(st, (({ gen, from }) => ({ gen, from }))(generationOf(svc)));
       children.set(name, g.child); watch(svc, st, children, boot, g.child);
       swapEvent({ service: name, mode: "overlap", from: g.from, to: st.gen, result: "old copy exited first", ms: now - g.since });
@@ -776,7 +806,7 @@ function swapTick(services, state, ctx) {
     const old = st.pid;
     greens.delete(name);
     adopted.delete(name);
-    st.pid = g.pid; st.lastStart = g.since; st.argv0 = path.basename(svc.argv[0]); st.handover = null; st.shared = Boolean(svc.listen);
+    st.pid = g.pid; st.lastStart = g.since; st.bootId = bootSession(); st.argv0 = path.basename(svc.argv[0]); st.handover = null; st.shared = Boolean(svc.listen);
     const gen = generationOf(svc);
     st.gen = gen.gen; st.from = gen.from;
     children.set(name, g.child);

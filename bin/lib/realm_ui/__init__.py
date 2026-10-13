@@ -411,6 +411,40 @@ def launch_url(live: dict, code: str) -> str:
     return f"{live['url'].rstrip('/')}/#launch={code}"
 
 
+def launch_dir() -> Path:
+    return ui_home() / "launch"
+
+
+# How long a launch file outlives its code. The code dies at 120 s
+# (server.mjs LAUNCH_CODE_TTL_MS), so a file older than that is only litter.
+LAUNCH_FILE_TTL_S = 120
+
+
+def launch_file(url: str, now=time.time) -> Path:
+    """A one-line page that sends the browser on to url, in a 0700 folder.
+
+    The launch code would otherwise ride in `open`'s argv, which any account
+    on the Mac can read in `ps` while it runs (security review, 10/13). A path
+    in argv gives away nothing: only this user can read the file behind it."""
+    d = launch_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    os.chmod(d, 0o700)
+    for old in d.glob("*.html"):
+        try:
+            if now() - old.stat().st_mtime > LAUNCH_FILE_TTL_S:
+                old.unlink()
+        except OSError:
+            pass
+    path = d / f"{os.urandom(12).hex()}.html"
+    safe = json.dumps(url).replace("<", "\\u003c")
+    body = ('<!doctype html><meta charset="utf-8"><title>Agents</title>'
+            f'<script>location.replace({safe})</script>\n')
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(body)
+    return path
+
+
 def opener_argv(url: str, front: bool) -> list:
     """The command that opens url in the default browser. On a Mac `open -g`
     keeps it behind whatever has focus: an agent running this must never pull
@@ -435,7 +469,7 @@ def open_in_browser(front: Optional[bool] = None, print_only: bool = False, run=
         return url
     if front is None:
         front = sys.stdin.isatty() and sys.stdout.isatty()
-    done = run(opener_argv(url, front), capture_output=True, text=True, timeout=30)
+    done = run(opener_argv(str(launch_file(url)), front), capture_output=True, text=True, timeout=30)
     if done.returncode != 0:
         raise RuntimeError(f"could not open a browser: {(done.stderr or '').strip()[:200]}")
     return live["url"]

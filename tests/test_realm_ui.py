@@ -427,8 +427,19 @@ realm_ui.built = lambda: True
 try:
     got = realm_ui.open_in_browser(front=False, run=lambda argv, **k: ran.append(argv) or subprocess.CompletedProcess(argv, 0, "", ""),
                                    start_fn=lambda: fake_live, engine_fn=lambda: True)
-    check("open hands the browser the one-time address and reports the plain one",
-          got == "http://127.0.0.1:1/" and ran and ran[0][-1] == "http://127.0.0.1:1/#launch=CODE", (got, ran))
+    target = Path(ran[0][-1]) if ran else Path("/nonexistent")
+    check("open reports the plain address", got == "http://127.0.0.1:1/", got)
+    check("the launch code never rides in the opener's argv, where ps shows it to every account",
+          ran and not any("CODE" in a for a in ran[0]), ran)
+    check("the browser is handed a private file that sends it on to the one-time address",
+          target.is_file() and oct(target.stat().st_mode & 0o777) == "0o600"
+          and oct(target.parent.stat().st_mode & 0o777) == "0o700"
+          and 'location.replace("http://127.0.0.1:1/#launch=CODE")' in target.read_text(),
+          (target, target.read_text() if target.is_file() else ""))
+    stale = realm_ui.launch_file("http://x/#launch=OLD", now=lambda: time.time())
+    os.utime(stale, (time.time() - 600, time.time() - 600))
+    realm_ui.launch_file("http://x/#launch=NEW")
+    check("a launch file past its code's life is swept", not stale.exists())
     printed = realm_ui.open_in_browser(print_only=True, run=lambda *a, **k: ran.append("ran"),
                                        start_fn=lambda: fake_live, engine_fn=lambda: True)
     check("--print-url opens nothing", printed.endswith("#launch=CODE") and ran.count("ran") == 0, printed)

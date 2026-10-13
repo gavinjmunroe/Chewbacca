@@ -13,7 +13,8 @@
                                 open it in a normal browser tab, no Kyber needed: same
                                 page, same buttons. Starts the engine and the server if
                                 they're down. --print-url prints a one-time address
-                                instead of opening it (for a headless browser or ssh).
+                                instead of opening it (for a headless browser or ssh);
+                                that address is a credential for two minutes, once.
                                 --build builds the engine and the page first if they
                                 aren't (what `chewbacca agents` runs; ~80 s the first time)
 

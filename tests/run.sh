@@ -866,6 +866,8 @@ if group "installer"; then
   # time, and a welcome with nothing about class.
   check  "a USC student's week reads files, grades and announcements in one call each" \
     bash "$ROOT/tests/usc_student_week.sh" "$ROOT"
+  check  "the usc day screen reads the week through the Chrome session and says signed out plainly" \
+    bash "$ROOT/tests/usc_day_due.sh" "$ROOT"
   # 2026-10-13: after lockin the ledger had no class times, office hours,
   # absence budget or grading, all of it sitting in the pulled syllabi.
   check  "lockin's syllabi fill the empty ledger fields, each with its page, never the AI policy" \

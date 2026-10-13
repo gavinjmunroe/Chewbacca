@@ -1,0 +1,60 @@
+# The USC student stack
+
+Every site a USC student opens in a normal semester, what they do there, and
+whether Chewbacca answers it as one call. Built 2026-10-13 from one student's
+120-day Chrome history (hosts only) plus the sites every student is sent to.
+tests/usc_api_sites.sh fails if a row marked yes names an op no spec has.
+
+"Blocked" means the site needs something Chewbacca never does: a password, a
+Duo push, a CAPTCHA, or a site that didn't answer. It is never a guess.
+
+| Site                                       | What the student does there                                                     | One call? | Op                                                                                                                                                                          |
+| ------------------------------------------ | ------------------------------------------------------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Brightspace                                | courses, what's due, grades, announcements, lecture files, quizzes, discussions | yes       | `brightspace.myCourses`, `brightspace.upcoming`, `brightspace.grades`, `brightspace.announcements`, `brightspace.content`, `brightspace.quizzes`, `brightspace.discussions` |
+| WebReg (webreg.usc.edu)                    | registration time, holds, registered sections, course bin                       | yes       | `usc-reg.registrationAppointment`, `usc-reg.holds`, `usc-reg.schedule`, `usc-reg.courseBin`                                                                                 |
+| Schedule of Classes (classes.usc.edu)      | find a course and its sections and seats                                        | yes       | `usc-classes.searchCourses`, `usc-classes.getSections`                                                                                                                      |
+| Registration and Fee Summary (atweb)       | a term's charges, aid and net                                                   | yes       | `usc-fees.registeredTerms`, `usc-fees.termSummary`                                                                                                                          |
+| myUSC (my.usc.edu)                         | a launcher with no data of its own                                              | n/a       | the tiles above                                                                                                                                                             |
+| Experience USC (experience.usc.edu)        | MyAcademics: academic profile, standing, academic records                       | no        | blocked: it signs in through USC's own login.usc.edu, which wants a password and Duo in a headless browser; the Entra session the other USC ops ride doesn't reach it       |
+| STARS degree audit (stars.usc.edu)         | degree progress                                                                 | no        | blocked: opened from Experience USC, same sign-in                                                                                                                           |
+| USC ePay                                   | account balance and due date                                                    | no        | not taught: a payment portal                                                                                                                                                |
+| Gradescope                                 | assignment scores and feedback                                                  | no        | blocked when signed out in Chrome (no Gradescope session cookie on this Mac)                                                                                                |
+| Ed Discussion, Piazza                      | class Q&A                                                                       | no        | not taught: no visits in this student's history, so nothing to learn from                                                                                                   |
+| Handshake                                  | jobs, employer events, career fairs                                             | yes       | `handshake.searchJobs`, `handshake.getJob`, `handshake.events`, `handshake.careerFairs`                                                                                     |
+| Career Center appointments                 | book an advisor                                                                 | no        | not taught: booking is a write                                                                                                                                              |
+| USC Gmail                                  | inbox                                                                           | partly    | `mac mail` reads it when the usc.edu account is in Mail.app                                                                                                                 |
+| USC Google Calendar                        | class and club schedule                                                         | partly    | the Google Calendar connector, when it can see the usc.edu calendar                                                                                                         |
+| Google Drive, Box, OneDrive                | course files                                                                    | partly    | the Google Drive connector; Brightspace files come from `brightspace.content`                                                                                               |
+| Dining hall menus                          | what's for lunch                                                                | yes       | `usc-dining.menuBreakfast`, `usc-dining.menuBrunch`, `usc-dining.menuLunch`, `usc-dining.menuDinner`                                                                        |
+| Housing portal (usc.starrezhousing.com)    | room assignment, housing application                                            | no        | blocked: its own housing password, not USC sign-in                                                                                                                          |
+| Trojan Check                               | daily campus pass                                                               | n/a       | retired: trojancheck.usc.edu answers 404                                                                                                                                    |
+| Campus events (calendar.usc.edu)           | what's on today                                                                 | yes       | `usc-events.upcoming`, `usc-events.searchEvents`                                                                                                                            |
+| Clubs (engage.usc.edu)                     | find a club, its officers and events                                            | yes       | `sc-engage.searchOrgs`, `sc-engage.getOrg`, `sc-engage.orgEvents`                                                                                                           |
+| Libraries                                  | open study rooms                                                                | yes       | `usc-libraries.studyRooms`                                                                                                                                                  |
+| Directory                                  | a professor's or office's email                                                 | yes       | `usc-directory.searchPeople`                                                                                                                                                |
+| RateMyProfessors                           | how an instructor rates                                                         | yes       | `rmp.searchProfessors`, `rmp.getProfessor`                                                                                                                                  |
+| Parking (usc.aimsparking.com)              | permit, citations owed, balance, vehicles                                       | yes       | `usc-parking.account`, `usc-parking.activePermits`                                                                                                                          |
+| Parking citations list                     | each citation                                                                   | no        | blocked: /tickets/ is behind a Cloudflare Turnstile; counts and totals come from `usc-parking.account`                                                                      |
+| Transportation (transnet.usc.edu)          | shuttle routes and live tracking                                                | no        | blocked: the site didn't answer from this Mac on 2026-10-13 (curl at 15 s and a headless browser at 30 s both timed out)                                                    |
+| Rec centers (recsports.usc.edu)            | how packed the gym is                                                           | yes       | `usc-rec.facilityTraffic`                                                                                                                                                   |
+| MyRecSports                                | class and court sign-ups                                                        | no        | not taught: sign-ups are writes                                                                                                                                             |
+| Campus map (maps.usc.edu)                  | where a building is                                                             | yes       | `usc-maps.searchPlaces`                                                                                                                                                     |
+| USC Jobs (staff board)                     | campus jobs with pay                                                            | yes       | `usc-jobs.searchJobs`, `usc-jobs.getJob`                                                                                                                                    |
+| Student health, accessibility services     | medical and accommodation records                                               | no        | not taught on purpose: health and disability records stay out                                                                                                               |
+| Courseware (Pearson, Cengage, McGraw Hill) | homework inside the publisher's app                                             | no        | not taught: third-party apps, read-only rule                                                                                                                                |
+
+## Where REA would beat the usual capture
+
+None of the 2026-10-13 gaps needed it. AIMS parking, the rec traffic widget and
+the campus map each showed their data request in an `api-anything capture` or a
+headless render in 5 to 20 seconds. REA's own redo that morning measured its
+browser tools at 16 s against 0.2 to 0.6 s for a grep on the same questions.
+
+The one place it could earn its time is Experience USC once a signed-in session
+exists. It is a Salesforce Experience Cloud site whose data comes from Apex
+methods called by name. A headless render signed out, grepping its 6 public
+scripts, listed 26 methods in 11 s, but none of the MyAcademics ones the
+signed-in page called (`getAcademicProfileDetails`, `getCourseInfo`,
+`getRegistrationAppointment`). Those live in modules loaded after sign-in,
+which is what REA's module-import tracing is for. Untested until the sign-in
+is solved.

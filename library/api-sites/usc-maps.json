@@ -1,0 +1,88 @@
+{
+  "name": "usc-maps",
+  "baseUrl": "https://maps.usc.edu",
+  "operations": [
+    {
+      "name": "searchPlaces",
+      "description": "Find a USC building or place on the official campus map by name or building code (THH, SGM, Leavey): name with code, category, map id, latitude and longitude",
+      "request": {
+        "method": "GET",
+        "url": "https://api.concept3d.com/search?map=1928&q=%7Bq%7D&tzOffset=420&page=1&ppage=10&key=0001085cc708b9cef47080f064612ca5", "urlNote": "key is the public map key maps.usc.edu serves to every anonymous visitor; secret-scan: allow",
+        "headers": {
+          "accept": "*/*",
+          "accept-language": "en-US,en;q=0.9",
+          "origin": "https://maps.usc.edu",
+          "priority": "u=1, i",
+          "referer": "https://maps.usc.edu/",
+          "sec-ch-ua": "\"Google Chrome\";v=\"155\", \"Chromium\";v=\"155\", \"Not(A:Brand\";v=\"24\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "empty",
+          "sec-fetch-mode": "cors",
+          "sec-fetch-site": "cross-site",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "q",
+          "at": [
+            "query:q"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://maps.usc.edu/?id=1928",
+        "steps": [
+          {
+            "action": "wait",
+            "selector": "#search-query"
+          },
+          {
+            "action": "fill",
+            "selector": "#search-query",
+            "value": "{q}"
+          },
+          {
+            "action": "press",
+            "selector": "#search-query",
+            "value": "Enter"
+          },
+          {
+            "action": "wait",
+            "ms": 3000
+          }
+        ]
+      },
+      "match": {
+        "host": "api.concept3d.com",
+        "path": "/search"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json; charset=utf-8",
+        "extract": "data",
+        "pick": [
+          "name",
+          "category=categoryName",
+          "id",
+          "lat",
+          "lng"
+        ]
+      },
+      "params": [
+        {
+          "name": "q",
+          "type": "string",
+          "required": true,
+          "example": "Taper"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-13T16:26:00.805Z"
+    }
+  ]
+}

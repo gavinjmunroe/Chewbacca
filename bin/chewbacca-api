@@ -7,7 +7,7 @@
 #   chewbacca api teach <site> <op> --trigger <url> --example k=v ...
 #                                      learn a new operation (api-anything add)
 #   chewbacca api login <site>         import a session from a signed-in browser
-#                                      (brightspace, handshake, usc-reg, usc-fees: from
+#                                      (brightspace, handshake, usc-reg, usc-fees, usc-parking: from
 #                                      whichever Chrome profile is signed in to USC)
 #   chewbacca api sync                 load the kit's taught sites into the engine
 #   chewbacca api grow                 sites browsed with no op yet, most visited first
@@ -234,9 +234,24 @@ sync_sites() {
 PROFILE_LOGIN_SITES="brightspace brightspace.usc.edu d2l
 handshake joinhandshake.com -
 usc-reg webreg.usc.edu,my.usc.edu,shibboleth.usc.edu,login.usc.edu,login.microsoftonline.com:ests|buid|fpc|esctx|x-ms-gateway-slice|stsservicecookie|ccstate|signinstatecookie|aadsso -
-usc-fees atweb.usc.edu,shibboleth.usc.edu,login.usc.edu,login.microsoftonline.com:ests|buid|fpc|esctx|x-ms-gateway-slice|stsservicecookie|ccstate|signinstatecookie|aadsso -"
+usc-fees atweb.usc.edu,shibboleth.usc.edu,login.usc.edu,login.microsoftonline.com:ests|buid|fpc|esctx|x-ms-gateway-slice|stsservicecookie|ccstate|signinstatecookie|aadsso -
+usc-parking aimsparking.com,shibboleth.usc.edu,login.usc.edu,login.microsoftonline.com:ests|buid|fpc|esctx|x-ms-gateway-slice|stsservicecookie|ccstate|signinstatecookie|aadsso -"
 
 profile_login_row() { printf '%s\n' "$PROFILE_LOGIN_SITES" | awk -v s="$1" '$1 == s'; }
+
+# Sites whose USC sign-in only finishes inside a page: the SAML answer lands on
+# a handoff page that POSTs the session over, and the engine's read guard
+# aborts that POST on a tier-3 call (2026-10-13: AIMS parking's trigger ended
+# on an aborted POST to /secure/index.php, so every call drifted).
+# bin/lib/sso_warmup.mjs signs in headless from the imported jar and hands the
+# site's own cookies to the import, the same click a student makes on "USC NetID".
+# One line per site: name, the sign-in URL, and a GET plus a JSON path that is
+# true only when signed in, so a guest landing never counts as a sign-in. Never
+# a page that changes anything: the only POSTs are the SAML answer and handoff.
+PROFILE_SSO_WARMUP="usc-parking https://uscauth.aimsparking.com/aimsweb/index.php /api/common/index.php?cmd=get_common_data user.logged_in"
+
+sso_warmup_url() { printf '%s\n' "$PROFILE_SSO_WARMUP" | awk -v s="$1" '$1 == s {print $2}'; }
+sso_warmup_check() { printf '%s\n' "$PROFILE_SSO_WARMUP" | awk -v s="$1" '$1 == s {print $3, $4}'; }
 
 login_from_profile() {
   local row host prefix dir rc
@@ -251,6 +266,8 @@ login_from_profile() {
   [ "$1" = brightspace ] && [ -z "${2:-}" ] && python3 "$ROOT/bin/brightspace" whoami >/dev/null 2>&1
   dir="$(mktemp -d)" || return 1
   chmod 700 "$dir"
+  # Decrypted Chrome cookies sit in here; a Ctrl-C mid sign-in must not leave them.
+  trap 'rm -rf "$dir"; exit 130' INT TERM
   if ! python3 - "$host" "$prefix" "$dir/cookies.json" "${CHEWIE_CHROME_PROFILE:-}" <<'PY'
 import hashlib, json, os, shutil, sqlite3, subprocess, sys, tempfile, time
 from pathlib import Path
@@ -350,7 +367,7 @@ with os.fdopen(fd, "w") as f:
     json.dump(jar, f)
 PY
   then
-    rm -rf "$dir"
+    rm -rf "$dir"; trap - INT TERM
     return 1
   fi
   # The engine keeps only cookies on the site's own domain, so a sign-in that
@@ -378,8 +395,21 @@ PY
       say "couldn't import the $dom sign-in cookies: $(tail -1 "$dir/extra.err")" >&2
     fi
   done
-  api-anything login "$1" --cookies "$dir/cookies.json" >/dev/null; rc=$?
-  rm -rf "$dir"
+  local warm jar="$dir/cookies.json"
+  warm="$(sso_warmup_url "$1")"
+  if [ -n "$warm" ]; then
+    # shellcheck disable=SC2046 # the check is two words on purpose
+    if ! node "${CHEWBACCA_SSO_WARMUP:-$ROOT/bin/lib/sso_warmup.mjs}" "$warm" "$dir/cookies.json" "$dir/warm.json" \
+      $(sso_warmup_check "$1") 2>"$dir/warm.err"; then
+      # A half sign-in is not a sign-in: say why and import nothing.
+      say "$1: $(tail -1 "$dir/warm.err")" >&2
+      rm -rf "$dir"; trap - INT TERM
+      return 1
+    fi
+    jar="$dir/warm.json"
+  fi
+  api-anything login "$1" --cookies "$jar" >/dev/null; rc=$?
+  rm -rf "$dir"; trap - INT TERM
   [ "$rc" -eq 0 ] && say "$1 session imported for 12 hours"
   return "$rc"
 }
@@ -473,11 +503,19 @@ try:
 except ValueError:
     sys.exit(1)
 why = str(r.get("reason") or "")
-lapsed = r.get("ok") is False and (
+warm = sys.argv[1] == "1"
+data = r.get("data")
+lapsed = (r.get("ok") is False and (
     r.get("class") == "auth"
     or re.search(r"HTTP (30[12]|40[13])\b", why)
-    or (r.get("class") == "blocked" and re.search(r"challeng|sign.?in|log.?in", why, re.I)))
-sys.exit(0 if lapsed else 1)' && login_from_profile "$1" quiet >/dev/null 2>&1; then
+    or (r.get("class") == "blocked" and re.search(r"challeng|sign.?in|log.?in", why, re.I))
+    # A signed-out handoff site answers guest pages, not 401s: AIMS returns an
+    # error page where the JSON was, which the engine calls drift.
+    or (warm and r.get("class") == "drift"))
+    # An op that reports its own sign-in state says so plainly: a guest answer
+    # with ok true is still not the student data.
+    or (isinstance(data, dict) and data.get("signedIn") is False))
+sys.exit(0 if lapsed else 1)' "$([ -n "$(sso_warmup_url "$1")" ] && echo 1 || echo 0)" && login_from_profile "$1" quiet >/dev/null 2>&1; then
         rm -f "$errf"
         sync_sites --quiet
         exec api-anything call "$@"

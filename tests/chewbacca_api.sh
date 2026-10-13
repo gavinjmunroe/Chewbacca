@@ -272,6 +272,67 @@ SH
   [ -e "$T/keychain-asked" ] && no "Keychain was asked for a Chrome key with no session to decrypt"
   rm -f "$T/bin/security"
 
+  if command -v node >/dev/null 2>&1; then
+  # A USC site whose sign-in finishes inside a page (AIMS parking) answers a
+  # guest page instead of a 401 once the session lapses: ok true and
+  # signedIn false on 2026-10-13, which read as "no permits, no tickets". That
+  # answer re-imports, finishes the sign-in headless, and retries.
+  python3 - "$T/chrome3" <<'PY3'
+import hashlib, os, sqlite3, sys
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+key = hashlib.pbkdf2_hmac("sha1", b"fakekey", b"saltysalt", 1003, 16)
+def enc(v):
+    raw = v.encode(); pad = 16 - len(raw) % 16; raw += bytes([pad]) * pad
+    e = Cipher(algorithms.AES(key), modes.CBC(b" " * 16)).encryptor()
+    return b"v10" + e.update(raw) + e.finalize()
+os.makedirs(f"{sys.argv[1]}/Profile 1", exist_ok=True)
+db = sqlite3.connect(f"{sys.argv[1]}/Profile 1/Cookies")
+db.execute("create table cookies (host_key, name, encrypted_value, path, is_secure, is_httponly, last_access_utc)")
+for host, name in ((".aimsparking.com", "cf_clearance"), (".login.microsoftonline.com", "ESTSAUTH")):
+    db.execute("insert into cookies values (?,?,?,?,?,?,?)", (host, name, enc("fake-" + name), "/", 1, 1, 100))
+db.commit()
+PY3
+  cat > "$T/warm.mjs" <<'JS'
+import fs from "fs";
+const [url, inFile, outFile, ...check] = process.argv.slice(2);
+fs.appendFileSync(process.env.FAKE_LOG, `warmup ${url} ${check.join(" ")}\n`);
+const jar = JSON.parse(fs.readFileSync(inFile, "utf8"));
+fs.writeFileSync(outFile, JSON.stringify([...jar, { name: "AW9_SESSION", value: "signed-in", domain: ".usc.aimsparking.com", path: "/" }]));
+JS
+  cat > "$T/bin/api-anything" <<'SH'
+#!/bin/bash
+printf '%s\n' "$*" >> "$FAKE_LOG"
+case "$1 $2" in
+  "login usc-parking")
+    for a in "$@"; do [ "$prev" = --cookies ] && grep -q signed-in "$a" && touch "$FAKE_STATE"; prev="$a"; done
+    echo '{"ok":true}' ;;
+  "call usc-parking")
+    if [ -f "$FAKE_STATE" ]; then echo '{"ok":true,"data":{"signedIn":true,"activePermits":1}}'
+    else echo '{"ok":true,"data":{"signedIn":false,"cartItems":0}}'; fi ;;
+  "call usc-reg") echo '{"ok":false,"class":"drift","reason":"extract path missing"}' ;;
+  *) echo '{"ok":true}' ;;
+esac
+SH
+  chmod +x "$T/bin/api-anything"
+  : > "$T/calls"; rm -f "$T/state"
+  out="$(CHEWBACCA_CHROME_DIR="$T/chrome3" CHEWBACCA_CHROME_SAFE_KEY=fakekey FAKE_STATE="$T/state" \
+    CHEWBACCA_SSO_WARMUP="$T/warm.mjs" bash "$ROOT/bin/chewbacca-api" call usc-parking account 2>/dev/null)"
+  printf '%s' "$out" | grep -q '"signedIn":true' || no "a guest answer from usc-parking was returned as the student's data: $out"
+  grep -q '^warmup https://uscauth.aimsparking.com/.* user.logged_in$' "$T/calls" || no "usc-parking re-imported without finishing and checking the USC sign-in"
+  # Drift on a site without a page sign-in is a real drift: no re-import.
+  : > "$T/calls"
+  CHEWBACCA_CHROME_DIR="$T/chrome" CHEWBACCA_CHROME_SAFE_KEY=fakekey FAKE_STATE="$T/state" \
+    bash "$ROOT/bin/chewbacca-api" call usc-reg holds term=20271 >/dev/null 2>&1
+  grep -q '^login' "$T/calls" && no "a drift on usc-reg triggered a Chrome re-import"
+# Entra stops on Duo: the half sign-in imports nothing and the login says so.
+printf 'process.stderr.write("sign-in stopped at login.microsoftonline.com\\n"); process.exit(1);\n' > "$T/warm-fail.mjs"
+: > "$T/calls"; rm -f "$T/state"
+CHEWBACCA_CHROME_DIR="$T/chrome3" CHEWBACCA_CHROME_SAFE_KEY=fakekey FAKE_STATE="$T/state" \
+  CHEWBACCA_SSO_WARMUP="$T/warm-fail.mjs" bash "$ROOT/bin/chewbacca-api" login usc-parking >/dev/null 2>&1 &&
+  no "a failed USC sign-in for usc-parking reported success"
+grep -q '^login usc-parking --cookies' "$T/calls" && no "a failed USC sign-in still imported cookies for usc-parking"
+  fi
+
   # restore the plain fake engine
   printf '#!/bin/bash\nprintf "%%s\\n" "$*" >> "$FAKE_LOG"\necho "{\\"ok\\":true}"\n' > "$T/bin/api-anything"
 fi

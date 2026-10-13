@@ -53,6 +53,9 @@ Read them before the first call: most failures are a param format they spell out
 | handshake     | searchJobs, getJob, events, careerFairs                                                             | the student's connectSC session; .json endpoints only, the pages write on load                                                                |
 | usc-reg       | registrationAppointment, holds, schedule, courseBin, each taking term=<code> (20271 is Spring 2027) | WebReg through the student's USC sign-in; browser tier, 6 to 9 s, run it through `chewbacca jobs submit --net`                                |
 | usc-fees      | registeredTerms, termSummary                                                                        | Registration and Fee Summary: a term's charges, credits, net charges and units (no balance or due date); `chewbacca api login usc-fees` first |
+| usc-parking   | account, activePermits                                                                              | the student's parking balance, unpaid citations, permits and vehicles; signs in through USC by itself, `signedIn: false` means signed out |
+| usc-rec       | facilityTraffic                                                                                     | live head counts at Lyon, Village and HSC gyms and the pools |
+| usc-maps      | searchPlaces                                                                                        | a building or place on the campus map by name or code (SGM, DML), with coordinates |
 | bundled       | google-flights, airbnb, amazon, goodreads, youtube, x, instagram, hacker-news                       | upstream's own                                                                                                                                |
 
 Formats that bit during teaching: LinkedIn job locations in full
@@ -61,7 +64,8 @@ queries need the city or they bias to LA; RMP ids are base64 (`Teacher-123`);
 USC course codes have no space (`CSCI102`).
 
 myUSC itself is a launcher with no data; its Registration and Fee Summary
-is usc-fees.
+is usc-fees. Every USC site a student uses, what's one call and what's
+blocked, is in `library/api-sites/USC-STACK.md`.
 
 LinkedIn warning: signed-in LinkedIn calls got both of his Chrome sessions
 revoked on 2026-10-10, minutes after use. Use linkedin-jobs (logged out) for

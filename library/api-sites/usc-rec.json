@@ -1,0 +1,58 @@
+{
+  "name": "usc-rec",
+  "baseUrl": "https://recsports.usc.edu",
+  "operations": [
+    {
+      "name": "facilityTraffic",
+      "description": "Live head counts at USC Recreational Sports (Lyon Center, Village Fitness Center, HSC Fitness Center, Aquatics): each area's current count, capacity, whether it's closed, and when the counter last updated (Pacific time)",
+      "request": {
+        "method": "GET",
+        "url": "https://goboardapi.azurewebsites.net/api/FacilityCount/GetCountsByAccount?AccountAPIKey=D2A34F88-54D5-472A-8325-8B3E15C1B5EE", "urlNote": "AccountAPIKey is USC Recreational Sports' public widget key, served to every visitor of recsports.usc.edu/rec-facilities/current-facility-traffic/; secret-scan: allow",
+        "headers": {
+          "accept": "*/*",
+          "accept-language": "en-US,en;q=0.9",
+          "sec-fetch-dest": "empty",
+          "sec-fetch-mode": "cors",
+          "sec-fetch-site": "cross-site",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+          "sec-ch-ua": "\"Google Chrome\";v=\"155\", \"Chromium\";v=\"155\", \"Not(A:Brand\";v=\"24\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\""
+        }
+      },
+      "slots": [],
+      "volatile": [],
+      "trigger": {
+        "url": "https://recsports.usc.edu/rec-facilities/current-facility-traffic/",
+        "steps": [
+          {
+            "action": "wait",
+            "ms": 5000
+          }
+        ]
+      },
+      "match": {
+        "host": "goboardapi.azurewebsites.net",
+        "path": "/api/FacilityCount/GetCountsByAccount"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json; charset=utf-8",
+        "extract": ".",
+        "pick": [
+          "facility=FacilityName",
+          "area=LocationName",
+          "count=LastCount",
+          "capacity=TotalCapacity",
+          "closed=IsClosed",
+          "updated=LastUpdatedDateAndTime"
+        ]
+      },
+      "params": [],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-13T16:24:55.310Z"
+    }
+  ]
+}

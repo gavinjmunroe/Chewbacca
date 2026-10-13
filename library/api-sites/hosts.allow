@@ -35,3 +35,19 @@ usc-reg signed-in-ok
 # the page fires only GETs. The ops pick fields so the profile block (USC ID,
 # addresses, phones) never comes back. The Download Report button is not used.
 usc-fees signed-in-ok
+
+# 2026-10-13: usc-parking reads the student's own parking account and active
+# permits on usc.aimsparking.com (AIMS), signed in through USC's Entra SAML at
+# uscauth.aimsparking.com. Reviewed: 2 GET JSON ops, read-only. The pages carry
+# Order Permit, cart and Pay Now; the ops never load them. /tickets/ sits
+# behind a Cloudflare Turnstile and is not taught.
+usc-parking signed-in-ok
+
+# 2026-10-13: recsports.usc.edu's Current Facility Traffic page embeds a
+# Connect2 widget whose data is this host's public JSON, keyed by USC's
+# account key that the page itself serves. No cookie rides along.
+usc-rec goboardapi.azurewebsites.net
+
+# 2026-10-13: maps.usc.edu is a Concept3D map; its search box calls this host
+# with the public map key the page serves. No cookie rides along.
+usc-maps api.concept3d.com

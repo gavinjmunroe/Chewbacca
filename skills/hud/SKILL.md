@@ -1024,6 +1024,59 @@ yet: 3 (a seven-day filter), 5 (Cmd+K on the tiles), 14, 15.
 
 Also clever, not ranked: Cursor sends separate user-facing and model-facing tool errors ("Tool call failed" goes to the model); Claude.app and the Claude Code ext warn before an expensive re-read ("Your next message re-reads all {tokens} tokens. Compact first"); Claude.app moves keyboard focus to the next row when you dismiss one; Notion queues navigation commands until the page is ready (`sendOrQueueNavigationCommand`) and keeps the current URL on reload; Linear's `applicable(ctx)` hides "Go to X" while you are on X.
 
+
+### Carlton's Realm, measured: the 10-task benchmark (10/13)
+
+"Better" on the agents glass means a number on one of these rows, measured
+on Carlton's stock app first. The tasks come from Caleb's own 7 days of
+Claude Code and Codex history (2,320 Claude sessions, 29 Codex rollouts, a
+median of 6 sessions live in any 10-minute window and a peak of 59). His
+most frequent short prompt was "We good?" (95 times), then "?" (25),
+"Progress?" (13) and "How much longer?" (10). 166 turns failed, and 161 of
+those were the weekly limit.
+
+How it's measured: headless WebKit at the glass's size, a scratch v2.1.0
+engine over a copy of his session store (restored before every run), one
+real Claude agent in a scratch repo. A press is one click or key chord, and
+typed text counts once with its characters noted. Seconds run to the task's
+own success check. Two runs per build, and the ranges are those two runs.
+The harness is `~/.chewbacca/overnight/d1013/ide-better/bench/` (bench.mjs,
+run-bench.sh, store-snapshot/). Rerun it before claiming a row moved.
+
+| Task | Stock (his app, f977fbd6) | Ours (fork d5e52504) |
+| --- | --- | --- |
+| T1 Start an agent in a repo | 6 presses + 134 chars, 7.0 to 8.4 s | same (no change) |
+| T2 Check on five agents ("We good?") | 9 presses + 41 chars, 9.7 to 9.8 s. 1 of 5 rows readable, the rest show the reply's opening prayer | 1 press, 1.0 to 1.1 s, 5 of 5 readable |
+| T3 Find the agent that needs you | 1 press, 1.7 s from the ask | same |
+| T4 Answer a permission | 1 press, 1.6 to 1.9 s | same |
+| T5 Keep part of a diff | FAILS: whole-file Stage only, needs a terminal | 7 presses + 24 chars, 8.9 to 9.4 s, top hunk staged, bottom left |
+| T6 Find a session from a past day | 2 presses, 2.5 to 2.6 s (his Sessions page has dates) | same |
+| T7 Switch between agents and back | 2 keys (cmd-[ and cmd-]), 2.2 to 2.5 s | same |
+| T8 Recover from a failed turn | 4 presses + retype, 6.3 to 6.4 s. The card offers nothing, and retyping into the same session fails again | 2 presses, 0 typed, 4.2 s ("Ask Claude instead") |
+| T9 What is it doing right now | 2 presses (unfold his space, open it), 2.6 to 2.8 s | same |
+| T10 Stop a runaway agent | 1 key (Esc). Stopped within 10 s in 2 of 4 runs | 1 key, 4 of 4. No code change, so that's agent interrupt latency, not ours |
+
+What changed, each a commit on github.com/calebnewtonusc/realm branch
+`chewbacca`, in his files:
+
+- T2: `leftOff` (apps/server/src/store/sessions.ts) shows the last
+  paragraph about the work, reading back through up to 5 replies past an
+  "Amen" opener or a sign-off of 3 words or fewer.
+- T5: `workspace.stageHunk` stages one hunk with `git apply --cached`,
+  found again by the starts the pane drew. It answers `stale` as a value and
+  never writes the working tree. Each hunk on the unstaged side gets a Stage.
+- T8: panes/session/failure-cause.ts reads why a turn failed. A limit
+  or sign-in gets "Ask Claude instead" (a new session, same space and
+  checkout, same message), a blip gets Try again, and a message that must
+  change gets nothing.
+
+Engines, measured: Jev got 11 of 12 on the failure strings (125 to 330 ms,
+network, missed "ran out of context"), and code got 12 of 12 in under 1 ms,
+so it's code. genui wasn't built: T5 was missing an action, not a drawing.
+REA, scoped to one Claude.app chunk, matched nothing on the UI rows. Grep
+found how Claude draws the limit card in 0.6 s: typed `exceeded_limit` plus
+`resets_at` state (c267d3c1f-BSHT4wzm.js), not string matching.
+
 ## Rules
 
 **Everything on the glass is instant.** A surface paints its last known state

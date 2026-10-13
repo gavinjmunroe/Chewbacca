@@ -162,16 +162,42 @@ class TheFork(unittest.TestCase):
         self.assertNotIn("data-frameless", (self.src / "styles.css").read_text())
         self.assertNotIn("setHostQuiet", (self.src / "extensions.ts").read_text())
 
-    def test_the_fork_is_his_main_plus_two_seams(self):
+    def test_the_fork_is_his_main_plus_two_seams_and_the_measured_changes(self):
+        # The seams (slot, composer id), plus the three changes that beat stock
+        # on the 10/13 benchmark (skills/hud/SKILL.md, "the 10-task
+        # benchmark"): leftOff, stageHunk, failure-cause. Anything else in
+        # this diff is a change to his app nobody measured.
         out = subprocess.run(["git", "-C", str(FORK), "diff", "--name-only", "upstream/main...chewbacca"],
                              capture_output=True, text=True, timeout=60)
         if out.returncode != 0:
             self.skipTest("no upstream remote in this checkout")
-        self.assertEqual(sorted(out.stdout.split()), [
+        self.assertEqual(sorted(out.stdout.split()), sorted([
             "apps/desktop/src/renderer/src/App.tsx",
             "apps/desktop/src/renderer/src/extensions.ts",
             "apps/desktop/src/renderer/src/panes/session/Composer.tsx",
-        ])
+            # T2, where a session left off
+            "apps/server/src/store/sessions.ts",
+            "apps/server/src/store/sessions.test.ts",
+            # T5, stage one hunk
+            "packages/contracts/src/rpc.ts",
+            "apps/server/src/rpc/methods.ts",
+            "apps/server/src/workspace/git-write.ts",
+            "apps/server/src/workspace/git-write.test.ts",
+            "apps/desktop/src/renderer/src/panes/diff/DiffPane.tsx",
+            "apps/desktop/src/renderer/src/panes/diff/PatchView.tsx",
+            "apps/desktop/src/renderer/src/panes/diff/diff-pane.test.tsx",
+            "apps/desktop/src/renderer/src/state/live-api.ts",
+            "apps/desktop/src/renderer/src/state/store.test-fakes.ts",
+            # T5 and T8 share the store and the stylesheet
+            "apps/desktop/src/renderer/src/state/store.ts",
+            "apps/desktop/src/renderer/src/styles.css",
+            # T8, a failed turn's way out
+            "apps/desktop/src/renderer/src/panes/session/failure-cause.ts",
+            "apps/desktop/src/renderer/src/panes/session/failure-cause.test.ts",
+            "apps/desktop/src/renderer/src/panes/session/failure-recover.test.tsx",
+            "apps/desktop/src/renderer/src/panes/session/Transcript.tsx",
+            "apps/desktop/src/renderer/src/panes/session/SessionPane.tsx",
+        ]))
 
     def test_each_composer_names_its_session(self):
         composer = (self.src / "panes" / "session" / "Composer.tsx").read_text()

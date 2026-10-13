@@ -381,5 +381,48 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(made, [])
 
 
+    def test_vscode_gets_instructions_skills_and_mcp_and_undoes_cleanly(self):
+        # 10/13: `--every-agent` promised VS Code and there was no adapter.
+        user = runtime.vscode_user_dir()
+        user.mkdir(parents=True)
+        mcp = user / 'mcp.json'
+        original = b'{\n  "servers": {"mine": {"type": "stdio", "command": "mine"}}\n}\n'
+        mcp.write_bytes(original)
+        self.assertIn('vscode', runtime.selected('all'))
+        for _ in range(2):
+            result = runtime.setup('vscode')
+        instructions = runtime.vscode_instructions().read_text()
+        self.assertTrue(instructions.startswith('---\n'))
+        self.assertIn('applyTo: "**"', instructions)
+        self.assertIn('agent_context.py', instructions)
+        self.assertEqual(instructions.count(runtime.BEGIN), 1)
+        servers = json.loads(mcp.read_text())['servers']
+        self.assertEqual(servers['mine'], {'type': 'stdio', 'command': 'mine'})
+        import host_mcp
+        if host_mcp.chewbacca_server():
+            self.assertEqual(servers['chewbacca']['type'], 'stdio')
+        self.assertTrue((self.home / '.agents/skills/debugging/SKILL.md').is_file())
+        backup = mcp.with_name('mcp.json' + runtime.BACKUP_SUFFIX)
+        self.assertEqual(backup.read_bytes(), original)
+        self.assertEqual(result['runtimes'][0]['backups'], [])  # the rerun kept the first backup
+        runtime.remove('vscode')
+        self.assertEqual(mcp.read_bytes(), original)
+        self.assertFalse(runtime.vscode_instructions().exists())
+
+    def test_backup_holds_the_file_from_before_chewbacca_ever_touched_it(self):
+        settings = runtime.claude_home() / 'settings.json'
+        settings.parent.mkdir(parents=True)
+        original = b'{"model": "mine", "hooks": {}}\n'
+        settings.write_bytes(original)
+        first = runtime.setup('claude-code')
+        backup = settings.with_name('settings.json' + runtime.BACKUP_SUFFIX)
+        self.assertIn(str(backup), first['runtimes'][0]['backups'])
+        self.assertEqual(backup.read_bytes(), original)
+        self.assertNotEqual(settings.read_bytes(), original)
+        runtime.setup('claude-code')
+        self.assertEqual(backup.read_bytes(), original)
+        self.assertEqual(backup.stat().st_mode & 0o777, 0o600)
+
+
 if __name__ == '__main__':
     unittest.main()

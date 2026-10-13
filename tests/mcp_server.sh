@@ -73,6 +73,18 @@ assert "chewbacca" in d["mcpServers"], "did not register itself"
 
 [ -f "$cfg.before-chewbacca" ] || fail "--register did not back the config up"
 
+# 6a. The backup is the config from before Chewbacca, kept across reruns. A
+#     rerun that replaced a stale entry used to copy over it, so the backup
+#     held Chewbacca's own entry and the person's original was gone.
+python3 - "$cfg" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+d["mcpServers"]["chewbacca"] = {"command": "/nonexistent/node", "args": ["/nonexistent/chewbacca-mcp"]}
+json.dump(d, open(sys.argv[1], "w"))
+PY
+HOME="$tmp" "$MCP" --register >/dev/null 2>&1
+grep -q chewbacca "$cfg.before-chewbacca" && fail "--register overwrote the original backup on a rerun"
+
 # 6b. A new person's Mac, end to end in a scratch HOME: Claude, Cursor and
 #     ChatGPT installed, none ever opened, so no config file exists yet. The
 #     old --register skipped every one of them ("only if the file exists").

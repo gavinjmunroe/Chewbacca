@@ -533,9 +533,12 @@ function register(asJson) {
   const done = [];
   const say = (host, state, detail) => done.push({ host, state, detail: detail || "" });
 
+  // First time only (COPYFILE_EXCL), the way REA keeps <config>.rea.backup:
+  // a rerun that replaced a stale entry used to copy over the backup, so it
+  // held Chewbacca's own entry and the person's original config was gone.
   const backup = (f) => {
     try {
-      fs.copyFileSync(f, f + ".before-chewbacca");
+      fs.copyFileSync(f, f + ".before-chewbacca", fs.constants.COPYFILE_EXCL);
     } catch {}
   };
 

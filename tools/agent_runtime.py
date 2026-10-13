@@ -215,7 +215,63 @@ def codex_capacity_config(original):
                      'Use a standard [agents] table or set the desired values explicitly.')
 
 
+def vscode_user_dir():
+    """VS Code's user profile folder, home of its user-level mcp.json. The same
+    per-platform rule REA's setup uses (SupportedClients.js vscodeUserDirectory)."""
+    home = Path.home()
+    if sys.platform == 'darwin':
+        return home / 'Library/Application Support/Code/User'
+    if sys.platform == 'win32':
+        return Path(os.environ.get('APPDATA', str(home / 'AppData/Roaming'))) / 'Code/User'
+    return Path(os.environ.get('XDG_CONFIG_HOME', str(home / '.config'))) / 'Code/User'
+
+
+def vscode_instructions():
+    # Copilot chat reads *.instructions.md from here in every workspace.
+    return Path.home() / '.copilot/instructions/chewbacca.instructions.md'
+
+
+def install_vscode(brain, spec, team=False):
+    """VS Code has no lifecycle hooks, so everything a hook would load at
+    session start has to arrive as standing instructions instead. The file is
+    Chewbacca's own, so a rerun rewrites it whole."""
+    text = ('---\nname: Chewbacca\ndescription: Shared Chewbacca context, skills and guidance\n'
+            'applyTo: "**"\n---\n\n' + context.startup_block(Path(context.__file__).resolve(), brain)
+            + '\n\n' + instruction_block(spec, team) + '\n')
+    path = vscode_instructions()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    context.atomic_write(path, text)
+    return path
+
+
+BACKUP_SUFFIX = '.chewbacca.backup'
+
+
+def backup_once(path):
+    """Copy a config Chewbacca is about to change to <name>.chewbacca.backup,
+    beside it, the first time only. A rerun never replaces it, so the backup
+    always holds the file as it was before Chewbacca ever touched it. That is
+    REA's rule (`<config>.rea.backup`, copied with COPYFILE_EXCL): the receipt
+    already lets `remove` restore, but a person can only trust what they can
+    open and diff themselves."""
+    source = path.resolve() if path.is_symlink() else path
+    if not source.is_file():
+        return None
+    backup = source.with_name(source.name + BACKUP_SUFFIX)
+    if backup.exists():
+        return None
+    try:
+        fd = os.open(backup, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        return None
+    with os.fdopen(fd, 'wb') as out:
+        out.write(source.read_bytes())
+    return str(backup)
+
+
 def native_paths(key):
+    if key == 'vscode':
+        return [vscode_instructions(), vscode_user_dir() / 'mcp.json']
     if key == 'cursor':
         return [Path.home() / '.cursor/hooks.json', Path.home() / '.cursor/mcp.json']
     if key == 'gemini':
@@ -443,6 +499,10 @@ def setup(name, brain=None, import_claude_skills=False, person_name=None, team=F
         key = spec['id']
         receipt = shared / 'runtime-installs' / (key + '.json')
         previous = json.loads(receipt.read_text()) if receipt.is_file() else {'files': [], 'links': []}
+        # A file Chewbacca created has nothing of the person's to keep.
+        created = {entry['path'] for entry in previous['files'] if entry['contents'] is None}
+        backups = [made for made in (backup_once(path) for path in native_paths(key)
+                                     if str(path.resolve()) not in created) if made]
         before = [snapshot(path) for path in native_paths(key)]
         if key == 'codex':
             import codex_hooks
@@ -462,6 +522,12 @@ def setup(name, brain=None, import_claude_skills=False, person_name=None, team=F
             skill_path = Path.home() / spec['skills_dir']
             activation = ('Start a new ' + spec['label'] + ' session; the bridge loads instructions, '
                           'the brain and the Claude Code hooks on its first event.')
+        elif key == 'vscode':
+            target = None
+            hook_path = install_vscode(brain, spec, not no_team and saved.get('team') is True)
+            skill_path = Path.home() / spec['skills_dir']
+            activation = ('Open a new Copilot chat in VS Code; it reads the instructions, skills and MCP '
+                          'servers there. VS Code runs no Chewbacca hooks, so the shared checks do not run in it.')
         else:
             home = claude_home()
             target = context.install_claude(brain)
@@ -495,7 +561,8 @@ def setup(name, brain=None, import_claude_skills=False, person_name=None, team=F
         context.atomic_write(receipt, json.dumps({'files': list(old_files.values()), 'links': links}) + '\n')
         result['runtimes'].append({'id': key, 'instructions': str(target) if target else 'session hook',
                                    'hooks': str(hook_path), 'skills': projection,
-                                   'mcp_added': mcp_added, 'activation': activation})
+                                   'mcp_added': mcp_added, 'activation': activation,
+                                   'backups': backups})
     result['missing_dependencies'] = [binary for binary in ('bash', 'jq') if not shutil.which(binary)]
     result['missing_context_sources'] = [name for name in context.source_names(brain) if not (brain / name).is_file()]
     return result
@@ -649,6 +716,10 @@ def connect(new_only=False):
 def status(name):
     result = plan(name)
     for spec in result['runtimes']:
+        if spec['adapter'] == 'vscode':
+            spec['hook_configuration_present'] = vscode_instructions().is_file()
+            spec['hook_execution'] = 'none: VS Code runs no Chewbacca hooks'
+            continue
         if spec['adapter'] in ('cursor', 'gemini'):
             import host_install
             spec['hook_configuration_present'] = host_install.registered(spec['adapter'])
@@ -769,6 +840,10 @@ def describe(command, output):
             print('  ' + runtime['activation'])
             if runtime['skills']['conflicts']:
                 print('  Preserved conflicting skills: ' + ', '.join(runtime['skills']['conflicts']))
+            if runtime.get('mcp_added'):
+                print('  MCP servers added: ' + ', '.join(runtime['mcp_added']))
+            for made in runtime.get('backups', []):
+                print('  Backed up first: ' + made)
         if output['shared_skills']['conflicts']:
             print('Preserved shared skill conflicts: ' + ', '.join(output['shared_skills']['conflicts']))
         if output['missing_dependencies']:
@@ -776,6 +851,9 @@ def describe(command, output):
         if output['missing_context_sources']:
             print('Missing context: ' + ', '.join(output['missing_context_sources']))
         print('Model, account and permission settings preserved. Data imports and session openers are optional.')
+        print('Undo everything above: ' + shlex.quote(sys.executable) + ' '
+              + shlex.quote(str(ROOT / 'tools/agent_runtime.py')) + ' remove --runtime '
+              + ','.join(r['id'] for r in output['runtimes']))
         print('Agents page: ' + agents_command() + ' puts it in a browser tab (no Kyber needed; '
               'with Kyber it is on the glass).')
     elif command in ('plan', 'status'):

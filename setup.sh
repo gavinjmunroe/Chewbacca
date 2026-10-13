@@ -133,7 +133,10 @@ Required:
 
 Optional:
   --runtime <name>             Install only the selected runtime adapter:
-                               claude-code, codex, both, or auto. No Mac bootstrap.
+                               claude-code, codex, cursor, gemini, vscode, both,
+                               auto or all. No Mac bootstrap.
+  --every-agent                Same as --runtime all: every agent found on this
+                               machine, each config backed up first.
                                Use --dry-run to preview; use agent export for other hosts.
   --brain-dir <path>           With --runtime, choose the private context folder.
   --json                      With --runtime, print machine-readable results.
@@ -205,6 +208,9 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --name) NAME="${2:-}"; shift 2 ;;
     --runtime) AGENT_RUNTIME="${2:-}"; shift 2 ;;
+    # Every agent already on this machine: Claude Code, Codex, Cursor, Gemini
+    # CLI and VS Code, each detected, its configs backed up first.
+    --every-agent) AGENT_RUNTIME=all; shift ;;
     --brain-dir) AGENT_BRAIN="${2:-}"; shift 2 ;;
     --json) AGENT_JSON=1; shift ;;
     --github-user) GITHUB_USER="${2:-}"; shift 2 ;;
@@ -260,7 +266,7 @@ if [ -n "$AGENT_RUNTIME" ]; then
   for ((arg_index=0; arg_index<${#REQUESTED_ARGS[@]}; arg_index++)); do
     case "${REQUESTED_ARGS[$arg_index]}" in
       --runtime|--name|--brain-dir) arg_index=$((arg_index + 1)) ;;
-      --dry-run|--json|--team|--no-team) ;;
+      --dry-run|--json|--team|--no-team|--every-agent) ;;
       *) err "Runtime setup does not accept ${REQUESTED_ARGS[$arg_index]}; use the full installer or native host settings for that option."
          exit 2 ;;
     esac
@@ -273,7 +279,15 @@ if [ -n "$AGENT_RUNTIME" ]; then
   [ "$AGENT_JSON" -eq 1 ] && runtime_args+=(--json)
   [ "${AGENT_TEAM:-0}" -eq 1 ] && runtime_args+=(--team)
   [ "${AGENT_NO_TEAM:-0}" -eq 1 ] && runtime_args+=(--no-team)
-  exec python3 "$SCRIPT_DIR/tools/agent_runtime.py" "${runtime_args[@]}"
+  if [ "$action" = plan ] || [ "$AGENT_JSON" -eq 1 ]; then
+    exec python3 "$SCRIPT_DIR/tools/agent_runtime.py" "${runtime_args[@]}"
+  fi
+  python3 "$SCRIPT_DIR/tools/agent_runtime.py" "${runtime_args[@]}" || exit $?
+  # The first win, before anyone opens an agent: their own week from the git
+  # repos already here, read only, with a receipt of the commands behind it.
+  echo
+  python3 "$SCRIPT_DIR/tools/first_win.py" || true
+  exit 0
 fi
 if [ -n "$AGENT_BRAIN" ] || [ "$AGENT_JSON" -eq 1 ]; then
   err "--brain-dir and --json require --runtime"

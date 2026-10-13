@@ -22,7 +22,7 @@ import goldset   # noqa: E402
 import brain     # noqa: E402
 
 IDX = os.environ.get("BRAIN_INDEX", os.path.expanduser("~/second-brain/.brain"))
-OFF = {"alpha": 0, "folder_cap": 0, "len_b": 0}
+OFF = {"alpha": 0, "folder_cap": 0, "len_b": 0, "fusion": "minmax"}  # the 2026-10-10 tables ran under minmax
 
 
 def load_index():

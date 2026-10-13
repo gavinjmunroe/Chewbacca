@@ -60,7 +60,7 @@ def resolve_gold(gold, files):
 
 def stage_one(db, rows, E, q, pool=POOL):
     dense = E @ qvec(q)
-    top, _ = brain.rank(rows, dense, brain.lexical(db, q), pool)
+    top, _ = brain.rank(rows, dense, brain.lexical(db, q), pool, E=E)
     return [f for f, _ in top], dense
 
 

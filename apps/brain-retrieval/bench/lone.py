@@ -31,7 +31,7 @@ import hubs      # noqa: E402  (index loading, query vectors, gold resolution)
 import goldset   # noqa: E402
 brain = hubs.brain
 
-SHIPPED = {"folder_cap": 1}
+SHIPPED = {"folder_cap": 1, "fusion": "minmax"}  # shipped on 2026-10-10, before rrf3
 
 
 def hub_prior(rows, E, k=10):

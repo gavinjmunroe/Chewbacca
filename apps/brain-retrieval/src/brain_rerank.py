@@ -44,7 +44,7 @@ def ask(args):
         if degraded == "embed_timeout":
             brain.spawn_warm()
     lex = brain.lexical(db, args.query)
-    pool, dv = brain.rank(rows, dense, lex, max(POOL, args.k))
+    pool, dv = brain.rank(rows, dense, lex, max(POOL, args.k), E=E)
     names = [f for f, _ in pool]
     score = dict(pool)
     note = "rerank=off(lexical)"

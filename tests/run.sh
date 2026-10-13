@@ -1434,6 +1434,7 @@ if group "hooks"; then
   check "brain index is incremental and a slow model load no longer silences recall" python3 "$ROOT/tests/test_brain_index.py"
   check "brain-rerank falls back to stage one on any model failure and caches only the ranking" python3 "$ROOT/tests/test_brain_rerank.py"
   check "a long hub folder cannot fill brain's top 5 for an unrelated question" python3 "$ROOT/tests/test_brain_hubs.py"
+  check "brain ranks by fused rank with best chunk and one feedback round" python3 "$ROOT/tests/test_brain_fusion.py"
   check "router shadow log never blocks a hook or lands in a repo" bash "$ROOT/tests/route_shadow.sh"
   check "route_tune follows its written rule and refuses under 50 rows" bash "$ROOT/tests/route_tune.sh"
   check "formatter handles a broken Node runtime" python3 "$ROOT/tests/test_formatter_runtime.py"

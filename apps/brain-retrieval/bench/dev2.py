@@ -31,12 +31,12 @@ def is_lone(f):
     return f.startswith("domains/") and f.count("/") == 1
 
 
-def score(prepped, rows, k=5):
+def score(prepped, rows, k=5, E=None):
     hit = mrr = 0.0
     caused, present, misses = 0, 0, []
     filler = collections.Counter()
     for q, gold, dense, lex in prepped:
-        top, _ = brain.rank(rows, dense, lex, 50)
+        top, _ = brain.rank(rows, dense, lex, 50, E=E)
         names = [f for f, _ in top]
         rank = next((i + 1 for i, f in enumerate(names) if f in gold), None)
         if rank:
@@ -70,7 +70,7 @@ def main():
     pp = hubs.prepare(qs, db, rows, E)
     print(f"index {hubs.IDX}: {len({r[1] for r in rows})} files, {len(rows)} chunks")
     print(f"{a.set}: {len(qs)} questions, {len(pp)} with a gold file in the index")
-    p, mrr, caused, present, misses, filler = score(pp, rows)
+    p, mrr, caused, present, misses, filler = score(pp, rows, E=E)
     n = len(pp)
     ci = 196 * (p * (1 - p) / n) ** 0.5
     print(f"shipped ranker  r@5 {p*100:5.1f}% +/-{ci:4.1f}  MRR {mrr:.3f}  misses {len(misses)}")

@@ -41,6 +41,25 @@ LEX_LEN_B   = 0.0   # BM25-style length divisor on the lexical file score. Off:
 # or lost on dev. Query-space hubness (beta 0.1) took dev 68% -> 80% and then
 # the sealed set 55.4% -> 43.1%, run once. Do not turn one on without a new
 # sealed run.
+# Rank fusion, 2026-10-12 night, bench/cards.py. The sealed misses are questions
+# worded unlike their note (dev2 finding), and dev3 (70 blind questions, 43 of
+# them with no word of the note's name or description) reproduced the sealed
+# number: shipped 44.3% there against 47.7% sealed. Its misses showed two
+# shapes: a long gold note whose one matching chunk ranked 1st to 6th among
+# all chunks but whose file mean sank under the other chunks, and min-max
+# fusion handing the lexical side a full 0..1 spread even when every match
+# was a stopword. So the file score became reciprocal-rank fusion of three
+# lists, chunk-mean cosine, best-chunk cosine and lexical, plus one round of
+# pseudo-relevance feedback on the dense side. Picked by net queries gained
+# over all three dev sets (140): +17 -2 (dev3 alone 44.3% -> 57.1%). Pieces:
+# RRF over mean and lexical +9 -4, adding best chunk +11 -2, feedback (0.6, 5)
+# on top +17 -2. Counts are with tied scores sharing a rank (see _ranks).
+FUSION  = "rrf3"    # "minmax" is the pre-2026-10-12 fusion, kept for the old tables
+RRF_K   = 10        # dev sweep 5, 10, 20 tied on dev3 r@5; 10 kept the best MRR
+                    # there. 60, the textbook default, lost 7 on dev2 (2-list RRF).
+PRF_B, PRF_M = 0.6, 5   # query + 0.6 * mean of its top 5 chunks. Over rrf3 alone:
+                    # dev3 +4, dev +2 -1, dev2 0. b=0.3 gained 2 fewer on dev3.
+PROBE_W = 0.0       # doc2query list weight; off until measured (bench/cards.py)
 TARGET_WORDS, OVERLAP = 300, 60
 MAXTOK   = 40       # a token longer than this is a base64 blob, not language. One
                     # 234KB token in a club-application file crashed the first
@@ -375,8 +394,34 @@ def topm_mean(v, m):
     if not m or m >= len(v): return sum(v) / len(v)
     return sum(sorted(v, reverse=True)[:m]) / m
 
+def feedback(E, dense, b=None, m=None):
+    """Dense scores for the query moved toward its own top m chunks:
+    E @ (q + b * mean(E[top m])), computed from dense = E @ q alone. Unnormalised,
+    because both fusions read only order or min-max, and a positive scale changes
+    neither. Used for ranking only: abstention and shown cosines stay raw."""
+    b = PRF_B if b is None else b
+    m = PRF_M if m is None else m
+    if dense is None or E is None or not b or not m or len(dense) == 0:
+        return dense
+    top = np.argpartition(-dense, min(m, len(dense)) - 1)[:m]
+    return dense + b * (E @ E[top].mean(axis=0))
+
+def _ranks(d):
+    """Competition rank: ties share the rank of the first of them. Ranking ties
+    by name instead put every file with no lexical match in alphabetical
+    order, so a 0.20-cosine note beat a 0.50 one on its name and team memory
+    (~/ sorts last) always came last (review of 2026-10-12)."""
+    out, prev, at = {}, None, 0
+    for i, (u, v) in enumerate(sorted(d.items(), key=lambda kv: -kv[1])):
+        if v != prev:
+            prev, at = v, i
+        out[u] = at
+    return out
+
 def rank(rows, dense, lex, k, alpha=None, folder_cap=None, len_b=None,
-         top_m=None, unit="file", hub=None, hub_beta=0.0, csls=0.0, lone_cap=0):
+         top_m=None, unit="file", hub=None, hub_beta=0.0, csls=0.0, lone_cap=0,
+         E=None, fusion=None, rrf_k=None, prf_b=None, probes=None, probe_w=None,
+         probe_merge=False):
     """Fuse dense and lexical scores per file and return the top k as
     [(file, score)], plus the per-file mean cosine used for abstention.
 
@@ -385,12 +430,21 @@ def rank(rows, dense, lex, k, alpha=None, folder_cap=None, len_b=None,
     constants and are arguments only so the bench can sweep them: top_m
     aggregates over a unit's best m chunks, unit="section" ranks (file,
     heading) sections and scores a file by its best one, hub is hub_prior()'s
-    output for hub_beta (k-occurrence discount) and csls (density penalty)."""
+    output for hub_beta (k-occurrence discount) and csls (density penalty).
+    E, the chunk vectors, turns on pseudo-relevance feedback (feedback());
+    fusion picks rrf3 or the old minmax. probes maps a file to its best
+    doc2query question cosine (brain_d2q); under rrf3 it is a fourth list at
+    weight probe_w, or with probe_merge it joins the best-chunk list."""
+    fusion = FUSION if fusion is None else fusion
+    rrf_k = RRF_K if rrf_k is None else rrf_k
+    raw = dense
+    if dense is not None and E is not None:
+        dense = feedback(E, dense, prf_b)
     alpha = CHUNK_ALPHA if alpha is None else alpha
     folder_cap = FOLDER_CAP if folder_cap is None else folder_cap
     len_b = LEX_LEN_B if len_b is None else len_b
     nchunks = collections.Counter(r[1] for r in rows)
-    dv = agg_by_file([(r[1], float(dense[r[4]])) for r in rows]) if dense is not None else {}
+    dv = agg_by_file([(r[1], float(raw[r[4]])) for r in rows]) if raw is not None else {}
     key = (lambda r: (r[1], r[2])) if unit == "section" else (lambda r: r[1])
     agg = (lambda pairs: agg_by_file(pairs)) if not top_m else (
         lambda pairs: {u: topm_mean(v, top_m) for u, v in _group(pairs).items()})
@@ -407,13 +461,31 @@ def rank(rows, dense, lex, k, alpha=None, folder_cap=None, len_b=None,
     if len_b and nchunks:
         avg = sum(nchunks.values()) / len(nchunks)
         lu = {u: s / (1 - len_b + len_b * nchunks[ufile(u)] / avg) for u, s in lu.items()}
-    dvn, lvn = norm(du), norm(lu)
-    w = W_DENSE if dense is not None else 0.0
     score = {}
-    for u in set(dvn) | set(lvn):
-        s = w*dvn.get(u, 0) + (1-w)*lvn.get(u, 0)
-        f = ufile(u)
-        if f not in score or s > score[f]: score[f] = s
+    if fusion == "rrf3" and du:
+        mx = {}
+        for r in rows:
+            v = cs(r)
+            if v > mx.get(key(r), -9.0): mx[key(r)] = v
+        pw = PROBE_W if probe_w is None else probe_w
+        if probes and probe_merge:
+            mx = {u: max(v, probes.get(ufile(u), -9.0)) for u, v in mx.items()}
+        a, b, l = _ranks(du), _ranks(mx), _ranks(lu)
+        p = _ranks({u: probes.get(ufile(u), -9.0) for u in du}) if probes and pw and not probe_merge else None
+        for u in du:
+            s = (W_DENSE * (0.5/(rrf_k + a[u]) + 0.5/(rrf_k + b[u]))
+                 + (1-W_DENSE) / (rrf_k + l[u]))
+            if p is not None:
+                s += pw / (rrf_k + p[u])
+            f = ufile(u)
+            if f not in score or s > score[f]: score[f] = s
+    else:
+        dvn, lvn = norm(du), norm(lu)
+        w = W_DENSE if dense is not None else 0.0
+        for u in set(dvn) | set(lvn):
+            s = w*dvn.get(u, 0) + (1-w)*lvn.get(u, 0)
+            f = ufile(u)
+            if f not in score or s > score[f]: score[f] = s
     if hub_beta and hub:
         score = {f: s * (1 + hub["kocc"].get(f, 1.0)) ** -hub_beta for f, s in score.items()}
     ordered = sorted(score.items(), key=lambda kv: (-kv[1], kv[0]))
@@ -492,7 +564,7 @@ def cmd_ask(args):
             spawn_warm()
 
     lex = lexical(db, args.query)
-    ranked, dv = rank(rows, dense, lex, args.k)
+    ranked, dv = rank(rows, dense, lex, args.k, E=E)
 
     top_cos = max(dv.values()) if dv else 0.0
     st = stale_files(db)

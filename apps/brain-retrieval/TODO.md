@@ -334,3 +334,66 @@ topics dev2 sampled lightly. A cheap test of (a): strip every proper noun and
 note-specific term from dev2's 32 overlap questions and rerun `bench/dev2.py`
 once. `bench/dev2.py` runs `brain.rank()` with its defaults and refuses the
 sealed file.
+
+**Measured 2026-10-12 night: dev3, rank fusion, and doc2query.** Step 14 of
+docs/plans/reengineer-flat-plan.md: the memory indexes load whole until the
+shipped retriever holds 55.4% recall@5 sealed (tools/recall_gate.py).
+
+dev3 is a third blind set, 70 questions in
+`~/second-brain/.bench/brain-retrieval/queries_dev3.json` (private,
+untracked). A separate agent that never saw the retriever, the sealed set or
+the other dev sets sampled targets first (seed 1013 over the 839 indexed
+files), then wrote one question per note: 43 single-hop questions share no
+4+ letter word with the note's path, name or description, 12 are plain, 15
+are multi-hop. Leakage check: no question over 0.75 of its words in the gold.
+
+The control, on one frozen copy of the live index (839 files, 4,006 chunks):
+
+| shipped minmax ranker | r@5   | MRR   |
+| --------------------- | ----- | ----- |
+| dev  (24 resolve)     | 66.7% | 0.468 |
+| dev2 (46)             | 84.8% | 0.689 |
+| dev3 (70)             | 44.3% | 0.345 |
+
+dev3 is the first dev set that reproduces the sealed number (47.7% live on
+10/12 morning), so it is the first that can see the failure. Its 39 misses:
+18 have the gold below rank 50 (the embedding never puts it near the
+question), 12 at 6 to 20, 9 at 21 to 50. Hard-paraphrase single-hop scored
+13 of 43. In several misses the gold was a long note whose best chunk ranked
+1st to 6th of all 4,006 chunks, and the file mean buried it.
+
+Sweep, `bench/cards.py`, net queries gained against minmax over dev+dev2+dev3
+(140). Every variant goes through the same fusion and folder cap as
+`brain.rank()`, checked equal at the control:
+
+| family                                        | best variant           | net      |
+| --------------------------------------------- | ---------------------- | -------- |
+| card: one vector per file (name, description, headings), blended into the dense mean | c=0.15 | +1 (+3 -2); c>=0.3 loses on dev3 |
+| nomic task prefixes on both sides (re-embedded 4,006 chunks) | prefix alone | -2; prefix+card loses 4 on dev2 |
+| stopwords out of the lexical OR query         | any                    | loses up to 27 on dev3 |
+| RRF of dense mean and lexical                 | k=10                   | +5 (+9 -4) |
+| best-chunk cosine mixed into the mean         | a=0.3                  | -2 alone |
+| **RRF of mean, best chunk and lexical (rrf3)** | k=10                  | **+9 (+11 -2)** |
+| pseudo-relevance feedback alone               | b=0.6, m=5             | +2 |
+| **rrf3 + feedback b=0.6 m=5**                 | shipped                | **+15 (+17 -2)** |
+
+RRF rows are after review found that the first rrf3 broke score ties by file
+name (every file with no lexical match sat in alphabetical order, team memory
+last); tied scores now share a rank, and that fix alone took the shipped
+config from +14 -1 to +17 -2. Shipped config by set: dev 66.7% -> 75.0%, dev2
+84.8% -> 93.5%, dev3 44.3% -> 57.1%.
+
+Shipped as `brain.rank()`'s default (`FUSION`, `RRF_K`, `PRF_B`, `PRF_M`);
+`fusion="minmax"` reproduces every older table. Feedback is for ranking only:
+abstention and the cosines brain-recall gates on stay raw.
+
+| sealed, run once (n=65), same frozen index | r@5   | 95% CI  | MRR   |
+| ------------------------------------------ | ----- | ------- | ----- |
+| minmax (shipped before)                    | 50.8% | +/-12.2 | 0.333 |
+| rrf3 + feedback                            | 53.8% | +/-12.1 | 0.389 |
+
++6 -4 sealed, MRR up 0.056, still under the 55.4% floor. This run measured
+the name-ordered ties (fixed after it); the fixed ranker's sealed number is
+the baseline row of the doc2query run below, so the sealed set was not opened
+a second time for this family. `bench/frozen/rrf3_prf.json.sealed-run` holds
+the aggregate.

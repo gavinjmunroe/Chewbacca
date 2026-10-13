@@ -123,28 +123,55 @@ def inspect(repo, email, since):
     log = git(repo, 'log', '--branches', '--no-merges', '--since=' + since, '--format=%H', *author)
     # Submodules carry their own config, so status never descends into them.
     off = filters_off(repo)
-    status = '' if off is None else git(repo, 'status', '--porcelain', '--ignore-submodules=all', extra=off) or ''
+    status = None if off is None else git(repo, *status_args(), extra=off)
     remotes = (git(repo, 'remote') or '').split()
-    # Unpushed means no remote branch holds the change. Matching on author time
-    # plus subject, not on hash: a commit landed by cherry-pick or rebase gets a
-    # new hash, and on this Mac hash matching called 202 commits unpushed (98
-    # in one repo) that were all on origin under other hashes.
-    fmt = '--format=%H %at %s'
-    local = git(repo, 'log', '--branches', '--not', '--remotes', '--no-merges', '--since=' + since, fmt, *author) or ''
-    landed = set()
-    if local.strip() and remotes:
-        for line in (git(repo, 'log', '--remotes', '--no-merges', '--since=' + since, fmt) or '').splitlines():
-            landed.add(line.partition(' ')[2])
-    unpushed = {line.split(' ', 1)[0] for line in local.splitlines()
-                if line.strip() and line.partition(' ')[2] not in landed}
+    # Unpushed means no remote branch holds the same change. Compared by patch
+    # id, not by hash: a commit landed by cherry-pick or rebase gets a new hash,
+    # and on this Mac hash matching called 202 commits unpushed (98 in one
+    # repo) that were all on origin under other hashes. Not by subject either:
+    # an amended commit keeps its subject and author time but not its content.
+    local = patch_ids(repo, '--branches', '--not', '--remotes', '--since=' + since, *author)
+    unpushed = set(local)
+    if local and remotes:
+        landed = set(patch_ids(repo, '--remotes', '--since=' + since).values())
+        unpushed = {h for h, pid in local.items() if pid is None or pid not in landed}
     try:
         common_id = os.stat(common.strip())
         common_key = f'{common_id.st_dev}:{common_id.st_ino}'
     except OSError:
         common_key = common.strip()
     return {'path': str(repo), 'common': common_key,
-            'commits': set((log or '').split()), 'dirty': len(status.splitlines()),
+            'commits': set((log or '').split()), 'dirty': len(status.splitlines()) if status else 0,
+            'unchecked': status is None, 'filters_off': off or [],
             'unpushed': unpushed, 'remote': bool(remotes)}
+
+
+def status_args():
+    return ('status', '--porcelain', '--ignore-submodules=all')
+
+
+LOG_ARGS = ('log', '-p', '--no-merges', '--no-ext-diff', '--no-textconv', '--no-color', '--format=commit %H')
+
+
+def patch_ids(repo, *revs):
+    """{commit: patch id} for the commits revs select; None for a commit with
+    no diff (an empty commit has no patch id to match on)."""
+    hashes = (git(repo, 'log', '--no-merges', '--format=%H', *revs) or '').split()
+    if not hashes:
+        return {}
+    patches = git(repo, *LOG_ARGS, *revs, timeout=30)
+    ids = dict.fromkeys(hashes)
+    if patches:
+        try:
+            done = subprocess.run([*SAFE, '-C', str(repo), 'patch-id', '--stable'], input=patches,
+                                  capture_output=True, text=True, timeout=30)
+            for line in done.stdout.splitlines():
+                pid, _, commit = line.partition(' ')
+                if commit in ids:
+                    ids[commit] = pid
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    return ids
 
 
 def plural(n, word):
@@ -169,6 +196,7 @@ def week(home=None, extra=(), days=7):
     active = {c: len(h) for c, h in commits_by_repo.items() if h}
     total = sum(active.values())
     dirty = [r for r in rows if r['dirty']]
+    unchecked = {r['common']: r for r in rows if r['unchecked']}
     local_only = {r['common']: r for r in rows if not r['remote']}
     # Worktrees share branches, so unpushed commits are counted once per repo.
     unpushed = {}
@@ -189,19 +217,24 @@ def week(home=None, extra=(), days=7):
     if dirty:
         risk.append(f'{plural(len(dirty_repos), "repo")} with uncommitted changes')
     if ahead:
-        risk.append(f'{plural(sum(r["ahead"] for r in ahead), "commit")} from this week never pushed')
+        risk.append(f'{plural(sum(r["ahead"] for r in ahead), "commit")} from this week on no remote')
     if local_only:
         risk.append(f'{plural(len(local_only), "repo")} with no remote at all')
     machine = 'this Mac' if sys.platform == 'darwin' else 'this machine'
     if head and risk:
         line = f'Your week: {head}. Only on {machine}: ' + ', '.join(risk) + '.'
-    elif head:
+    elif head and not unchecked:
         line = f'Your week: {head}. Everything is committed and pushed.'
+    elif head:
+        line = f'Your week: {head}.'
     else:
         line = ('No git repos found in ~/code, ~/Developer, ~/dev, ~/src or the other usual code '
                 'folders. Point it at one: chewbacca week --path <folder>')
+    if unchecked:
+        # A skipped or failed status is not a clean tree; never let it read as one.
+        line += f' {plural(len(unchecked), "repo")} not checked for uncommitted changes (see the receipt).'
     return {'line': line, 'email': email, 'days': days, 'repos': rows, 'active': active,
-            'names': names, 'dirty': dirty, 'ahead': ahead, 'local_only': list(local_only.values()),
+            'names': names, 'dirty': dirty, 'unchecked': list(unchecked.values()), 'ahead': ahead, 'local_only': list(local_only.values()),
             'seconds': round(time.monotonic() - started, 2)}
 
 
@@ -210,26 +243,34 @@ def receipt(result, folder):
     stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / f'week-{stamp}.md'
-    q = shlex.quote
-    author = f' --author={q(result["email"])}' if result['email'] else ''
     lines = ['# Receipt: your week in one line', '', result['line'], '',
              f'Made {datetime.datetime.now():%Y-%m-%d %H:%M} in {result["seconds"]} s, read only, '
              f'from {plural(len(result["repos"]), "git repo")}. '
              f'Commits are yours by git email ({result["email"] or "no global user.email, so everyone"}), '
              f'last {result["days"]} days, local branches, merges left out.', '',
              'Check any number yourself:', '']
+    # The same safe prefix the scan used: a receipt command must never run a
+    # cloned repo's fsmonitor, hooks or filters either.
+    def cmd(repo, *args, extra=()):
+        return shlex.join([*SAFE, *extra, '-C', str(repo), *args])
+    since = f'--since={result["days"]}.days.ago'
+    author = ['--author=' + result['email']] if result['email'] else []
     for common, count in sorted(result['active'].items(), key=lambda kv: -kv[1]):
         repo = next(r['path'] for r in result['repos'] if r['common'] == common)
         lines.append(f'- {result["names"][common]}: {count} commits. '
-                     f'`git -C {q(repo)} log --branches --no-merges --since={result["days"]}.days.ago{author} --oneline | wc -l`')
+                     f'`{cmd(repo, "log", "--branches", "--no-merges", since, *author, "--oneline")} | wc -l`')
     for r in result['dirty']:
-        lines.append(f'- {Path(r["path"]).name}: {plural(r["dirty"], "uncommitted file")}. `git -C {q(r["path"])} status --short`')
+        lines.append(f'- {Path(r["path"]).name}: {plural(r["dirty"], "uncommitted file")}. '
+                     f'`{cmd(r["path"], *status_args(), extra=r["filters_off"])}`')
+    for r in result['unchecked']:
+        lines.append(f'- {Path(r["path"]).name}: not checked for uncommitted changes. Its filter config '
+                     'could not be switched off safely, so git status was not run there.')
     for r in result['ahead']:
         lines.append(f'- {Path(r["path"]).name}: {plural(r["ahead"], "commit")} not on any remote. '
-                     f'`git -C {q(r["path"])} log --branches --not --remotes --no-merges --since={result["days"]}.days.ago{author} --oneline` '
-                     '(a commit whose author time and subject are on a remote counts as pushed)')
+                     f'`{cmd(r["path"], "log", "--branches", "--not", "--remotes", "--no-merges", since, *author, "--oneline")}` '
+                     'lists candidates; one whose change is on a remote under another hash (same `git patch-id`) counts as pushed.')
     for r in result['local_only']:
-        lines.append(f'- {Path(r["path"]).name}: no remote. `git -C {q(r["path"])} remote -v` prints nothing')
+        lines.append(f'- {Path(r["path"]).name}: no remote. `{cmd(r["path"], "remote", "-v")}` prints nothing')
     path.write_text('\n'.join(lines) + '\n')
     return path
 

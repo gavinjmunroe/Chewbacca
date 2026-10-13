@@ -409,6 +409,21 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(mcp.read_bytes(), original)
         self.assertFalse(runtime.vscode_instructions().exists())
 
+    def test_vscode_instructions_symlink_survives_setup_and_undo(self):
+        dotfiles = self.home / 'dotfiles/chewbacca.instructions.md'
+        dotfiles.parent.mkdir()
+        dotfiles.write_text('mine\n')
+        link = runtime.vscode_instructions()
+        link.parent.mkdir(parents=True)
+        link.symlink_to(dotfiles)
+        runtime.vscode_user_dir().mkdir(parents=True)
+        runtime.setup('vscode')
+        self.assertTrue(link.is_symlink())
+        self.assertIn('applyTo', dotfiles.read_text())
+        runtime.remove('vscode')
+        self.assertTrue(link.is_symlink())
+        self.assertEqual(dotfiles.read_text(), 'mine\n')
+
     def test_backup_holds_the_file_from_before_chewbacca_ever_touched_it(self):
         settings = runtime.claude_home() / 'settings.json'
         settings.parent.mkdir(parents=True)

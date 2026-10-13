@@ -239,6 +239,9 @@ def install_vscode(brain, spec, team=False):
             'applyTo: "**"\n---\n\n' + context.startup_block(Path(context.__file__).resolve(), brain)
             + '\n\n' + instruction_block(spec, team) + '\n')
     path = vscode_instructions()
+    # Write through a dotfiles symlink, as merge_block does: replacing the link
+    # with a file left undo restoring the link's target and the new file behind.
+    path = path.resolve() if path.is_symlink() else path
     path.parent.mkdir(parents=True, exist_ok=True)
     context.atomic_write(path, text)
     return path

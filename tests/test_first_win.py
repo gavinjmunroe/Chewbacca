@@ -89,7 +89,7 @@ class WeekTests(unittest.TestCase):
         self.assertEqual(result['line'],
                          'Your week: 5 commits in 2 repos (most in app, 3). '
                          f'Only on this {"Mac" if sys.platform == "darwin" else "machine"}: '
-                         '1 repo with uncommitted changes, 1 commit from this week never pushed, '
+                         '1 repo with uncommitted changes, 1 commit from this week on no remote, '
                          '1 repo with no remote at all.')
         # 'landed elsewhere' is on origin under another hash, so it is pushed.
         self.assertEqual([r['ahead'] for r in result['ahead']], [1])
@@ -155,6 +155,45 @@ class WeekTests(unittest.TestCase):
         git(odd, 'config', 'filter.a=b.clean', 'cat')
         self.assertIsNone(first_win.filters_off(odd))
         self.assertEqual(first_win.filters_off(self.solo), [])
+
+    def test_an_amended_commit_is_still_unpushed(self):
+        # Same subject and author time as the pushed commit, different content:
+        # matching on those two alone called it pushed (review, 10/13).
+        (self.app / 'base.txt').write_text('changed after push\n')
+        git(self.app, 'add', 'base.txt')
+        git(self.app, 'checkout', '-q', '-b', 'amend', 'origin/main')
+        (self.app / 'base.txt').write_text('changed after push\n')
+        git(self.app, 'commit', '-q', '-a', '--amend', '--no-edit')
+        row = first_win.inspect(self.app, EMAIL, '7.days.ago')
+        amended = subprocess.run(['git', '-C', str(self.app), 'rev-parse', 'HEAD'],
+                                 capture_output=True, text=True).stdout.strip()
+        self.assertIn(amended, row['unpushed'])
+
+    def test_an_unchecked_repo_never_reads_as_all_clear(self):
+        clean = Path(tempfile.mkdtemp(dir=self.home)) / 'code/clean'
+        clean.mkdir(parents=True)
+        git(clean, 'init', '-q')
+        commit(clean, 'a.txt', 'x')
+        git(clean, 'config', 'filter.a=b.clean', 'cat')
+        line = first_win.week(clean.parents[1])['line']
+        self.assertNotIn('Everything is committed', line)
+        self.assertIn('1 repo not checked for uncommitted changes', line)
+
+    def test_receipt_status_command_is_as_safe_as_the_scan(self):
+        evil = self.home / 'code/evil'
+        evil.mkdir()
+        git(evil, 'init', '-q')
+        commit(evil, 'a.txt', 'x')
+        marker = self.home / 'PWNED-receipt'
+        git(evil, 'config', 'core.fsmonitor', f'touch {marker}; echo')
+        git(evil, 'config', 'filter.evil.clean', f'touch {marker}; cat')
+        (evil / '.gitattributes').write_text('*.txt filter=evil\n')
+        (evil / 'a.txt').write_text('y\n')  # same size, so git must hash it
+        path = first_win.receipt(first_win.week(self.home), self.home / '.chewbacca/receipts')
+        line = next(l for l in path.read_text().splitlines() if l.startswith('- evil: ') and 'uncommitted' in l)
+        self.assertFalse(marker.exists())
+        subprocess.run(line.split('`')[1], shell=True, capture_output=True)
+        self.assertFalse(marker.exists())
 
     def test_empty_machine_says_where_to_point_it(self):
         empty = Path(tempfile.mkdtemp(dir=self.home))

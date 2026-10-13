@@ -50,7 +50,7 @@ import { rpc } from "../src/rpc/client";
 import type { AppState } from "../src/state/store";
 import { Spinner } from "../src/components/Spinner";
 import { Story } from "./Story";
-import { NO_PICK, SEED_EVENTS, barButtons, escapeOn, followHis, followRow, opening, tileKey, tilesReady, toSeed } from "./nav.mjs";
+import { NO_PICK, SEED_EVENTS, barButtons, escapeOn, followHis, followRow, opening, shownNow, tileKey, tilesReady, toSeed } from "./nav.mjs";
 import { editRange, excerpt, lostFocus, reviewDecided, voiceIntent } from "./model.mjs";
 import { GRACE_MS, REDIAL_MS, entryOf, staleBuild, watchLink } from "./link.mjs";
 import type { LinkSnap } from "./link.mjs";
@@ -252,8 +252,8 @@ function useShown(): { shown: boolean; opens: number } {
       }
     ).webkit?.messageHandlers?.realmGlass,
   );
-  const [shown, setShown] = useState(
-    () => !inKyber && document.visibilityState === "visible",
+  const [shown, setShown] = useState(() =>
+    shownNow({ inKyber, kyberSays: null, hidden: document.visibilityState === "hidden" }),
   );
   // Counts every time Kyber says the page is shown, even when it already
   // was: a surface drawn again over a page that never left still opens on
@@ -261,18 +261,18 @@ function useShown(): { shown: boolean; opens: number } {
   const [opens, setOpens] = useState(0);
   useEffect(() => {
     const w = window as unknown as { __realmGlassShown?: (v: boolean) => void };
-    // What Kyber last said, so a page attached a frame before its window
-    // became visible still turns shown once it does.
-    let kyberSays = false;
+    // What Kyber last said, null until it speaks (nav.mjs shownNow), so a
+    // page attached a frame before its window became visible still turns
+    // shown once it does.
+    let kyberSays: boolean | null = null;
+    const now = () =>
+      shownNow({ inKyber, kyberSays, hidden: document.visibilityState === "hidden" });
     w.__realmGlassShown = (v) => {
       kyberSays = Boolean(v);
-      setShown(kyberSays && document.visibilityState !== "hidden");
+      setShown(now());
       if (kyberSays) setOpens((n) => n + 1);
     };
-    const vis = () => {
-      if (document.visibilityState === "hidden") setShown(false);
-      else setShown(inKyber ? kyberSays : true);
-    };
+    const vis = () => setShown(now());
     document.addEventListener("visibilitychange", vis);
     return () => {
       document.removeEventListener("visibilitychange", vis);

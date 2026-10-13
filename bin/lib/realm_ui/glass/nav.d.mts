@@ -11,6 +11,11 @@ export function tileKey(
   key: string,
   cols?: number,
 ): { picked: number; open: boolean; handled: boolean };
+export function shownNow(state: {
+  inKyber: boolean;
+  kyberSays: boolean | null;
+  hidden: boolean;
+}): boolean;
 export function tilesReady(state: {
   listed: boolean;
   faulted: boolean;

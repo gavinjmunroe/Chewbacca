@@ -352,3 +352,21 @@ test("a press during a morph is never dropped", () => {
   assert.doesNotMatch(follow, /if \(morphing\.current\) return/);
   assert.match(follow, /morphGen\.current \+= 1;/, "a followed press leaves the morph flying");
 });
+
+// 10/13, the A2 verifier: Kyber tells a page it just loaded "shown" before
+// any of the page's scripts run (AppPane.swift attach), so the word was
+// dropped and the cold page sat on "Reading your agents" with 0 tiles. Until
+// Kyber speaks the page goes by visibility; a WKWebView in no window reads
+// "hidden" (Swift probe), so a page warmed at launch still never claims it.
+test("a page Kyber loaded cold is shown by visibility until Kyber speaks", () => {
+  assert.equal(nav.shownNow({ inKyber: true, kyberSays: null, hidden: false }), true);
+  assert.equal(nav.shownNow({ inKyber: true, kyberSays: null, hidden: true }), false);
+  assert.equal(nav.shownNow({ inKyber: true, kyberSays: false, hidden: false }), false);
+  assert.equal(nav.shownNow({ inKyber: true, kyberSays: true, hidden: true }), false);
+  assert.equal(nav.shownNow({ inKyber: true, kyberSays: true, hidden: false }), true);
+  assert.equal(nav.shownNow({ inKyber: false, kyberSays: null, hidden: false }), true);
+  const src = readFileSync(new URL("../bin/lib/realm_ui/glass/GlassLayer.tsx", import.meta.url), "utf8");
+  const hook = src.slice(src.indexOf("function useShown"), src.indexOf("return { shown, opens }"));
+  assert.match(hook, /shownNow\(/, "useShown reads the one rule");
+  assert.doesNotMatch(hook, /let kyberSays = false/, "Kyber's silence isn't a no");
+});

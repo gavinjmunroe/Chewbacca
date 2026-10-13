@@ -58,6 +58,24 @@ export function tilesReady({ listed, faulted, needTruth, truthAsked }) {
   return Boolean(listed && !faulted && (!needTruth || truthAsked));
 }
 
+/** Whether the page is on the glass. One rule, read by useShown in
+ *  GlassLayer.tsx. A hidden document is never shown. Outside Kyber,
+ *  visibility is all there is. Inside Kyber, its word (kyberSays, from
+ *  window.__realmGlassShown) wins once it has spoken; before that the page
+ *  goes by visibility. Kyber tells a freshly loaded page "shown" in the same
+ *  breath as view.load (AppPane.swift attach), before any page script runs,
+ *  so that word was dropped and a page Kyber loaded cold sat on "Reading
+ *  your agents" for good: headless WebKit against the live server, 10/13,
+ *  0 tiles after 12 s, 9 tiles 319 ms after a late tell. Visibility is safe
+ *  until Kyber speaks: a WKWebView in no window, or in one ordered out,
+ *  reports "hidden" (measured with a Swift probe on this Mac, 10/13), so a
+ *  page warmed at launch still never claims the glass. */
+export function shownNow({ inKyber, kyberSays, hidden }) {
+  if (hidden) return false;
+  if (!inKyber || kyberSays === null || kyberSays === undefined) return true;
+  return Boolean(kyberSays);
+}
+
 // The most realm-run sessions whose recent events are read when the list
 // arrives. Twelve covers the nine tiles plus a few; each read is one
 // sessions.events call (max 4.8 ms for 400 events at load 16, 10/11).

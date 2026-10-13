@@ -549,9 +549,13 @@ link_tool() {
 
 install_backend_launchers() {
   local backend_tool
-  for backend_tool in chatgpt-tab chatgpt-gateway perplexity-tab jev-browse chewbacca-bridge mac-use chrome-js; do
+  for backend_tool in chatgpt-tab chatgpt-gateway perplexity-tab jev-browse chewbacca-bridge chewbacca-browser mac-use chrome-js; do
     link_tool "$backend_tool"
   done
+  # The native host for ChatGPT and Claude in Chrome. Registering it writes one
+  # file naming one extension id; loading the extension stays a person's click.
+  { python3 "$SCRIPT_DIR/bin/chewbacca-browser" install || warn "chewbacca browser install failed; run it again once Chrome is installed"; } |
+    while read -r line; do log "$line"; done
   log "Chewbacca backend launchers refreshed in ~/.local/bin"
 }
 

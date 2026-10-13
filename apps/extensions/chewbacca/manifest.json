@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "Chewbacca",
+  "short_name": "Chewbacca",
+  "description": "Turns ChatGPT and Claude in your browser into Chewbacca: summarize a tab, pull what's due, and with the Mac half, your calendar, tasks and files.",
+  "version": "1.0.0",
+  "minimum_chrome_version": "116",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsGPKbWV87Eh6I1yrOUjpp4G8ejg3tNsFU6zoF47I3pA8Urfm575TBwXnkrEUtq3PetY+O1eA7aBFXetjq/h80+EOvzesO17mRPfjYhjObzcqKAa82BVEengs4KMSaGOLm+wYYIxGyz0Rg3OdA2iiaQJaFccMR7iIpjEwwybC90tH50YK8DL80Nv+rR+z60kRr9McdAPm8EvPzXKbbbkt7o846boQ/fgMNf8UEV1bPtTHMFLRxb9j+udONwwyWJMzoleRnIvL7ifvme1WZuq1iYQ7yYEAq4hOcjHLaoPBajllKV8PcHhHAK5YWqOETOWmRy+uvsOTDwUboC+yZdzxnQIDAQAB",
+  "permissions": [
+    "nativeMessaging",
+    "storage",
+    "scripting",
+    "tabs",
+    "activeTab",
+    "contextMenus",
+    "sidePanel"
+  ],
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://claude.ai/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://claude.ai/*"
+      ],
+      "js": [
+        "protocol.js",
+        "sites.js",
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "side_panel": {
+    "default_path": "panel.html"
+  },
+  "action": {
+    "default_title": "Chewbacca"
+  }
+}

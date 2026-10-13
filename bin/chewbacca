@@ -95,6 +95,7 @@ COMMANDS=(
   "chat|one inbox for every chat network: local Matrix bridges (up, down, status, link)"
   "office|Microsoft 365 mail, calendar, files, docs and Teams, read through Graph after one Microsoft device-code sign-in"
   "usc|a USC student's day; lockin pulls your courses, lecture files and what's due first"
+  "browser|ChatGPT or Claude in Chrome as Chewbacca: install the Mac half, status, tools, log"
   "google|find and read Google Docs, Sheets and Slides as text"
   "docs|local Word, Excel and PowerPoint files through genoffice: read, preview an edit, apply it"
   "clay|any Clay read without opening Clay, by the fastest surface (clay ops)"
@@ -300,6 +301,12 @@ office)
   # device-code flow (MSAL); the token cache lives in the login keychain. Read-only.
   shift
   exec python3 "$ROOT/bin/chewbacca-office" "$@"
+  ;;
+browser)
+  # The native host a chat tab reaches through apps/extensions/chewbacca.
+  # Reads run; writes need a press on the Mac. docs/reference/BROWSER-CHEWB.md
+  shift
+  exec python3 "$ROOT/bin/chewbacca-browser" "$@"
   ;;
 usc)
   # Any USC student's day from Brightspace, dining and the campus calendar,

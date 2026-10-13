@@ -1,0 +1,202 @@
+#!/usr/bin/env python3
+"""chewbacca browser: the Mac half of Chewbacca in a chat tab (chatgpt.com, claude.ai).
+
+    chewbacca browser install [--dir D] [--extension-id ID]   register the native host
+    chewbacca browser uninstall [--dir D]                     remove it
+    chewbacca browser status                                  installed where, last calls
+    chewbacca browser tools                                   what a chat page can call
+    chewbacca browser log [-n N]                              the verdict log
+
+Chrome starts this same file as the native messaging host, with the calling
+extension's origin as its first argument. The rules it enforces, and why, are
+in docs/reference/BROWSER-CHEWB.md; the decisions are in bin/lib/browser_host.py.
+
+`install` writes one JSON file into Chrome's NativeMessagingHosts folder naming
+this file and one extension id. It never loads the extension into Chrome:
+that is a click in chrome://extensions, and it prints that line.
+"""
+import json
+import os
+import pathlib
+import shutil
+import struct
+import sys
+
+HERE = pathlib.Path(__file__).resolve().parent
+ROOT = HERE.parent
+sys.path.insert(0, str(HERE / "lib"))
+import browser_host as bh  # noqa: E402
+
+EXTENSION_SRC = ROOT / "apps" / "extensions" / "chewbacca"
+# Chrome keeps loading an unpacked extension from the folder it was picked
+# from. The kit runs from snapshots that get pruned when a newer one lands, so
+# install copies the extension to a folder that never moves.
+EXTENSION_DIR = pathlib.Path.home() / ".chewbacca" / "browser-extension"
+CONFIG = pathlib.Path.home() / ".chewbacca" / "browser-host.json"
+SUPPORT = pathlib.Path.home() / "Library" / "Application Support"
+# Every Chromium-family browser reads the same manifest from its own folder.
+BROWSER_DIRS = [
+    SUPPORT / "Google" / "Chrome", SUPPORT / "Google" / "Chrome Beta", SUPPORT / "Chromium",
+    SUPPORT / "BraveSoftware" / "Brave-Browser", SUPPORT / "Microsoft Edge", SUPPORT / "Arc" / "User Data",
+]
+
+
+def allowed_ids() -> list:
+    try:
+        ids = json.loads(CONFIG.read_text()).get("extension_ids", [])
+    except (OSError, ValueError):
+        ids = []
+    return [bh.EXTENSION_ID] + [i for i in ids if isinstance(i, str) and len(i) == 32 and i.isalpha()]
+
+
+# --- the host loop ------------------------------------------------------------
+
+def read_message(stream):
+    head = stream.read(4)
+    if len(head) < 4:
+        return None
+    size = struct.unpack("<I", head)[0]
+    if size > bh.MAX_IN:
+        stream.read(size)  # drain it so the next frame lines up, then refuse
+        return {"__too_big__": size}
+    return json.loads(stream.read(size).decode("utf-8"))
+
+
+def write_message(stream, obj) -> None:
+    data = json.dumps(obj).encode("utf-8")
+    stream.write(struct.pack("<I", len(data)) + data)
+    stream.flush()
+
+
+def serve(origin: str) -> int:
+    if origin.rstrip("/") not in (f"chrome-extension://{i}" for i in allowed_ids()):
+        sys.stderr.write(f"chewbacca-browser: refusing caller {origin!r}\n")
+        return 1
+    host = bh.Host(origin)
+    stdin, stdout = sys.stdin.buffer, sys.stdout.buffer
+    while True:
+        try:
+            msg = read_message(stdin)
+        except (ValueError, UnicodeDecodeError):
+            write_message(stdout, {"ok": False, "verdict": "refused", "error": "not JSON"})
+            continue
+        if msg is None:
+            return 0
+        if "__too_big__" in msg:
+            write_message(stdout, {"ok": False, "verdict": "refused", "error": "the call is too large"})
+            continue
+        write_message(stdout, host.handle(msg))
+
+
+# --- install, status --------------------------------------------------------
+
+def host_path() -> str:
+    """The kit's `current` link when this runs from a kit snapshot, which gets
+    pruned when a newer one lands; the file itself otherwise."""
+    here = pathlib.Path(__file__).resolve()
+    kit = pathlib.Path.home() / ".chewbacca" / "kit"
+    snaps = (kit / "snapshots").resolve()
+    if snaps in here.parents and (kit / "current" / "bin" / here.name).exists():
+        return str(kit / "current" / "bin" / here.name)
+    return str(here)
+
+
+def manifest(ids: list) -> dict:
+    return {"name": bh.HOST_NAME, "description": "Chewbacca for chat tabs: a fixed list of tools, writes need a press",
+            "path": host_path(), "type": "stdio",
+            "allowed_origins": [f"chrome-extension://{i}/" for i in ids]}
+
+
+def targets(explicit):
+    if explicit:
+        return [pathlib.Path(explicit).expanduser()]
+    found = [d / "NativeMessagingHosts" for d in BROWSER_DIRS if d.is_dir()]
+    return found or [BROWSER_DIRS[0] / "NativeMessagingHosts"]
+
+
+def install(argv) -> int:
+    explicit, extra = None, []
+    it = iter(argv)
+    for a in it:
+        if a == "--dir":
+            explicit = next(it, None)
+        elif a == "--extension-id":
+            extra.append(next(it, ""))
+        else:
+            print(f"install: unknown option {a}", file=sys.stderr)
+            return 2
+    for i in extra:
+        if not (len(i) == 32 and i.isalpha() and i.islower()):
+            print(f"install: {i!r} isn't a Chrome extension id", file=sys.stderr)
+            return 2
+    if extra:
+        CONFIG.parent.mkdir(parents=True, exist_ok=True)
+        CONFIG.write_text(json.dumps({"extension_ids": extra}, indent=1) + "\n")
+    os.chmod(__file__, 0o755)
+    if EXTENSION_DIR.exists():
+        shutil.rmtree(EXTENSION_DIR)
+    shutil.copytree(EXTENSION_SRC, EXTENSION_DIR)
+    for d in targets(explicit):
+        d.mkdir(parents=True, exist_ok=True)
+        (d / f"{bh.HOST_NAME}.json").write_text(json.dumps(manifest(allowed_ids()), indent=2) + "\n")
+        print(f"native host registered: {d / (bh.HOST_NAME + '.json')}")
+    print(f"Last step, in Chrome: open chrome://extensions, turn on Developer mode, click Load unpacked, and pick {EXTENSION_DIR}")
+    return 0
+
+
+def uninstall(argv) -> int:
+    explicit = argv[1] if argv[:1] == ["--dir"] and len(argv) > 1 else None
+    for d in targets(explicit):
+        f = d / f"{bh.HOST_NAME}.json"
+        if f.exists():
+            f.unlink()
+            print(f"removed {f}")
+    return 0
+
+
+def status() -> int:
+    for d in targets(None):
+        f = d / f"{bh.HOST_NAME}.json"
+        print(f"{'registered' if f.exists() else 'not registered'}: {f}")
+    print(f"extension folder: {EXTENSION_DIR}")
+    print(f"shared folder: {bh.shared_dir()}")
+    return show_log(["-n", "5"])
+
+
+def show_log(argv) -> int:
+    n = int(argv[1]) if argv[:1] == ["-n"] and len(argv) > 1 else 20
+    path = bh.log_path()
+    rows = path.read_text().splitlines()[-n:] if path.exists() else []
+    for line in rows:
+        try:
+            r = json.loads(line)
+            print(f"{r['ts']}  {r['verdict']:<8} {r['tier']:<6} {str(r['tool']):<14} {r['ms']} ms")
+        except (ValueError, KeyError):
+            continue
+    if not rows:
+        print("no calls yet")
+    return 0
+
+
+def main(argv) -> int:
+    if argv and argv[0].startswith("chrome-extension://"):
+        return serve(argv[0])
+    cmd, rest = (argv[0], argv[1:]) if argv else ("status", [])
+    if cmd == "install":
+        return install(rest)
+    if cmd == "uninstall":
+        return uninstall(rest)
+    if cmd == "status":
+        return status()
+    if cmd == "tools":
+        for t in bh.tool_list():
+            print(f"{t['tier']:<6} {t['tool']}")
+        return 0
+    if cmd == "log":
+        return show_log(rest)
+    print(__doc__)
+    return 0 if cmd in ("-h", "--help", "help") else 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

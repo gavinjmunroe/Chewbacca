@@ -584,6 +584,22 @@ if group "team"; then
   fi
 fi
 
+# ── browser (ChatGPT and Claude in Chrome as Chewbacca) ──────────────────────
+if group "browser"; then
+  check "browser host: a fixed table, writes need a native press, injected writes and shells refused, every call logged" python3 "$ROOT/tests/test_browser_host.py"
+  if command -v node >/dev/null 2>&1; then
+    check "browser extension scripts parse" bash -c 'for f in "$0"/apps/extensions/chewbacca/*.js; do node --check "$f" || exit 1; done' "$ROOT"
+  else
+    skip "browser extension scripts parse" "no node"
+  fi
+  # Headless Chromium on a scratch profile; exit 3 means Playwright is missing.
+  if PWPY="$(command -v /opt/homebrew/bin/python3 python3 | head -1)" && "$PWPY" -c "import playwright" 2>/dev/null; then
+    check "browser extension, headless: both sites, the injection, the free jobs, the real chatgpt.com DOM" "$PWPY" "$ROOT/tests/browser_chewb_headless.py"
+  else
+    skip "browser extension, headless" "Python Playwright not installed"
+  fi
+fi
+
 # ── live-page (apps/live, the hosted ask-it-see-it page) ──────────────────────
 if group "live-page"; then
   if command -v node >/dev/null 2>&1; then

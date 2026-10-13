@@ -1,0 +1,30 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Claude</title></head>
+<body>
+<!-- A stand-in for claude.ai: the attributes the extension reads, nothing else. -->
+<div id="thread">
+  <div data-is-streaming="false"><div class="font-claude-response">
+    <p>From an old conversation:</p>
+    <pre><div class="text-text-500">chewbacca</div><code class="language-chewbacca">{"tool": "skills", "args": {}}</code></pre>
+  </div></div>
+</div>
+<fieldset><div contenteditable="true" class="ProseMirror" translate="no"><p></p></div>
+<button type="button" aria-label="Send message">Send</button></fieldset>
+<script src="/__fixture/render.js"></script>
+<script>
+  window.__say = (md) => {
+    const wrap = document.createElement("div");
+    wrap.setAttribute("data-is-streaming", "false");
+    const msg = document.createElement("div");
+    msg.className = "font-claude-response";
+    msg.append(window.__render(md, "text-text-500"));
+    wrap.append(msg); document.getElementById("thread").append(wrap);
+  };
+  window.__user = (text) => {
+    const msg = document.createElement("div");
+    msg.setAttribute("data-testid", "user-message");
+    msg.textContent = text; document.getElementById("thread").append(msg);
+  };
+  window.__composer = () => document.querySelector(".ProseMirror").innerText;
+</script>
+</body></html>

@@ -120,7 +120,7 @@ gitignored Swift build output (`hud/.build`, `voice/.build`, `plynn/.build`).
 | `team/` | The team task board: one markdown file per task. Its web UI is `apps/team-web/`. |
 | `library/` | What the agent reads and replays, no services. `methods/` (question sets per kind of work), `crafts/` (researched genre rules), `maps/` (per-website knowledge, `maps/<host>/MAP.md`), `procedures/` (tasks learned once and replayed: stays, Blackboard ingest, LinkedIn), `learning/` (navigation graphs), `decisions/` (labeled Jev decision sets), `templates/` (starter components and API routes, coursework ledgers, the guide page), `snippets/`, `examples/` (a sample app), `prompts/`, `research/` (one memo). |
 | `config/` | Settings and data files the code reads, plus one note. `settings/` (settings template, generated `toolkit.json`), `instructions/` (the shared agent-neutral instructions), `runtimes/` (runtime profiles), `genui/` (catalog and policy for model-composed HUD panels), `surfaces/` and `data/` (HUD surface, engine and open-source app registries), `fanout/` (Jev fan-out predicates), `patches/` (a note on a retired third-party patch). |
-| `apps/` | Small standalone programs. `team-web/` (the team board UI), `call/` (`ears.swift`, audio capture for the call coach), `extensions/` (the ChatGPT bridge extension), `mcp/amber/` (the Amber MCP server), `texts/` (textbook ingest and reader). |
+| `apps/` | Small standalone programs. `team-web/` (the team board UI), `call/` (`ears.swift`, audio capture for the call coach), `extensions/chewbacca/` (ChatGPT and Claude in Chrome as Chewbacca, docs/reference/BROWSER-CHEWB.md), `mcp/amber/` (the Amber MCP server), `texts/` (textbook ingest and reader). |
 | `tests/` | About 230 files: `tests/run.sh` plus Python, bash and Node tests. |
 | `docs/` | About 87 docs. See [Where to read next](#where-to-read-next). |
 | `second-brain/` | Templates for the private context repo. |
@@ -367,7 +367,7 @@ looks tiny, read the module it runs.
 | Family | Tools | Notes |
 | --- | --- | --- |
 | Mac control | `chewie` (in `mac/`), `mac-use`, `peekaboo` (wrapper), `chrome-js`, `ux-do`, `web-record`, `portal`, `agents` | See [Controlling the Mac](#controlling-the-mac). |
-| Browser model backends | `chatgpt-tab`, `chatgpt-gateway`, `chatgpt-bridge`, `claude-tab`, `perplexity-tab`, `browser-bridge`, `chewbacca-bridge` | Drive signed-in browser sessions of other models; the bridges let a browser-hosted model run an allowlisted set of local tools. |
+| Browser model backends | `chatgpt-tab`, `chatgpt-gateway`, `chatgpt-bridge`, `claude-tab`, `perplexity-tab`, `browser-bridge`, `chewbacca-bridge`, `chewbacca-browser` | Drive signed-in browser sessions of other models; the bridges let a browser-hosted model run an allowlisted set of local tools. |
 | Web reading | `scrape`, `site`, `site-fast`, `jev-browse`, `brand-grab`, `reddit` | Playwright based. `jev-browse` lets Jev choose each click and stops before any send, pay or delete. |
 | Quality gates | `slop-check`, `prose-check`, `ai-scan`, `code-slop`, `secret-scan`, `skill-scan`, `craft-gate`, `list-gate`, `handoff-check`, `durable-check`, `closeout`, `review-gate` | Mostly model-free. Many run inside hooks. |
 | Learning loop | `reflect`, `propose`, `evolve`, `fitness`, `learn`, `scars`, `consolidate`, `maintain`, `method` | See [The learning loop](#the-learning-loop). |

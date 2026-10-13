@@ -47,6 +47,7 @@ relative link in here points nowhere.
 | [RUNTIMES.md](reference/RUNTIMES.md)                               | Running the same brain and skills under Claude Code, Codex and other hosts            |
 | [MACOS-TOOLS.md](reference/MACOS-TOOLS.md)                         | The Mac tools setup installs (peekaboo, summarize, mac-use, mac, Maccy)               |
 | [MACOS-APP-CONTROL.md](reference/MACOS-APP-CONTROL.md)             | mac-cli: the JSON contract, permissions and weak spots for driving native apps        |
+| [BROWSER-CHEWB.md](reference/BROWSER-CHEWB.md)                     | ChatGPT and Claude in Chrome as Chewbacca: the boundary, the host, the tests          |
 | [THREAT-MODEL.md](reference/THREAT-MODEL.md)                       | What the kit exposes, who could attack it, what is not protected                      |
 | [CLAUDE-PERSONAL.md](reference/CLAUDE-PERSONAL.md)                 | The standards file `setup.sh --profile personal` installs                             |
 | [ADVISING.md](reference/ADVISING.md)                               | Rules for helping someone reach a goal rather than write code                         |
@@ -98,6 +99,7 @@ relative link in here points nowhere.
 | [AFTER-PANES-MOTION.md](plans/AFTER-PANES-MOTION.md)   | The motion and material layer for AFTER-PANES                                       |
 | [COMPETITORS.md](plans/COMPETITORS.md)                 | Ghost, Instinct, headless SaaS and the rest, checked 2026-10-05 to 2026-10-11       |
 | [MOG-PLAN.md](plans/MOG-PLAN.md)                       | Win the B2B wedge first: four layers, the proof rules, written 2026-10-10           |
+| [BROWSER-FREEMIUM.md](plans/BROWSER-FREEMIUM.md)       | The extension as the front door: free forever, what paid adds, cost per user         |
 | [FIRST-COHORT.md](plans/FIRST-COHORT.md)               | The first B2B cohort plan from the 2026-10-06 call                                  |
 | [CLAY-MASTERY.md](plans/CLAY-MASTERY.md)               | Research on becoming the best Clay operator, 2026-09-23                             |
 | [CLAY-HUD.md](plans/CLAY-HUD.md)                       | Design spec for a Kyber layer drawn over Clay, 2026-10-09                           |

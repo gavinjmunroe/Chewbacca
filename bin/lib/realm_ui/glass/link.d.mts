@@ -1,4 +1,5 @@
-// Types for link.mjs, the page's line to Realm's engine on the glass.
+// Types for link.mjs, the page's line to Realm's engine on the glass, in our
+// layer over Carlton Aikins' Realm renderer (github.com/31Carlton7/realm).
 export type LinkSnap = {
   readonly phase: "steady" | "handover" | "down";
   readonly gen: number;

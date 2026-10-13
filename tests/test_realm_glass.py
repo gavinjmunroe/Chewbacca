@@ -44,7 +44,7 @@ def realm_status(repo: Path) -> str:
 class LayerFiles(unittest.TestCase):
     def test_layer_is_ours_and_credits_him(self):
         names = sorted(p.name for p in LAYER.iterdir())
-        self.assertEqual(names, ["FolderPick.tsx", "GlassLayer.tsx", "Story.tsx", "attach.ts", "beats.mjs", "glass.css", "install.tsx", "main.tsx", "model.mjs", "nav.d.mts", "nav.mjs", "regions.mjs", "turn.d.mts", "turn.mjs"])
+        self.assertEqual(names, ["FolderPick.tsx", "GlassLayer.tsx", "Story.tsx", "attach.ts", "beats.mjs", "glass.css", "install.tsx", "link.d.mts", "link.mjs", "main.tsx", "model.mjs", "nav.d.mts", "nav.mjs", "regions.mjs", "turn.d.mts", "turn.mjs"])
         for p in LAYER.iterdir():
             self.assertIn("Carlton Aikins", p.read_text(), p.name)
 
@@ -55,7 +55,7 @@ class LayerFiles(unittest.TestCase):
 
     def test_a_layer_change_rebuilds(self):
         texts = realm_ui.layer_texts()
-        self.assertEqual(len(texts), 14)
+        self.assertEqual(len(texts), 16)
         self.assertTrue(any(t.startswith("GlassLayer.tsx\n") for t in texts))
 
     def test_vite_points_the_entry_at_ours_and_refuses_a_missing_seam(self):
@@ -210,7 +210,9 @@ class Voice(unittest.TestCase):
     def test_a_shown_listening_page_gets_the_sentence_and_names_the_agent(self):
         self.page("/glass/focus", {"shown": True, "mode": "work", "sessionId": "s1", "title": "Fix the rail"})
         stream = self.page("/glass/events")
-        self.assertEqual(json.loads(stream.readline()), {"type": "hello"})
+        # The hello names the build the server serves (link.mjs staleBuild):
+        # empty here, where the test's dist has no built index.
+        self.assertEqual(json.loads(stream.readline()), {"type": "hello", "entry": ""})
         sent = realm_glass_voice.send("add a test for the zero limit", self.state)
         self.assertEqual(sent, {"to": "Fix the rail", "mode": "work"})
         self.assertEqual(json.loads(stream.readline()), {"type": "voice", "text": "add a test for the zero limit"})

@@ -1,0 +1,330 @@
+{
+ "status": "OK",
+ "menu": {
+  "sections_1": [
+   {
+    "name": "Eatwell",
+    "is_hidden": 0,
+    "is_deleted": 0,
+    "currently_available": 1,
+    "items": []
+   },
+   {
+    "name": "Italian Sub",
+    "is_hidden": 1,
+    "is_deleted": 1,
+    "currently_available": 1,
+    "items": []
+   },
+   {
+    "name": "Pop Up Dumplin By Aro",
+    "is_hidden": 1,
+    "is_deleted": 1,
+    "currently_available": 1,
+    "items": []
+   },
+   {
+    "name": "Taco Taco Catering",
+    "is_hidden": 1,
+    "is_deleted": 1,
+    "currently_available": 1,
+    "items": []
+   },
+   {
+    "name": "Lasagna",
+    "is_hidden": 1,
+    "is_deleted": 1,
+    "currently_available": 1,
+    "items": []
+   },
+   {
+    "name": "Panda Catering",
+    "is_hidden": 1,
+    "is_deleted": 1,
+    "currently_available": 1,
+    "items": []
+   },
+   {
+    "name": "Bowls",
+    "is_hidden": 0,
+    "is_deleted": 0,
+    "currently_available": 1,
+    "items": [
+     {
+      "itemid": 9035712,
+      "name": "Japchae with Mushroom Tofu",
+      "price_display": 1499,
+      "dietary_restrictions": [
+       {
+        "icon_url": "flags/icon_flag_155_1_3557_1755798765451.png",
+        "itemid": 9035712,
+        "valueid": 0,
+        "dietaryid": 467,
+        "object_type": "dietary_restriction",
+        "campusid": 155,
+        "midr_id": 108654,
+        "mvdr_id": 0,
+        "dietarykey": "155_1755798767505",
+        "label": "Vegan"
+       }
+      ],
+      "description": "",
+      "is_hidden": 0,
+      "is_deleted": 0,
+      "pos_outofstock": 0,
+      "mobile_stock_available": 1,
+      "options": [
+       {
+        "name": "Customize Your Ingredients",
+        "minimum": 0,
+        "maximum": 50,
+        "is_hidden": 0,
+        "is_deleted": 0
+       },
+       {
+        "name": "Would You Like Any Add Ons",
+        "minimum": 0,
+        "maximum": 50,
+        "is_hidden": 0,
+        "is_deleted": 0
+       }
+      ]
+     },
+     {
+      "itemid": 9035711,
+      "name": "Bibimbap Spicy Pork Bowl",
+      "price_display": 1499,
+      "dietary_restrictions": [],
+      "description": "",
+      "is_hidden": 0,
+      "is_deleted": 0,
+      "pos_outofstock": 0,
+      "mobile_stock_available": 1,
+      "options": [
+       {
+        "name": "Customize Your Ingredients",
+        "minimum": 0,
+        "maximum": 50,
+        "is_hidden": 0,
+        "is_deleted": 0
+       },
+       {
+        "name": "Would You Like Any Add Ons",
+        "minimum": 0,
+        "maximum": 50,
+        "is_hidden": 0,
+        "is_deleted": 0
+       }
+      ]
+     },
+     {
+      "itemid": 8821673,
+      "name": "Bibimbap Beef Bowl",
+      "price_display": 1599,
+      "dietary_restrictions": [],
+      "description": "White Rice / Bulgogi / Marinated Bean Sprouts / Marinated Spinach / Shiitake Mushroom / Kimchi / Half Hard Boiled Egg / Green Onions / Furikake",
+      "is_hidden": 0,
+      "is_deleted": 0,
+      "pos_outofstock": 0,
+      "mobile_stock_available": 1,
+      "options": [
+       {
+        "name": "Would You Like Any Add Ons",
+        "minimum": 0,
+        "maximum": 50,
+        "is_hidden": 0,
+        "is_deleted": 0
+       },
+       {
+        "name": "Customize Your Ingredients",
+        "minimum": 0,
+        "maximum": 50,
+        "is_hidden": 0,
+        "is_deleted": 0
+       }
+      ]
+     },
+     {
+      "itemid": 8822567,
+      "name": "Bibimbap Mushroom Bowl",
+      "price_display": 1499,
+      "dietary_restrictions": [],
+      "description": "White Rice / Mushroom Tofu / Marinated Bean Sprouts / Marinated Spinach / Shiitake Mushroom / Kimchi / Half Hard Boiled Egg / Green Onions / Furikake",
+      "is_hidden": 0,
+      "is_deleted": 0,
+      "pos_outofstock": 0,
+      "mobile_stock_available": 1,
+      "options": [
+       {
+        "name": "Customize Your Ingredients",
+        "minimum": 0,
+        "maximum": 50,
+        "is_hidden": 0,
+        "is_deleted": 0
+       },
+       {
+        "name": "Would You Like Any Add Ons",
+        "minimum": 0,
+        "maximum": 50,
+        "is_hidden": 0,
+        "is_deleted": 0
+       }
+      ]
+     },
+     {
+      "itemid": 8822568,
+      "name": "Bibimbap Spicy Chicken Bowl",
+      "price_display": 1499,
+      "dietary_restrictions": [],
+      "description": "White Rice / Spicy Chicken / Marinated Bean Sprouts / Marinated Spinach / Shiitake Mushroom / Kimchi / Half Hard Boiled Egg / Green Onions / Furikake",
+      "is_hidden": 0,
+      "is_deleted": 0,
+      "pos_outofstock": 0,
+      "mobile_stock_available": 1,
+      "options": [
+       {
+        "name": "Would You Like Any Add Ons",
+        "minimum": 0,
+        "maximum": 50,
+        "is_hidden": 0,
+        "is_deleted": 0
+       },
+       {
+        "name": "Customize Your Ingredients",
+        "minimum": 0,
+        "maximum": 50,
+        "is_hidden": 0,
+        "is_deleted": 0
+       }
+      ]
+     },
+     {
+      "itemid": 8821676,
+      "name": "Tonkatsu Curry Bowl",
+      "price_display": 1499,
+      "dietary_restrictions": [],
+      "description": "Chicken Katsu / White Rice / Japanese Curry / Fukujinzuke / Green Onions",
+      "is_hidden": 0,
+      "is_deleted": 0,
+      "pos_outofstock": 0,
+      "mobile_stock_available": 1,
+      "options": [
+       {
+        "name": "Customize Your Ingredients",
+        "minimum": 0,
+        "maximum": 50,
+        "is_hidden": 0,
+        "is_deleted": 0
+       },
+       {
+        "name": "Would You Like Any Add Ons",
+        "minimum": 0,
+        "maximum": 50,
+        "is_hidden": 0,
+        "is_deleted": 0
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "name": "Drinks",
+    "is_hidden": 0,
+    "is_deleted": 0,
+    "currently_available": 1,
+    "items": [
+     {
+      "itemid": 8836236,
+      "name": "Fountain Drink",
+      "price_display": 349,
+      "dietary_restrictions": [],
+      "description": "",
+      "is_hidden": 0,
+      "is_deleted": 0,
+      "pos_outofstock": 0,
+      "mobile_stock_available": 1,
+      "options": []
+     }
+    ]
+   }
+  ],
+  "sections_2": [],
+  "sections_3": [],
+  "tenders": [
+   {
+    "ct_id": 18435,
+    "name": "Dining Dollars",
+    "swipe": 0,
+    "is_hidden": 0,
+    "currently_available": 1
+   },
+   {
+    "ct_id": 18436,
+    "name": "Directors Card",
+    "swipe": 0,
+    "is_hidden": 0,
+    "currently_available": 1
+   },
+   {
+    "ct_id": 18434,
+    "name": "Discretionary - Non Student",
+    "swipe": 0,
+    "is_hidden": 0,
+    "currently_available": 1
+   },
+   {
+    "ct_id": 18433,
+    "name": "Discretionary - Student",
+    "swipe": 0,
+    "is_hidden": 0,
+    "currently_available": 1
+   },
+   {
+    "ct_id": 18437,
+    "name": "Student Meal Plan",
+    "swipe": 1,
+    "is_hidden": 0,
+    "currently_available": 1
+   }
+  ]
+ },
+ "asap_min": 2,
+ "asap_max": 9,
+ "menu_time_slots": [
+  {
+   "start_time": "13:50",
+   "object_type": "menu_time_slot",
+   "end_time": "13:55",
+   "number_of_slots_total": 8,
+   "number_of_slots_used": 0,
+   "is_available": 1
+  },
+  {
+   "start_time": "13:55",
+   "object_type": "menu_time_slot",
+   "end_time": "14:00",
+   "number_of_slots_total": 8,
+   "number_of_slots_used": 0,
+   "is_available": 1
+  },
+  {
+   "start_time": "14:00",
+   "object_type": "menu_time_slot",
+   "end_time": "14:05",
+   "number_of_slots_total": 8,
+   "number_of_slots_used": 0,
+   "is_available": 1
+  },
+  {
+   "start_time": "14:05",
+   "object_type": "menu_time_slot",
+   "end_time": "14:10",
+   "number_of_slots_total": 8,
+   "number_of_slots_used": 0,
+   "is_available": 1
+  }
+ ],
+ "location": {
+  "header_text": "Menu Items Have Not Been Analyzed For Allergens"
+ }
+}

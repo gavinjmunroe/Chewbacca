@@ -17,6 +17,8 @@ chewbacca usc: a USC student's day in one screen, for any student on any Mac.
                                 would fill (--apply writes empty fields only)
   chewbacca usc grades          released Brightspace scores onto the ledger's
                                 matching grading parts (--apply writes)
+  chewbacca usc food            mobile order and the dining halls: what's open, waits,
+                                menus with prices, lunch near you, a ready cart (bin/usc-food)
   chewbacca usc --hall evk      pick the dining hall (parkside, evk, university-village)
   chewbacca usc --json          the same, as data
 
@@ -838,6 +840,9 @@ def short(v):
 
 
 def main():
+    if sys.argv[1:2] == ["food"]:
+        food_cli = str(ROOT / "bin" / "usc-food")
+        os.execv(sys.executable, [sys.executable, food_cli] + sys.argv[2:])
     ap = argparse.ArgumentParser(prog="chewbacca usc", add_help=True)
     ap.add_argument("cmd", nargs="?", default="today", choices=["today", "setup", "lockin", "read", "syllabus", "grades"])
     ap.add_argument("target", nargs="?", help="read: a course code, a folder or a file")

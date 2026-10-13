@@ -466,9 +466,14 @@ def _policy_refusal(channel, env):
     return send_policy.why_not(answer)
 
 
-def take(channel, to, text, subject="", show=None, tty=None, env=None, chain=False, exe=exe_path):
+def take(channel, to, text, subject="", show=None, tty=None, env=None, chain=False, exe=exe_path,
+         always_press=False):
     """Consume the approval for this exact message, or raise NoApproval.
-    Returns which press approved it: a minted token's press, hud, code or tty."""
+    Returns which press approved it: a minted token's press, hud, code or tty.
+
+    always_press is for spending money (a USC mobile order): agents send
+    messages by default, but spending is a press whatever the mode file says
+    (Caleb's brief for USC mobile order, 2026-10-13)."""
     channel, to, text, subject = str(channel), str(to), str(text), str(subject or "")
     env = os.environ if env is None else env
     # The rules (config/send-policy.cedar) come before any press: a send the
@@ -479,7 +484,7 @@ def take(channel, to, text, subject="", show=None, tty=None, env=None, chain=Fal
     if refused:
         _log("refused", channel, to, reason="send policy")
         raise NoApproval(refused)
-    if mode() != "press":
+    if mode() != "press" and not always_press:
         _log("take", channel, to, "agent")
         return "agent"
     press = _take_token(channel, to, text, subject)

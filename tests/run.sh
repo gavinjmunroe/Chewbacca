@@ -931,6 +931,10 @@ if group "installer"; then
   # signed-out site must not take the other sections down.
   check  "chewbacca usc shows this term's due items, dining and events, and survives a signed-out site" \
     bash "$ROOT/tests/chewbacca_usc.sh" "$ROOT"
+  # 2026-10-13: Caleb, "Mobile order for usc would be huge". Reads only; an
+  # order needs the owner's own press and no code path here submits one.
+  check  "chewbacca usc food reads mobile order and the halls, builds a cart to one line, and never places an order" \
+    /usr/bin/python3 "$ROOT/tests/test_usc_food.py"
   check  "chewbacca linkedin parses Voyager reads in the real Chrome tab, throttles, and stops on pushback" \
     bash "$ROOT/tests/chewbacca_linkedin.sh" "$ROOT"
   check  "chewbacca groupme reads groups and DMs in the real GroupMe tab, GET only, throttled, and stops on pushback" \

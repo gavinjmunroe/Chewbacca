@@ -1336,8 +1336,10 @@ FAST_PATHS = {
     "handle_agents_word": "agents",
 }
 # These need a pending draft, a waiting agent or a live terminal to decide, and
-# a replayed sentence has none of those, so `fast_path` cannot say.
-STATEFUL_PATHS = ("handle_agent_answer", "handle_draft_word", "handle_terminal_word", "search_dismiss")
+# a replayed sentence has none of those, so `fast_path` cannot say. The Realm
+# glass takes the talk key only while its page is shown and listening.
+STATEFUL_PATHS = ("handle_agent_answer", "handle_draft_word", "handle_terminal_word", "search_dismiss",
+                  "realm_glass_request")
 
 
 def fast_path(said: str) -> str | None:

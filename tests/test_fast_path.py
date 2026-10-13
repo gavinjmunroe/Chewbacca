@@ -106,7 +106,8 @@ TABLE = [
     ("Clay, find 20 seed investors in Austin", "clay"),
     ("build a list of fifty fintech VC partners with work emails", "clay"),
     ("okay so find me fintech VC partners in clay", "clay"),
-    ("open clay", None),
+    # The outbound surface (0daac8c0, 10/12) answers "open clay" on purpose.
+    ("open clay", "surface"),
     ("build me a list of 5 restaurants in Dallas", None),
     # CHW-195: one note by title, before the surface words.
     ("add milk to my groceries note", "notes"),

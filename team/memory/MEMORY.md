@@ -290,6 +290,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_bma_amber_push_to_main: BMA and Amber repos (togari-platform too) push straight to main, never a PR (Karthik via Caleb, 10/11); tests are the review
 - feedback_build_for_everyone: everything built into Chewbacca works for any user; per-user values from their config, never literals; tests/portable_code.sh refuses them (10/11)
 - feedback_fix_the_class_at_the_source: 3 repeats on 10/11 each walked past a lesson that covered one surface (Slack DM, the bridge's own Chrome, draft-only replies); fix where all paths meet, with a test
+- feedback_every_call_comes_with_a_take: a call handed to Caleb with no "My take:" is refused by the decision inbox and flagged by `decision-inbox check` and the jobs runner; lane prompts start from config/instructions/unattended-lane.md (7 of 11 calls had none on 10/13)
 - feedback_solved_jobs_need_a_front_door: a PDF took minutes by hand while the fix sat inside the GTM report (10/11); solved jobs get a chewbacca command, use-the-kit-guard points there
 - feedback_too_many_tabs_one_goal: 13 tabs on "make chewb perfect" made it worse (load 33, push races); about four lanes, one tab each
 - feedback_land_workflow_traps: checksums.py hashes the index (add first), never chain cleanup with ;, DESTRUCTIVE_OK=1 must lead, zsh file lists need arrays (10/10)

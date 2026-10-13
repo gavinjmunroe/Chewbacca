@@ -26,9 +26,14 @@ mix:
     receipt    done (or failed, or stopped): one line, with proof (a sha on
                main, a job id and exit code, a ledger task's evidence)
 
-A decision without a recommendation, or a receipt without proof, is never
-drawn. It lands in `held` with the reason, so the gap is a count an agent can
-close instead of a vague row he has to research.
+A decision without a recommendation and two options, or a receipt without
+proof, can't be built: Item refuses it. Every source yields a Draft, and only
+Draft.ready() turns one into an Item. What isn't ready lands in `held` with
+the reason, so the gap is a count an agent can close instead of a vague row
+he has to research. On 10/13, 7 of the 11 calls agents handed him said "ur
+call" and stopped; untaken() finds those lines in a report, and
+`decision-inbox check` and the jobs runner both run it, so the agent that
+wrote the line sees it before he does.
 """
 from __future__ import annotations
 
@@ -53,9 +58,23 @@ KINDS = (DECISION, RECEIPT)
 # "(your call, nothing opened)", and the BLOCKED: lines agents write for a
 # click only he can make.
 CALL = re.compile(r"\b(?:ur|your) calls?\b|\bcalls? only (?:u|you)\b|\bonly (?:u|you) can (?:make|decide)\b"
-                  r"|\bur decision\b|^\s*(?:[-*]\s*)?BLOCKED:", re.I)
-# Where the agent's own recommendation starts in that line.
-REC = re.compile(r"\b(?:my (?:rec|take|recommendation|pick|vote)|i'?d (?:recommend|go with|say)|rec)\s*:\s*", re.I)
+                  r"|\bur decision\b|\bcaleb decides\b|\bcaleb'?s (?:call|decision)\b"
+                  r"|^\s*(?:[-*]\s*)?BLOCKED:", re.I)
+# Where the agent's own recommendation starts. A take written later by
+# another agent says so in brackets: "My take (takes-gate lane, 10/13): ...".
+REC = re.compile(r"\b(?:my (?:rec|take|recommendation|pick|vote)|i'?d (?:recommend|go with|say)|rec)"
+                 r"(?:\s*\([^()\n]{1,80}\))?\s*:\s*", re.I)
+# Words about calls that hand none over: a quote ("7 of 11 said "ur call""),
+# code, or the phrase used as a noun ("one feed of only ur calls", "never show
+# as ur calls", "opens with the calls only u can make"). All were 10/13 report
+# lines the feed held as calls.
+QUOTED = re.compile(r'"[^"\n]*"|\u201c[^\u201d\n]*\u201d|`[^`\n]*`')
+MENTION = re.compile(r"\b(?:as|of|only|shows?|these|those)\s+(?:ur|your)\s+calls?\b"
+                     r"|\bthe\s+calls?\s+only\s+(?:u|you)\b", re.I)
+# A recap of calls raised elsewhere, takes included ("Ur calls, my take on
+# each: keep the repo PRIVATE... Turn ON text-ur-own-Mac..."; the 10/13 day
+# summary). Read as one call it glued four calls into one merged row.
+RECAP = re.compile(r"\bmy takes? on (?:each|both|all)\b", re.I)
 BLOCKED = re.compile(r"^\s*(?:[-*]\s*)?BLOCKED:\s*", re.I)
 SHA = re.compile(r"(?<![0-9a-zA-Z/])([0-9a-f]{8,40})(?![0-9a-zA-Z])")
 # Ledger rows that are a decision by their own words. "Decide:" is how the
@@ -90,8 +109,47 @@ LIVE_TAB_S = 15 * 60
 DIGEST_CALLS = 3
 
 
+def why_not_drawn(item) -> str | None:
+    """None when a row (Item or Draft) can be drawn, else the one reason it can't."""
+    if not item.text.strip():
+        return "no text"
+    if item.kind == DECISION:
+        if not item.recommendation.strip():
+            return "no recommendation"
+        if len(item.options) < 2:
+            return "fewer than two options"
+        return None
+    if not item.proof.strip():
+        return "no proof"
+    return None
+
+
+@dataclass(frozen=True)
+class Draft:
+    """A row as its source wrote it, take or no take. Only ready() makes an
+    Item of it, so nothing half-made can reach a surface by another path."""
+    kind: str
+    key: str
+    text: str
+    source: str
+    at: float = 0.0
+    recommendation: str = ""
+    options: tuple = ()
+    proof: str = ""
+    state: str = ""
+    sources: tuple = ()
+
+    def ready(self) -> tuple["Item | None", str | None]:
+        reason = why_not_drawn(self)
+        if reason:
+            return None, reason
+        return Item(**{f: getattr(self, f) for f in self.__dataclass_fields__}), None
+
+
 @dataclass(frozen=True)
 class Item:
+    """A drawable row. A decision with no take or fewer than two options, or a
+    receipt with no proof, raises: it can't exist, so it can't be drawn."""
     kind: str
     key: str
     text: str
@@ -110,21 +168,9 @@ class Item:
             raise ValueError("a decision carries no proof or state: it is not done yet")
         if self.kind == RECEIPT and (self.recommendation or self.options):
             raise ValueError("a receipt carries no options or recommendation: nothing is left to decide")
-
-
-def why_not_drawn(item: Item) -> str | None:
-    """None when the item can be drawn, else the one reason it can't."""
-    if not item.text.strip():
-        return "no text"
-    if item.kind == DECISION:
-        if not item.recommendation.strip():
-            return "no recommendation"
-        if len(item.options) < 2:
-            return "fewer than two options"
-        return None
-    if not item.proof.strip():
-        return "no proof"
-    return None
+        reason = why_not_drawn(self)
+        if reason:
+            raise ValueError(f"a {self.kind} with {reason} can't be drawn: hold its Draft instead")
 
 
 @dataclass
@@ -132,12 +178,12 @@ class Feed:
     day: str
     decisions: list = field(default_factory=list)
     receipts: list = field(default_factory=list)
-    held: list = field(default_factory=list)      # (Item, reason)
+    held: list = field(default_factory=list)      # (Draft, reason)
     working: list = field(default_factory=list)   # plain lines: what is still running
     built_at: float = 0.0
 
     def as_json(self) -> dict:
-        def one(i: Item) -> dict:
+        def one(i) -> dict:
             out = {"kind": i.kind, "key": i.key, "text": i.text, "source": i.source}
             if i.kind == DECISION:
                 out.update(recommendation=i.recommendation, options=list(i.options), sources=list(i.sources))
@@ -181,21 +227,79 @@ def overlap(a: str, b: str) -> float:
 
 # ── reports ──────────────────────────────────────────────────────────────
 
-def report_blocks(text: str) -> list[str]:
-    """A report's lines that can each hold one call: bullets, numbered items,
-    headings and paragraphs, outside fenced code."""
-    blocks, fenced = [], False
-    for line in text.splitlines():
+HEADING = re.compile(r"^\s*(#{1,6})\s")
+ITEM_START = re.compile(r"^\s*(?:[-*]|\d+[.)])\s")
+
+
+def hands_a_call(line: str) -> bool:
+    """The line hands him a call: call words outside quotes and code, used as
+    a hand-over rather than as a noun, and not a heading or an intro line
+    ("Calls only u can make (4):") over calls written below it."""
+    said = MENTION.sub(" ", QUOTED.sub(" ", line))
+    if not CALL.search(said) or RECAP.search(said):
+        return False
+    intro = HEADING.match(line) or line.rstrip().endswith(":")
+    return not (intro and re.search(r"\bcalls\b", said, re.I))
+
+
+def indent(line: str) -> int:
+    return len(line) - len(line.lstrip())
+
+
+def beside(lines: list[str], i: int) -> str:
+    """What counts as next to line i: a heading's whole section, or an item's
+    own continuation and sub-items (deeper lines, up to a blank line)."""
+    out = []
+    head = HEADING.match(lines[i])
+    for line in lines[i + 1:]:
+        h = HEADING.match(line)
+        if head:
+            if h and len(h.group(1)) <= len(head.group(1)):
+                break
+        elif not line.strip() or h or (ITEM_START.match(line) and indent(line) <= indent(lines[i])):
+            break
+        out.append(line)
+    return "\n".join(out)
+
+
+def report_calls(text: str) -> list[tuple[int, str, str]]:
+    """(line number, line, what is next to it) for every line in a report that
+    hands him a call, outside fenced code and tables."""
+    lines, fenced, out = text.splitlines(), False, []
+    for i, line in enumerate(lines):
         if line.strip().startswith("```"):
             fenced = not fenced
             continue
         if fenced or not line.strip() or line.lstrip().startswith("|"):
             continue
-        blocks.append(line)
-    return blocks
+        if hands_a_call(line):
+            out.append((i + 1, line, beside(lines, i)))
+    return out
+
+
+def take_in(text: str) -> str:
+    """The take written next to a call: the rest of the first line holding one."""
+    for line in text.splitlines():
+        m = REC.search(plain(line))
+        if m:
+            return plain(line)[m.end():].strip()
+    return ""
+
+
+def untaken(text: str) -> list[tuple[int, str]]:
+    """(line number, line) for each call in a report with no take next to it.
+    The check behind `decision-inbox check` and the jobs runner's note."""
+    out = []
+    for n, line, near in report_calls(text):
+        for part in sub_calls(line):
+            if not (split_call(part)[1] or take_in(near)):
+                out.append((n, plain(line)))
+                break
+    return out
 
 
 CALL_PREFIX = re.compile(r"^(?:(?:ur|your) calls?|(?:two|three|\d+) calls? only (?:u|you) can make)[^:.]*[:.]\s*", re.I)
+CALL_ASIDE = re.compile(r"\s*\((?:ur|your) call\b[^()]*\)", re.I)
 PAREN = re.compile(r"\(([^()]{8,})\)\s*\.?\s*$")
 
 
@@ -204,11 +308,17 @@ def split_call(block: str) -> tuple[str, str]:
     agent said the call is; the recommendation is what it said after "My
     take:" or "My rec:". A BLOCKED line's recommendation is its own step, and
     the step's how-to in brackets when it gave one."""
-    body = plain(block)
+    body = plain(HEADING.sub("", block))
+    body = CALL_ASIDE.sub("", re.sub(r"^\d+[.)]\s+", "", body)).strip()
     if BLOCKED.match(block):
         step = BLOCKED.sub("", plain(block.strip()))
+        m = REC.search(step)
+        if m:
+            return step[: m.start()].strip(), step[m.end():].strip()
+        # A click with its how-to in brackets carries its own take. A bare
+        # BLOCKED line ("BLOCKED: pricing") doesn't, and is held like any call.
         how = PAREN.search(step)
-        return step, f"Do it: {how.group(1)}" if how else "Do it"
+        return step, f"Do it: {how.group(1)}" if how else ""
     m = REC.search(body)
     if not m:
         return CALL_PREFIX.sub("", body).strip(), ""
@@ -226,18 +336,17 @@ def sub_calls(block: str) -> list[str]:
     return [re.sub(r"^\([a-z]\)\s*", "", p) for p in parts[1:]]
 
 
-def decisions_in_report(text: str, source: str, at: float = 0.0) -> list[Item]:
+def decisions_in_report(text: str, source: str, at: float = 0.0) -> list[Draft]:
     out = []
-    for block in report_blocks(text):
-        if not CALL.search(block):
-            continue
+    for _n, block, near in report_calls(text):
         for part in sub_calls(block):
             question, rec = split_call(part)
+            rec = rec or take_in(near)
             if not question:
                 continue
             options = ("Do it", "Later") if BLOCKED.match(part) else ("Go with my take", "Not now")
-            out.append(Item(DECISION, key=call_key(source, question, rec), text=question, source=source,
-                            at=at, recommendation=rec, options=options if rec else (), sources=(source,)))
+            out.append(Draft(DECISION, key=call_key(source, question, rec), text=question, source=source,
+                             at=at, recommendation=rec, options=options if rec else (), sources=(source,)))
     return out
 
 
@@ -335,7 +444,7 @@ def from_jobs(jobs_dir: Path, day: str, on_main: Callable[[str], bool]) -> tuple
         if again:
             line += f" ({again} earlier {'try' if again == 1 else 'tries'})"
         state = {"done": "done" if job.get("exit") in (0, None) else "failed"}.get(status, status)
-        receipt = Item(RECEIPT, key=f"job:{job.get('id')}", text=line, source="jobs", at=at,
+        receipt = Draft(RECEIPT, key=f"job:{job.get('id')}", text=line, source="jobs", at=at,
                        proof=proof, state=state)
         receipts.append(receipt)
         if report is not None:
@@ -345,7 +454,33 @@ def from_jobs(jobs_dir: Path, day: str, on_main: Callable[[str], bool]) -> tuple
     return receipts, decisions, working
 
 
-def morning_calls(overnight: Path, now: float) -> list[Item]:
+def day_reports(jobs_dir: Path, day: str) -> list[Path]:
+    """Every agent job report from jobs submitted on `day`, oldest first."""
+    out = []
+    for path in sorted(jobs_dir.glob("*/job.json")):
+        try:
+            job = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        report = job_report(job) if local_day(job.get("created") or 0) == day else None
+        if report and report not in out:
+            out.append(report)
+    return out
+
+
+def check_reports(paths: Iterable[Path]) -> list[tuple[Path, int, str]]:
+    """(report, line number, line) for each call handed over with no take."""
+    out = []
+    for path in paths:
+        try:
+            text = Path(path).read_text(errors="replace")
+        except OSError:
+            continue
+        out.extend((Path(path), n, line) for n, line in untaken(text))
+    return out
+
+
+def morning_calls(overnight: Path, now: float) -> list[Draft]:
     """The calls in the newest morning summary, if it is from the last night."""
     summaries = sorted(overnight.glob("*/REPORT.md"), key=lambda p: p.stat().st_mtime, reverse=True)
     if not summaries or now - summaries[0].stat().st_mtime > MORNING_SUMMARY_S:
@@ -403,12 +538,12 @@ def from_ledger(rows: Iterable[dict], day: str) -> tuple[list, list, set]:
         if key.startswith("inbox:"):
             chosen.add(key[len("inbox:"):])
             if (r.get("updated_at") or "")[:10] == day:
-                receipts.append(Item(RECEIPT, key=f"ledger:{r['id']}", text=title, source="ledger",
-                                     proof=f"ledger {str(r['id'])[:8]}", state="chosen"))
+                receipts.append(Draft(RECEIPT, key=f"ledger:{r['id']}", text=title, source="ledger",
+                                      proof=f"ledger {str(r['id'])[:8]}", state="chosen"))
             continue
         if status == "done" and (r.get("updated_at") or "")[:10] == day:
-            receipts.append(Item(RECEIPT, key=f"ledger:{r['id']}", text=title, source="ledger",
-                                 proof=clip(plain(r.get("evidence") or ""), 80), state="done"))
+            receipts.append(Draft(RECEIPT, key=f"ledger:{r['id']}", text=title, source="ledger",
+                                  proof=clip(plain(r.get("evidence") or ""), 80), state="done"))
         elif status in ("queued", "active", "blocked") and (r.get("owner") or "").lower() in ("", "caleb"):
             # An agent-owned task is the agents' work even when its words
             # mention a call: on 10/13 the inbox's own follow-up ("calls as
@@ -416,14 +551,19 @@ def from_ledger(rows: Iterable[dict], day: str) -> tuple[list, list, set]:
             said = " ".join([title, r.get("next_action") or "", r.get("reason") or ""])
             if LEDGER_CALL.search(said):
                 text = re.sub(r"^\s*decide\s*:\s*", "", title, flags=re.I)
-                decisions.append(Item(DECISION, key=f"ledger:{r['id']}", text=text, source="ledger",
-                                      sources=("ledger",)))
+                # A take on the task itself ("My take: ..." in its next
+                # action) is the call's take, so a ledger call can be drawn
+                # without a report line to merge with.
+                rec = take_in(r.get("next_action") or "") or take_in(r.get("reason") or "")
+                decisions.append(Draft(DECISION, key=f"ledger:{r['id']}", text=text, source="ledger",
+                                       recommendation=rec, options=("Go with my take", "Not now") if rec else (),
+                                       sources=("ledger",)))
     return receipts, decisions, chosen
 
 
 # ── the verdict log and the tab board ────────────────────────────────────
 
-def held_sends(log: Path, day: str) -> list[Item]:
+def held_sends(log: Path, day: str) -> list[Draft]:
     """Sends a guard held for his approval today. CHEWBACCA_NO_SEND holds are
     dry runs (and the gtme tests write their fixture sends to this same log),
     so they are not waiting on anyone."""
@@ -446,7 +586,7 @@ def held_sends(log: Path, day: str) -> list[Item]:
         if subject in seen:
             continue
         seen.add(subject)
-        out.append(Item(DECISION, key=f"verdict:{subject}", text=f"A send is held for you: {clip(subject, 70)}",
+        out.append(Draft(DECISION, key=f"verdict:{subject}", text=f"A send is held for you: {clip(subject, 70)}",
                         source="verdicts", at=int(p[0]) / 1000, sources=("verdicts",)))
     return out
 
@@ -466,10 +606,10 @@ def live_tabs(db: Path, now: float) -> list[str]:
 
 # ── one feed ─────────────────────────────────────────────────────────────
 
-def merge(decisions: list[Item]) -> list[Item]:
+def merge(decisions: list[Draft]) -> list[Draft]:
     """One row per call. Two wordings of the same call (by word overlap) are
     one decision that keeps the recommendation and every source that raised it."""
-    groups: list[list[Item]] = []
+    groups: list[list[Draft]] = []
     for item in decisions:
         for group in groups:
             if any(overlap(item.text + " " + item.recommendation, g.text + " " + g.recommendation) >= SAME_CALL
@@ -483,8 +623,8 @@ def merge(decisions: list[Item]) -> list[Item]:
         best = max(group, key=lambda i: (bool(i.recommendation), i.at))
         sources = tuple(dict.fromkeys(s for g in group for s in (g.sources or (g.source,))))
         options = best.options or (("Go with my take", "Not now") if best.recommendation else ())
-        out.append(Item(DECISION, key=best.key, text=best.text, source=best.source, at=best.at,
-                        recommendation=best.recommendation, options=options, sources=sources))
+        out.append(Draft(DECISION, key=best.key, text=best.text, source=best.source, at=best.at,
+                         recommendation=best.recommendation, options=options, sources=sources))
     return out
 
 
@@ -506,8 +646,8 @@ def build_feed(day: str | None = None, home: Path | None = None, repo: Path | No
     for item in merge(report_calls + ledger_calls + sends):
         if item.key in chosen or any(s in chosen for s in item.sources if s.startswith("ledger:")):
             continue
-        reason = why_not_drawn(item)
-        (feed.held.append((item, reason)) if reason else feed.decisions.append(item))
+        drawn, reason = item.ready()
+        (feed.held.append((item, reason)) if reason else feed.decisions.append(drawn))
     seen = set()
     for item in job_receipts + ledger_receipts:
         # One row per key. On 10/13 one stopped job drew twice in a build
@@ -515,8 +655,8 @@ def build_feed(day: str | None = None, home: Path | None = None, repo: Path | No
         if item.key in seen:
             continue
         seen.add(item.key)
-        reason = why_not_drawn(item)
-        (feed.held.append((item, reason)) if reason else feed.receipts.append(item))
+        drawn, reason = item.ready()
+        (feed.held.append((item, reason)) if reason else feed.receipts.append(drawn))
     # Calls with a click first (BLOCKED lines), then newest first.
     feed.decisions.sort(key=lambda i: (i.options[0] != "Do it", -i.at))
     feed.receipts.sort(key=lambda i: -i.at)

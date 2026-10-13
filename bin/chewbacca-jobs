@@ -62,6 +62,13 @@ and a job.json mirror for readers. A job's supervisor
 is `chewbacca-jobs _run <id>`, so a tab closing never orphans it, and orphan-reap leaves
 it alone.
 
+AN AGENT JOB'S REPORT. A job that runs `claude -p "$(cat <dir>/<name>.md)"`
+writes its report to <dir>/REPORT-<name>.md; the decision inbox reads it. Every
+line there that hands Caleb a call ("ur call", "Caleb decides", BLOCKED:)
+carries the agent's take on it, "My take: ...", on the same line or the one
+under it, and two options. When the job ends, the runner lists any call
+without one at the end of out.log (`decision-inbox check` runs the same check).
+
 A RESTART. A job that was running or paused when the Mac went down goes back
 in the queue and runs again from the top; nothing reruns it from a checkpoint,
 so a job resumes where it was only if its command skips work it already did
@@ -424,7 +431,28 @@ def _run(job_id):
         if j["status"] != "killed" and j.get("pid") in (None, os.getpid()):
             j.update(status="done" if code == 0 else "failed", exit=code, ended=time.time())
             save(j)
+    note_untaken_calls(j)
     tick(quiet=True)  # a slot just opened
+
+
+def note_untaken_calls(j):
+    """An agent job's report (REPORT-<prompt>.md) is where it hands Caleb its
+    calls, and each one needs "My take:" next to it. On 10/13, 7 of 11 calls
+    said "ur call" and stopped. The lines missing a take go to the end of the
+    job's log, where `jobs log` and the next agent read them; the decision
+    inbox holds those calls back until a take is written."""
+    try:
+        import decision_inbox
+        report = decision_inbox.job_report(j)
+        bad = decision_inbox.check_reports([report]) if report else []
+        if bad:
+            with open(DIR / j["id"] / "out.log", "a") as log:
+                log.write(f"\n[jobs] {len(bad)} call(s) in {report.name} with no take next to them; "
+                          "write \"My take: ...\" on the line or the one under it:\n")
+                for _path, n, line in bad:
+                    log.write(f"[jobs]   line {n}: {decision_inbox.clip(line, 160)}\n")
+    except Exception as e:  # noqa: BLE001  a note must never fail the job's own result
+        print(f"jobs: take check skipped for {j.get('id')}: {e}", file=sys.stderr)
 
 
 def tick(quiet=False):

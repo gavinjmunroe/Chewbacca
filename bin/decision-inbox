@@ -3,6 +3,10 @@
 
     decision-inbox [show] [--day YYYY-MM-DD] [--json]   the feed as text (or JSON)
     decision-inbox digest [--day D] [--write PATH]      one phone message, a draft: never sent
+    decision-inbox check [REPORT.md...] [--day D]       every line that hands Caleb a call ("ur
+                                                        call", "Caleb decides", BLOCKED:) with
+                                                        no "My take:" next to it; no files means
+                                                        that day's job reports. Exit 1 if any
     decision-inbox scoreboard [--day D] [--write]       decisions, receipts, status asks and
                                                         minutes in VS Code + Claude for a day;
                                                         --write keeps it in
@@ -79,11 +83,21 @@ def keep(row: dict) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(prog="decision-inbox", description=__doc__.splitlines()[0])
-    ap.add_argument("what", nargs="?", default="show", choices=("show", "digest", "scoreboard"))
+    ap.add_argument("what", nargs="?", default="show", choices=("show", "digest", "scoreboard", "check"))
+    ap.add_argument("files", nargs="*", type=Path)
     ap.add_argument("--day", default=date.today().isoformat())
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--write", nargs="?", const="", default=None)
     args = ap.parse_args()
+    if args.what == "check":
+        reports = args.files or inbox.day_reports(HOME / "jobs", args.day)
+        bad = inbox.check_reports(reports)
+        for path, n, line in bad:
+            print(f"{path}:{n}: {inbox.clip(line, 160)}")
+        print(f"{len(bad)} call{'s' if len(bad) != 1 else ''} with no take in {len(reports)} report"
+              f"{'s' if len(reports) != 1 else ''}. Write \"My take: ...\" on the line or the one under it.",
+              file=sys.stderr)
+        return 1 if bad else 0
     feed = inbox.build_feed(day=args.day, home=HOME)
     if args.what == "digest":
         text = inbox.digest(feed)

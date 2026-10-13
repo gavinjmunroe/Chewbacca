@@ -22,10 +22,11 @@ app, and on 10/12 he typed "Progress?" or "We good?" into tabs six times.
   the digest only draw it.
 - Two kinds. A decision has a question, at least two options and a
   recommendation. A receipt has one line, a state and proof. The `Item`
-  constructor refuses anything else.
-- Nothing half-made is drawn. A decision without a take, or a receipt without
-  proof, goes to `held` with the reason, and the panel shows only the count.
-  That count is work for an agent, not for him.
+  constructor refuses anything else, a decision with no take included.
+- Nothing half-made is drawn. Every source yields a `Draft`; only
+  `Draft.ready()` makes an `Item`. A decision without a take, or a receipt
+  without proof, goes to `held` with the reason, and the panel shows only the
+  count. That count is work for an agent, not for him.
 
 ## What it reads (no store of its own)
 
@@ -48,8 +49,27 @@ Ur call: whether the Setup zip gets a public download page. My take: not until t
 BLOCKED: loading the extension is a click only u can make (chrome://extensions, Load unpacked).
 ```
 
-A line that says "ur call" with no "My take:" is held. On the 10/13 feed, 7 of
-the 11 calls were held for exactly that.
+The take goes on the call's line or the line right under it (a sub-bullet), or
+anywhere in the section when the call is a heading. A take written later by
+another agent says so: `My take (takes-gate lane, 10/13): ...`. A ledger call
+carries its take in its next action the same way.
+
+A line that says "ur call", "Caleb decides" or "only u can decide", or a
+`BLOCKED:` line with no how-to in brackets, and has no take next to it, is
+held. On the 10/13 feed, 7 of the 11 calls were held for exactly that.
+
+Three places catch it, all running `untaken()` in the one module:
+
+- `decision-inbox check [REPORT.md...]` prints `file:line` for each one and
+  exits 1. With no files it checks that day's job reports.
+- `chewbacca jobs` lists them at the end of an agent job's `out.log` when the
+  job ends.
+- Every lane prompt starts from `config/instructions/unattended-lane.md`, which
+  asks for the take and for the check before the lane ends.
+
+Not calls: words in quotes or code, the phrase used as a noun ("one feed of
+only ur calls", "the calls only u can make"), an intro line or heading over
+calls listed below it, and a recap that already says "my take on each".
 
 ## Pressing Go with it
 

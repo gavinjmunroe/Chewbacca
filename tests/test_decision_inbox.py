@@ -12,9 +12,12 @@ ledger, a verdict log and a transcript. Nothing reads ~/.chewbacca.
 """
 from __future__ import annotations
 
+import importlib.machinery
+import importlib.util
 import json
 import os
 import sqlite3
+import subprocess
 import sys
 import tempfile
 from datetime import datetime
@@ -116,6 +119,121 @@ def world(tmp: Path) -> Path:
         f"{ms}\tsend\tgtme send\t\theld\t0\ts1\tFixture batch\tCHEWBACCA_NO_SEND\n"
         f"{ms - 86_400_000}\tsend\tgtme send\t\theld\t0\ts1\tOld batch\tyesterday\n")
     return home
+
+
+# The shapes agents used on 10/13, one per line. 7 of the 11 calls they handed
+# Caleb that day said "ur call" and stopped.
+LANE = """# A lane report
+
+Press first: say "We good?" to the bar. It opens with the calls only u can make, each with a take.
+- Most calls came with no take. 7 of 11 said "ur call" and stopped.
+- 9026cc5c agent-owned ledger tasks never show as ur calls, and a receipt shows once
+- Getting the zip to a stranger. No public download while the repo is private. Ur call.
+- The repo is private, so the README's clone line 404s. It's ur call.
+  - My take (takes-gate lane, 10/13): keep it private and add the people u hand it to as collaborators.
+- Wiping the gold sets from history: Caleb decides yes/no.
+- BLOCKED: pricing the Pro tier.
+- BLOCKED: loading the extension is a click only u can make (chrome://extensions, Load unpacked).
+- Ur calls, my take on each: keep it private. Turn the text door on.
+
+Calls only u can make (2):
+
+## 4. PR candidates for Carlton (your call, nothing opened)
+
+My take (takes-gate lane, 10/13): open one PR, Stage one hunk, and hold the other two.
+
+- Stage one hunk: the strongest.
+
+## Not done, and ur calls
+
+- Ur call, no rush: turning the text door on. My take: turn it on, it only ever texts u.
+"""
+
+
+def takes_gate(tmp: Path) -> None:
+    """Every call handed over carries a take, at every place one can arrive."""
+    # The constructor is the gate: no take, no options or no proof can't be built.
+    for name, kwargs in (("a decision with no take", dict(kind=inbox.DECISION, options=("a", "b"))),
+                         ("a decision with one option", dict(kind=inbox.DECISION, recommendation="x",
+                                                             options=("a",))),
+                         ("a receipt with no proof", dict(kind=inbox.RECEIPT, state="done"))):
+        try:
+            inbox.Item(key="k", text="t", source="s", **kwargs)
+            check(f"{name} can't be built as an Item", False, "constructed")
+        except ValueError:
+            check(f"{name} can't be built as an Item", True)
+    draft = inbox.Draft(inbox.DECISION, key="k", text="t", source="s")
+    check("a Draft with no take is ready for nothing, with the reason",
+          draft.ready() == (None, "no recommendation"), draft.ready())
+
+    flagged = [line for _n, line in inbox.untaken(LANE)]
+    check("a bare 'Ur call.' is flagged", any("zip to a stranger" in f for f in flagged), flagged)
+    check("'Caleb decides' with no take is flagged", any("gold sets" in f for f in flagged), flagged)
+    check("a BLOCKED line with no take and no how-to is flagged", any("Pro tier" in f for f in flagged), flagged)
+    check("exactly those three are flagged", len(flagged) == 3, flagged)
+    check("a take on the line under the call counts, and so does a take in a heading's section",
+          not any("404" in f or "Carlton" in f for f in flagged), flagged)
+    check("quotes, noun uses ('as ur calls', 'the calls only u'), intros and recaps are not calls",
+          not any(w in f for f in flagged for w in ("said", "9026cc5c", "Press first", "Calls only", "on each",
+                                                    "Not done")), flagged)
+
+    drafts = inbox.decisions_in_report(LANE, "REPORT-lane.md")
+    by = {d.text: d for d in drafts}
+    pr = next((d for d in drafts if d.text.startswith("PR candidates for Carlton")), None)
+    check("a heading call is drawn with the take from its section, its '(your call...)' aside dropped",
+          pr is not None and pr.text == "PR candidates for Carlton" and pr.recommendation.startswith("open one PR")
+          and pr.ready()[0] is not None, pr)
+    clone = next((d for d in drafts if "404" in d.text), None)
+    check("a backfilled take keeps its marker out of the take and draws",
+          clone is not None and clone.recommendation.startswith("keep it private") and clone.ready()[0] is not None,
+          clone)
+    check("the bare BLOCKED line is held, not given a made-up 'Do it'",
+          any("Pro tier" in t and not d.recommendation for t, d in by.items()), list(by))
+
+    # A ledger call carries its own take in its next action.
+    rows = [{"id": "l1", "source_key": "k1", "title": "Decide whether to introduce Jonah to the assistant",
+             "status": "queued", "owner": "caleb", "next_action": "Live since 10/10. My take (takes-gate lane, "
+             "10/13): not yet, he asked us to handle replies.", "reason": "", "evidence": "", "updated_at": DAY},
+            {"id": "l2", "source_key": "k2", "title": "Decide: wipe the gold sets", "status": "queued",
+             "owner": "caleb", "next_action": "Caleb decides yes/no.", "reason": "", "evidence": "",
+             "updated_at": DAY}]
+    _r, calls, _c = inbox.from_ledger(rows, DAY)
+    ready = {c.key: c.ready() for c in calls}
+    check("a ledger call with 'My take:' in its next action is drawn with that take",
+          ready["ledger:l1"][0] is not None and ready["ledger:l1"][0].recommendation.startswith("not yet"), ready)
+    check("one without stays held", ready["ledger:l2"] == (None, "no recommendation"), ready)
+
+    # The check, from the command line and from the jobs runner.
+    lane = tmp / "lanes"
+    lane.mkdir()
+    (lane / "REPORT-lane.md").write_text(LANE)
+    (lane / "REPORT-clean.md").write_text("# Clean\n\n- Ur call: x. My take: y.\n")
+    cli = [sys.executable, str(ROOT / "bin" / "decision-inbox"), "check"]
+    bad = subprocess.run(cli + [str(lane / "REPORT-lane.md")], capture_output=True, text=True)
+    check("decision-inbox check exits 1 and names file:line for each call with no take",
+          bad.returncode == 1 and bad.stdout.count("REPORT-lane.md:") == 3, (bad.returncode, bad.stdout))
+    ok = subprocess.run(cli + [str(lane / "REPORT-clean.md")], capture_output=True, text=True)
+    check("and exits 0 on a report where every call has one", ok.returncode == 0, (ok.returncode, ok.stdout))
+
+    jobs_dir = tmp / "jobs-runner"
+    (jobs_dir / "1013-150000-ffff").mkdir(parents=True)
+    os.environ["JOBS_DIR"] = str(jobs_dir)
+    spec = importlib.util.spec_from_loader("chewbacca_jobs", importlib.machinery.SourceFileLoader(
+        "chewbacca_jobs", str(ROOT / "bin" / "chewbacca-jobs")))
+    jobs = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(jobs)
+    (lane / "lane.md").write_text("prompt")
+    job = {"id": "1013-150000-ffff", "cmd": ["/bin/bash", "-c", f'claude -p "$(cat {lane}/lane.md)"']}
+    jobs.note_untaken_calls(job)
+    log = (jobs_dir / job["id"] / "out.log")
+    said = log.read_text() if log.is_file() else ""
+    check("an agent job's end lists its calls with no take at the end of its log",
+          "3 call(s) in REPORT-lane.md with no take" in said and "line " in said, said)
+
+    header = (ROOT / "config" / "instructions" / "unattended-lane.md").read_text()
+    check("the lane prompt header asks for a take on every call and names the check",
+          "My take:" in header and "decision-inbox check" in header, header[:200])
+    check("the lane header's own examples are not untaken calls", not inbox.untaken(header), inbox.untaken(header))
 
 
 def main() -> int:
@@ -251,6 +369,7 @@ def main() -> int:
     check("status asks count only his bare 'we good?' and 'progress?'", asks["status_asks"] == 2, asks)
     check("a headless run's message is not his", asks["messages"] == 4, asks)
 
+    takes_gate(tmp)
     print("all passed" if not failed else f"{failed} failed")
     return 1 if failed else 0
 

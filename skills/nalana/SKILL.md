@@ -145,3 +145,24 @@ Thirty-six corrections across two nights, most of them the same few mistakes.
   this shit" at 5:46am. Report what reads and what doesn't, plainly.
 - **Every render, three sizes.** Full, 128px and 48px before it goes in
   ~/Downloads/TTS logos.
+
+## Joining the S piece to the helmet: never-dos from 2026-10-13
+
+- **Never close the top of the S toward the cheek.** I capped the gap by curling
+  the flap's edge back left and got "Bruhhhh the top of the S is chopped now it
+  doesn't reach out far enough to the right". The S's top arm runs RIGHT, under
+  the flap, and ends in a rounded tip. Carve it with an EXACT boolean cutter
+  placed first in the flap's stack, and give the flap's inner shell the holdout
+  material so the arm reads white instead of showing the red inside.
+- **A transparent inner shell makes white spots.** "I hv a feeling the
+  transparent part is cooking some spots and creases". A Solidify with
+  material_offset pointing at holdout punches a hole wherever an inside face
+  shows. Holdout goes only where the page is meant to show through (the S arm),
+  and every other inner shell stays red.
+- **Never fix wobbly edges with wide-window smoothing.** Pinning corners by
+  looking 5 vertices either way rounded the T's square corners. Pin any vertex
+  whose two boundary edges meet under 140 degrees, smooth the rest, and back up
+  the mesh first.
+- **Turning the view trades the left T against the S.** "rotate the whole thing
+  slightly right the left T has gotten a bit skinny". At 7 degrees the S went
+  edge-on to a slit, and 3.5 is the limit. Check both at 64px after any turn.

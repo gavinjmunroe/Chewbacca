@@ -451,8 +451,11 @@ import)
   shift
   # scan, apply and undo bring in what Claude Code, Codex, Cursor or a chat
   # export already know. Anything else is a bundle path for the restore.
+  # -B from the first import: Apple python caches stdlib bytecode under
+  # $HOME/Library before the tool can set dont_write_bytecode, and a scan
+  # must write nothing (test_context_import, 10/13).
   case "${1:-}" in
-  scan|apply|undo) exec python3 "$ROOT/tools/context_import.py" "$@" ;;
+  scan|apply|undo) exec python3 -B "$ROOT/tools/context_import.py" "$@" ;;
   esac
   run bin/lib/import.sh "$@"
   ;;

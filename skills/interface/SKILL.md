@@ -166,7 +166,7 @@ page that claims `MOTION_INTENSITY: 7` is broken. If working motion will not fit
 the scope, drop the dial to 3 and ship a clean static page; never half-build
 motion that breaks. On 2026-09-23 a page shipped at 3 animations against a
 reference's 214 and the linter returned clean, because nothing scored ambition.
-_Dials and rule from Leonxlnx/taste-skill `skills/taste-skill/SKILL.md` §1.B
+_Dials and rule from `Leonxlnx/taste-skill/skills/taste-skill/SKILL.md` §1.B
 and §5, MIT, at `ce26fc2`. Its "at minimum" list (hero entrance, scroll-reveal
 on key sections, CTA hover physics) is left out: step 6 already refuses to
 equate motion with quantity._

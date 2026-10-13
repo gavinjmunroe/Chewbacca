@@ -337,6 +337,10 @@ def npy2_path(db):
     except sqlite3.OperationalError:
         return None
     if not MODEL2 or meta.get("model2") != MODEL2 or not meta.get("npy2"): return None
+    # Written by the same build as the rows, or it does not count. A brain.py
+    # from before 2026-10-13 rewrites rows and built_at but never these keys,
+    # so a kit still running it would leave npy2 naming vectors in the old order.
+    if meta.get("built2") != meta.get("built_at"): return None
     p = os.path.join(HOME, meta["npy2"])
     return p if os.path.exists(p) else None
 
@@ -435,13 +439,15 @@ def cmd_index(args):
                        [(c["file"], i, c["section"], c["text"], i) for i, c in enumerate(chunks)])
         db.execute("INSERT INTO fts(rowid,text) SELECT id,text FROM chunk")
         db.executemany("INSERT INTO file(path,sha) VALUES(?,?)", [(r, sha(t)) for r, t in docs])
-        for k, v in [("model", MODEL), ("dim", str(DIM)), ("built_at", str(time.time())),
+        built = str(time.time())
+        for k, v in [("model", MODEL), ("dim", str(DIM)), ("built_at", built),
                      ("n", str(len(chunks))), ("npy", name)]:
             db.execute("INSERT OR REPLACE INTO meta VALUES(?,?)", (k, v))
         # Rows changed, so second-model vectors from an older build no longer line up.
-        db.execute("DELETE FROM meta WHERE k IN ('model2','npy2')")
+        db.execute("DELETE FROM meta WHERE k IN ('model2','npy2','built2')")
         if name2:
-            db.executemany("INSERT OR REPLACE INTO meta VALUES(?,?)", [("model2", MODEL2), ("npy2", name2)])
+            db.executemany("INSERT OR REPLACE INTO meta VALUES(?,?)",
+                           [("model2", MODEL2), ("npy2", name2), ("built2", built)])
     db.close()
     # Keep the newest two vector files: an ask that read the old meta a moment
     # ago may still be about to open the previous one.

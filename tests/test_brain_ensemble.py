@@ -153,6 +153,17 @@ def main():
           {model for model, _ in calls} == set(DIMS), calls)
     check("an ask with both says so", out.startswith("# brain mode=hybrid models=2"), out[:120])
     check("and still finds the note", "[1] memory/alpha.md" in out, out)
+    # A brain.py from before the second model rewrites rows and built_at but
+    # leaves model2/npy2 behind; those vectors must stop counting.
+    db = sqlite3.connect(os.path.join(d, ".brain", "index.db"))
+    with db:
+        db.execute("UPDATE chunk SET row = (SELECT count(*) FROM chunk) - 1 - row")
+        db.execute("INSERT OR REPLACE INTO meta VALUES('built_at', '1')")
+    db.close()
+    del calls[:]
+    out = run(b.cmd_ask, query="the mentor said loneliness is a contentment problem", k=3, width=80)
+    check("second vectors from another build are ignored", "models=2" not in out.splitlines()[0]
+          and {model for model, _ in calls} == {"nomic-embed-text"}, (out[:120], calls))
     srv.shutdown()
 
     # Without it: same answers, one model, and the index never writes a second file.

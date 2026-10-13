@@ -38,7 +38,8 @@ def load_index():
     rows = db.execute("SELECT id,file,section,text,row FROM chunk ORDER BY id").fetchall()
     meta = dict(db.execute("SELECT k,v FROM meta"))
     E2 = None
-    if brain.MODEL2 and meta.get("model2") == brain.MODEL2 and meta.get("npy2"):
+    if (brain.MODEL2 and meta.get("model2") == brain.MODEL2 and meta.get("npy2")
+            and meta.get("built2") == meta.get("built_at")):
         E2 = np.load(os.path.join(IDX, meta["npy2"]))
         if E2.shape[0] != len(rows):
             E2 = None

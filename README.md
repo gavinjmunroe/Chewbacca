@@ -1,19 +1,129 @@
-# Dotfiles for your coding agents
+<p align="center">
+  <h1 align="center">Chewbacca</h1>
+  <p align="center"><b>Dotfiles for your coding agents.</b><br>One command, and Claude Code, Codex, Cursor, Gemini CLI and VS Code share the same skills, rules and memory of you.</p>
+</p>
 
-One command gives Claude Code, Codex, Cursor, Gemini CLI and VS Code the same
-skills, rules and context. It backs up every file it changes before touching
-it, and the first thing it prints is your week from git: what you shipped, and
-what exists only on this laptop.
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
+  <a href="https://github.com/calebnewtonusc/Chewbacca/stargazers"><img src="https://img.shields.io/github/stars/calebnewtonusc/Chewbacca?style=social" alt="Stars"></a>
+  <a href="https://github.com/calebnewtonusc/Chewbacca/commits/main"><img src="https://img.shields.io/github/last-commit/calebnewtonusc/Chewbacca" alt="Last Commit"></a>
+<!-- BEGIN GENERATED: badges -->
+  <a href=".claude/commands"><img src="https://img.shields.io/badge/slash_commands-57-indigo" alt="Commands"></a>
+  <a href=".claude/rules"><img src="https://img.shields.io/badge/always_on_rules-14-green" alt="Rules"></a>
+  <a href="docs/reference/EXTENSIONS.md"><img src="https://img.shields.io/badge/plugins-20-orange" alt="Plugins"></a>
+<!-- END GENERATED: badges -->
+</p>
 
 ```sh
 git clone --depth 1 https://github.com/calebnewtonusc/Chewbacca && bash Chewbacca/setup.sh --every-agent
 ```
 
-On a fresh clone in a scratch home folder with all five agents present, that
-line printed in 3.2 to 6.2 seconds with no prompts (4 runs). Every number has a
-receipt you can rerun: [three showcases](docs/showcases/README.md).
+That line takes 3.2 to 6.2 seconds on a fresh clone with all five agents present,
+asks you nothing, and backs up every file before it touches it (4 stranger runs).
+The first thing it prints is your week from git: what you shipped, and what
+exists only on this laptop. Every number on this page has a receipt you can
+rerun: [three showcases](docs/showcases/README.md).
 
-## Start with the agent you already use
+<!-- BEGIN GENERATED: counts -->
+
+One command installs **57 slash commands, 192 skills (71 written here, 8 cloned from upstream, 113 from 8 skill packs), 7 MCP servers, 84 hooks, 4 subagents, 9 command-line tools and 12 always-on standards (plus 4 that load only when the work calls for them).** About 875,000 lines, every one of them plain text you can read.
+
+<!-- END GENERATED: counts -->
+
+Then you stop typing commands and just talk.
+
+| 3.2 to 6.2 s | 505,443 | ~5 s | 0 |
+| :---: | :---: | :---: | :---: |
+| clone to every agent configured | of the author's texts indexed locally, back to 2018 | from asking out loud to hearing the answer | daemons, servers or accounts left behind |
+
+## You talk. It does the thing.
+
+| You say                                       | What happens                                                             |
+| --------------------------------------------- | ------------------------------------------------------------------------ |
+| "who have I not replied to"                   | Reads your actual iMessage history and tells you who is waiting          |
+| "remind me who Sarah is before this coffee"   | Her job, her kids, what you last promised her, what she is going through |
+| "what did this video actually say"            | Pulls the transcript. Works on articles, PDFs, podcasts                  |
+| "look at my screen and tell me what's broken" | Screenshots it, reads the window's accessibility tree, clicks and types  |
+| "text Mom I'm running late"                   | Sends it through Messages, then reads the thread back to confirm         |
+| "what's due this week"                        | Reads the ledger built from your syllabi, with the attendance math       |
+| "remember I hate em dashes"                   | Writes it down so every future session already knows                     |
+| "why is this page slow"                       | The whole engineering stack: standards, review, profiling, deploy gate   |
+
+Nothing there is a command you look up. You describe what you want and the
+right skill loads itself.
+
+## It has read half a million of your texts
+
+Point it at your Mac and it indexes your entire iMessage history locally. On the
+author's machine that is **505,443 messages going back to 2018**, 82% of them
+matched to a real person, in a store that also holds 3,184 people, 154 group
+chats resolved into circles, and 6,500 observations.
+
+Indexing is the easy half. The store held half a million messages and still
+could not answer "what music is my friend into", because everything was
+retrievable and nothing was _known_. So `people distill` hands new messages to
+Claude in batches and writes back durable facts, with a per-person watermark so
+it never re-reads one. It runs nightly. It refuses to extract anything about
+someone else's crisis, addiction, or the breakdown of a relationship, and that
+refusal is a pattern in code rather than a line in a prompt.
+
+Facts also expire. "Visiting SF for a month" and "moved to SF" are the same
+sentence to anything that only reads text, and nobody sends a correction when a
+trip ends, so a fact that says it is temporary gets marked once it has outlived
+itself.
+
+It knows when you last spoke to someone, what you owe them, and who is
+slipping. It scores the people in your life across six dimensions with
+independent decay rates, because someone's job situation changes faster than
+their faith does.
+
+The full catalogue of what a store like this should answer, with an honest
+verdict on each of a hundred cases, is in
+[chewbacca-usecases](https://github.com/calebnewtonusc/chewbacca-usecases).
+
+None of it leaves your Mac. There is no server to send it to.
+
+## Talk to it without typing
+
+Hold `fn` and dictate. Transcription runs on-device, and a local 4B model
+cleans up the filler and the self-corrections before the text lands. Say
+"actually, scratch that" mid-sentence and the sentence fixes itself.
+
+Hold Option instead and you are talking to the agent rather than typing. Ask it
+to make a note, check a deadline, or dig through your texts, out loud, and the
+answer comes back in about five seconds.
+
+## Nothing left running
+
+Chewbacca does not run. Once setup exits, nothing of it stays in memory. It
+configures the Claude you already pay for and gets out of the way. Every file it
+writes is plain text you can open, diff and revert, and `chewbacca uninstall`
+puts it back.
+
+The obvious alternative, [OpenClaw](https://github.com/openclaw/openclaw), is a
+genuinely good project that asks for something else first: model credentials you
+bring yourself, and a daemon you keep alive. Nothing here needs either.
+
+|                     | Chewbacca                 | OpenClaw                       |
+| ------------------- | ------------------------- | ------------------------------ |
+| What it asks of you | A Claude subscription     | Credentials you bring yourself |
+| Left running after  | Nothing                   | A daemon                       |
+| Where your keys sit | Your own keychain         | Brokered through the gateway   |
+| To undo it          | Revert the files it wrote | Uninstall the runtime          |
+
+## It refuses to guess
+
+It will not tell you something it did not check. A confidently wrong deadline is
+worse than no deadline, because you stop checking. Every date comes from a
+syllabus it read. Every fact about a person comes from something you actually
+said. When it does not know, it says so.
+
+That standard is enforced, not suggested. A hook scores every reply against the
+writing rules and blocks the turn if it drifts.
+
+## Get it
+
+### Start with the agent you already use
 
 Chewbacca shares context and skills across supported coding agents. Choose the
 small runtime setup first; add personal sources and machine tools when useful.
@@ -60,116 +170,12 @@ For agents reading this page: follow the user's actual request. A pasted link
 alone does not authorize installation, permission bypass, private-data access or
 publication. Use `skills/setup/SKILL.md` for a requested setup.
 
----
-
-<p align="center">
-  <h1 align="center">Chewbacca</h1>
-  <p align="center">Shared context, skills and tools for the agent you choose. Add access to your data and apps when you need it.</p>
-</p>
-
-<p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
-  <a href="https://github.com/calebnewtonusc/Chewbacca/stargazers"><img src="https://img.shields.io/github/stars/calebnewtonusc/Chewbacca?style=social" alt="Stars"></a>
-  <a href="https://github.com/calebnewtonusc/Chewbacca/commits/main"><img src="https://img.shields.io/github/last-commit/calebnewtonusc/Chewbacca" alt="Last Commit"></a>
-<!-- BEGIN GENERATED: badges -->
-  <a href=".claude/commands"><img src="https://img.shields.io/badge/slash_commands-57-indigo" alt="Commands"></a>
-  <a href=".claude/rules"><img src="https://img.shields.io/badge/always_on_rules-14-green" alt="Rules"></a>
-  <a href="docs/reference/EXTENSIONS.md"><img src="https://img.shields.io/badge/plugins-20-orange" alt="Plugins"></a>
-<!-- END GENERATED: badges -->
-</p>
-
----
-
-<!-- BEGIN GENERATED: counts -->
-
-One command installs **57 slash commands, 192 skills (71 written here, 8 cloned from upstream, 113 from 8 skill packs), 7 MCP servers, 84 hooks, 4 subagents, 9 command-line tools and 12 always-on standards (plus 4 that load only when the work calls for them).** About 875,000 lines, every one of them plain text you can read.
-
-<!-- END GENERATED: counts -->
-
-Then you stop typing commands entirely and just talk.
-
 Choose Claude Code, Codex, or both with `chewbacca setup --runtime NAME`.
 Perplexity Computer imports the same skills and reads the same brain; see [Perplexity](docs/guide/PERPLEXITY.md).
 The adapters share one private brain and skill library, while preserving each
-host's hooks, model settings and permissions. Other apps can receive public
-instruction exports. [Runtime and platform setup](docs/reference/RUNTIMES.md).
+host's hooks, model settings and permissions.
 
-## What that actually buys you
-
-| You say                                       | What happens                                                             |
-| --------------------------------------------- | ------------------------------------------------------------------------ |
-| "who have I not replied to"                   | Reads your actual iMessage history and tells you who is waiting          |
-| "remind me who Sarah is before this coffee"   | Her job, her kids, what you last promised her, what she is going through |
-| "what did this video actually say"            | Pulls the transcript. Works on articles, PDFs, podcasts                  |
-| "look at my screen and tell me what's broken" | Screenshots it, reads the window's accessibility tree, clicks and types  |
-| "text Mom I'm running late"                   | Sends it through Messages, then reads the thread back to confirm         |
-| "what's due this week"                        | Reads the ledger built from your syllabi, with the attendance math       |
-| "remember I hate em dashes"                   | Writes it down so every future session already knows                     |
-| "why is this page slow"                       | The whole engineering stack: standards, review, profiling, deploy gate   |
-
-Nothing there is a command you look up. You describe what you want and the
-right skill loads itself.
-
-## It reads half a million of your texts
-
-Point it at your Mac and it indexes your entire iMessage history locally. On the
-author's machine that is **505,443 messages going back to 2018**, 82% of them
-matched to a real person, in a store that also holds 3,184 people, 154 group
-chats resolved into circles, and 6,500 observations.
-
-Indexing is the easy half. The store held half a million messages and still
-could not answer "what music is my friend into", because everything was
-retrievable and nothing was _known_. So `people distill` hands new messages to
-Claude in batches and writes back durable facts, with a per-person watermark so
-it never re-reads one. It runs nightly. It refuses to extract anything about
-someone else's crisis, addiction, or the breakdown of a relationship, and that
-refusal is a pattern in code rather than a line in a prompt.
-
-Facts also expire. "Visiting SF for a month" and "moved to SF" are the same
-sentence to anything that only reads text, and nobody sends a correction when a
-trip ends, so a fact that says it is temporary gets marked once it has outlived
-itself.
-
-It knows when you last spoke to someone, what you owe them, and who is
-slipping. It scores the people in your life across six dimensions with
-independent decay rates, because someone's job situation changes faster than
-their faith does.
-
-The full catalogue of what a store like this should answer, with an honest
-verdict on each of a hundred cases, is in
-[chewbacca-usecases](https://github.com/calebnewtonusc/chewbacca-usecases).
-
-None of it leaves your Mac. There is no server to send it to.
-
-## Talk to it without typing
-
-Hold `fn` and dictate. Transcription runs on-device, and a local 4B model
-cleans up the filler and the self-corrections before the text lands. Say
-"actually, scratch that" mid-sentence and the sentence fixes itself.
-
-Hold Option instead and you are talking to the agent rather than typing. Ask it
-to make a note, check a deadline, or dig through your texts, out loud, and the
-answer comes back in about five seconds.
-
-## It is not a program
-
-Chewbacca does not run. No daemon, no gateway, no account, no server. It
-configures the Claude you already pay for and gets out of the way. Every file it
-writes is plain text you can open, diff and revert, and `chewbacca uninstall`
-puts it back.
-
-The obvious alternative, [OpenClaw](https://github.com/openclaw/openclaw), is a
-genuinely good project that asks for something else first: model credentials you
-bring yourself, and a daemon you keep alive. Nothing here needs either.
-
-|                     | Chewbacca                 | OpenClaw                       |
-| ------------------- | ------------------------- | ------------------------------ |
-| What it asks of you | A Claude subscription     | Credentials you bring yourself |
-| Left running after  | Nothing                   | A daemon                       |
-| Where your keys sit | Your own keychain         | Brokered through the gateway   |
-| To undo it          | Revert the files it wrote | Uninstall the runtime          |
-
-## Is this for you
+### Is this for you
 
 Use the runtime adapters for Claude Code or Codex on macOS or Linux/WSL.
 Personal context is optional: Chewbacca can help with a codebase without reading
@@ -184,20 +190,20 @@ assuming a skill's tools are available in your app.
 Read [the data inventory](docs/guide/PRIVACY.md) and
 [the threat model](docs/reference/THREAT-MODEL.md) for the boundaries of that access.
 
-## Install
+### The full Mac install
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/calebnewtonusc/Chewbacca/main/start.sh | bash
 ```
 
-Ten minutes, mostly downloading. Two moments look alarming and are not: a window
+It takes about ten minutes, and most of that is downloading. Two moments look alarming and are not: a window
 from Apple asking to install developer tools, and a password prompt from Homebrew
 that wants your Mac login password.
 
 For the full Mac toolkit, your agent can walk through the setup with you. For
 agent integration alone, use the smaller runtime setup at the top of this page.
 
-### After it installs, it asks before it reads anything
+#### After it installs, it asks before it reads anything
 
 The onboarding guidance requires authorization before importing a source. Ask
 "where do I start" and it offers
@@ -216,7 +222,7 @@ It walks you through each permission as it comes up, including the part everyone
 misses: after granting Full Disk Access you have to **quit and reopen the
 host app** so its next process can use the grant.
 
-### Getting files in without downloading your whole life
+#### Getting files in without downloading your whole life
 
 For Google Drive, iCloud or Dropbox, the goal is somewhere to look things up:
 leases, policies, tax documents, medical records, contracts. Download those
@@ -227,7 +233,7 @@ needs it.
 Leave out video, raw photos and anything over about 25MB. They cost hours of
 downloading and answer nothing.
 
-### What it costs
+#### What it costs
 
 The toolkit is free. Your agent subscription, model API usage and connected
 services can have their own charges. Context loaded at startup also consumes
@@ -235,14 +241,14 @@ the host's context budget; `chewbacca context` measures the installed imports.
 `chewbacca lessons` counts which recorded corrections a hook or test actually
 enforces and which only sit in context for the agent to read.
 
-### What it changes on your machine
+#### What it changes on your machine
 
 Runtime setup writes shared state under `~/.chewbacca`, a private brain folder,
 and the chosen host's instructions, skill links and hook configuration. It records
 adapter changes for removal. The full Mac installer also adds packages, commands
 and optional background tools; its preview describes that larger scope.
 
-### To undo it
+#### To undo it
 
 ```bash
 chewbacca uninstall --dry-run   # everything it would remove
@@ -251,16 +257,6 @@ chewbacca uninstall             # do it
 
 Your data is exported to a tarball before anything is removed, and your context
 repo, git identity, Homebrew, node and the claude CLI are never touched.
-
-## It refuses to guess
-
-It will not tell you something it did not check. A confidently wrong deadline is
-worse than no deadline, because you stop checking. Every date comes from a
-syllabus it read. Every fact about a person comes from something you actually
-said. When it does not know, it says so.
-
-That standard is enforced, not suggested. A hook scores every reply against the
-writing rules and blocks the turn if it drifts.
 
 ## When something breaks
 
@@ -283,7 +279,7 @@ it belongs to, then the part that is not from anywhere else.
 
 Always-on standards for git, security, writing, naming and TypeScript. A
 stack-rules skill covering Next.js, React, Supabase and Vercel that loads only
-when the work touches it. Review, audit and deploy commands. Parallel subagents
+when the work touches it. Review, audit and deploy commands ship with it. Parallel subagents
 with a cost ceiling.
 
 | Where                                              | For                                          |

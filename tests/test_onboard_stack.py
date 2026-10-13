@@ -189,7 +189,11 @@ esac
           "show my agents" in steps["hud"]["say"], steps["hud"])
 
     # Nothing outside the scratch folder: every path any step wrote is under t.
+    # The kit's own path is allowed: a checkout under ~/code is under the real
+    # home, and every spawn names a tool in it (2026-10-13: three false reds,
+    # each only the repo's own bin/ path).
     for line in spawns():
+        line = line.replace(str(ROOT), "<kit>")
         if str(Path.home()) in line and str(t) not in line:
             check("a spawned command named the real home folder", False, line)
     print("all passed" if not failed else f"{failed} failed")

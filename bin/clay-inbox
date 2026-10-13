@@ -72,8 +72,14 @@ THREAD_WORKERS = 6
 
 def clay_op(*args):
     """One read through chewbacca clay's API surface: HTTP with the saved
-    session, no browser, nothing on screen."""
-    p = subprocess.run(["chewbacca", "clay", *args], capture_output=True, text=True, timeout=120)
+    session, no browser, nothing on screen.
+
+    Pinned to api-anything: the inbox op falls back to this very script, so
+    an unpinned call recursed whenever the API read failed. On 2026-10-13 that
+    chain grew one level every ~20 s, each launching a Chrome, and the Dock
+    twitched all afternoon."""
+    p = subprocess.run(["chewbacca", "clay", *args, "--surface", "api-anything"],
+                       capture_output=True, text=True, timeout=120)
     try:
         out = json.loads(p.stdout)
     except ValueError:

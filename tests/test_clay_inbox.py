@@ -27,6 +27,9 @@ INBOX = [
 # `chewbacca clay inbox|thread ...` answered from files, the shape clay_op reads.
 API_STUB = r"""#!/bin/sh
 [ "$1" = clay ] || exit 2
+# Unpinned, the inbox op can fall back to clay-inbox itself and recurse
+# (2026-10-13), so every call must pin the API surface.
+case " $* " in *" --surface api-anything "*) ;; *) echo '{"ok": false, "error": "unpinned surface"}'; exit 0 ;; esac
 case "$2" in
   inbox) cat "$CLAY_STUB_API" ;;
   thread) echo '{"ok": true, "data": {"history": []}}' ;;

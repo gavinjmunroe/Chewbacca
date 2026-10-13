@@ -194,6 +194,13 @@ deadline):
   Chewbacca's.
 - Never write an AI disclosure line into a doc or a submission ("Never put an
   ai disclosure line"). The prompt log is the record; disclosing is their call.
+- Never hand a team assignment kit over as a file in ~/Downloads only. On
+  2026-10-13 (ACAD 185 A13/A14) the game plan sat in Downloads and he had to
+  ask "Where's the game plan?", then "When it makes more sense just make a
+  google doc for me." Plans, scripts and call agendas go in a Google Doc,
+  trackers in a Google Sheet, created in his Drive with the Drive connector,
+  and the reply leads with the link. Upload as text/markdown with no emojis:
+  Drive's import turned them into mojibake.
 
 ## Reading a syllabus into the ledger
 

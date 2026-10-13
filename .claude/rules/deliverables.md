@@ -6,6 +6,7 @@ Always on. Any file made for the user to use or pass on follows this.
 
 - **Downloads, plain name.** Save it to `~/Downloads` with a name a person would type, like `Karthik call prep.md`. A file left in a repo or a notes folder never gets opened.
 - **They might edit it: `.md`.** Prep sheets, plans, drafts and notes for themselves. They paste it into Google Docs.
+- **A team doc, or one he'll pull up on a call: Google Doc.** Create it in his Drive with the Drive connector (text/markdown upload, no emojis, they import as mojibake) and lead the reply with the link. A table goes in a Google Sheet. Caleb, 2026-10-13: "When it makes more sense just make a google doc for me."
 - **It goes to someone else: PDF.** Anything for a teammate, professor, client or investor.
 
 - **Link it by absolute path.** In the reply, link the file as `/Users/<user>/Downloads/<name>` with spaces as `%20`. A link relative to the shell's cwd is dead, because the editor resolves it from the session root (2026-10-11: two `../../Downloads/...` links refused by link-guard on the Chewbacca one-pager).

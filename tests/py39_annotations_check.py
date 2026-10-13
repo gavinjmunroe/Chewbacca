@@ -6,7 +6,9 @@ has no `|` on types, so the module dies on import with "unsupported operand
 type(s) for |: 'type' and 'NoneType'". On 2026-10-13 ten files did that, and
 seven suite checks were red for it at once (cleanup-suite-before.log, d1013).
 `from __future__ import annotations` makes every annotation a string, which
-is the whole fix.
+is the whole fix. Two 3.11 APIs did the same to three more checks that day
+(TestCase.enterContext in test_tabs and test_work_ledger_context,
+hashlib.file_digest in tools/task_graph.py), so those are refused too.
 
   py39_annotations_check.py          check the repo's tracked Python
   py39_annotations_check.py FILE...  check these files
@@ -17,6 +19,11 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+
+
+UNION = "a `X | Y` annotation without `from __future__ import annotations` fails to import on Python 3.9"
+# Attribute names seen breaking the suite on 3.9, with the version that added them.
+NEWER_APIS = {"enterContext": "3.11", "file_digest": "3.11"}
 
 
 def has_union(node):
@@ -30,18 +37,21 @@ def findings(path):
         tree = ast.parse(src)
     except (OSError, UnicodeDecodeError, SyntaxError):
         return []
-    if any(isinstance(n, ast.ImportFrom) and n.module == "__future__"
-           and any(a.name == "annotations" for a in n.names) for n in tree.body):
-        return []
-    lines = set()
+    future = any(isinstance(n, ast.ImportFrom) and n.module == "__future__"
+                 and any(a.name == "annotations" for a in n.names) for n in tree.body)
+    found = set()
     for n in ast.walk(tree):
+        if isinstance(n, ast.Attribute) and n.attr in NEWER_APIS:
+            found.add((n.lineno, f"{n.attr} is Python {NEWER_APIS[n.attr]}+ and fails on 3.9"))
+        if future:
+            continue
         if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
             args = n.args.posonlyargs + n.args.args + n.args.kwonlyargs + [n.args.vararg, n.args.kwarg]
             if has_union(n.returns) or any(a is not None and has_union(a.annotation) for a in args):
-                lines.add(n.lineno)
+                found.add((n.lineno, UNION))
         elif isinstance(n, ast.AnnAssign) and has_union(n.annotation):
-            lines.add(n.lineno)
-    return sorted(lines)
+            found.add((n.lineno, UNION))
+    return sorted(found)
 
 
 def tracked_python():
@@ -64,10 +74,9 @@ def main(argv):
     paths = [Path(a) for a in argv] or list(tracked_python())
     bad = 0
     for p in paths:
-        for line in findings(p):
+        for line, why in findings(p):
             rel = p.relative_to(ROOT) if p.is_absolute() and ROOT in p.parents else p
-            print(f"{rel}:{line}: a `X | Y` annotation without `from __future__ import annotations` "
-                  "fails to import on Python 3.9")
+            print(f"{rel}:{line}: {why}")
             bad += 1
     return 1 if bad else 0
 

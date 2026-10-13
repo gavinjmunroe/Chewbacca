@@ -14,6 +14,13 @@ sys.path.insert(0, str(ROOT / 'tools'))
 import tabs
 
 
+
+def enter_context(case, manager):
+    """TestCase.enterContext is 3.11; stock /usr/bin/python3 is 3.9."""
+    value = manager.__enter__()
+    case.addCleanup(manager.__exit__, None, None, None)
+    return value
+
 class TabsTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
@@ -22,7 +29,7 @@ class TabsTests(unittest.TestCase):
         self.repo = self.root / 'repo'
         self.repo.mkdir()
         self.log = self.root / 'write-log.tsv'
-        self.enterContext(patch.dict(os.environ, {
+        enter_context(self, patch.dict(os.environ, {
             'CHEWBACCA_TABS_DB': str(self.root / 'tabs.sqlite'),
             'CHEWBACCA_WRITE_LOG': str(self.log),
         }))

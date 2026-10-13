@@ -15,6 +15,13 @@ import codex_hooks
 import work_ledger
 
 
+
+def enter_context(case, manager):
+    """TestCase.enterContext is 3.11; stock /usr/bin/python3 is 3.9."""
+    value = manager.__enter__()
+    case.addCleanup(manager.__exit__, None, None, None)
+    return value
+
 class WorkLedgerContextTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
@@ -25,17 +32,17 @@ class WorkLedgerContextTests(unittest.TestCase):
         self.brain = self.root / 'fixture brain'
         for path in (self.workspace, self.other, self.brain, self.root / 'personal'):
             path.mkdir()
-        self.enterContext(patch.dict(os.environ, {
+        enter_context(self, patch.dict(os.environ, {
             'CHEWBACCA_HOME': str(self.root / 'shared'),
             'CODEX_HOME': str(self.root / 'codex'),
             'CHEWBACCA_PERSONAL_SCOPE': str(self.root / 'personal'),
         }))
-        self.enterContext(patch.object(agent_context, 'read_sources', return_value=0))
-        self.enterContext(patch.object(codex_hooks.context, 'read_sources', return_value=0))
-        self.enterContext(patch.object(codex_hooks.context, 'brain_root', return_value=self.brain))
-        self.enterContext(patch.object(codex_hooks, 'turn_state', return_value={}))
-        self.enterContext(patch.object(codex_hooks, 'prompt_context', return_value=''))
-        self.enterContext(patch.object(codex_hooks, 'shared_hook', return_value=''))
+        enter_context(self, patch.object(agent_context, 'read_sources', return_value=0))
+        enter_context(self, patch.object(codex_hooks.context, 'read_sources', return_value=0))
+        enter_context(self, patch.object(codex_hooks.context, 'brain_root', return_value=self.brain))
+        enter_context(self, patch.object(codex_hooks, 'turn_state', return_value={}))
+        enter_context(self, patch.object(codex_hooks, 'prompt_context', return_value=''))
+        enter_context(self, patch.object(codex_hooks, 'shared_hook', return_value=''))
 
     def seed(self):
         work_ledger.add(self.workspace, 'OPEN_SELECTED_CANARY', 'selected',

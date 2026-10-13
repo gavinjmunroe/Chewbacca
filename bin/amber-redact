@@ -77,7 +77,17 @@ def rows(db, query):
     if not db.exists():
         return []
     try:
-        connection = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        try:
+            connection = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+            connection.execute("select count(*) from sqlite_master").fetchall()
+        except sqlite3.OperationalError:
+            # The people store is WAL. Once its last writer closes, the -wal
+            # and -shm are gone, and Apple's sqlite (3.43) refuses a mode=ro
+            # open that would have to create the -shm: every known name read
+            # as none and leaked (test_amber_redact, 7 of 11 on 10/13). A
+            # normal open can make the -shm; query_only keeps it from writing.
+            connection = sqlite3.connect(str(db))
+            connection.execute("PRAGMA query_only=ON")
         try:
             return connection.execute(query).fetchall()
         finally:

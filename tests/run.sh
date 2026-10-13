@@ -136,7 +136,11 @@ check() {
 expect() {
   local name="$1" needle="$2"; shift 2
   local out; out="$("$@" 2>&1)"
-  if printf '%s' "$out" | grep -qF -- "$needle"; then
+  # A here-string, not a pipe: grep -q stops at the first match, printf takes
+  # SIGPIPE on output past the 64 KB pipe buffer, and pipefail made that a
+  # FAIL. skills/hud/SKILL.md reached 66,516 bytes in f09dd48c (10/12) and
+  # "the skill teaches the wire format" went red with the needle on line 5.
+  if grep -qF -- "$needle" <<< "$out"; then
     PASS=$((PASS+1)); echo -e "  ${GRN}pass${NC}  $name"
   else
     FAIL=$((FAIL+1)); FAILURES+=("$CURRENT: $name")
@@ -684,6 +688,8 @@ if group "tools"; then
   # dead end with nothing failing: 13 such references sat in 5 skills on
   # 2026-10-10, including a whole corpus tool that only existed on one Mac.
   check  "skills name no dangling paths or commands" bash "$ROOT/tests/skill_refs_check.sh"
+  expect "expect finds a needle early in output past the 64 KB pipe buffer" "needle-at-top" \
+    bash -c "echo needle-at-top; head -c 200000 /dev/zero | tr '\\0' x"
   # Stock /usr/bin/python3 is 3.9: ten files with `dict | None` annotations
   # failed to import there on 2026-10-13 and took seven checks red at once.
   check  "every Python file imports on 3.9 (no bare X | None annotations)" /usr/bin/python3 "$ROOT/tests/py39_annotations_check.py"

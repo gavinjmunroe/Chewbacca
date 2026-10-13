@@ -9,6 +9,9 @@ chewbacca usc: a USC student's day in one screen, for any student on any Mac.
                                 it would build, and how many lecture files to pull
   chewbacca usc lockin --apply  build the ledger (new files only) and pull every
                                 lecture file to ~/coursework/slides/<CODE>/
+  chewbacca usc read [CODE]     the text of every pulled file (PDF pages, slides,
+                                Word), labeled by page, with nothing to install
+  chewbacca usc read --find "office hours"   matching lines across every course
   chewbacca usc --hall evk      pick the dining hall (parkside, evk, university-village)
   chewbacca usc --json          the same, as data
 
@@ -454,12 +457,189 @@ def lockin(apply, out, days, retried=False):
         print(f"{total} file(s) to pull. Nothing written: rerun with --apply.")
     else:
         print(f"Pulled {total} file(s). Rerunning only fetches what's new.")
+        # The seeded ledger has no class times, office hours, attendance budget
+        # or grading: `coursework check` listed 13 gaps for 4 courses on the
+        # USC week walk, and every answer was in a syllabus lockin had just
+        # pulled. Name those files so the next step is reading them.
+        syllabi = sorted(f for f in out.glob("*/**/*") if f.is_file() and "syllab" in f.name.lower())
+        if syllabi:
+            print("\nSyllabi (class times, office hours, attendance, grading) for the ledger:")
+            for f in syllabi:
+                print(f"  {f.relative_to(out)}")
+            print("Read them with `chewbacca usc read <CODE>`.")
     return 0
+
+
+# ── read ─────────────────────────────────────────────────────────────────────
+# The study session and the syllabus both start from the files lockin pulled,
+# and on a fresh Mac nothing could read them: `chewbacca docs` needs genoffice,
+# stock python3 has no PDF library and there's no pdftotext (USC week walk,
+# 2026-10-13). PDFKit ships with macOS and JXA reaches it, and .pptx/.docx are
+# zipped XML, so every file reads with what the Mac already has. Each page or
+# slide is labeled so a quiz question can cite where it came from.
+
+JXA_PDF = '''function run(argv) {
+  ObjC.import("PDFKit");
+  const doc = $.PDFDocument.alloc.initWithURL($.NSURL.fileURLWithPath(argv[0]));
+  if (!doc) return "";
+  const out = [];
+  for (let i = 0; i < doc.pageCount; i++) {
+    const s = doc.pageAtIndex(i).string;
+    out.push("\\f" + (s.isNil() ? "" : ObjC.unwrap(s)));
+  }
+  return out.join("");
+}'''
+
+
+def ooxml_parts(path, prefix, tag):
+    import zipfile
+    with zipfile.ZipFile(path) as z:
+        names = [n for n in z.namelist() if re.fullmatch(prefix + r"\d*\.xml", n)]
+        names.sort(key=lambda n: int(re.search(r"(\d+)\.xml$", n).group(1)) if re.search(r"\d+\.xml$", n) else 0)
+        for n in names:
+            # Guessed, never measured: the biggest real slide XML seen was well
+            # under 1 MB, so a 20 MB part is a damaged file or a zip bomb.
+            if z.getinfo(n).file_size > 20_000_000:
+                raise ValueError(f"{n} is over 20 MB uncompressed")
+            xml = z.read(n).decode("utf8", "replace")
+            paras = []
+            for p in re.findall(r"<(?:a|w):p[ >].*?</(?:a|w):p>", xml, re.S):
+                text = "".join(re.findall(rf"<{tag}(?: [^>]*)?>([^<]*)</{tag}>", p))
+                if text.strip():
+                    paras.append(unescape(text))
+            yield paras
+
+
+def unescape(s):
+    import html
+    return html.unescape(s)
+
+
+PPT_ATOM = re.compile(rb"\x00\x00(\xa0|\xa8)\x0f(.{4})", re.S)
+PPT_BOILERPLATE = re.compile(r"^(Click to edit|Second level|Third level|Fourth level|Fifth level|\*)", re.I)
+
+
+def ppt_text(path):
+    """Text from a binary PowerPoint 97-2003 .ppt.
+
+    Six of the BISC 101 decks pulled on 2026-10-13 were .ppt, which no zip
+    reader opens. Slide text sits in TextCharsAtom (0x0FA0, UTF-16LE) and
+    TextBytesAtom (0x0FA8, Latin-1) records, each behind an 8-byte header, so
+    finding those headers recovers the words without an Office install. Slide
+    order is the stream's order; slide numbers aren't recovered.
+    """
+    import struct
+    data = path.read_bytes()
+    out = []
+    for m in PPT_ATOM.finditer(data):
+        size = struct.unpack("<I", m.group(2))[0]
+        start = m.end()
+        if not 0 < size < 65536 or start + size > len(data):
+            continue
+        raw = data[start:start + size]
+        text = raw.decode("utf-16-le", "replace") if m.group(1) == b"\xa0" else raw.decode("latin-1")
+        text = text.replace("\r", "\n").replace("\x0b", "\n").strip()
+        # The same four bytes can turn up inside an embedded picture; real
+        # slide text is printable, picture bytes decoded as text are not.
+        if sum(c.isprintable() or c == "\n" for c in text) < 0.95 * len(text):
+            continue
+        if text and not PPT_BOILERPLATE.match(text) and (not out or out[-1] != text):
+            out.append(text)
+    return [("text", "\n".join(out))]
+
+
+CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
+
+
+def file_pages(path):
+    """[(label, text)] for one course file, with terminal control bytes dropped
+    (a file is someone else's text), or None when its type can't be read."""
+    pages = raw_pages(path)
+    return None if pages is None else [(label, CONTROL.sub("", text)) for label, text in pages]
+
+
+def raw_pages(path):
+    ext = path.suffix.lower()
+    if ext == ".pdf":
+        r = subprocess.run(["/usr/bin/osascript", "-l", "JavaScript", "-e", JXA_PDF, str(path)],
+                           capture_output=True, text=True, timeout=120)
+        pages = [(f"page {i}", t.strip()) for i, t in enumerate(r.stdout.rstrip("\n").split("\f")[1:], 1)]
+        if not any(t for _, t in pages):
+            # Locked, damaged, or a scan with no text layer: say so, never an
+            # empty header that reads as "this file says nothing".
+            raise ValueError("no text layer, likely a scan" if pages else "PDFKit couldn't open it")
+        return pages
+    if ext == ".pptx":
+        return [(f"slide {i}", "\n".join(p)) for i, p in enumerate(ooxml_parts(path, "ppt/slides/slide", "a:t"), 1)]
+    if ext == ".docx":
+        return [("text", "\n".join(p)) for p in ooxml_parts(path, "word/document", "w:t")]
+    if ext == ".ppt":
+        return ppt_text(path)
+    if ext in (".txt", ".md", ".csv"):
+        return [("text", path.read_text(errors="replace"))]
+    return None
+
+
+def course_files(target, slides):
+    """A file, a course folder by code (bisc120, BISC-120, "BISC 120"), or every course."""
+    p = Path(target).expanduser() if target else None
+    if p and p.is_file():
+        return [p]
+    if p and p.is_dir():
+        roots = [p]
+    elif target:
+        roots = [d for d in sorted(slides.glob("*")) if d.is_dir() and norm(d.name) == norm(target)]
+        if not roots:
+            roots = [d for d in sorted(slides.glob("*")) if d.is_dir() and norm(d.name).startswith(norm(target))]
+        if not roots:
+            return None
+    else:
+        roots = [d for d in sorted(slides.glob("*")) if d.is_dir()]
+    return [f for r in roots for f in sorted(r.rglob("*")) if f.is_file() and not f.name.startswith(".")]
+
+
+def read(target, find, slides):
+    files = course_files(target, slides)
+    if files is None:
+        have = ", ".join(d.name for d in sorted(slides.glob("*")) if d.is_dir()) or "none yet"
+        print(f"No course folder matches {target!r} in {slides} (have: {have}). "
+              "`chewbacca usc lockin --apply` pulls them.")
+        return 1
+    words = [w.lower() for w in find.split()] if find else []
+    skipped, hits = [], 0
+    for f in files:
+        try:
+            pages = file_pages(f)
+        except Exception as e:  # a corrupt zip or a PDF PDFKit refuses: name it, keep going
+            skipped.append(f"{f.name} ({e if isinstance(e, ValueError) else e.__class__.__name__})")
+            continue
+        if pages is None:
+            skipped.append(f.name)
+            continue
+        rel = f.relative_to(slides) if f.is_relative_to(slides) else f
+        if words:
+            for label, text in pages:
+                for line in text.splitlines():
+                    if all(w in line.lower() for w in words):
+                        hits += 1
+                        print(f"{rel}, {label}: {line.strip()}")
+            continue
+        print(f"=== {rel}")
+        for label, text in pages:
+            print(f"--- {label}\n{text}" if len(pages) > 1 or label != "text" else text)
+        print()
+    if words and not hits:
+        print(f"Nothing in {len(files)} file(s) mentions {find!r}.")
+    if skipped:
+        print(f"Can't read here: {', '.join(skipped)}", file=sys.stderr)
+    return 1 if files and len(skipped) == len(files) else 0
 
 
 def main():
     ap = argparse.ArgumentParser(prog="chewbacca usc", add_help=True)
-    ap.add_argument("cmd", nargs="?", default="today", choices=["today", "setup", "lockin"])
+    ap.add_argument("cmd", nargs="?", default="today", choices=["today", "setup", "lockin", "read"])
+    ap.add_argument("target", nargs="?", help="read: a course code, a folder or a file")
+    ap.add_argument("--find", help="read: only lines with all these words, each with its file and page")
     ap.add_argument("--apply", action="store_true", help="lockin: write the ledger and pull files")
     ap.add_argument("--out", default=str(Path(os.environ.get("COURSEWORK_DIR") or Path.home() / "coursework") / "slides"),
                     help="lockin: where lecture files go")
@@ -471,6 +651,8 @@ def main():
         return setup()
     if a.cmd == "lockin":
         return lockin(a.apply, Path(a.out).expanduser(), a.days)
+    if a.cmd == "read":
+        return read(a.target, a.find, Path(a.out).expanduser())
     cfg = load_config()
     if a.hall:
         cfg["hall"] = a.hall

@@ -65,7 +65,20 @@ GOALS = {
                   "permissions": [],
                   "primer": "",
                   "first_try": "what did this video actually say (paste a link)"},
+    # Offered only when this Mac shows a school (see questions()). Before, a
+    # USC freshman detected from Brightspace cookies was asked to pick from
+    # texts and family, appointments, letters and look-ups, with nothing about
+    # classes (USC week walk, 2026-10-13).
+    "classes": {"label": "Stay on top of my classes",
+                "rule": "staying on top of my classes: what's due, readings, studying",
+                "permissions": [],
+                "primer": "",
+                "first_try": "what's due this week"},
 }
+# The question tool shows at most four options. A student swaps the calendar
+# one for classes, since lockin covers their deadlines.
+STUDENT_GOALS = ("classes", "texts", "writing", "questions")
+GENERAL_GOALS = ("texts", "calendar", "writing", "questions")
 COMFORT = {
     "new": {"label": "New to them",
             "rule": "New to computers. Use plain everyday words, one step at a time, "
@@ -151,13 +164,14 @@ DEFAULTS = {"comfort": "getby", "tone": "short", "confirm": "always"}
 def questions():
     """At most two per screen, three screens: one decision at a time is the older-user
     rule, four per screen is the tool's limit, and two is the compromise."""
-    def opts(table):
-        return [{"value": k, "label": v["label"]} for k, v in table.items()]
+    def opts(table, keys=None):
+        return [{"value": k, "label": table[k]["label"]} for k in (keys or table)]
+    school = detect_school()
     return {"screens": [
         [{"key": "name", "question": "What should I call you?", "header": "Your name",
           "options": [], "free_text": True},
          {"key": "goals", "question": "What would help you most? Pick any.", "header": "Help with",
-          "options": opts(GOALS), "multi": True}],
+          "options": opts(GOALS, STUDENT_GOALS if school else GENERAL_GOALS), "multi": True}],
         [{"key": "comfort", "question": "How do you feel about computers?", "header": "Comfort",
           "options": opts(COMFORT)},
          {"key": "tone", "question": "How should I talk to you?", "header": "Style",
@@ -168,7 +182,7 @@ def questions():
           "options": opts(CONFIRM)},
          {"key": "school", "question": "Are you a student?", "header": "School",
           "options": opts(SCHOOL)}],
-    ], "defaults": DEFAULTS, "detected": {"school": detect_school()}}
+    ], "defaults": DEFAULTS, "detected": {"school": school}}
 
 
 def chewbacca_home() -> Path:
@@ -274,9 +288,11 @@ def save(args) -> int:
         # The demo that sells it goes first: their own classes, not a feature.
         result["school"] = USC_SCHOOL
         result["primers"].append(USC_SCHOOL["primer"])
-        result["first_try"].insert(0, USC_SCHOOL["first_try"])
+        if USC_SCHOOL["first_try"] not in result["first_try"]:
+            result["first_try"].insert(0, USC_SCHOOL["first_try"])
     elif ans["school"] == "other":
-        result["first_try"].insert(0, "what's due this week")
+        if "what's due this week" not in result["first_try"]:
+            result["first_try"].insert(0, "what's due this week")
     print(json.dumps(result, indent=2))
     return 0
 

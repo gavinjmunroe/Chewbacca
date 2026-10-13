@@ -837,6 +837,11 @@ if group "installer"; then
   # USC, lockin lists courses and pulls files, coursework due reads the result.
   check  "a fresh USC student goes from install to slides and a due list" \
     bash "$ROOT/tests/usc_student_e2e.sh" "$ROOT"
+  # 2026-10-13: the week after lockin, where a made-up student got stuck:
+  # unreadable slides and syllabi, grades and announcements one course at a
+  # time, and a welcome with nothing about class.
+  check  "a USC student's week reads files, grades and announcements in one call each" \
+    bash "$ROOT/tests/usc_student_week.sh" "$ROOT"
   check  "tools_link links new tools and replaces only start.sh's stub" \
     python3 "$ROOT/tests/test_tools_link.py"
   check  "usc api sites take a term and none is pinned to one" \

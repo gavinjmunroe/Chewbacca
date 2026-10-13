@@ -44,8 +44,20 @@ chewbacca jobs submit --net --title "lock in" -- chewbacca usc lockin --apply
 `--apply` creates `~/coursework/courses/<code>.yml` for any course with no
 ledger file (never overwrites one), seeded with every dated Brightspace
 calendar item and its source, and pulls every visible file into
-`~/coursework/slides/<CODE>/`. A rerun only fetches what's new. Offer to read
-the syllabus from the slides folder for meetings, grading and dates.
+`~/coursework/slides/<CODE>/`. A rerun only fetches what's new. It ends by
+naming each syllabus it pulled: read them with `chewbacca usc read <CODE>` and
+fill the ledger's meetings, instructor and office hours, attendance budget and
+grading, each with its `source`. Until then `coursework today`, `attendance`
+and `grade` have nothing to answer from.
+
+## Reading the course files
+
+`chewbacca usc read <CODE>` prints the text of every pulled file in a course:
+PDF pages, .pptx slides, old .ppt decks and Word files, each labeled by page
+or slide, using only what macOS ships. `chewbacca usc read --find "office
+hours"` searches every course and cites the file and page. Use it for a study
+session, a quiz, an assignment sheet or a syllabus, before any other reader:
+on a fresh Mac `chewbacca docs` needs genoffice and there is no pdftotext.
 
 It works on a stranger's Mac as is: Chrome plus a Brightspace sign-in. No api
 engine, no `pip install`, no profile to name.
@@ -56,6 +68,10 @@ Never open Brightspace, a browser tab or `chewie web` for it. Every read is
 one call, and a lapsed session renews itself from Chrome:
 
 - What's due, dropboxes AND quizzes, with submitted or grade: `brightspace due --days 7`
+- Every released grade in every course: `brightspace grades`. The ledger has
+  weights, Brightspace has scores; read both before saying where a grade stands
+- Announcements from every course, newest first (a missed class, team lists,
+  a moved exam room): `brightspace news --days 7`
 - Grades, announcements, quizzes, discussions, content for one course:
   `chewbacca api call brightspace <grades|announcements|quizzes|discussions|content> orgUnitId=<id>`
   (ids from `chewbacca api call brightspace myCourses`)

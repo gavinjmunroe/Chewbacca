@@ -7,6 +7,8 @@ assignments the coursework ledger never heard of.
   brightspace due [--days 14]        every dropbox due in the window, with
                                      submitted/not, flagged NOT IN LEDGER when
                                      no ledger item matches it
+  brightspace grades [--json]        every released grade, every current course
+  brightspace news [--days 7]        announcements from every current course
   brightspace get <api path>         raw JSON, e.g. /le/1.99/302780/news/
 
 The ledger is built from syllabi, and some assignments only ever exist as a
@@ -492,6 +494,85 @@ def cmd_due(client, days, ledger_dir, as_json):
     return 1 if missing else 0
 
 
+def cmd_grades(client, as_json):
+    """Every released grade in every current course, from the Chrome session.
+
+    Friday's "how am I doing" used to be myCourses for the ids, then one api
+    call per course, each needing the api engine a fresh Mac doesn't have,
+    while `coursework grade` read the ledger lockin had seeded without scores
+    and answered "nothing graded yet" over a 71 on a midterm (USC week walk,
+    2026-10-13). The ledger stays the place weights live; this reads scores.
+    """
+    out = []
+    for course, units in enrolled_courses(client).items():
+        rows = []
+        for ou in units:
+            for g in optional(client, f"/le/1.99/{ou}/grades/values/myGradeValues/") or []:
+                num, den = g.get("PointsNumerator"), g.get("PointsDenominator")
+                rows.append({"name": clean_text(g.get("GradeObjectName")).strip(), "shown": clean_text(g.get("DisplayedGrade")),
+                             "points": num, "out_of": den,
+                             "percent": round(100 * num / den, 1) if num is not None and den else None})
+        out.append({"course": course, "grades": rows})
+    if as_json:
+        print(json.dumps(out, indent=1))
+        return 0
+    for c in out:
+        print(c["course"])
+        if not c["grades"]:
+            print("  nothing released yet")
+        for r in c["grades"]:
+            pct = f"{r['percent']:g}%" if r["percent"] is not None else ""
+            print(f"  {r['name'][:40]:<40} {str(r['shown'] or ''):<12} {pct}")
+        print()
+    return 0
+
+
+CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
+
+
+def clean_text(text):
+    """An instructor's text with terminal control bytes (escape sequences) removed."""
+    return CONTROL.sub("", text or "")
+
+
+def plain(html):
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html or "")).strip()
+
+
+def cmd_news(client, days, as_json):
+    """Announcements from every current course in the last `days`, newest first.
+
+    A missed class or a team assignment lives in an announcement, and there
+    was no way to read them across courses without the api engine and one
+    call per course (USC week walk, 2026-10-13).
+    """
+    since = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=days)
+    rows = []
+    for course, units in enrolled_courses(client).items():
+        for ou in units:
+            for n in optional(client, f"/le/1.99/{ou}/news/") or []:
+                when = n.get("StartDate") or n.get("CreatedDate")
+                if not when or n.get("IsPublished") is False:
+                    continue
+                if dt.datetime.fromisoformat(when.replace("Z", "+00:00")) < since:
+                    continue
+                body = n.get("Body") or {}
+                rows.append({"course": course, "when": when, "title": clean_text(n.get("Title")).strip(),
+                             "text": clean_text((body.get("Text") or "").strip() or plain(body.get("Html"))), "ou": ou})
+    rows.sort(key=lambda r: r["when"], reverse=True)
+    if as_json:
+        print(json.dumps(rows, indent=1))
+        return 0
+    if not rows:
+        print(f"No announcements in the last {days} days.")
+    for r in rows:
+        local = dt.datetime.fromisoformat(r["when"].replace("Z", "+00:00")).astimezone()
+        print(f"{r['course']:<12} {local:%a %b %d}  {r['title']}")
+        if r["text"]:
+            print(f"  {r['text'][:400]}")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(prog="brightspace")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -499,6 +580,11 @@ def main():
     d = sub.add_parser("due")
     d.add_argument("--days", type=int, default=14)
     d.add_argument("--json", action="store_true")
+    gr = sub.add_parser("grades", help="every released grade in every current course")
+    gr.add_argument("--json", action="store_true")
+    nw = sub.add_parser("news", help="announcements from every current course")
+    nw.add_argument("--days", type=int, default=7)
+    nw.add_argument("--json", action="store_true")
     g = sub.add_parser("get")
     g.add_argument("path")
     args = ap.parse_args()
@@ -508,6 +594,10 @@ def main():
         print(me.get("FirstName"), me.get("LastName"))
     elif args.cmd == "get":
         print(json.dumps(client.get(args.path), indent=1))
+    elif args.cmd == "grades":
+        sys.exit(cmd_grades(client, args.json))
+    elif args.cmd == "news":
+        sys.exit(cmd_news(client, args.days, args.json))
     else:
         sys.exit(cmd_due(client, args.days, LEDGER, args.json))
 

@@ -424,3 +424,33 @@ at a local optimum, and more knob turning on these sets is noise.
 `feedback()` now returns true cosines (divided by the moved query's length,
 computable from dense alone). Rankings are identical, checked on all three
 dev sets; it matters only for csls and for any probe compared against it.
+
+**A second embedding model, shipped 2026-10-13.** `bench/ensemble.py`: nomic
+and mxbai-embed-large, each with one feedback round in its own space, cosines
+averaged per chunk, then rrf3 as before. The September ablation had swapped
+models one at a time (a wash); averaging was never tried. Chunk strings are
+the ones nomic embeds, cut at 2,000 characters for mxbai's 512 tokens; the
+question gets mxbai's query instruction. Same frozen index, vs shipped rrf3 +
+feedback:
+
+| variant           | dev (24)       | dev2 (46)      | dev3 (70)      |
+| ----------------- | -------------- | -------------- | -------------- |
+| ensemble 0.3      | 83.3% (+3 -1)  | 95.7% (+1 -0)  | 60.0% (+4 -2)  |
+| **ensemble 0.5**  | **87.5% (+4 -1)** | **93.5% (+1 -1)** | **60.0% (+5 -3)** |
+| mxbai alone       | 83.3% (+4 -2)  | 91.3% (+1 -2)  | 52.9% (+5 -8)  |
+
+0.3 and 0.5 tie at +5 net; 0.5 picked on MRR, the stated tie-break, before
+the run. Ship rule written into the frozen file before the run: clear 55.4%
+or gain 3+ net queries, since it costs a second model resident (669 MB) and a
+second embed per prompt (run in parallel; warm p50 20 ms against nomic's 17).
+
+| sealed, run once (n=65), same frozen index | r@5   | 95% CI  | MRR   |
+| ------------------------------------------ | ----- | ------- | ----- |
+| shipped rrf3 + feedback (ties fixed)       | 52.3% | +/-12.1 | 0.385 |
+| nomic + mxbai 0.5                          | **56.9%** | +/-12.0 | 0.460 |
+
++3 -0. The first ranker over the 55.4% floor, by one question, well inside
+the interval. The production path (`brain.rank(dense2=, E2=)`, the index's
+`npy2`) reproduces the bench to the query on all three dev sets. With the
+model not pulled or `BRAIN_MODEL2` empty, brain is nomic only
+(`tests/test_brain_ensemble.py`).

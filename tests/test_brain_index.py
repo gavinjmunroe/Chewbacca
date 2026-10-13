@@ -111,7 +111,8 @@ def main():
     server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(fake))
     threading.Thread(target=server.serve_forever, daemon=True).start()
     env = dict(os.environ, BRAIN_DIR=brain, OLLAMA_HOST=f"http://127.0.0.1:{port}",
-               BRAIN_EMBED_TIMEOUT="0.12", BRAIN_EXTRA_DIRS=os.path.join(tmp, "team"))
+               BRAIN_EMBED_TIMEOUT="0.12", BRAIN_EXTRA_DIRS=os.path.join(tmp, "team"),
+               BRAIN_MODEL2="")  # one model here; tests/test_brain_ensemble.py covers two
 
     def brain_cmd(*args):
         return subprocess.run([sys.executable, "-I", BRAIN, *args], env=env,

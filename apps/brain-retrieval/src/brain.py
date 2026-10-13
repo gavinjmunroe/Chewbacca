@@ -20,6 +20,19 @@ NPY   = os.path.join(HOME, "emb.npy")
 DIRS  = ["core", "domains", "memory", "projects", "systems", "wiki"]
 MODEL = "nomic-embed-text"
 DIM   = 768
+# A second embedding model, averaged with nomic per chunk, 2026-10-13 night
+# (bench/ensemble.py). nomic alone and mxbai alone each miss paraphrases the
+# other finds: on dev3, mxbai alone lost 8 queries and won 5. Averaged at 0.5
+# after feedback in each model's own space: dev+dev2+dev3 +10 -5, and the one
+# sealed run (bench/frozen/ensemble_mxbai.json) 52.3% -> 56.9%, +3 -0, the
+# first ranker over the 55.4% recall gate. Optional: with the model not pulled
+# (`ollama pull mxbai-embed-large`) or BRAIN_MODEL2 empty, brain is nomic only.
+MODEL2 = os.environ.get("BRAIN_MODEL2", "mxbai-embed-large")
+ENS_W  = 0.5        # dev: 0.3 and 0.5 both +5 net; 0.5 had the higher MRR
+                    # (dev3 0.463 vs 0.447). 1.0 (mxbai alone) lost 3 net on dev3.
+Q2_PREFIX = "Represent this sentence for searching relevant passages: "
+                    # mxbai's documented query instruction; documents get none.
+MAXCHARS2 = 2000    # mxbai reads 512 tokens; the bench cut chunks here too.
 
 # Tuned on the 25-query dev set, confirmed on the sealed 73. Dev said 80% r@5,
 # the sealed set said 68%. That 12-point gap is why the set was sealed.
@@ -108,17 +121,49 @@ def _post(payload, timeout):
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read())["embeddings"]
 
-def embed(texts, timeout=300, keep_alive=KEEP_ALIVE):
+def embed(texts, timeout=300, keep_alive=KEEP_ALIVE, model=MODEL, dim=DIM, fill=True):
+    """fill=False leaves None where a text failed instead of a zero vector, for
+    a caller that would rather skip a build than keep a zero row forever."""
     out = []
     for i in range(0, len(texts), 64):
         batch = texts[i:i+64]
         try:
-            out.extend(_post({"model": MODEL, "input": batch, "keep_alive": keep_alive}, timeout))
+            out.extend(_post({"model": model, "input": batch, "keep_alive": keep_alive}, timeout))
         except Exception:
             for t in batch:                      # isolate the poison chunk
-                try:    out.extend(_post({"model": MODEL, "input": [t], "keep_alive": keep_alive}, timeout))
-                except Exception: out.append([0.0]*DIM)
+                try:    out.extend(_post({"model": model, "input": [t], "keep_alive": keep_alive}, timeout))
+                except Exception: out.append([0.0]*dim if fill else None)
     return out
+
+# A Mac without the second model would otherwise probe Ollama on every
+# 10-minute index run. Guessed, never measured: six hours caps that at four
+# probes a day, and `brain index --full` always probes.
+MODEL2_RETRY_S = 6 * 3600
+
+def model2_ready(timeout=60, force=False):
+    """The second model's dimension, or None when it is off or not pulled.
+    One real call, so a missing model never turns into a file of zero vectors."""
+    if not MODEL2: return None
+    miss = os.path.join(HOME, "model2.miss")
+    try:
+        if not force and time.time() - os.path.getmtime(miss) < MODEL2_RETRY_S: return None
+    except OSError:
+        pass
+    try:
+        v = _post({"model": MODEL2, "input": ["ready"], "keep_alive": KEEP_ALIVE}, timeout)[0]
+        if v:
+            try: os.remove(miss)
+            except OSError: pass
+            return len(v)
+    except Exception:
+        pass
+    try: open(miss, "w").close()
+    except OSError: pass
+    return None
+
+def unit_rows(vecs, dim):
+    E = np.asarray(vecs, dtype="float32").reshape(len(vecs), dim)
+    return E / (np.linalg.norm(E, axis=1, keepdims=True) + 1e-9)
 
 # WARM. The failure this exists for, found 2026-10-09 in Ollama's server log:
 # nomic-embed-text was started 568 times that day and almost never finished.
@@ -160,6 +205,9 @@ def cmd_warm(args):
         ok = True
     except Exception:
         ok = False
+    if MODEL2:
+        try: _post({"model": MODEL2, "input": ["warm"], "keep_alive": KEEP_ALIVE}, WARM_TIMEOUT)
+        except Exception: pass
     try: os.remove(lock)
     except OSError: pass
     if not getattr(args, "quiet", True):
@@ -179,9 +227,18 @@ def frontmatter(txt):
 def clean(t):
     return " ".join(w for w in t.split() if len(w) <= MAXTOK)
 
+def embed_text(header, section, text):
+    """The string a chunk is embedded as: where it lives, what the note says it
+    is, its heading, its words. Stripping the path costs 12 points (RESULTS.md)."""
+    return (f"{header}\n## {section}\n{clean(text)}" if section else f"{header}\n{clean(text)}")[:MAXCHARS]
+
+def file_header(rel, txt):
+    fm, _ = frontmatter(txt)
+    return rel + (f" | {fm['description']}" if fm.get("description") else "")
+
 def chunk_file(rel, txt):
     fm, body = frontmatter(txt)
-    header = rel + (f" | {fm['description']}" if fm.get("description") else "")
+    header = file_header(rel, txt)
     parts, cur, head = [], [], ""
     lineno, starts = 1, []
     for line in body.splitlines():
@@ -197,7 +254,7 @@ def chunk_file(rel, txt):
         i = 0
         while i < len(words):
             text = " ".join(words[i:i+TARGET_WORDS])
-            ctx = (f"{header}\n## {h}\n{clean(text)}" if h else f"{header}\n{clean(text)}")[:MAXCHARS]
+            ctx = embed_text(header, h, text)
             if len(ctx.split()) >= 5:
                 out.append({"file": rel, "section": h, "text": text, "embed": ctx})
             if i + TARGET_WORDS >= len(words): break
@@ -272,6 +329,17 @@ def npy_path(db):
         row = None
     return os.path.join(HOME, row[0]) if row else NPY
 
+def npy2_path(db):
+    """The second model's vectors for this database's rows, or None when the
+    build that wrote them used another model or wrote none."""
+    try:
+        meta = dict(db.execute("SELECT k,v FROM meta"))
+    except sqlite3.OperationalError:
+        return None
+    if not MODEL2 or meta.get("model2") != MODEL2 or not meta.get("npy2"): return None
+    p = os.path.join(HOME, meta["npy2"])
+    return p if os.path.exists(p) else None
+
 def previous(db):
     """What the last build left: each file's sha and its chunks with vectors,
     or None when there is nothing safe to reuse."""
@@ -284,9 +352,18 @@ def previous(db):
     except Exception:
         return None
     if len(rows) != E.shape[0]: return None
+    E2 = None
+    p2 = npy2_path(db)
+    if p2:
+        try:
+            E2 = np.load(p2)
+            if E2.shape[0] != len(rows): E2 = None
+        except Exception:
+            E2 = None
     by_file = collections.defaultdict(list)
     for f, sec, text, row in rows:
-        by_file[f].append(({"file": f, "section": sec, "text": text}, E[row]))
+        by_file[f].append(({"file": f, "section": sec, "text": text}, E[row],
+                           E2[row] if E2 is not None else None))
     return shas, by_file
 
 def cmd_index(args):
@@ -303,18 +380,27 @@ def cmd_index(args):
     db = sqlite3.connect(DB); db.executescript(SCHEMA)
     prev = None if args.full else previous(db)
     shas_old, reuse = prev if prev else ({}, {})
-    chunks, vecs, fresh = [], [], []
+    chunks, vecs, vecs2, fresh, headers = [], [], [], [], {}
     for rel, txt in docs:
         h = sha(txt)
+        headers[rel] = file_header(rel, txt)
         if shas_old.get(rel) == h and rel in reuse:
-            for c, v in reuse[rel]:
-                chunks.append(c); vecs.append(v)
+            for c, v, v2 in reuse[rel]:
+                chunks.append(c); vecs.append(v); vecs2.append(v2)
         else:
             for c in chunk_file(rel, txt):
-                fresh.append(len(chunks)); chunks.append(c); vecs.append(None)
+                fresh.append(len(chunks)); chunks.append(c); vecs.append(None); vecs2.append(None)
     gone = sorted(set(shas_old) - {r for r, _ in docs})
     changed = sorted({chunks[i]["file"] for i in fresh})
-    if prev and not changed and not gone:
+    # Ask Ollama for the second model only when there is something for it to
+    # embed: with its vectors current, an unchanged index makes no call; without
+    # the model, at most one probe per MODEL2_RETRY_S.
+    need2 = [i for i, v in enumerate(vecs2) if v is None] if MODEL2 else []
+    have2 = [v for v in vecs2 if v is not None]
+    dim2 = model2_ready(force=args.full) if need2 else (
+        len(have2[0]) if have2 and len(have2) == len(vecs2) else None)
+    if not dim2: need2 = []
+    if prev and not changed and not gone and not need2:
         db.close()
         if not args.quiet: print(f"files {len(docs)}  up to date")
         return
@@ -329,6 +415,20 @@ def cmd_index(args):
     E = np.asarray(vecs, dtype="float32").reshape(len(chunks), DIM)
     name = f"emb-{int(time.time()*1000)}.npy"
     np.save(os.path.join(HOME, name), E)
+    name2 = None
+    if dim2:
+        # A reused chunk keeps no embed string, so rebuild it the way chunk_file did.
+        new2 = embed([embed_text(headers[chunks[i]["file"]], chunks[i]["section"],
+                                 chunks[i]["text"])[:MAXCHARS2] for i in need2],
+                     model=MODEL2, dim=dim2, fill=False)
+        for i, v in zip(need2, new2):
+            vecs2[i] = None if v is None else np.asarray(v, dtype="float32")
+        # One failed text and this build writes no second file: asks run on
+        # nomic until the next build embeds them all. A zero row would have
+        # sunk its chunk under the average for as long as its file stayed put.
+        if all(v is not None and len(v) == dim2 for v in vecs2):
+            name2 = f"emb2-{int(time.time()*1000)}.npy"
+            np.save(os.path.join(HOME, name2), unit_rows(vecs2, dim2))
     with db:
         db.execute("DELETE FROM chunk"); db.execute("DELETE FROM fts"); db.execute("DELETE FROM file")
         db.executemany("INSERT INTO chunk(file,ord,section,text,row) VALUES(?,?,?,?,?)",
@@ -338,15 +438,21 @@ def cmd_index(args):
         for k, v in [("model", MODEL), ("dim", str(DIM)), ("built_at", str(time.time())),
                      ("n", str(len(chunks))), ("npy", name)]:
             db.execute("INSERT OR REPLACE INTO meta VALUES(?,?)", (k, v))
+        # Rows changed, so second-model vectors from an older build no longer line up.
+        db.execute("DELETE FROM meta WHERE k IN ('model2','npy2')")
+        if name2:
+            db.executemany("INSERT OR REPLACE INTO meta VALUES(?,?)", [("model2", MODEL2), ("npy2", name2)])
     db.close()
     # Keep the newest two vector files: an ask that read the old meta a moment
     # ago may still be about to open the previous one.
     olds = sorted(glob.glob(os.path.join(HOME, "emb-*.npy")), key=os.path.getmtime)
-    for f in olds[:-2] + ([NPY] if os.path.exists(NPY) else []):
+    olds2 = sorted(glob.glob(os.path.join(HOME, "emb2-*.npy")), key=os.path.getmtime)
+    for f in olds[:-2] + olds2[:-2] + ([NPY] if os.path.exists(NPY) else []):
         try: os.remove(f)
         except OSError: pass
     if not args.quiet:
-        print(f"indexed in {time.time()-t0:.1f}s  {E.nbytes/1e6:.1f}MB", flush=True)
+        print(f"indexed in {time.time()-t0:.1f}s  {E.nbytes/1e6:.1f}MB"
+              f"  {MODEL2 + ' ' + str(len(need2)) if name2 else 'one model'}", flush=True)
 
 def stale_files(db):
     have = dict(db.execute("SELECT path,sha FROM file"))
@@ -424,7 +530,7 @@ def _ranks(d):
 def rank(rows, dense, lex, k, alpha=None, folder_cap=None, len_b=None,
          top_m=None, unit="file", hub=None, hub_beta=0.0, csls=0.0, lone_cap=0,
          E=None, fusion=None, rrf_k=None, prf_b=None, probes=None, probe_w=None,
-         probe_merge=False):
+         probe_merge=False, dense2=None, E2=None):
     """Fuse dense and lexical scores per file and return the top k as
     [(file, score)], plus the per-file mean cosine used for abstention.
 
@@ -435,7 +541,9 @@ def rank(rows, dense, lex, k, alpha=None, folder_cap=None, len_b=None,
     heading) sections and scores a file by its best one, hub is hub_prior()'s
     output for hub_beta (k-occurrence discount) and csls (density penalty).
     E, the chunk vectors, turns on pseudo-relevance feedback (feedback());
-    fusion picks rrf3 or the old minmax. probes maps a file to its best
+    fusion picks rrf3 or the old minmax. dense2 and E2, the second model's
+    cosines and vectors, average in at ENS_W after feedback in their own space.
+    probes maps a file to its best
     doc2query question cosine (brain_d2q); under rrf3 it is a fourth list at
     weight probe_w, or with probe_merge it joins the best-chunk list."""
     fusion = FUSION if fusion is None else fusion
@@ -443,6 +551,8 @@ def rank(rows, dense, lex, k, alpha=None, folder_cap=None, len_b=None,
     raw = dense
     if dense is not None and E is not None:
         dense = feedback(E, dense, prf_b)
+        if dense2 is not None and E2 is not None:
+            dense = (1 - ENS_W) * dense + ENS_W * feedback(E2, dense2, prf_b)
     alpha = CHUNK_ALPHA if alpha is None else alpha
     folder_cap = FOLDER_CAP if folder_cap is None else folder_cap
     len_b = LEX_LEN_B if len_b is None else len_b
@@ -544,34 +654,72 @@ def open_read(path=None, **kw):
         return db
 
 
+def load_vectors(db):
+    """rows, nomic vectors, and the second model's (or None), one snapshot."""
+    db.execute("BEGIN")     # rows and the vector file names from one snapshot
+    rows = db.execute("SELECT id,file,section,text,row FROM chunk ORDER BY id").fetchall()
+    E = np.load(npy_path(db))
+    p2 = npy2_path(db)
+    db.execute("COMMIT")
+    E2 = None
+    if p2:
+        try:
+            E2 = np.load(p2)
+            if E2.shape[0] != len(rows): E2 = None
+        except Exception:   # an index rotated it away: answer on one model
+            E2 = None
+    return rows, E, E2
+
+def query_dense(query, E, E2=None):
+    """(dense, dense2, degraded): the question's cosines under each model.
+    Both models are asked at once, so the second costs no wall time: warm p50
+    17 ms nomic and 20 ms mxbai on 2026-10-13 at load 13. dense2 is None when
+    the index has no second vectors, that model fails, or nomic failed."""
+    import threading
+    got = {}
+    def ask_model(key, model, text):
+        try:
+            # _post, not embed(): embed() swallows a failure, retries it once and
+            # returns a zero vector, so every outage used to read as a timeout and
+            # every timeout sent two requests that each aborted a model load.
+            v = np.asarray(_post({"model": model, "input": [text],
+                                  "keep_alive": KEEP_ALIVE}, EMBED_TIMEOUT)[0], dtype="float32")
+            if np.linalg.norm(v) < 1e-6: raise ValueError("zero vector")
+            got[key] = v / np.linalg.norm(v)
+        except Exception as e:
+            got[key] = e
+    threads = [threading.Thread(target=ask_model, args=("q", MODEL, query))]
+    if E2 is not None:
+        threads.append(threading.Thread(target=ask_model, args=("q2", MODEL2, Q2_PREFIX + query)))
+    for t in threads: t.start()
+    for t in threads: t.join()
+    dense = dense2 = degraded = None
+    if isinstance(got.get("q"), np.ndarray):
+        dense = E @ got["q"]
+    else:
+        degraded = classify(got.get("q"))
+    q2 = got.get("q2")
+    if E2 is not None and dense is not None and isinstance(q2, np.ndarray) and q2.shape[0] == E2.shape[1]:
+        dense2 = E2 @ q2
+    timeouts = [k for k in ("q", "q2") if k in got and not isinstance(got[k], np.ndarray)
+                and classify(got[k]) == "embed_timeout"]
+    if timeouts:
+        spawn_warm()
+    return dense, dense2, degraded
+
 def cmd_ask(args):
     if not os.path.exists(DB): die("no index. run: brain index", 2)
     db = open_read(isolation_level=None)
-    db.execute("BEGIN")     # rows and the vector file name from one snapshot
-    rows = db.execute("SELECT id,file,section,text,row FROM chunk ORDER BY id").fetchall()
-    E = np.load(npy_path(db))
-    db.execute("COMMIT")
-    degraded, dense = None, None
-    try:
-        # _post, not embed(): embed() swallows a failure, retries it once and
-        # returns a zero vector, so every outage used to read as a timeout and
-        # every timeout sent two requests that each aborted a model load.
-        q = np.asarray(_post({"model": MODEL, "input": [args.query],
-                              "keep_alive": KEEP_ALIVE}, EMBED_TIMEOUT)[0], dtype="float32")
-        if np.linalg.norm(q) < 1e-6: raise ValueError("zero vector")
-        q /= np.linalg.norm(q)
-        dense = E @ q
-    except Exception as e:
-        degraded = classify(e)
-        if degraded == "embed_timeout":
-            spawn_warm()
+    rows, E, E2 = load_vectors(db)
+    dense, dense2, degraded = query_dense(args.query, E, E2)
 
     lex = lexical(db, args.query)
-    ranked, dv = rank(rows, dense, lex, args.k, E=E)
+    ranked, dv = rank(rows, dense, lex, args.k, E=E, dense2=dense2, E2=E2)
 
     top_cos = max(dv.values()) if dv else 0.0
     st = stale_files(db)
     print(f"# brain mode={'hybrid' if dense is not None else 'lexical'}"
+          f"{' models=2' if dense2 is not None else ''}"
           f"{' degraded='+degraded if degraded else ''}"
           f" files={len({r[1] for r in rows})} chunks={len(rows)}"
           f"{' index=STALE('+str(len(st))+')' if st else ''}")

@@ -29,11 +29,20 @@ IDX = os.environ.get("BRAIN_INDEX", os.path.expanduser("~/second-brain/.brain"))
 POOL = 50
 
 
+E2 = None   # the second model's vectors when the index has them (brain.MODEL2)
+
+
 def load_index():
+    global E2
     db = brain.open_read(os.path.join(IDX, "index.db"))
     rows = db.execute("SELECT id,file,section,text,row FROM chunk ORDER BY id").fetchall()
-    npy = dict(db.execute("SELECT k,v FROM meta")).get("npy", "emb.npy")
-    return db, rows, np.load(os.path.join(IDX, npy))
+    meta = dict(db.execute("SELECT k,v FROM meta"))
+    E2 = None
+    if brain.MODEL2 and meta.get("model2") == brain.MODEL2 and meta.get("npy2"):
+        E2 = np.load(os.path.join(IDX, meta["npy2"]))
+        if E2.shape[0] != len(rows):
+            E2 = None
+    return db, rows, np.load(os.path.join(IDX, meta.get("npy", "emb.npy")))
 
 
 _qv = {}
@@ -58,9 +67,20 @@ def resolve_gold(gold, files):
     return out
 
 
+_qv2 = {}
+def qvec2(q):
+    if q not in _qv2:
+        v = np.asarray(brain._post({"model": brain.MODEL2, "input": [brain.Q2_PREFIX + q],
+                                    "keep_alive": "30m"}, 120)[0], "float32")
+        _qv2[q] = v / (np.linalg.norm(v) + 1e-9)
+    return _qv2[q]
+
+
 def stage_one(db, rows, E, q, pool=POOL):
+    """brain ask's ranking: both models when the index carries the second."""
     dense = E @ qvec(q)
-    top, _ = brain.rank(rows, dense, brain.lexical(db, q), pool, E=E)
+    dense2 = E2 @ qvec2(q) if E2 is not None else None
+    top, _ = brain.rank(rows, dense, brain.lexical(db, q), pool, E=E, dense2=dense2, E2=E2)
     return [f for f, _ in top], dense
 
 

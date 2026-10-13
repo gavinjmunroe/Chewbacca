@@ -67,10 +67,15 @@ rebuildable from scratch in 85 seconds.
 
 ```
 ollama pull nomic-embed-text
+ollama pull mxbai-embed-large      # optional second model: sealed recall@5 52.3% -> 56.9%
 BRAIN_DIR=~/second-brain python3 src/brain.py index          # only changed files; --full for all
 BRAIN_DIR=~/second-brain python3 src/brain.py ask "what did my mentor say about loneliness"
 BRAIN_DIR=~/second-brain python3 src/brain.py status
 ```
+
+With `mxbai-embed-large` pulled, `index` also writes a second vector file and
+`ask` averages the two models' cosines per chunk (`BRAIN_MODEL2`, empty turns
+it off). Without it, brain runs on nomic alone.
 
 `index` re-embeds only files whose bytes changed, so it can run every few
 minutes. On this machine `~/.local/bin/brain` links here and a launchd job

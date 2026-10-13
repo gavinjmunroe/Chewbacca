@@ -27,24 +27,10 @@ def ask(args):
     if not os.path.exists(brain.DB):
         brain.die("no index. run: brain index", 2)
     db = brain.open_read(isolation_level=None)
-    db.execute("BEGIN")
-    rows = db.execute("SELECT id,file,section,text,row FROM chunk ORDER BY id").fetchall()
-    E = np.load(brain.npy_path(db))
-    db.execute("COMMIT")
-    degraded, dense = None, None
-    try:
-        q = np.asarray(brain._post({"model": brain.MODEL, "input": [args.query],
-                                    "keep_alive": brain.KEEP_ALIVE}, brain.EMBED_TIMEOUT)[0],
-                       dtype="float32")
-        if np.linalg.norm(q) < 1e-6:
-            raise ValueError("zero vector")
-        dense = E @ (q / np.linalg.norm(q))
-    except Exception as e:
-        degraded = brain.classify(e)
-        if degraded == "embed_timeout":
-            brain.spawn_warm()
+    rows, E, E2 = brain.load_vectors(db)
+    dense, dense2, degraded = brain.query_dense(args.query, E, E2)
     lex = brain.lexical(db, args.query)
-    pool, dv = brain.rank(rows, dense, lex, max(POOL, args.k), E=E)
+    pool, dv = brain.rank(rows, dense, lex, max(POOL, args.k), E=E, dense2=dense2, E2=E2)
     names = [f for f, _ in pool]
     score = dict(pool)
     note = "rerank=off(lexical)"

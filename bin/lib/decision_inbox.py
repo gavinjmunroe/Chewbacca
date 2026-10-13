@@ -86,7 +86,7 @@ MORNING_SUMMARY_S = 36 * 3600
 # A tab seen in the last 15 minutes is still working. Guessed, never measured.
 LIVE_TAB_S = 15 * 60
 # Calls a phone digest spells out before "+N more on the HUD". Guessed, never
-# measured: three keeps the 10/13 digest at 620 characters, one phone screen.
+# measured as a limit: three put the 10/13 digest at 723 characters.
 DIGEST_CALLS = 3
 
 

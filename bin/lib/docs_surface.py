@@ -308,18 +308,20 @@ class Pending:
     sha: str = ""
 
 
-def blocks_of(ctx: Context, doc: Doc) -> tuple[list[dict], str]:
-    """(paragraphs, the revision or hash they came from)."""
+def blocks_of(ctx: Context, doc: Doc) -> tuple[list[dict], str, str]:
+    """(paragraphs, the revision or hash they came from, why it can't be
+    edited or "")."""
     if doc.google:
         got = _cli(ctx, ["google", "blocks", doc.ref[2:], "--json"], READ_TIMEOUT, "Google")
         blocks = [{"index": int(b["index"]), "text": str(b.get("text", "")), "editable": bool(b.get("plain", True))}
                   for b in (got or {}).get("blocks", []) if isinstance(b, dict) and isinstance(b.get("index"), int)]
-        return blocks, str((got or {}).get("revision") or "")
+        why_not = "" if (got or {}).get("can_edit", True) is not False else str((got or {}).get("why_not") or "view only")
+        return blocks, str((got or {}).get("revision") or ""), why_not
     got = _cli(ctx, ["docs", "blocks", doc.ref[2:], "--json"], READ_TIMEOUT, "genoffice")
     blocks = [{"index": int(b["index"]), "text": str(b.get("text", "")), "editable": True,
                "type": str(b.get("type") or "")}
               for b in (got or {}).get("blocks", []) if isinstance(b, dict) and isinstance(b.get("index"), int)]
-    return blocks, str((got or {}).get("sha256") or "")
+    return blocks, str((got or {}).get("sha256") or ""), ""
 
 
 def model_argv(ctx: Context, prompt: str) -> list[str]:
@@ -411,7 +413,11 @@ def _edits_file(edits: list) -> str:
 def draft(ctx: Context, doc: Doc, instruction: str) -> Pending:
     if not doc.editable:
         raise SurfaceError(f"{doc.where}s are read only from here; edits work on Docs and Word files")
-    blocks, base = blocks_of(ctx, doc)
+    blocks, base, why_not = blocks_of(ctx, doc)
+    if why_not:
+        # Caught before the model is asked, so a Doc he can only comment on
+        # never shows a diff with an Apply edit press that Google will refuse.
+        raise SurfaceError(clip(why_not.replace(" Nothing was changed.", ""), 200).rstrip("."))
     if not blocks:
         raise SurfaceError("the document has no paragraphs to edit")
     if doc.google and not base:

@@ -8,8 +8,10 @@ chewbacca google: read Google Docs, Sheets and Slides as text, and find them.
   add --json to find/recent/read for data; `read --json --rows N` gives a
   Sheet's first tab as rows (N, default 50) instead of every tab as CSV
 
+  chewbacca google access <id or url>  whether this sign-in can edit it, and who owns it
   chewbacca google blocks <doc id> --json
-                    a Doc's paragraphs: index, text, and the revision they came from
+                    a Doc's paragraphs: index, text, the revision they came from,
+                    and can_edit
   chewbacca google replace <doc id> --revision R --edits edits.json
                     rewrite whole paragraphs, only if the Doc is still at
                     revision R and each paragraph still reads what the edit
@@ -220,8 +222,51 @@ def scope_hint(message):
     return ""
 
 
+def access(fid):
+    """Whether this sign-in may edit the file, from Drive's own capabilities.
+
+    The Docs API can't answer it before a write: on 2026-10-13 a no-op
+    batchUpdate pinned to a made-up revision came back 400 "does not match
+    the latest revision" on a Doc this account can only comment on, the same
+    answer an editable Doc gave, so Google checks the revision before the
+    permission. And Google's revisionId is no signal either: a comment-only
+    Doc carried one and a view-only Doc didn't. Drive's canEdit is the one
+    field that says it.
+
+    Missing capabilities count as editable on purpose: this is a courtesy
+    refusal, and Google still refuses the write itself when it isn't."""
+    d = gws("drive", "files", "get", params={
+        "fileId": fid, "supportsAllDrives": True,
+        "fields": "name,owners(emailAddress),capabilities(canEdit,canComment)"})
+    caps = d.get("capabilities") or {}
+    owners = [o.get("emailAddress") for o in d.get("owners") or [] if isinstance(o, dict) and o.get("emailAddress")]
+    return {"id": fid, "name": clean_text(d.get("name", ""))[:80], "can_edit": caps.get("canEdit", True) is not False,
+            "can_comment": caps.get("canComment", True) is not False,
+            "owner": clean_text(owners[0])[:80] if owners else ""}
+
+
+def access_or_unknown(fid):
+    """access(), or "can edit, owner unknown" when Drive won't say, so a
+    reader of the Doc never loses its paragraphs to a metadata error."""
+    try:
+        return access(fid)
+    except SystemExit:
+        return {"id": fid, "name": "", "can_edit": True, "can_comment": True, "owner": ""}
+
+
+def view_only(acc):
+    level = "comment on" if acc["can_comment"] else "view"
+    if not acc["owner"]:
+        return f"This Google sign-in can only {level} \"{acc['name']}\". Nothing was changed."
+    return (f"\"{acc['name']}\" is owned by {acc['owner']}, and this Google sign-in can only {level} it. "
+            f"Ask {acc['owner']} for edit access. Nothing was changed.")
+
+
 def replace(fid, revision, edits_path):
     edits = load_edits(edits_path)
+    acc = access(fid)
+    if not acc["can_edit"]:
+        sys.exit("chewbacca google: " + view_only(acc))
     rev, blocks, title = doc_blocks(fid)
     if not revision or rev != revision:
         sys.exit("chewbacca google: the Doc changed since the preview (its revision moved). Nothing was changed; "
@@ -282,8 +327,18 @@ def main(argv):
             rest = rest[:i] + rest[i + 2:]
         read(rest[0], as_json=as_json, rows=max(1, min(rows, 500)))
     elif cmd == "blocks" and rest:
-        rev, blocks, title = doc_blocks(file_id(rest[0]))
-        print(json.dumps({"id": file_id(rest[0]), "title": title, "revision": rev, "blocks": blocks}))
+        fid = file_id(rest[0])
+        rev, blocks, title = doc_blocks(fid)
+        acc = access_or_unknown(fid)
+        print(json.dumps({"id": fid, "title": title, "revision": rev, "blocks": blocks,
+                          "can_edit": acc["can_edit"], "owner": acc["owner"],
+                          "why_not": "" if acc["can_edit"] else view_only(acc)}))
+    elif cmd == "access" and rest:
+        acc = access(file_id(rest[0]))
+        if as_json:
+            print(json.dumps(acc))
+        else:
+            print(f"{acc['name']}: can edit (owner {acc['owner'] or 'unknown'})" if acc["can_edit"] else view_only(acc))
     elif cmd == "replace" and rest and "--revision" in rest and "--edits" in rest:
         i, j = rest.index("--revision"), rest.index("--edits")
         if i + 1 >= len(rest) or j + 1 >= len(rest):

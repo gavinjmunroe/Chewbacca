@@ -142,7 +142,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - reference_writing_toolchain: Four writing tools are installed and they overlap; which one to reach for, plus...
 
 - reference_setup_installs_from_checkout: setup re-execs from ~/code/chewbacca; source_sync catches it up, update needs a 2nd setup run; verify hooks w grep settings
-- reference_google_docs_write_via_gws: Edit a Google Doc in place w gws batchUpdate (tabId, indices high to low, read back); 403 = re-consent via chewbacca email add
+- reference_google_docs_write_via_gws: Edit a Google Doc in place w gws batchUpdate (tabId, indices high to low, read back); works as of 10/13, check `chewbacca google access` first; scope 403 = re-consent via chewbacca email add
 
 ## Lessons
 

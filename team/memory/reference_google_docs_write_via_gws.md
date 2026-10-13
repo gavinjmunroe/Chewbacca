@@ -12,6 +12,10 @@ Editing a Google Doc is `gws docs documents batchUpdate`, never clipboard pastes
 3. Send every request in one batch, highest index first, or each edit shifts the next one's indices. `replaceAllText` with `tabsCriteria` handles typos.
 4. Read the doc back and check that each new string is there. A 200 response is not evidence.
 
+Checked 2026-10-13: Docs writes work. gws carries the documents scope, and a revision-pinned `chewbacca google replace` on a scratch Doc wrote, read back and refused a stale revision, in 1.8 s. The safe write path is that command: Drive's `capabilities.canEdit` first (`chewbacca google access <id>`), then one batchUpdate with `writeControl.requiredRevisionId`. Nothing needs the web app's own requests.
+
+Before a write, ask Drive, not Docs, whether this account may edit. Google checks the revision before the permission, so a probe can't tell, and revisionId is no signal: a comment-only Doc carried one and a view-only Doc didn't. A 403 "The caller does not have permission" is the owner's call (ask them for edit access), not a sign-in problem.
+
 A 403 "insufficient authentication scopes" means the sign-in lacks write access. `chewbacca email add <the gws auth status user>` re-consents. Since 2026-10-11 it asks for full account access (mail, Drive, Docs, Sheets, Slides, Calendar, Contacts, Tasks).
 
 Related: [[feedback_google_signin_calendar_write]], [[feedback_never_read_only]].

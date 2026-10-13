@@ -48,7 +48,8 @@ first 50 rows. "Open in Google" or "Show in Finder" is the secondary press.
 "Make the intro shorter in my mash up doc" (or the panel's box) has a tool-less
 model rewrite whole paragraphs, drawn as a Diff; only Apply edit writes,
 through `chewbacca docs apply` (genoffice, refused if the file's hash moved)
-or `chewbacca google replace` (refused by Google if the revision moved), and
+or `chewbacca google replace` (refused by Google if the revision moved, and
+refused before any model runs when Drive says the account can't edit it), and
 the result is read back against the preview. Sheets and decks are read only.
 Escape, the X or "close the doc" take it down. Source:
 [bin/lib/docs_surface.py](../../bin/lib/docs_surface.py).

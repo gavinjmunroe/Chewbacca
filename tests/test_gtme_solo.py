@@ -313,6 +313,19 @@ class Solo(unittest.TestCase):
         self.assertEqual([m["to"] for m in b["mails"]], ["maria@crumbcorner.test"])
         self.assertIn("hello@rollhouse.test", [m["to"] for m in b["held"]])
 
+    def test_the_ledgers_own_lines_json_is_read_without_the_flag(self):
+        # 10/12: every Firm Foundation lead was held for "no personal line"
+        # because lines.json sat in the ledger and batch only read --lines.
+        self.ready()
+        plan = json.loads((self.d / "plan.json").read_text())
+        plan["require_line"] = True
+        (self.d / "plan.json").write_text(json.dumps(plan))
+        (self.d / "lines.json").write_text(json.dumps({"maria@crumbcorner.test": {
+            "line": "Your plan a visit page has no form.", "source": "https://crumbcorner.test/visit"}}))
+        b = self.batch()
+        self.assertEqual([m["to"] for m in b["mails"]], ["maria@crumbcorner.test"])
+        self.assertIn("Your plan a visit page has no form.", b["mails"][0]["body"])
+
     def test_jev_checks_hold_an_email_jev_flags(self):
         import gtme_jev
         self.ready()

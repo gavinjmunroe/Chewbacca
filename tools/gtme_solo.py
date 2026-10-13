@@ -483,6 +483,8 @@ def lines_from(path: str | None) -> dict[str, dict]:
     the agent writes them, because only judgment makes one worth reading."""
     if not path:
         return {}
+    if not Path(path).exists():
+        return {}
     body = op.read_json(Path(path), {})
     return {k.lower(): v for k, v in body.items() if isinstance(v, dict)} if isinstance(body, dict) else {}
 
@@ -550,7 +552,10 @@ def cmd_batch(a) -> int:
                       + "; ".join(refusals) + ". Fix the copy with `chewbacca gtme copy`.")
     room = max(0, today_cap(a.client) - sent_today(a.client))
     d = cdir(a.client)
-    lines = lines_from(a.lines)
+    # No --lines: the ledger's own lines.json. On 10/12 all 252 Firm Foundation
+    # SoCal leads were held as "no personal line" because the file sat in the
+    # ledger and nobody passed the flag.
+    lines = lines_from(a.lines or str(cdir(a.client) / "lines.json"))
     off = suppressed(a.client)
     contacted = {r["email"] for r in jsonl(d / "sent.jsonl")}
     steps = {c["step"]: c for c in plan["copy"]}

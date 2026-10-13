@@ -67,11 +67,13 @@
     platform: "darwin",
     // HtmlMenu instead of NativeMenu: Menu.tsx draws its own when popupMenu is absent.
     htmlMenus: true,
-    // The glass frames the app itself. Caleb's fork of realm (branch
-    // chewbacca, src/App.tsx) reads this and puts the rail, sidebar, lead and
-    // trail away from inside; his own checkout ignores it, and glass.css
-    // hides them there instead.
-    frameless: true,
+    // His window chrome stays on the glass: the rail, the session sidebar,
+    // back and forward, search, New session and the side panel toggle are
+    // how you get around his app (skills/hud/SKILL.md, "His
+    // navigation stays"). Caleb's fork reads `frameless` and would put them
+    // away, so it is off. On 10/12 4:10pm, with them hidden, Caleb: "we need
+    // buttons to get through a UX".
+    frameless: false,
     zoomFactor: () => 1,
     onOpenSession: () => unsubscribe,
     onDaemonState: () => unsubscribe,
@@ -103,7 +105,8 @@
       Promise.reject(new Error("attachments need Realm's desktop app")),
     pathForFile: dropped,
     clipboard: { readText: () => Promise.resolve("") },
-    permissions: absent(["probe", "openSettings"]),
+    // His Permissions tab maps over probe()'s rows: no rows here, never null.
+    permissions: { ...absent(["openSettings"]), probe: empty },
     // Two namespaces his store reads a shape from, not just a value: the
     // composer's @ picker reads `computerAccess.rows` and the Permissions tab
     // `macAccess.rows`, so a null crashed the whole page the moment @ was
@@ -111,14 +114,26 @@
     // "nothing granted here" in his own shape: no rows, no helper.
     macAccess: {
       ...absent(["grant", "openSettings", "appIcon", "revealApp"]),
-      status: () => Promise.resolve({ cli: { present: false, path: null, version: null }, host: { name: "Chewbacca glass", bundlePath: null, packaged: false }, rows: [] }),
+      // His shape for a missing CLI is `{ present: false, searched }`; the
+      // tab joins `searched`, and without it Settings > Permissions blanked
+      // the glass (headless WebKit, 10/12 5:25pm, "e.cli.searched.join").
+      status: () => Promise.resolve({ cli: { present: false, searched: [] }, host: { name: "Chewbacca glass", bundlePath: "", packaged: false }, rows: [] }),
     },
     computerAccess: {
       ...absent(["openSettings"]),
       status: () => Promise.resolve({ hostName: "Chewbacca glass", packaged: false, helperAvailable: false, rows: [] }),
       request: () => Promise.resolve({ hostName: "Chewbacca glass", packaged: false, helperAvailable: false, rows: [] }),
     },
-    updates: absent(["status", "check", "download", "install", "onChanged"]),
+    // His Settings page reads `status.state.kind` the moment it draws, and
+    // absent() answers a name ending in "s" with an empty list, so opening
+    // Settings from his rail blanked the whole glass (headless WebKit,
+    // 10/12 5:20pm, "undefined is not an object (evaluating 'l.kind')").
+    // The glass has no update feed of its own: his "no-feed" state, in his shape.
+    updates: {
+      ...absent(["onChanged"]),
+      ...Object.fromEntries(["status", "check", "download", "install"].map((key) =>
+        [key, () => Promise.resolve({ version: "", state: { kind: "disabled", reason: "no-feed" } })])),
+    },
     // A turn that settles or asks while the glass is down: Kyber draws it as
     // a needs-you notice. Answers whether one was shown, as Electron's does.
     notify: {

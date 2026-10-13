@@ -697,7 +697,9 @@ to the story; Escape from the story goes back to the tiles.
 - The composer, the branch bar, the model picker, the machine and folder
   footer. Replying is a press ("Reply") or the talk key, not a field that sits
   there.
-- The breadcrumb header and its icons. The ask region already names the work.
+- Nothing of his frame. His pane bar (the space crumb, the title, Summary and
+  files, the pane menu) stays on screen above the story, and so do his rail,
+  sidebar, lead and trail ("His navigation stays", below).
 - "Worked for", the message action icons (copy, retry, branch, thumbs). Not
   part of what happened.
 - The "Edited 2 files +20 -3" card and its Undo and Review. The figure and the
@@ -783,22 +785,34 @@ What opens first:
   from the last 30 minutes, then everything settled by age, and last any
   failure older than that (`FRESH_FAIL_MS` in turn.mjs).
 
-What's always visible:
+What's always visible: his whole frame, plus one bar over it.
 
-- **On the tiles, a bar over them:** Agents with the count, New agent
-  (the one primary action), Close with its `esc` key drawn on it.
-- **On an agent (story or transcript), a column on the left:** All agents
-  as the first and largest button, New agent under it, then every agent
-  on the tiles as one row each (state, title, age, agent and repo) with the
-  open one marked, and Close at the bottom. Pressing a row switches straight
-  to that agent's story.
+- **The bar, in every mode:** All agents with the count (marked current on
+  the tiles), then on an agent its name and a Story / Transcript switch,
+  then New agent (the one primary action), Close with its `esc` key drawn
+  on it. Labeled buttons, 36 pt tall.
+- **His sidebar, in every mode:** every session, Needs you first, grouped
+  by space, the one showing marked. A row is one press to that agent: its
+  story from the tiles or a story, its transcript from the transcript. The
+  glass never draws a second agent list beside it.
+- **His rail, lead and trail, in every mode:** Home, Library, Connections,
+  Scheduled tasks, Code review, his account; back and forward; the side
+  panel toggle. A rail page shows in the workspace. Home is "Back to your
+  sessions" in his app, so on the glass it goes to the tiles.
 - **On the story, the doors are buttons:** Open transcript, and Reply as
   the primary. Never grey words.
 
-Where the exits are: All agents (or Escape) from the story goes to the
-tiles; Escape from the transcript goes to the story; Close (or Escape on
-the tiles, or a press on empty glass) takes the glass down. Every one of
-them is a button on screen; the keys are shortcuts, never the only way.
+Where the exits are: All agents (or Escape, or his Home) from the story or
+the transcript goes to the tiles; Story in the bar (or Escape) from the
+transcript goes to the story; Close (or Escape on the tiles) takes the
+glass down. Every one of them is a button on screen; the keys are
+shortcuts, never the only way.
+
+Only his presses move the glass. His store restores the last layout on
+boot by itself, and the first build that followed his focus showed the
+glass straight into the dead Gemini session again; `followHis` in nav.mjs
+moves only on a change of his focus within `PRESS_MS` of a press or key in
+his frame.
 
 A failed turn is a named state, never the provider's words as a headline:
 "Gemini can't sign in" over the beat line, and the call says what to do
@@ -823,21 +837,76 @@ over a test backdrop with a column of desktop icons on the right edge, at
 from every state the way back to all agents must be on screen and one
 press. Then every frame is opened and looked at.
 
+### His navigation stays
+
+Caleb, 2026-10-12 4:10pm, after his first live test: "Bro study carlton's UX
+on realm, we need buttons to get through a UX fucker! Yes it is the ux of the
+future but the future is intuitive ux!" Until then glass.css hid Carlton's
+rail, sidebar, lead and trail with `!important`, and the story replaced his
+screens with a layout that had no buttons. Subtraction went too far: it
+removed what makes his app easy to get around.
+
+The contract: **every navigation affordance Carlton ships stays visible and
+pressable on the glass**, unless a line below gives a reason Caleb would
+agree with. The story and the tiles are views inside his main pane, where his
+transcript goes, never a full-screen replacement. `tests/test_realm_floating.mjs`
+refuses any rule in glass.css that hides a piece of his chrome.
+
+What his app gives, read from his source (App.tsx, sidebar/, WindowLead.tsx,
+SidePaneToggle.tsx, CommandPalette.tsx, keys/) and from a headless build of
+his app with none of our layer (frames in
+`~/.chewbacca/overnight/live-ide-realm-nav-report.md`):
+
+| Where | Affordance | What it does | Key |
+| ----- | ---------- | ------------ | --- |
+| Rail (`.app-rail`, 52 pt) | Home | "Back to your sessions": closes a page, or starts a session if none is up. On the glass: the tiles | |
+| Rail | Library, Connections, Scheduled tasks, Code review | that page over his main pane; pressed again, closes it | |
+| Rail foot | You (his name) | menu: your page, Settings | ⌘, |
+| Lead (`.window-lead`) | Go back, Go forward | step the window's trail of what was showing | ⌃- / ⌃⇧- |
+| Lead | Show sidebar | only while the sidebar is folded | ⌘B |
+| Sidebar head | Hide sidebar, Search, New session | fold it; the palette; a new session in this space | ⌘B, ⌘K, ⌘N |
+| Sidebar | Profile switcher | other profiles, All spaces, profile settings | ⌘⇧Space |
+| Sidebar | Needs you | every session waiting on him, one row each, with Answer here inline | |
+| Sidebar | Spaces lens / Activity lens | sessions by space, or by day | |
+| Sidebar | A space's row | collapse; hover: New session here, More (worktree, Finder, memory, archived, settings) | |
+| Sidebar | A session's row | show it; ⌘-click beside; hover Archive; right-click: move, pin, rename, peek, focus, checkpoints, close, delete | |
+| Sidebar foot | New space | his new-space sheet (name, colour, folder) | |
+| Pane bar (`.panel-bar`) | Space crumb, title, Summary and files, Pane menu, Close | the space page; rename; the session summary; split, focus, close | ⌘W |
+| Trail (`.window-trail`) | Show / Hide side panel | the side panel's tabs: browser, files, terminal, sub-agents | |
+| Palette (`.palette`) | Open, the space's sessions, Actions, Theme, Deep search | jump anywhere; Respond to pending permission | ⌘K, ⌘P, ⌘⇧P |
+| Transcript | Permission card | Allow, Allow always, Deny, Submit | ↵, ⇧↵, ⌘⌫, Esc |
+| Anywhere | Toasts (`.toasts`), the connection banner | every failed action as a toast with its action; engine trouble with Retry | |
+
+What the glass adds on top, and nothing more: the bar (All agents, Story /
+Transcript, New agent, Close), the tiles and the story in his main pane, and
+the stage column beside the transcript while something is live.
+
+The stated exceptions, each one Caleb would agree with:
+
+- His Home, on the glass, goes to the tiles. His tooltip says "Back to your
+  sessions", and on the glass the tiles are his sessions.
+- His main pane's loops are paused while the tiles or the story cover it
+  (40 to 44 infinite animations measured under a pane nobody could see).
+  The sidebar's are not; its dots are on screen.
+- Escape is still ours first (bridge.js), so it steps transcript to story to
+  tiles. His dialogs, menus, palette and pages keep it while they are up.
+
 ### One owner per region
 
 <!-- regions:begin -->
 | Region    | Owner                 | Grid area        | Modes              | Draws |
 | --------- | --------------------- | ---------------- | ------------------ | ----- |
-| notice    | Notice                | notice (layer)   | tiles, story, work | a fault no one agent owns (engine down, the talk key lost), with its one fix |
-| nav       | Nav                   | nav (layer)      | tiles, story, work | the way around, always on screen: All agents, New agent, every agent to switch to, Close |
-| field     | TileField             | main (layer)     | tiles              | the agent tiles, one line each, a count of the rest, and the New agent door when there are none |
-| story     | Story                 | main (layer)     | story              | one agent's turn told by the screen, in the five regions below |
+| notice    | Notice                | notice (pane)    | tiles, story, work | a fault no one agent owns (engine down, the talk key lost), with its one fix |
+| frame     | Carlton's app (#root) | -                | tiles, story, work | his window chrome, never hidden: the rail, the session sidebar, back and forward, search, New session, the side panel toggle |
+| nav       | Nav                   | -                | tiles, story, work | the bar over his frame, always on screen: All agents, Story and Transcript, New agent, Close |
+| field     | TileField             | main (pane)      | tiles              | the agent tiles, one line each, a count of the rest, and the New agent door when there are none |
+| story     | Story                 | main (pane)      | story              | one agent's turn told by the screen, in the five regions below |
 | ask       | Story                 | ask (story)      | story              | what he asked, which agent, how long ago |
 | tell      | Story                 | tell (story)     | story              | the one headline, the beat line from the typed turn, what proved it |
 | call      | Story                 | call (story)     | story              | the one decision waiting on him, or the fault that stopped the story, with its press |
 | figure    | Story                 | figure (story)   | story              | one object for the beat: the turn's file, command or tests, the request, the hunks |
 | doors     | Story                 | doors (story)    | story              | Open transcript and Reply as buttons, his full workspace one press away |
-| stage     | Stage                 | main (layer)     | work               | the one live object beside his transcript: the command, the file being written, the check, or the fault |
+| stage     | Stage                 | -                | work               | the one live object beside his transcript: the command, the file being written, the check, or the fault |
 | workspace | Carlton's app (#root) | -                | work               | his conversation, composer and panes, untouched |
 | pick      | FolderPick            | -                | work               | Choose folder on the glass, over his new space sheet: his repos and a path field |
 | light     | Light                 | -                | tiles, story, work | the morph outline between a tile and the story, for 320 ms |
@@ -847,8 +916,10 @@ A new region is a row here, a row in regions.mjs, a `data-region` on exactly
 one element its owner draws, and a `grid-area` in glass.css that no other
 region of the same grid and mode uses. One component may own several regions
 (the story owns five); a region never has two owners. tests/test_realm_regions.mjs refuses any one without the
-others. The light is the only region with no area: it is drawn for the 320 ms
-of a morph, over everything, and then it is gone.
+others. The regions with no area are fixed strips of their own: his frame,
+the bar over it, the stage beside it, and the light, drawn for the 320 ms of
+a morph, over everything, and then gone. The pane over his main pane is one
+grid in every mode, placed by the measured rectangle of his `.main`.
 
 ## Navigation patterns from shipped agent apps
 

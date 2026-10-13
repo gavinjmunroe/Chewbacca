@@ -75,3 +75,52 @@ export function toSeed(
     .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
     .slice(0, max);
 }
+
+/** What the glass does when his own frame moves focus: a row in his
+ *  sidebar, his palette, his New session, a rail page. Before 10/12 his
+ *  frame was hidden, so only our buttons moved the glass; now his are on
+ *  screen in every mode and each press of his lands somewhere visible.
+ *
+ *  `before`/`after` are the session his focused pane showed before and
+ *  after the change (null for none). `known` says whether `after` is an
+ *  agent the glass already lists. `page` is whether one of his rail pages
+ *  (Library, Code review...) is up, `pageBefore` whether it was.
+ *
+ *  `pressed` says whether he pressed something in his frame just now.
+ *
+ *  Returns null when nothing should move, else the mode and focus to take.
+ *  Only a CHANGE of his focus that HE made counts. His store fires on every
+ *  event, and on boot it restores the last layout by itself: the first
+ *  build of this, 10/12 4:45pm, followed that restore and opened the glass
+ *  straight into the dead Gemini session, the 3:38pm bug again. */
+export function followHis({ mode, before, after, known, page, pageBefore, pressed }) {
+  if (!pressed) return null;
+  if (page && !pageBefore && mode !== "work") return { mode: "work", focus: null, keep: true };
+  if (!after || after === before) return null;
+  if (!known) return { mode: "work", focus: after, keep: false };
+  return { mode: mode === "work" ? "work" : "story", focus: after, keep: false };
+}
+
+/** A press on one of his sidebar's session rows that didn't move his
+ *  focus. Only the row his app already marks as showing (data-active) can
+ *  mean "this one": that is the restored session, pressed on purpose. Any
+ *  other row that didn't move his focus (an imported tab still opening, a
+ *  profile switch in flight, a ⌘-click that opens beside) is never
+ *  guessed at: the review of 10/12 found the first version opened whatever
+ *  his layout had restored, the dead Gemini "Hello", on such a press. */
+export function followRow({ mode, rowActive, focused, known, current }) {
+  if (!rowActive || !focused) return null;
+  if (mode !== "tiles" && focused === current) return null;
+  if (!known) return { mode: "work", focus: focused, keep: false };
+  return { mode: mode === "work" ? "work" : "story", focus: focused, keep: false };
+}
+
+/** The labeled buttons the glass bar shows in each mode. One press each to
+ *  every agent, another agent (his sidebar), and a new one, from any state
+ *  (skills/hud/SKILL.md, "Getting around"). */
+export function barButtons(mode, focused) {
+  const out = ["All agents"];
+  if (focused && mode !== "tiles") out.push("Story", "Transcript");
+  out.push("New agent", "Close");
+  return out;
+}

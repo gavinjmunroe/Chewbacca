@@ -168,3 +168,27 @@ test("a notification goes to Kyber as plain title and body, shown only when Kybe
   const broken = page({ postMessage: () => Promise.reject(new Error("gone")) });
   assert.equal(await broken.realm.notify.show({ id: "n3", title: "x" }), false);
 });
+
+// 10/12, once his rail was on the glass: Settings from his You menu blanked
+// the whole page ("evaluating 'l.kind'"), and Settings > Permissions did the
+// same ("e.cli.searched.join"). His Settings reads a shape from these, so
+// "not here" has to be said in his shape (env.d.ts), never null or [].
+test("the bridge answers his Settings page in his own shapes", async () => {
+  const realm = page(null).realm;
+  for (const key of ["status", "check", "download", "install"]) {
+    const st = await realm.updates[key]();
+    assert.equal(st.state.kind, "disabled", `updates.${key}`);
+    assert.equal(typeof st.version, "string");
+  }
+  assert.equal(typeof realm.updates.onChanged(() => {}), "function");
+  const mac = await realm.macAccess.status();
+  assert.equal(mac.cli.present, false);
+  assert.ok(Array.isArray(mac.cli.searched), "cli.searched is joined by his tab");
+  assert.ok(Array.isArray(mac.rows));
+  assert.equal(typeof mac.host.bundlePath, "string");
+  assert.ok(Array.isArray(await realm.permissions.probe()));
+});
+
+test("the bridge leaves his window chrome on (frameless off)", () => {
+  assert.equal(page(null).realm.frameless, false);
+});

@@ -24,14 +24,14 @@ function body(src, name) {
   return next < 0 ? src.slice(at) : src.slice(at, at + 1 + next);
 }
 
-/** The grid-template-areas of a grid ("layer" in one mode, or "story"). */
-function areasFor(grid, mode) {
+/** The grid-template-areas of a grid ("pane", the one over his main pane,
+ *  or "story"). The pane is one grid in every mode. */
+function areasFor(grid) {
   const rule = (re) => (re.exec(css) ?? [])[1];
   const block =
     grid === "story"
       ? rule(/\n\.story \{([^}]*)\}/)
-      : (mode !== "tiles" && rule(new RegExp(`\\.glass-layer\\[data-mode="${mode}"\\] \\{([^}]*grid-template[^}]*)\\}`))) ||
-        rule(/\.glass-layer \{([^}]*)\}/);
+      : rule(/\n\.glass-pane \{([^}]*)\}/);
   return [...(block ?? "").matchAll(/"([^"]+)"/g)].flatMap((m) => m[1].split(/\s+/)).filter((a) => a !== ".");
 }
 const CLASS = { nav: "glass-nav", notice: "glass-notice", field: "glass-field", stage: "glass-stage", story: "story" };
@@ -67,10 +67,10 @@ test("every region is drawn by exactly one component, at its own root", () => {
 test("within a mode, no two regions share a grid area, and every area is in its grid", () => {
   const modes = [...new Set(REGIONS.flatMap((r) => r.modes))];
   for (const mode of modes)
-    for (const grid of ["layer", "story"]) {
+    for (const grid of ["pane", "story"]) {
       const placed = REGIONS.filter((r) => r.grid === grid && r.modes.includes(mode));
       if (!placed.length) continue;
-      const areas = areasFor(grid, mode);
+      const areas = areasFor(grid);
       const used = placed.map((r) => r.area);
       assert.equal(new Set(used).size, used.length, `${mode}/${grid}: ${used}`);
       for (const r of placed) assert.ok(areas.includes(r.area), `${mode}/${grid}: no "${r.area}" area for ${r.id}`);

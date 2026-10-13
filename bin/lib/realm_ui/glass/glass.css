@@ -2,9 +2,10 @@
  * renderer (github.com/31Carlton7/realm). Loaded after his tokens.css and
  * styles.css (glass/main.tsx), so it wins where it overrides them, and it
  * only ever uses his tokens: the colour ladder, radii, type and motion are
- * his. What it changes is the frame: no window ground, no rail, no sidebar,
- * and his panes float on the desktop at the alpha his own design.md measured
- * as the thinnest that holds body text at AA over any desktop (84%).
+ * his. His window chrome stays: the rail, the session sidebar, back and
+ * forward, search, New session and the side panel toggle are on the glass in
+ * every mode (skills/hud/SKILL.md, "His navigation stays"). What we add is
+ * a bar over his frame and our tiles and story inside his main pane.
  */
 
 :root[data-glass] {
@@ -12,116 +13,104 @@
    * read through the story at 84% and the panel looked like a tinted sheet
    * over his wallpaper (live-test/first-live-1538.png). */
   --pane-alpha: 96%;
-  --glass-stage-w: min(40vw, 480px);
-  --glass-nav-w: 232px;
+  --glass-stage-w: min(30vw, 300px);
+  --glass-bar-h: 52px;
   --glass-gap: 12px;
   background: transparent;
 }
 
-/* Tiles: his app stays mounted and live underneath (instant on grow) but is
- * not drawn and takes no pointer. */
-:root[data-glass="tiles"] #root {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transition:
-    opacity var(--dur-fast) var(--ease-fade),
-    visibility 0s linear var(--dur-fast);
+/* His frame: his whole app, under our bar, in every mode. Before 10/12
+ * glass.css hid his rail, sidebar, lead and trail with !important, and
+ * Caleb's first live test had no way around ("we need buttons to get
+ * through a UX", 4:10pm). Now nothing of his chrome is hidden; his app is
+ * pushed down by the bar's height, and his fixed pieces at the top (the
+ * lead's back, forward and sidebar buttons, the trail's side panel toggle,
+ * the sidebar's seam shade, the connection banner with its Retry) move down
+ * with it. Nothing here makes #root a
+ * stacking context or a containing block, so his palette, sheets, menus,
+ * tooltips and toasts still land over everything at his own z-indexes. */
+:root[data-glass] #root {
+  box-sizing: border-box;
+  padding-top: calc(var(--glass-bar-h) + 6px);
 }
-:root[data-glass="work"] #root {
-  opacity: 1;
-  visibility: visible;
-  transition: opacity var(--dur-enter) var(--ease-fade);
+:root[data-glass] .window-lead,
+:root[data-glass] .window-trail,
+:root[data-glass] .sidebar-shade,
+:root[data-glass] .conn-banner {
+  translate: 0 calc(var(--glass-bar-h) + 6px);
+}
+:root[data-glass] .app {
+  border-radius: var(--radius-window, 16px);
+  overflow: clip;
+  background: color-mix(in srgb, var(--sidebar-ground, var(--pane-ground)) 96%, transparent);
+  box-shadow:
+    inset 0 0 0 var(--hairline-w, 1px) var(--card-ring, var(--line)),
+    var(--shadow-overlay);
+}
+/* The stage takes a column on the right only while it has something on it. */
+:root[data-glass="work"][data-glass-stage] #root {
+  padding-right: calc(var(--glass-stage-w) + var(--glass-gap));
+  transition: padding var(--dur-base) var(--ease-out-strong);
 }
 
-/* His app's own loops stop while it is hidden under the tiles or the
- * story. Measured 10/12 on his default build in headless WebKit against the
- * fake agent (day-ide-report.md): rl-orb-breathe and friends ran 40 infinite
- * animations while empty, 44 while working and 44 while needs-you, all under
- * a #root nobody can see. His own data-quiet pause never fires here, since
- * the glass keeps the page focused, and its list leaves the orbs out anyway.
- * Paused, not removed: his once-in entrances (rl-fade-in) resume where they
- * were the moment the workspace shows, never stuck at opacity 0 there. */
-:root[data-glass="tiles"] #root *,
-:root[data-glass="tiles"] #root *::before,
-:root[data-glass="tiles"] #root *::after,
-:root[data-glass="story"] #root *,
-:root[data-glass="story"] #root *::before,
-:root[data-glass="story"] #root *::after {
+/* His main pane's own loops stop while our tiles or story cover it.
+ * Measured 10/12 on his default build in headless WebKit against the fake
+ * agent (day-ide-report.md): 40 to 44 infinite animations ran under a pane
+ * nobody could see. Only the covered pane: his sidebar's status dots are on
+ * screen and keep moving. Paused, not removed, so his once-in entrances
+ * resume where they were the moment the transcript shows. */
+:root[data-glass="tiles"] #root .main *,
+:root[data-glass="tiles"] #root .main *::before,
+:root[data-glass="tiles"] #root .main *::after,
+:root[data-glass="story"] #root .main *,
+:root[data-glass="story"] #root .main *::before,
+:root[data-glass="story"] #root .main *::after {
   animation-play-state: paused !important;
 }
 
-/* No chrome on the glass: the window's rail, its sidebar column, the lead,
- * the trail and the frame around the panes are a window's, and this is not
- * one. The trail's "Show side panel" button floated alone in the glass's
- * top right corner, off his app, over the desktop (floating audit,
- * 2026-10-12); the stage is the side column here. */
-:root[data-glass] .app-rail,
-:root[data-glass] .app > .sidebar,
-:root[data-glass] .sidebar-shade,
-:root[data-glass] .window-lead,
-:root[data-glass] .window-trail,
-:root[data-glass] .side-pane-toggle {
-  display: none !important;
-}
-:root[data-glass] .app {
-  --sidebar-w: 0px !important;
-  background: transparent;
-}
-:root[data-glass] .app > .main {
-  border: 0 !important;
-  border-radius: var(--radius-window, 16px);
-  overflow: clip;
-  background: var(--pane-ground) !important;
-  box-shadow: var(--shadow-overlay);
-}
-:root[data-glass] .app > .main::before,
-:root[data-glass] .app > .main::after {
-  display: none !important;
-}
-
-/* The stage takes its column only while it has something on it, and the
- * workspace gives way on his `--dur-base` size step: one morph per change. */
-:root[data-glass="work"] #root {
-  width: 100%;
-  transition:
-    opacity var(--dur-enter) var(--ease-fade),
-    width var(--dur-base) var(--ease-out-strong);
-}
-:root[data-glass="work"] #root {
-  margin-left: calc(var(--glass-nav-w) + var(--glass-gap));
-  width: calc(100% - var(--glass-nav-w) - var(--glass-gap));
-}
-:root[data-glass="work"][data-glass-stage] #root,
-:root[data-glass="work"][data-glass-notice] #root {
-  width: calc(100% - var(--glass-nav-w) - var(--glass-stage-w) - 2 * var(--glass-gap));
-}
-
 /* One owner per region (skills/hud/SKILL.md, "One owner per region"): the
-   layer is a grid, and each region is one named area of it, so two things
-   can't be laid out in the same place. The light is the one exception: it
-   exists only for the 320 ms of a morph, over everything, and then is gone. */
+   pane over his main is a grid, and each region in it is one named area, so
+   two things can't be laid out in the same place. The bar and the stage are
+   fixed to their own strips beside his frame; the light exists only for the
+   320 ms of a morph, over everything, and then is gone. The layer itself
+   is not a box (display: contents), so each piece takes its own z-index
+   among his: over his main pane (z auto), under his lead and trail (36),
+   his sheets (40), palette (50) and menus (100). */
 .glass-layer {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-  pointer-events: none;
+  display: contents;
   font-family: var(--font-sans);
   color: var(--ink);
+}
+.glass-pane {
+  position: fixed;
+  z-index: 34;
+  left: var(--glass-main-x, 0px);
+  top: calc(var(--glass-main-y, 0px) + var(--frame-top, 40px));
+  width: var(--glass-main-w, 100vw);
+  height: calc(var(--glass-main-h, 100vh) - var(--frame-top, 40px));
+  pointer-events: none;
   display: grid;
   grid-template:
     "notice" auto
-    "nav" auto
     "main" minmax(0, 1fr) / minmax(0, 1fr);
+  container-type: inline-size;
+  border-bottom-right-radius: var(--radius-window, 16px);
+  overflow: clip;
 }
-.glass-layer[data-mode="work"] {
-  grid-template:
-    "nav . notice" auto
-    "nav . main" minmax(0, 1fr) / var(--glass-nav-w) minmax(0, 1fr) var(--glass-stage-w);
-  column-gap: var(--glass-gap);
+.glass-pane[data-mode="tiles"],
+.glass-pane[data-mode="story"] {
+  background: var(--pane-ground);
 }
-.glass-layer[data-mode="tiles"] {
-  pointer-events: auto;
+/* On the tiles nothing is open, so his pane bar (which names whatever his
+ * layout last restored, the dead Gemini "Hello" on 10/12) is covered too.
+ * On a story it shows that agent's space and title, which is true. */
+.glass-pane[data-mode="tiles"] {
+  top: var(--glass-main-y, 0px);
+  height: var(--glass-main-h, 100vh);
+  border-top-right-radius: var(--radius-window, 16px);
+}
+.glass-pane[data-mode="work"] {
+  height: auto;
 }
 
 /* ── tiles ─────────────────────────────────────────────────────────────── */
@@ -131,7 +120,8 @@
   display: grid;
   align-content: start;
   justify-items: center;
-  padding: 16px 24px 24px;
+  padding: 20px 24px 24px;
+  pointer-events: auto;
   overflow-y: auto;
   animation: glass-in var(--dur-slow) var(--ease-out-strong) both;
 }
@@ -142,7 +132,8 @@
 }
 .glass-tiles {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 300px));
+  width: 100%;
+  grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
   gap: var(--glass-gap);
 }
 .glass-tile {
@@ -329,7 +320,12 @@
 
 /* ── the stage ─────────────────────────────────────────────────────────── */
 .glass-stage {
-  grid-area: main;
+  position: fixed;
+  z-index: 34;
+  top: calc(var(--glass-bar-h) + 6px);
+  right: 0;
+  bottom: 0;
+  width: var(--glass-stage-w);
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -524,23 +520,8 @@
 
 /* ── the story: one agent turn told by the screen ─────────────────────────
  * skills/hud/SKILL.md, "An agent turn told by the screen". Seven regions on
- * one surface, each with one job. His transcript is mounted underneath and
- * hidden, exactly as under the tiles, so Transcript is instant. */
-:root[data-glass="story"] #root {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transition:
-    opacity var(--dur-fast) var(--ease-fade),
-    visibility 0s linear var(--dur-fast);
-}
-.glass-layer[data-mode="story"] {
-  pointer-events: auto;
-  grid-template:
-    "nav notice" auto
-    "nav main" minmax(0, 1fr) / var(--glass-nav-w) minmax(0, 1fr);
-  column-gap: var(--glass-gap);
-}
+ * one surface, each with one job, in his main pane where his transcript
+ * goes. His transcript is mounted underneath, so Transcript is instant. */
 .story {
   grid-area: main;
   min-height: 0;
@@ -553,12 +534,8 @@
     "call   doors";
   column-gap: 40px;
   row-gap: 24px;
-  padding: 36px 40px 28px;
-  border-radius: var(--radius-window, 16px);
-  background: var(--pane-ground);
-  box-shadow:
-    inset 0 0 0 var(--hairline-w, 1px) var(--card-ring, var(--line)),
-    var(--shadow-overlay);
+  padding: 28px 32px 24px;
+  pointer-events: auto;
   animation: glass-in var(--dur-slow) var(--ease-out-strong) both;
 }
 .story-label {
@@ -985,8 +962,10 @@
   outline-offset: 2px;
 }
 
-/* Narrow glass: one column, the figure under the telling. */
-@media (max-width: 760px) {
+/* A narrow main pane (his sidebar open on a 1000 pt glass): one column,
+ * the figure under the telling. A container query, since the pane is
+ * narrower than the window. */
+@container (max-width: 760px) {
   .story {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto auto minmax(0, 1fr) auto auto;
@@ -1198,42 +1177,30 @@
   color: var(--ink-2);
 }
 
-/* ── the nav: the way around, in every mode ──────────────────────────────
- * One owner (Nav in GlassLayer.tsx), one area. On the tiles it is the bar
- * over them; on an agent it is the column on the left. Always on screen,
- * never only a key: on 10/12 the only ways out were Escape, a small x over
- * his desktop icons, and grey words in a corner. */
+/* ── the bar: the way around, in every mode ─────────────────────────────
+ * One owner (Nav in GlassLayer.tsx). A strip over his frame with All agents,
+ * the open agent's Story and Transcript, New agent and Close, each a labeled
+ * button. Another agent is his sidebar, right under it. Never only a key: on
+ * 10/12 the only ways out were Escape, a small x over his desktop icons,
+ * and grey words in a corner. */
 .glass-nav {
-  grid-area: nav;
+  position: fixed;
+  z-index: 37;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--glass-bar-h);
   pointer-events: auto;
   display: flex;
+  align-items: center;
   gap: 8px;
+  padding: 0 8px;
   border-radius: var(--radius-window, 16px);
   background: var(--pane-ground);
   box-shadow:
     inset 0 0 0 var(--hairline-w, 1px) var(--card-ring, var(--line)),
     var(--shadow-overlay);
   animation: glass-in var(--dur-slow) var(--ease-out-strong) both;
-}
-.glass-nav[data-shape="bar"] {
-  justify-self: center;
-  align-items: center;
-  width: min(100% - 48px, 924px);
-  margin: 24px 24px 0;
-  padding: 10px 10px 10px 18px;
-}
-.glass-nav[data-shape="column"] {
-  flex-direction: column;
-  min-height: 0;
-  padding: 12px;
-}
-.glass-nav-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--text-base, 14px);
-  font-weight: var(--font-weight-semibold, 600);
-  color: var(--ink);
 }
 .glass-nav-count {
   min-width: 20px;
@@ -1247,13 +1214,46 @@
   font-variant-numeric: tabular-nums;
 }
 .glass-nav-hint {
-  margin-right: auto;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-left: 4px;
   font-size: var(--text-sm, 13px);
   color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.glass-nav-here {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 6px;
+  font-size: var(--text-sm, 13px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--ink);
+}
+.glass-nav-here-title {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.glass-nav-views {
+  flex: none;
+  display: inline-flex;
+  gap: 2px;
+  margin-right: auto;
+  padding: 2px;
+  border-radius: var(--radius-control, 8px);
+  background: var(--hover);
 }
 .glass-nav-all,
 .glass-nav-new,
-.glass-nav-close {
+.glass-nav-close,
+.glass-nav-view {
+  flex: none;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -1268,14 +1268,24 @@
     background-color var(--dur-hover) var(--ease-fade),
     scale var(--dur-press) var(--ease-out-strong);
 }
+.glass-nav-view {
+  min-height: 32px;
+  padding: 4px 12px;
+  color: var(--ink-2);
+}
+.glass-nav-view[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 var(--hairline-w, 1px) var(--line-strong, var(--line));
+}
 .glass-nav-all {
   font-size: var(--text-base, 14px);
   font-weight: var(--font-weight-semibold, 600);
   background: var(--surface);
   box-shadow: inset 0 0 0 var(--hairline-w, 1px) var(--line-strong, var(--line));
 }
-.glass-nav-all .glass-nav-count {
-  margin-left: auto;
+.glass-nav-all[aria-current] {
+  cursor: default;
 }
 .glass-nav-new {
   color: var(--accent-ink);
@@ -1284,9 +1294,6 @@
 }
 .glass-nav-close {
   color: var(--ink-2);
-}
-.glass-nav[data-shape="column"] .glass-nav-close {
-  margin-top: auto;
 }
 .glass-nav-close kbd {
   padding: 0 5px;
@@ -1297,87 +1304,23 @@
   color: var(--ink-3);
 }
 @media (hover: hover) and (pointer: fine) {
-  .glass-nav-all:hover,
+  .glass-nav-all:not([aria-current]):hover,
   .glass-nav-new:hover,
   .glass-nav-close:hover,
-  .glass-nav-row:hover {
+  .glass-nav-view:hover {
     background: var(--hover);
   }
 }
 .glass-nav-all:active,
 .glass-nav-new:active,
 .glass-nav-close:active,
-.glass-nav-row:active {
+.glass-nav-view:active {
   scale: 0.97;
 }
 .glass-nav-all:focus-visible,
 .glass-nav-new:focus-visible,
 .glass-nav-close:focus-visible,
-.glass-nav-row:focus-visible {
+.glass-nav-view:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-}
-.glass-nav-list {
-  flex: 1 1 auto;
-  min-height: 0;
-  margin: 6px 0 0;
-  padding: 0;
-  list-style: none;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.glass-nav-row {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 8px 10px;
-  border-radius: var(--radius-control, 8px);
-  text-align: left;
-  cursor: pointer;
-  transition:
-    background-color var(--dur-hover) var(--ease-fade),
-    scale var(--dur-press) var(--ease-out-strong);
-}
-.glass-nav-row[aria-current] {
-  background: var(--hover-2, var(--hover));
-  box-shadow: inset 2px 0 0 var(--accent);
-  cursor: default;
-}
-.glass-nav-row-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: var(--text-xs, 12px);
-  color: var(--ink-3);
-}
-.glass-nav-row[data-tone="running"] .glass-nav-row-head {
-  color: var(--accent-ink);
-}
-.glass-nav-row[data-tone="needs"] .glass-nav-row-head {
-  color: var(--orange);
-}
-.glass-nav-row[data-tone="failed"] .glass-nav-row-head {
-  color: var(--red);
-}
-.glass-nav-row-age {
-  margin-left: auto;
-  font-variant-numeric: tabular-nums;
-}
-.glass-nav-row-title {
-  font-size: var(--text-sm, 13px);
-  font-weight: var(--font-weight-medium, 500);
-  color: var(--ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.glass-nav-row-meta {
-  font-size: var(--text-xs, 12px);
-  color: var(--ink-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }

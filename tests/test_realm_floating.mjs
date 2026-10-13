@@ -81,56 +81,40 @@ test("the stage draws through stageObject and never the trail", () => {
   assert.ok(!css.includes(".glass-trail"), "the trail's styles outlived it");
 });
 
-test("every piece of Carlton's window chrome is hidden on the glass", () => {
-  const hidden = /:root\[data-glass\][^{]*\{\s*display: none !important;/.exec(
-    css,
-  );
-  assert.ok(hidden, "no hide rule");
-  const rule = css.slice(
-    css.lastIndexOf("/*", hidden.index),
-    hidden.index + hidden[0].length,
-  );
-  for (const cls of [
-    ".app-rail",
-    ".app > .sidebar",
-    ".sidebar-shade",
-    ".window-lead",
-    ".window-trail",
-  ])
-    assert.ok(
-      rule.includes(`:root[data-glass] ${cls}`),
-      `${cls} still draws on the glass`,
-    );
-  // Any fixed window-* chrome Carlton adds later has to be named here too.
-  const realm =
-    process.env.CHEWBACCA_REALM_DIR ||
-    path.join(os.homedir(), "code/vendor/realm");
+// 10/12 4:10pm, after his first live test with this chrome hidden: "Bro
+// study carlton's UX on realm, we need buttons to get through a UX". Every
+// piece of Carlton's window chrome stays on the glass (skills/hud/SKILL.md,
+// "His navigation stays"); this held the opposite until that day.
+const CHROME = [".app-rail", ".sidebar", ".sidebar-shade", ".window-lead", ".window-trail", ".side-pane-toggle", ".rail-btn", ".sb-header"];
+test("no piece of Carlton's window chrome is hidden on the glass", () => {
+  for (const m of css.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+    const [sel, decl] = [m[1], m[2]];
+    if (!/display:\s*none|visibility:\s*hidden|opacity:\s*0[;\s]/.test(decl)) continue;
+    for (const cls of CHROME)
+      assert.ok(
+        !new RegExp(`\\${cls}(?![\\w-])`).test(sel.replace(/\/\*[\s\S]*?\*\//g, "")),
+        `${cls} is hidden by: ${sel.trim().slice(0, 80)}`,
+      );
+  }
+  // And his whole app is never hidden in any mode: it is the frame.
+  assert.doesNotMatch(css, /:root\[data-glass="(tiles|story)"\] #root \{[^}]*(visibility:\s*hidden|opacity:\s*0)/);
+  // Any fixed window-* chrome Carlton adds later moves down under our bar
+  // with the rest, or it would sit under the bar, unpressable.
+  const realm = process.env.CHEWBACCA_REALM_DIR || path.join(os.homedir(), "code/vendor/realm");
   const theirs = path.join(realm, "apps/desktop/src/renderer/src/styles.css");
   if (!existsSync(theirs)) return;
-  const fixed = [
-    ...readFileSync(theirs, "utf8").matchAll(
-      /\n(\.window-[\w-]+) \{[^}]*position: fixed/g,
-    ),
-  ].map((m) => m[1]);
-  assert.ok(
-    fixed.length > 0,
-    "found none of his fixed window chrome; the pattern drifted",
-  );
-  for (const cls of fixed)
-    assert.ok(
-      rule.includes(`:root[data-glass] ${cls}`),
-      `${cls} floats on the glass`,
-    );
+  const fixed = [...readFileSync(theirs, "utf8").matchAll(/\n(\.window-[\w-]+) \{[^}]*position: fixed/g)].map((m) => m[1]);
+  assert.ok(fixed.length > 0, "found none of his fixed window chrome; the pattern drifted");
+  const moved = /([^{}]*)\{[^}]*translate:\s*0 calc\(var\(--glass-bar-h\)/.exec(css)?.[1] ?? "";
+  // His connection banner (top 0, z 30, with Retry) too: under the bar
+  // its buttons couldn't be seen or pressed (review, 10/12).
+  for (const cls of [...fixed, ".conn-banner", ".sidebar-shade"])
+    assert.ok(moved.includes(`:root[data-glass] ${cls}`), `${cls} sits under the bar`);
 });
 
-test("no copy on the glass points at the sidebar the glass hides", () => {
-  for (const name of ["GlassLayer.tsx", "Story.tsx", "FolderPick.tsx"]) {
-    const jsx = src(name).replace(/\/\/.*$|\/\*[\s\S]*?\*\//gm, "");
-    assert.ok(
-      !/in the sidebar/.test(jsx),
-      `${name} sends him to a sidebar that isn't drawn`,
-    );
-  }
+test("the bridge never asks Caleb's fork to put his chrome away", () => {
+  const bridge = readFileSync(new URL("../bridge.js", DIR), "utf8");
+  assert.match(bridge, /frameless: false,/);
 });
 
 // Day polish, 10/12. Measured on his default build in headless WebKit with
@@ -138,10 +122,13 @@ test("no copy on the glass points at the sidebar the glass hides", () => {
 // tiles with no agents, 44 under the story while needs-you, 43 under the
 // tiles after a turn, all inside a #root nobody could see.
 test("his hidden app's loops are paused while the tiles or the story cover it, and run again in the workspace", () => {
+  // Only his main pane, which the tiles and the story cover: his sidebar is
+  // on screen and its status dots keep moving.
   for (const mode of ["tiles", "story"])
-    for (const sel of [`:root[data-glass="${mode}"] #root *`, `:root[data-glass="${mode}"] #root *::before`, `:root[data-glass="${mode}"] #root *::after`])
+    for (const sel of [`:root[data-glass="${mode}"] #root .main *`, `:root[data-glass="${mode}"] #root .main *::before`, `:root[data-glass="${mode}"] #root .main *::after`])
       assert.ok(css.includes(sel), sel);
-  const rule = /:root\[data-glass="tiles"\] #root \*,[\s\S]*?\{([^}]*)\}/.exec(css)?.[1] ?? "";
+  assert.ok(!css.includes(':root[data-glass="tiles"] #root *'), "the sidebar's dots paused while on screen");
+  const rule = /:root\[data-glass="tiles"\] #root \.main \*,[\s\S]*?\{([^}]*)\}/.exec(css)?.[1] ?? "";
   assert.match(rule, /animation-play-state:\s*paused\s*!important/);
   assert.doesNotMatch(rule, /animation:\s*none/, "paused, not removed: his entrances resume where they were");
   assert.ok(!css.includes(':root[data-glass="work"] #root *'), "never paused where he can see it");

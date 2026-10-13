@@ -7,7 +7,9 @@
 // skills/hud/SKILL.md, "Getting around".
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import * as nav from "../bin/lib/realm_ui/glass/nav.mjs";
 import * as t from "../bin/lib/realm_ui/glass/turn.mjs";
 import * as b from "../bin/lib/realm_ui/glass/beats.mjs";
@@ -251,18 +253,12 @@ test("the stylesheet: no filled beat, a nav in every mode, an opaque pane", () =
       /background/,
       "a beat word with a fill drew the red bar",
     );
-  for (const mode of ["story", "work"]) {
-    const block =
-      new RegExp(`\\.glass-layer\\[data-mode="${mode}"\\] \\{([^}]*)\\}`).exec(
-        css,
-      )?.[1] ?? "";
-    assert.match(block, /"nav /, `${mode} has no nav column`);
-  }
-  assert.match(
-    /\.glass-layer \{([^}]*)\}/.exec(css)[1],
-    /"nav"/,
-    "the tiles have no nav bar",
-  );
+  // The bar is one fixed strip over his frame, the same in every mode;
+  // switching agents is his sidebar under it.
+  const bar = /\n\.glass-nav \{([^}]*)\}/.exec(css)?.[1] ?? "";
+  assert.match(bar, /position:\s*fixed/, "the bar isn't fixed over the frame");
+  assert.doesNotMatch(css, /\.glass-nav\[data-shape="column"\]/, "a second agent list beside his sidebar");
+  assert.doesNotMatch(css, /\.glass-layer\[data-mode="\w+"\] \{[^}]*"nav/, "the bar moves between modes");
   const alpha = Number(/--pane-alpha:\s*(\d+)%/.exec(css)?.[1]);
   assert.ok(
     alpha >= 95,
@@ -281,4 +277,83 @@ test("an imported tab's transcript outranks realm's stale copy of its turn", () 
   assert.equal(t.tileTurn(s, stale, { state: "running", lastAt: NOW }, true).phase, "asked");
   // A realm-run session has no tab, so its own events stand.
   assert.equal(t.tileTurn({ ...s, providerSessionId: null }, stale, undefined, true).phase, "asked");
+});
+
+// 10/12 4:10pm: "study carlton's UX on realm, we need buttons". His frame is
+// on the glass now, so a press of his has to land somewhere visible, and
+// nothing that isn't his press may move the glass.
+test("his presses move the glass; his boot restoring a layout doesn't", () => {
+  const base = { mode: "tiles", before: null, after: "gem", known: true, page: false, pageBefore: false };
+  // His boot restored the dead Gemini session as the focused pane (the
+  // first build of this, 4:45pm, opened straight into it).
+  assert.equal(nav.followHis({ ...base, pressed: false }), null);
+  assert.equal(nav.followHis({ ...base, known: false, pressed: false }), null);
+  // A row in his sidebar, from the tiles or a story: that agent's story.
+  assert.deepEqual(nav.followHis({ ...base, pressed: true }), { mode: "story", focus: "gem", keep: false });
+  assert.deepEqual(nav.followHis({ ...base, mode: "story", before: "a", pressed: true }), { mode: "story", focus: "gem", keep: false });
+  // From the transcript it stays the transcript.
+  assert.deepEqual(nav.followHis({ ...base, mode: "work", before: "a", pressed: true }), { mode: "work", focus: "gem", keep: false });
+  // His New session: an agent the glass doesn't list yet, shown as his hero composer.
+  assert.deepEqual(nav.followHis({ ...base, known: false, pressed: true }), { mode: "work", focus: "gem", keep: false });
+  // The same focus, or none: nothing moves.
+  assert.equal(nav.followHis({ ...base, before: "gem", pressed: true }), null);
+  assert.equal(nav.followHis({ ...base, after: null, pressed: true }), null);
+  // A page of his rail (Code review, Library...) shows in the workspace.
+  assert.deepEqual(nav.followHis({ ...base, after: null, page: true, pressed: true }), { mode: "work", focus: null, keep: true });
+  assert.equal(nav.followHis({ ...base, mode: "work", after: null, page: true, pressed: true }), null);
+});
+
+test("the bar's labeled buttons, per mode", () => {
+  assert.deepEqual(nav.barButtons("tiles", false), ["All agents", "New agent", "Close"]);
+  assert.deepEqual(nav.barButtons("tiles", true), ["All agents", "New agent", "Close"]);
+  for (const m of ["story", "work"])
+    assert.deepEqual(nav.barButtons(m, true), ["All agents", "Story", "Transcript", "New agent", "Close"]);
+  // A session his New session just made isn't listed: no story to switch to.
+  assert.deepEqual(nav.barButtons("work", false), ["All agents", "New agent", "Close"]);
+  const src = readFileSync(new URL("../bin/lib/realm_ui/glass/GlassLayer.tsx", import.meta.url), "utf8");
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  const bar = code.slice(code.indexOf("function Nav("), code.indexOf("export function FaultBody"));
+  assert.match(bar, /barButtons\(mode,/, "the bar doesn't draw from barButtons");
+  for (const label of ["All agents", "Story", "Transcript", "New agent", "Close"])
+    assert.match(bar, new RegExp(`[>}]\\s*${label}\\s*[<{]|<span>${label}</span>`), `${label} isn't drawn as a button label`);
+  // His rail's Home ("Back to your sessions") goes to the tiles, and his
+  // Rail.tsx still names it that way (a relabel would silently skip us).
+  assert.match(code, /\.app-rail \.rail-btn\[aria-label="Home"\]/);
+  const rail = path.join(process.env.CHEWBACCA_REALM_DIR || path.join(os.homedir(), "code/vendor/realm"), "apps/desktop/src/renderer/src/components/sidebar/Rail.tsx");
+  if (existsSync(rail)) assert.match(readFileSync(rail, "utf8"), /className="rail-btn" aria-label="Home"/, "his Home button changed its label");
+});
+
+test("a press on his sidebar row opens only the row he pressed", () => {
+  const base = { mode: "tiles", focused: "gem", known: true, current: null };
+  // The row his layout already shows (marked data-active): that one.
+  assert.deepEqual(nav.followRow({ ...base, rowActive: true }), { mode: "story", focus: "gem", keep: false });
+  // Any other row that didn't move his focus (an imported tab still
+  // opening, a profile switch in flight): never the restored session.
+  assert.equal(nav.followRow({ ...base, rowActive: false }), null);
+  // Already on that agent's story: nothing moves.
+  assert.equal(nav.followRow({ ...base, mode: "story", rowActive: true, current: "gem" }), null);
+  assert.equal(nav.followRow({ ...base, rowActive: true, focused: null }), null);
+  // The layer reads the row before his click handler runs, and never
+  // guesses from "whatever is focused" with no row behind it.
+  const src = readFileSync(new URL("../bin/lib/realm_ui/glass/GlassLayer.tsx", import.meta.url), "utf8");
+  const onRow = src.slice(src.indexOf("const onRow = "), src.indexOf('document.addEventListener("click", onRow, true);'));
+  assert.match(onRow, /hasAttribute\("data-active"\)/);
+  assert.doesNotMatch(onRow, /before:\s*null|setTimeout/);
+});
+
+// Headless WebKit, 10/12 5:10pm: his Home pressed 200 ms after a tile grew
+// stayed on the transcript, and Escape the same, because the shrink
+// returned early while the grow's 320 ms morph ran. A press always wins.
+test("a press during a morph is never dropped", () => {
+  const layer = readFileSync(new URL("../bin/lib/realm_ui/glass/GlassLayer.tsx", import.meta.url), "utf8");
+  const shrink = layer.slice(layer.indexOf("const shrink = useCallback("), layer.indexOf("}, [tiles]);"));
+  assert.doesNotMatch(shrink, /if \(morphing\.current\) return;/, "shrink drops a press mid-morph");
+  assert.match(shrink, /morphGen\.current \+= 1;/, "shrink doesn't end the running morph");
+  const grow = layer.slice(layer.indexOf("const grow = useCallback("), layer.indexOf("const shrink = useCallback("));
+  assert.match(grow, /if \(!live\(\)\) return;\s*setMode\(land\)/, "an ended grow still lands its mode");
+  assert.doesNotMatch(grow, /morphing\.current\) return;/, "a tile pressed mid-shrink is dropped");
+  // And the follower of his frame never waits on a morph either.
+  const follow = layer.slice(layer.indexOf("const take = "), layer.indexOf("const onRow = "));
+  assert.doesNotMatch(follow, /if \(morphing\.current\) return/);
+  assert.match(follow, /morphGen\.current \+= 1;/, "a followed press leaves the morph flying");
 });

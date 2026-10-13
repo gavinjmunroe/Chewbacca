@@ -2,7 +2,13 @@
 // renderer (github.com/31Carlton7/realm). His app runs underneath, untouched;
 // this draws what makes it an OS surface instead of a window:
 //
-//   tiles    every agent as a tile floating on the desktop, nothing else
+//   frame    his window chrome, never hidden: the rail, the session sidebar,
+//            back and forward, search, New session, the side panel toggle.
+//            Everything below draws inside his main pane, where his
+//            transcript goes (skills/hud/SKILL.md, "His navigation stays")
+//   bar      over his frame: All agents, Story and Transcript, New agent,
+//            Close, each a labeled button in every mode
+//   tiles    every agent as a tile in his main pane
 //   grow     pressing a tile grows it into the story of its turn in one
 //            continuous morph of light; Escape shrinks it back into its tile
 //   story    the agent's turn told by the screen, one region per job
@@ -44,7 +50,7 @@ import { rpc } from "../src/rpc/client";
 import type { AppState } from "../src/state/store";
 import { Spinner } from "../src/components/Spinner";
 import { Story } from "./Story";
-import { NO_PICK, SEED_EVENTS, opening, tileKey, tilesReady, toSeed } from "./nav.mjs";
+import { NO_PICK, SEED_EVENTS, barButtons, followHis, followRow, opening, tileKey, tilesReady, toSeed } from "./nav.mjs";
 import { editRange, excerpt, lostFocus, reviewDecided, voiceIntent } from "./model.mjs";
 import {
   atRest,
@@ -147,6 +153,14 @@ const SESSIONS_BEAT_MS = 30_000;
 // sessions.events (400) max 4.8 ms. 5 s is over 250 times the worst seen, and
 // half server.mjs's ENGINE_HANDSHAKE_MS (10 s) for an engine still migrating.
 const ENGINE_ANSWER_MS = 5_000;
+// How long after his press a change of his focus still counts as his: one
+// engine answer, the budget every engine call gets here, since his sidebar's
+// open waits on revealSession.
+const PRESS_MS = ENGINE_ANSWER_MS;
+// His main pane, where his transcript goes: the tiles and the story draw
+// over it, below his frame-top band, so his rail, sidebar, pane bar and
+// window chrome stay on screen and pressable in every mode.
+const MAIN = "#root .app > .main";
 const OVERLAY =
   '[role="dialog"],[role="alertdialog"],[role="menu"],[role="listbox"],[aria-modal="true"]';
 
@@ -308,6 +322,11 @@ export function GlassLayer({
   const [leaving, setLeaving] = useState(false);
   const tileRefs = useRef(new Map<string, HTMLElement>());
   const morphing = useRef(false);
+  // Which morph is running. A press that lands mid-morph (All agents,
+  // Escape, his Home) ends it and wins; the morph's own frames and timers
+  // see a newer generation and do nothing. Before 10/12 such a press was
+  // dropped: headless WebKit, Home 200 ms after a tile grew, stayed put.
+  const morphGen = useRef(0);
   const modeRef = useRef<Mode>("tiles");
   modeRef.current = mode;
   const focusRef = useRef<string | null>(null);
@@ -316,6 +335,16 @@ export function GlassLayer({
   const booted = useSyncExternalStore(
     store.subscribe,
     () => store.getState().booted,
+  );
+  // Whether one of his rail pages (Code review, Library...) is up over his
+  // main pane. The bar's Story and Transcript close it, so neither reads as
+  // showing while his page is what's on screen.
+  const pageUp = useSyncExternalStore(store.subscribe, () =>
+    Boolean((store.getState() as unknown as { pageOverlay?: unknown }).pageOverlay),
+  );
+  const closePage = useCallback(
+    () => (store.getState() as unknown as { closePageOverlay?: () => void }).closePageOverlay?.(),
+    [store],
   );
 
   // Sessions, from his engine's contract. Refetched on boot, on a status
@@ -519,17 +548,102 @@ export function GlassLayer({
     [resting],
   );
 
-  // His palette, his sidebar or a click in his panes can move focus to
-  // another session while the workspace is up; the stage follows it.
-  useEffect(
-    () =>
-      store.subscribe((s) => {
-        if (modeRef.current !== "work") return;
-        const id = focusedSession(s);
-        if (id && id !== focusRef.current) setFocus(id);
-      }),
-    [store],
-  );
+  // His frame is on screen in every mode now, so a press of his (a sidebar
+  // row, his palette, his New session, a rail page) moves the glass to
+  // where that press shows: a known agent's story, a new session's
+  // transcript, his page in the workspace (nav.mjs followHis). Only a
+  // change of his focus counts, never a focus that sat there.
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
+  // When he last pressed or typed in his frame. A focus change within
+  // PRESS_MS of one is his; any other (his boot restoring the last layout,
+  // a session ending) moves nothing.
+  const pressedAt = useRef(0);
+  useEffect(() => {
+    // A pointer press, or a key that can pick something (Return in his
+    // palette, a ⌘ or ⌃ chord like ⌘N). Typing in his composer never
+    // counts, or every keystroke would hold the gate open (review, 10/12).
+    const mark = (e: Event) => {
+      const t = e.target as Element | null;
+      if (!t?.closest?.("#root")) return;
+      if (e instanceof KeyboardEvent && !(e.key === "Enter" || e.metaKey || e.ctrlKey)) return;
+      pressedAt.current = Date.now();
+    };
+    document.addEventListener("pointerdown", mark, true);
+    document.addEventListener("keydown", mark, true);
+    return () => {
+      document.removeEventListener("pointerdown", mark, true);
+      document.removeEventListener("keydown", mark, true);
+    };
+  }, []);
+  useEffect(() => {
+    const pageOf = (s: AppState) =>
+      Boolean((s as unknown as { pageOverlay?: unknown }).pageOverlay);
+    let before = focusedSession(store.getState());
+    let pageBefore = pageOf(store.getState());
+    // Until his app has booted, every focus change is his boot restoring
+    // the last layout, never a press: it is only recorded as the baseline.
+    let bootedSeen = Boolean(store.getState().booted);
+    // A press moved the glass: whatever morph was running ends, so its
+    // frames can't fly a light into a tile while the story shows.
+    const take = (next: { mode: Mode; focus: string | null; keep: boolean }) => {
+      if (!next.keep && next.focus === focusRef.current && next.mode === modeRef.current) return;
+      morphGen.current += 1;
+      morphing.current = false;
+      setLight(null);
+      setLeaving(false);
+      if (!next.keep) setFocus(next.focus);
+      setMode(next.mode);
+    };
+    const consider = (s: AppState) => {
+      const after = focusedSession(s);
+      const page = pageOf(s);
+      if (!bootedSeen) {
+        bootedSeen = Boolean(s.booted);
+        before = after;
+        pageBefore = page;
+        return;
+      }
+      const next = followHis({
+        mode: modeRef.current,
+        before,
+        after,
+        known: Boolean(after && sessionsRef.current[after]),
+        page,
+        pageBefore,
+        pressed: Date.now() - pressedAt.current < PRESS_MS,
+      });
+      before = after;
+      pageBefore = page;
+      // Never dropped while a morph runs: a press during the 320 ms grow
+      // was lost in the first build (the 4:50pm run, story to sidebar row).
+      if (next) take(next);
+    };
+    // A press on the session row his app already shows changes nothing in
+    // his store, so it is read off the row itself (nav.mjs followRow).
+    const onRow = (e: MouseEvent) => {
+      const t = e.target as Element | null;
+      const row = t?.closest?.('.sidebar .sb-row[data-actions="1"]');
+      if (!row || !t?.closest?.(".item-row") || e.metaKey) return;
+      const rowActive = row.hasAttribute("data-active");
+      if (!rowActive) return;
+      const focused = focusedSession(store.getState());
+      const next = followRow({
+        mode: modeRef.current,
+        rowActive,
+        focused,
+        known: Boolean(focused && sessionsRef.current[focused]),
+        current: focusRef.current,
+      });
+      if (next) take(next);
+    };
+    document.addEventListener("click", onRow, true);
+    const off = store.subscribe(consider);
+    return () => {
+      off();
+      document.removeEventListener("click", onRow, true);
+    };
+  }, [store]);
 
   // Tell the server who has the glass, for hud-listen's voice path.
   const target = mode === "tiles" ? (tiles[picked]?.id ?? null) : focus;
@@ -558,12 +672,15 @@ export function GlassLayer({
     return () => window.clearInterval(t);
   }, [shown, mode, target, targetTitle, focusPace]);
 
-  const workRect = (): Rect => ({
-    left: 0,
-    top: 0,
-    width: window.innerWidth,
-    height: window.innerHeight,
-  });
+  // The morph lands on his main pane, where the story and his transcript
+  // draw, never on the whole glass (his sidebar and rail stay put).
+  const workRect = (): Rect =>
+    rectOf(document.querySelector(MAIN)) ?? {
+      left: 0,
+      top: 0,
+      width: window.innerWidth,
+      height: window.innerHeight,
+    };
   const rectOf = (el: Element | null | undefined): Rect | null => {
     if (!el) return null;
     const r = el.getBoundingClientRect();
@@ -576,7 +693,9 @@ export function GlassLayer({
   const grow = useCallback(
     (id: string, land: Mode = "story") => {
       const s = sessions[id];
-      if (!s || morphing.current) return;
+      if (!s) return;
+      // A tile pressed while the shrink still flies: the press wins.
+      if (morphing.current) morphGen.current += 1;
       setFocus(id);
       void (
         settle(
@@ -600,18 +719,22 @@ export function GlassLayer({
         return;
       }
       morphing.current = true;
+      const gen = ++morphGen.current;
+      const live = () => morphGen.current === gen;
       setLeaving(true);
       setLight({ rect: from, to: null, ms: GROW_MS, out: false });
       requestAnimationFrame(() =>
         requestAnimationFrame(() => {
+          if (!live()) return;
           setMode(land);
           setLight({ rect: from, to: workRect(), ms: GROW_MS, out: false });
           window.setTimeout(
-            () => setLight((l) => (l ? { ...l, out: true } : l)),
+            () => live() && setLight((l) => (l ? { ...l, out: true } : l)),
             GROW_MS,
           );
-          window.setTimeout(() => setLeaving(false), GROW_MS);
+          window.setTimeout(() => live() && setLeaving(false), GROW_MS);
           window.setTimeout(() => {
+            if (!live()) return;
             setLight(null);
             morphing.current = false;
           }, GROW_MS + 160);
@@ -622,33 +745,98 @@ export function GlassLayer({
   );
 
   const shrink = useCallback(() => {
-    if (morphing.current) return;
     const id = focusRef.current;
     // Back on the tiles, the agent he came from is the picked one.
     if (id) setPickedId(id);
-    if (reduceMotion()) {
+    if (morphing.current || reduceMotion()) {
+      // Mid-morph, his press wins: the morph ends where it is.
+      morphGen.current += 1;
+      morphing.current = false;
+      setLight(null);
+      setLeaving(false);
       setMode("tiles");
       return;
     }
     morphing.current = true;
+    const gen = ++morphGen.current;
+    const live = () => morphGen.current === gen;
     const from = workRect();
     setLight({ rect: from, to: null, ms: SHRINK_MS, out: false });
     setMode("tiles");
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
+        if (!live()) return;
         const to = rectOf(id ? tileRefs.current.get(id) : null) ?? from;
         setLight({ rect: from, to, ms: SHRINK_MS, out: false });
         window.setTimeout(
-          () => setLight((l) => (l ? { ...l, out: true } : l)),
+          () => live() && setLight((l) => (l ? { ...l, out: true } : l)),
           SHRINK_MS,
         );
         window.setTimeout(() => {
+          if (!live()) return;
           setLight(null);
           morphing.current = false;
         }, SHRINK_MS + 160);
       }),
     );
   }, [tiles]);
+
+  // His rail's Home is "Back to your sessions" (Rail.tsx). On the glass his
+  // sessions are the tiles, so Home goes there, and closes a rail page he
+  // had open, as his goHome does. Only that one button; the rest of his
+  // rail is his.
+  useEffect(() => {
+    const onPress = (e: MouseEvent) => {
+      const t = e.target as Element | null;
+      if (!t?.closest?.('.app-rail .rail-btn[aria-label="Home"]')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      (store.getState() as unknown as { closePageOverlay?: () => void }).closePageOverlay?.();
+      if (modeRef.current !== "tiles") shrink();
+    };
+    document.addEventListener("click", onPress, true);
+    return () => document.removeEventListener("click", onPress, true);
+  }, [store, shrink]);
+
+  // Where his main pane is, as four CSS variables the tiles, the story and
+  // the notice are placed by (glass.css, .glass-pane). Measured, never
+  // guessed: his sidebar is resizable and folds.
+  useEffect(() => {
+    const root = document.documentElement;
+    let el: Element | null = null;
+    const put = () => {
+      el = document.querySelector(MAIN);
+      const r = el?.getBoundingClientRect();
+      if (!r || r.width < 2) return;
+      root.style.setProperty("--glass-main-x", `${Math.round(r.left)}px`);
+      root.style.setProperty("--glass-main-y", `${Math.round(r.top)}px`);
+      root.style.setProperty("--glass-main-w", `${Math.round(r.width)}px`);
+      root.style.setProperty("--glass-main-h", `${Math.round(r.height)}px`);
+    };
+    const ro = new ResizeObserver(put);
+    const watch = () => {
+      const next = document.querySelector(MAIN);
+      if (!next || next === el) return;
+      ro.disconnect();
+      ro.observe(next);
+      const app = document.querySelector("#root .app");
+      if (app) ro.observe(app);
+      put();
+    };
+    watch();
+    put();
+    // His Main remounts across first run and boot; look again on each
+    // store change that could swap it. One querySelector, and a measure
+    // (a layout read) only when the element changed: his store fires on
+    // every streamed event.
+    const off = store.subscribe(watch);
+    window.addEventListener("resize", put);
+    return () => {
+      off();
+      ro.disconnect();
+      window.removeEventListener("resize", put);
+    };
+  }, [store, booted]);
 
   // Escape: bridge.js asks us first (window.__realmGlass.onEscape). In the
   // workspace it shrinks back to the tiles unless his page has a use for the
@@ -874,8 +1062,8 @@ export function GlassLayer({
   );
   // The engine outranks the talk key: with no engine nothing else works.
   const notice = engineFault ?? voiceFault;
-  // In the workspace the notice sits in the column beside his app, so his
-  // app makes room for it as it does for the stage.
+  // In the workspace the notice sits over the top of his main pane, under
+  // his pane bar, with its one fix; his boot shine reads the same flag.
   useEffect(() => {
     const root = document.documentElement;
     if (notice) root.setAttribute("data-glass-notice", "");
@@ -900,22 +1088,6 @@ export function GlassLayer({
     if (modeRef.current === "tiles") return;
     shrink();
   }, [shrink]);
-  // Another agent from the nav: straight to its story, no trip through the
-  // tiles.
-  const switchTo = useCallback(
-    (id: string) => {
-      const s = sessions[id];
-      if (!s) return;
-      setFocus(id);
-      setMode("story");
-      void (
-        settle(store.getState().revealSession(id, s.spaceId), "engine-down", ENGINE_ANSWER_MS)
-      ).then((r) => {
-        if (!r.ok) setEngineFault(r.fault);
-      });
-    },
-    [sessions, store],
-  );
   return createPortal(
     <div className="glass-layer" data-mode={mode}>
       <Nav
@@ -925,9 +1097,18 @@ export function GlassLayer({
         ready={ready}
         focus={focus}
         onAll={toAll}
-        onPick={switchTo}
+        page={pageUp}
+        onStory={() => {
+          closePage();
+          if (focusRef.current) setMode("story");
+        }}
+        onTranscript={() => {
+          closePage();
+          openTranscript(false);
+        }}
         onNew={startNew}
       />
+      <div className="glass-pane" data-mode={mode}>
       {notice && (
         <Notice
           fault={notice}
@@ -962,6 +1143,7 @@ export function GlassLayer({
           })()}
         />
       )}
+      </div>
       {mode === "work" && focused && (
         <Stage session={focused} agent={agents[focused.id]} onSeed={seed} />
       )}
@@ -1054,91 +1236,72 @@ function Notice({ fault, onRetry }: { fault: Fault; onRetry?: () => void }) {
   );
 }
 
-/** The way around, always on the glass, sized to be found at a glance.
- *  On the tiles it is the bar over them: how many agents, New agent, Close.
- *  On an agent it is the column on the left: All agents, New agent, every
- *  agent on the tiles as one row each (the open one marked), and Close.
- *  Owns the nav region. Before 10/12 the only ways out were Escape, a small
- *  x over his desktop icons, and grey Transcript and Reply words. */
+/** The glass bar, over his frame, in every mode: All agents (the tiles),
+ *  Story and Transcript for the open agent, New agent, Close. Each is a
+ *  labeled button, never only a key. Switching to another agent is his
+ *  sidebar, right under it; this bar never lists agents a second time.
+ *  Owns the nav region. On 10/12 3:38pm the only ways out were Escape and
+ *  a small x; at 4:10pm, with his rail and sidebar still hidden: "we need
+ *  buttons to get through a UX". */
 function Nav(props: {
   mode: Mode;
   resting: Resting;
   sessions: Record<string, Session>;
   ready: boolean;
   focus: string | null;
+  page: boolean;
   onAll: () => void;
-  onPick: (id: string) => void;
+  onStory: () => void;
+  onTranscript: () => void;
   onNew: () => void;
 }) {
-  const { mode, resting, sessions, ready, focus, onAll, onPick, onNew } = props;
-  const total = resting.tiles.length + resting.moreAgents;
-  const close = (
-    <button type="button" className="glass-nav-close" onClick={dismissGlass} aria-label="Close the glass (Escape)">
-      <span>Close</span>
-      <kbd>esc</kbd>
-    </button>
-  );
-  const newAgent = (
-    <button type="button" className="glass-nav-new" onClick={onNew}>
-      <Icon name="add" size={16} />
-      New agent
-    </button>
-  );
-  const bar = mode === "tiles";
+  const { mode, resting, sessions, ready, focus, page, onAll, onStory, onTranscript, onNew } = props;
+  const total = Object.keys(sessions).length || resting.tiles.length + resting.moreAgents;
+  const focused = focus ? sessions[focus] : null;
+  // The views show only for an agent the glass knows: a session his New
+  // session just made isn't listed yet, and has no story to switch to.
+  const open = Boolean(focused) && barButtons(mode, Boolean(focused)).includes("Story");
+  const meta = focused ? AGENT_META[focused.agentKind as keyof typeof AGENT_META] : null;
   return (
-    <nav
-      className="glass-nav"
-      data-region="nav"
-      data-shape={bar ? "bar" : "column"}
-      aria-label="Agents"
-    >
-      {bar ? (
+    <nav className="glass-nav" data-region="nav" data-shape="bar" aria-label="Agents">
+      <button
+        type="button"
+        className="glass-nav-all"
+        onClick={onAll}
+        aria-current={mode === "tiles" ? "page" : undefined}
+      >
+        {mode !== "tiles" && <Icon name="chevronLeft" size={16} />}
+        All agents
+        {ready && total > 0 && <span className="glass-nav-count">{total}</span>}
+      </button>
+      {open && focused ? (
         <>
-          <span className="glass-nav-title">
-            Agents
-            {ready && total > 0 && <span className="glass-nav-count">{total}</span>}
+          <span className="glass-nav-here" title={focused.title ?? ""}>
+            <Icon name={meta?.icon ?? "sparkles"} size={14} colored />
+            <span className="glass-nav-here-title">{focused.title || "Untitled"}</span>
           </span>
-          <span className="glass-nav-hint">Pick one to open it</span>
+          <span className="glass-nav-views" role="group" aria-label="View">
+            <button type="button" className="glass-nav-view" aria-pressed={!page && mode === "story"} onClick={onStory}>
+              Story
+            </button>
+            <button type="button" className="glass-nav-view" aria-pressed={!page && mode === "work"} onClick={onTranscript}>
+              Transcript
+            </button>
+          </span>
         </>
       ) : (
-        <button type="button" className="glass-nav-all" onClick={onAll}>
-          <Icon name="chevronLeft" size={16} />
-          All agents
-          {total > 0 && <span className="glass-nav-count">{total}</span>}
-        </button>
+        <span className="glass-nav-hint">
+          {mode === "tiles" ? "Pick a tile, or any session in the sidebar" : ""}
+        </span>
       )}
-      {newAgent}
-      {!bar && (
-        <ul className="glass-nav-list" aria-label="Switch agent">
-          {(ready ? resting.tiles : []).map((t) => {
-            const s = sessions[t.id];
-            const meta = AGENT_META[s?.agentKind as keyof typeof AGENT_META];
-            const here = t.id === focus;
-            return (
-              <li key={t.id}>
-                <button
-                  type="button"
-                  className="glass-nav-row"
-                  data-tone={t.tone}
-                  aria-current={here ? "true" : undefined}
-                  onClick={() => (here ? undefined : onPick(t.id))}
-                >
-                  <span className="glass-nav-row-head">
-                    {t.tone === "running" ? <Spinner size={10} /> : <span className="glass-dot" />}
-                    <span className="glass-nav-row-word">{t.word}</span>
-                    <span className="glass-nav-row-age">{age(t.turn.at || s?.updatedAt)}</span>
-                  </span>
-                  <span className="glass-nav-row-title">{t.title}</span>
-                  <span className="glass-nav-row-meta">
-                    {meta?.label ?? s?.agentKind} · {base(s?.cwd ?? "")}
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      {close}
+      <button type="button" className="glass-nav-new" onClick={onNew}>
+        <Icon name="add" size={16} />
+        New agent
+      </button>
+      <button type="button" className="glass-nav-close" onClick={dismissGlass} aria-label="Close the glass (Escape)">
+        <span>Close</span>
+        <kbd>esc</kbd>
+      </button>
     </nav>
   );
 }
@@ -1199,17 +1362,11 @@ function TileField(props: {
     </button>
   );
   const tiles = resting.tiles;
-  // A press on the empty glass takes the surface down, as a click off it
-  // does; Escape is the keyboard's way to the same place.
-  const onGround = (e: { target: unknown; currentTarget: unknown }) => {
-    if (e.target === e.currentTarget) dismissGlass();
-  };
   return (
     <div
       className="glass-field"
       data-region="field"
       data-leaving={leaving || undefined}
-      onMouseDown={onGround}
     >
       {!tiles.length || !known ? (
         // Until the list has come back there is nothing true to say here;
@@ -1274,6 +1431,7 @@ function TileField(props: {
           {resting.moreAgents} more{" "}
           {resting.moreAgents === 1 ? "agent" : "agents"}
           {resting.moreWaiting > 0 && `, ${resting.moreWaiting} waiting on you`}
+          {", all in the sidebar"}
         </p>
       )}
     </div>

@@ -24,3 +24,20 @@ export function toSeed<S extends Seedable>(
   seeded?: Set<string>,
   max?: number,
 ): S[];
+export function followHis(state: {
+  mode: "tiles" | "story" | "work";
+  before: string | null;
+  after: string | null;
+  known: boolean;
+  page: boolean;
+  pageBefore: boolean;
+  pressed: boolean;
+}): null | { mode: "tiles" | "story" | "work"; focus: string | null; keep: boolean };
+export function barButtons(mode: "tiles" | "story" | "work", focused: boolean): string[];
+export function followRow(state: {
+  mode: "tiles" | "story" | "work";
+  rowActive: boolean;
+  focused: string | null;
+  known: boolean;
+  current: string | null;
+}): null | { mode: "tiles" | "story" | "work"; focus: string | null; keep: boolean };

@@ -10,32 +10,41 @@
 // components and the stylesheet to each other, and skills/hud/SKILL.md
 // ("One owner per region") carries the same table for people.
 //
-// `grid` is the CSS grid the region is an area of (the layer's own, or the
-// story's), `area` the area it fills in glass.css; `modes` are the layer
-// modes it can be drawn in. The workspace is Carlton's app (#root),
-// outside our layer, made narrower by glass.css; the light is the one region
-// with no area: it exists only during a morph, over everything, then is gone.
+// `grid` is the CSS grid the region is an area of (the pane over his main
+// pane, "pane", or the story's), `area` the area it fills in glass.css;
+// `modes` are the layer modes it can be drawn in. Regions with no grid are
+// fixed strips of their own: his frame (Carlton's chrome, never hidden since
+// 10/12), our bar over it, the stage beside it, and the light, which exists
+// only during a morph, over everything, then is gone.
 export const REGIONS = Object.freeze([
   {
     id: "notice",
     owner: "Notice",
-    grid: "layer",
+    grid: "pane",
     area: "notice",
     modes: ["tiles", "story", "work"],
     draws: "a fault no one agent owns (engine down, the talk key lost), with its one fix",
   },
   {
+    id: "frame",
+    owner: "Carlton's app (#root)",
+    grid: null,
+    area: null,
+    modes: ["tiles", "story", "work"],
+    draws: "his window chrome, never hidden: the rail, the session sidebar, back and forward, search, New session, the side panel toggle",
+  },
+  {
     id: "nav",
     owner: "Nav",
-    grid: "layer",
-    area: "nav",
+    grid: null,
+    area: null,
     modes: ["tiles", "story", "work"],
-    draws: "the way around, always on screen: All agents, New agent, every agent to switch to, Close",
+    draws: "the bar over his frame, always on screen: All agents, Story and Transcript, New agent, Close",
   },
   {
     id: "field",
     owner: "TileField",
-    grid: "layer",
+    grid: "pane",
     area: "main",
     modes: ["tiles"],
     draws: "the agent tiles, one line each, a count of the rest, and the New agent door when there are none",
@@ -43,7 +52,7 @@ export const REGIONS = Object.freeze([
   {
     id: "story",
     owner: "Story",
-    grid: "layer",
+    grid: "pane",
     area: "main",
     modes: ["story"],
     draws: "one agent's turn told by the screen, in the five regions below",
@@ -91,8 +100,8 @@ export const REGIONS = Object.freeze([
   {
     id: "stage",
     owner: "Stage",
-    grid: "layer",
-    area: "main",
+    grid: null,
+    area: null,
     modes: ["work"],
     draws: "the one live object beside his transcript: the command, the file being written, the check, or the fault",
   },

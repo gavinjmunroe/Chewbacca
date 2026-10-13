@@ -34,7 +34,9 @@ if "window.__chewLi[key] = null" in src:
     open(os.path.join(d, "script.js"), "w").write(src)
     path = json.loads(re.search(r"var path = (\"[^\"]*\")", src).group(1))
     with open(os.path.join(d, "calls.log"), "a") as f:
-        f.write(f"{time.monotonic()} {path}\n")
+        # Wall clock: each call is a new process, and monotonic() started near 0
+        # in every one on 10/13, so every gap read as under the throttle.
+        f.write(f"{time.time()} {path}\n")
     open(os.path.join(d, "last"), "w").write(path)
     print(json.dumps({"started": "k", "page": target, "origin": origin})); sys.exit(0)
 path = open(os.path.join(d, "last")).read()

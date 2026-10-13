@@ -48,7 +48,9 @@ d, tok = os.environ["FAKE_DIR"], os.environ.get("FAKE_TOKEN", "")
 sp = urllib.parse.urlsplit(sys.argv[1]); q = dict(urllib.parse.parse_qsl(sp.query))
 path = sp.path[len("/v3"):]
 with open(os.path.join(d, "calls.log"), "a") as f:
-    f.write(f"{time.monotonic()} {path}?{sp.query}\n")
+    # Wall clock: each call is a new process, and monotonic() started near 0
+    # in every one on 10/13, so every gap read as under the throttle.
+    f.write(f"{time.time()} {path}?{sp.query}\n")
 status = int(os.environ.get("FAKE_STATUS", "200"))
 BASE = 1760000000
 def msg(i, gid="101"):

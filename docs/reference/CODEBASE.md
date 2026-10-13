@@ -233,7 +233,7 @@ EVERY PROMPT (UserPromptSubmit, all advisory)
 EVERY TOOL CALL
   PreToolUse   guards that can refuse: load-guard (CPU fan-out), zsh-guard,
                chatdb-guard, submit-guard (coursework submission),
-               launch-guard (outbound campaigns), suite-rerun-guard,
+               launch-guard (outbound campaigns),
                fusion-guard, browser-ux-guard, ux-guard, plan-guard;
                advisory: env-guard, repo-overlap-guard, skill-gate
   PostToolUse  write-log.sh (who wrote which file), format-and-sync.sh
@@ -799,8 +799,8 @@ Groups are `if group "name"` blocks in `tests/run.sh`, found by grep, so a new
 block is a new group. Main groups: installer, tools, hud, reasoning backends,
 people, guide, hooks, doctor, coursework, decision-learning, chewbacca CLI,
 pytest (runs every Python test file), live, and smaller ones. A full run takes
-several minutes; `suite-rerun-guard.sh` refuses a second full run on an
-unchanged tree.
+several minutes; in an agent session it refuses its own second full run on an
+unchanged tree (`bin/lib/suite-gate.sh`).
 
 **Hermetic by construction.** The suite points every state directory
 (`PEOPLE_DIR`, `COURSEWORK_DIR`, log dirs) into a temp folder, and tests that

@@ -302,6 +302,9 @@ def submit(argv):
     j = {"id": time.strftime("%m%d-%H%M%S-") + uuid.uuid4().hex[:4], "cmd": cmd, "cwd": os.getcwd(),
          "class": cls, "title": title or " ".join(cmd)[:80], "status": "queued",
          "owner": os.environ.get("CLAUDE_SESSION_ID") or os.environ.get("TERM_SESSION_ID") or "",
+         # The agent session that asked, for checks that run inside the job
+         # (bin/lib/suite-gate.sh). Not owner: that keys other behavior.
+         "session": os.environ.get("CHEWBACCA_AGENT_SESSION", os.environ.get("CLAUDE_CODE_SESSION_ID", "")),
          "created": time.time(), "pid": None, "exit": None, "after": after, "writes": wrote}
     if once:
         j["once"] = True
@@ -401,8 +404,11 @@ def _run(job_id):
         signal.signal(signal.SIGTERM, lambda signum, frame: None)
     try:
         with open(DIR / job_id / "out.log", "ab") as log:
+            # The submitter's session, never whichever tab's tick started
+            # this supervisor: its environment belongs to that tab.
+            env = dict(os.environ, CHEWBACCA_AGENT_SESSION=j.get("session") or "")
             code = subprocess.call(["nice", "-n", str(NICE[j["class"]])] + j["cmd"],
-                                   stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+                                   stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=env)
     finally:
         if roots:
             wl.background_mark("end", os.getpid(), roots)

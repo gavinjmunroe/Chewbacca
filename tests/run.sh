@@ -47,6 +47,9 @@ declare -a FAILURES=()
 # 2026-09-22 and the hud group races real timers. CHEWBACCA_SUITE_SERIAL=1
 # restores the old single-process run.
 if [ -z "$ONLY" ] && [ -z "${CHEWBACCA_SUITE_SERIAL:-}" ]; then
+  # A repeat full run on an unchanged tree in the same agent session stops
+  # here, wherever it was started from. See the gate's header.
+  bash "$ROOT/bin/lib/suite-gate.sh" "$ROOT" || exit 2
   OUTDIR="$(mktemp -d)"; trap 'rm -rf "$OUTDIR"' EXIT
   STARTED=$SECONDS
   # Longest first, measured 2026-10-03 (pytest ~300 s, hud ~170, reasoning
@@ -1029,8 +1032,8 @@ if group "installer"; then
   check  "link-guard refuses a reply whose file links don't open from the session root" \
     bash "$ROOT/tests/link_guard.sh"
 
-  check  "suite-rerun-guard refuses a repeat full run on an unchanged tree" \
-    bash "$ROOT/tests/suite_rerun_guard.sh"
+  check  "the full suite refuses its own repeat run on an unchanged tree" \
+    bash "$ROOT/tests/suite_gate.sh"
 
   check  "repo-overlap-guard warns once when another session shares the checkout" \
     bash "$ROOT/tests/repo_overlap_guard.sh"

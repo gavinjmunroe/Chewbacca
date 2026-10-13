@@ -1990,11 +1990,8 @@ _register("PreToolUse", hooks_dir + "/zsh-guard.sh", timeout=5,
           matcher="Bash",
           status="Checking this reads right in zsh...")
 
-# 2026-10-03: the full suite ran four times in one session, twice on a tree
-# that had not changed, about 15 minutes each.
-_register("PreToolUse", hooks_dir + "/suite-rerun-guard.sh", timeout=10,
-          matcher="Bash",
-          status="Checking this suite run has something new to test...")
+# suite-rerun-guard.sh is gone (2026-10-13): tests/run.sh asks
+# bin/lib/suite-gate.sh itself before a full run, so no Bash call is read for it.
 
 # 2026-10-03: three Claude tabs and Codex shared one checkout and collided.
 _register("PreToolUse", hooks_dir + "/repo-overlap-guard.sh", timeout=5,

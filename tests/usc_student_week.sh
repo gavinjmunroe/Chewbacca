@@ -119,10 +119,11 @@ printf '%s' "$nw" | grep -q "Draft lab note" && no "an unpublished announcement 
   && ok "brightspace news lists every course's announcements in the window, newest first" \
   || no "news order or content wrong: $nw"
 
-# ── Monday: lockin names the syllabi, then every file reads ──────────────────
+# ── Monday: lockin reads the syllabi into the ledger, then every file reads ──
 applied="$($PY "$ROOT/bin/chewbacca-usc" lockin --apply 2>&1)"
-printf '%s' "$applied" | grep -A1 "^Syllabi (" | grep -qxF "  BISC-120/Course Info/BISC 120 Syllabus.pdf" \
-  && ok "lockin --apply names each syllabus it pulled" || no "lockin did not point at the syllabus: $applied"
+oh="$(node "$ROOT/bin/coursework" show bisc --json 2>&1 | $PY -c 'import json,sys; i=json.load(sys.stdin)[0]["instructor"]; print(i["office_hours"], "|", i["office_hours_source"])' 2>&1)"
+[ "$oh" = "Wed 1-2pm ZHS 260 | BISC 120 Syllabus.pdf, page 1" ] \
+  && ok "lockin --apply reads the syllabus it pulled into the ledger, with the page" || no "lockin syllabus fill: $oh / $applied"
 
 S="$COURSEWORK_DIR/slides"
 mkdir -p "$S/BISC-120/Lectures" "$S/PSYC-100/Readings"

@@ -851,6 +851,28 @@ function cmdIcs(args) {
   );
 }
 
+// The facts a syllabus carries, parsed, for a program that needs the values
+// (lockin's syllabus compare) and would otherwise re-parse the YAML itself.
+function cmdShow(args) {
+  const { courses } = loadLedger();
+  const query = args.find((a) => !a.startsWith("--"));
+  const picked = query ? [findCourse(courses, query)].filter(Boolean) : courses;
+  if (query && !picked.length) fail(`no course matches "${query}"`);
+  const keep = ["code", "title", "meets", "instructor", "absences", "grading_model", "grading"];
+  const out = picked.map((c) => Object.fromEntries(keep.filter((k) => c[k] !== undefined).map((k) => [k, c[k]])));
+  if (args.includes("--json")) return say(JSON.stringify(out, null, 2));
+  for (const c of out) {
+    say(String(c.code));
+    for (const m of normalizeMeets(c.meets))
+      say(`  meets   ${(m.days || []).join("/")} ${m.start || "?"}-${m.end || "?"} ${m.room || ""}`.trimEnd());
+    const inst = c.instructor && typeof c.instructor === "object" ? c.instructor : null;
+    if (inst && inst.office_hours) say(`  office hours  ${inst.office_hours}`);
+    if (c.absences) say(`  absences allowed  ${c.absences.allowed == null ? "unrecorded" : c.absences.allowed}`);
+    for (const g of Array.isArray(c.grading) ? c.grading : [])
+      say(`  grade   ${g.name}${g.weight != null ? ` ${g.weight}%` : ""}${g.points != null ? ` ${g.points} pts` : ""}`);
+  }
+}
+
 function cmdCheck() {
   const { courses, semester } = loadLedger();
   let problems = 0;
@@ -1011,6 +1033,7 @@ const USAGE = `coursework: read your semester ledger
   coursework grade [course] [--target 90]
   coursework policy <course> [late|attendance|exams|grading]
   coursework ics [--out file.ics]   deadlines as a calendar file
+  coursework show [course]          meetings, office hours, attendance, grading
   coursework check                  validate the ledger
 
 Add --json to any read command. Ledger: ${DIR} (set COURSEWORK_DIR to move it).
@@ -1036,6 +1059,8 @@ function main() {
     case "ics":
     case "calendar":
       return cmdIcs(args);
+    case "show":
+      return cmdShow(args);
     case "check":
     case "doctor":
       return cmdCheck();

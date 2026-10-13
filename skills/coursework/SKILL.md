@@ -45,10 +45,21 @@ chewbacca jobs submit --net --title "lock in" -- chewbacca usc lockin --apply
 ledger file (never overwrites one), seeded with every dated Brightspace
 calendar item and its source, and pulls every visible file into
 `~/coursework/slides/<CODE>/`. A rerun only fetches what's new. It ends by
-naming each syllabus it pulled: read them with `chewbacca usc read <CODE>` and
-fill the ledger's meetings, instructor and office hours, attendance budget and
-grading, each with its `source`. Until then `coursework today`, `attendance`
-and `grade` have nothing to answer from.
+reading every syllabus it pulled (PDF, Word, slides, a Brightspace HTML page)
+into the ledger: class times and room, instructor email, office and office
+hours, the free-absence count, and the grading breakdown or a labor contract.
+It fills empty fields only, every value carries `<field>_source` or `source`
+naming the file and page, and it never reads the AI policy.
+
+What it prints after that is the agent's list. "left alone, differs" means the
+ledger already had a value the syllabus disagrees with: tell the student, never
+pick one yourself. "not in the syllabus" means read that course by hand with
+`chewbacca usc read <CODE>` (often a section list where only the student knows
+theirs, or a schedule on another file). "can't read" is a scan.
+
+`chewbacca usc syllabus` runs the same read alone and writes nothing;
+`--apply` writes, `--ledger DIR` fills another ledger, and `--compare DIR`
+scores the result against a hand-filled ledger without touching it.
 
 ## Reading the course files
 

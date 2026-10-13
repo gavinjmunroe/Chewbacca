@@ -12,6 +12,9 @@ chewbacca usc: a USC student's day in one screen, for any student on any Mac.
   chewbacca usc read [CODE]     the text of every pulled file (PDF pages, slides,
                                 Word), labeled by page, with nothing to install
   chewbacca usc read --find "office hours"   matching lines across every course
+  chewbacca usc syllabus        what every pulled syllabus says about class times,
+                                office hours, absences and grading, and what it
+                                would fill (--apply writes empty fields only)
   chewbacca usc --hall evk      pick the dining hall (parkside, evk, university-village)
   chewbacca usc --json          the same, as data
 
@@ -458,15 +461,9 @@ def lockin(apply, out, days, retried=False):
     else:
         print(f"Pulled {total} file(s). Rerunning only fetches what's new.")
         # The seeded ledger has no class times, office hours, attendance budget
-        # or grading: `coursework check` listed 13 gaps for 4 courses on the
-        # USC week walk, and every answer was in a syllabus lockin had just
-        # pulled. Name those files so the next step is reading them.
-        syllabi = sorted(f for f in out.glob("*/**/*") if f.is_file() and "syllab" in f.name.lower())
-        if syllabi:
-            print("\nSyllabi (class times, office hours, attendance, grading) for the ledger:")
-            for f in syllabi:
-                print(f"  {f.relative_to(out)}")
-            print("Read them with `chewbacca usc read <CODE>`.")
+        # or grading, and every answer is in a syllabus lockin just pulled.
+        print()
+        syllabus(True, out, LEDGER)
     return 0
 
 
@@ -577,7 +574,19 @@ def raw_pages(path):
         return ppt_text(path)
     if ext in (".txt", ".md", ".csv"):
         return [("text", path.read_text(errors="replace"))]
+    if ext in (".html", ".htm"):
+        return [("text", html_text(path.read_text(errors="replace")))]
     return None
+
+
+def html_text(markup):
+    """A Brightspace HTML page (a syllabus written in the course's Content
+    editor) as lines: block tags become line breaks, scripts and styles go."""
+    markup = re.sub(r"(?is)<(script|style)\b.*?</\1>", " ", markup)
+    markup = re.sub(r"(?i)<br\s*/?>|</(p|div|li|tr|h[1-6]|table|ul|ol)>", "\n", markup)
+    markup = re.sub(r"(?i)</t[dh]>", " ", markup)
+    text = unescape(re.sub(r"<[^>]+>", "", markup))
+    return "\n".join(" ".join(l.split()) for l in text.splitlines() if l.strip())
 
 
 def course_files(target, slides):
@@ -635,15 +644,168 @@ def read(target, find, slides):
     return 1 if files and len(skipped) == len(files) else 0
 
 
+# ── syllabus into the ledger ─────────────────────────────────────────────────
+# Lockin seeded course files with no class times, office hours, attendance
+# budget or grading, and `coursework check` listed 13 gaps for 4 courses on the
+# 2026-10-13 USC week walk while every answer sat in a pulled syllabus. This
+# reads each one and fills only the empty fields, each value naming its file
+# and page (bin/lib/syllabus_ledger.py has the rules).
+
+SYLLABUS_EXT = {".pdf", ".docx", ".pptx", ".ppt", ".html", ".htm", ".txt", ".md"}
+
+
+def syllabus_files(slides):
+    """{course folder: [syllabus files]}: any readable file under the folder
+    whose name or parent folder says syllabus."""
+    out = {}
+    for d in sorted(p for p in slides.glob("*") if p.is_dir()):
+        files = [f for f in d.rglob("*") if f.is_file() and f.suffix.lower() in SYLLABUS_EXT
+                 and "syllab" in (f.name + " " + f.parent.name).lower()
+                 # A folder named Syllabus also holds the schedule and the
+                 # assignment prompts; only a file that says syllabus counts.
+                 and "syllab" in f.name.lower()]
+        if files:
+            out[d] = files
+    return out
+
+
+def course_file_for(folder, ledger):
+    want = norm(folder.name)
+    for f in sorted((ledger / "courses").glob("*.yml")):
+        m = re.search(r'^code:\s*"?([^"\n#]+)', f.read_text(errors="replace"), re.M)
+        if m and (norm(m.group(1)).startswith(want) or want.startswith(norm(m.group(1)))):
+            return f
+    return None
+
+
+def syllabus(apply, slides, ledger, compare=None, quiet=False):
+    sys.path.insert(0, str(ROOT / "bin" / "lib"))
+    import syllabus_ledger as sl
+    today = dt.date.today().isoformat()
+    groups = syllabus_files(slides)
+    if not groups:
+        print(f"No syllabus in {slides} yet. `chewbacca usc lockin --apply` pulls them.")
+        return 1
+    report = {}
+    for folder, files in groups.items():
+        dest = course_file_for(folder, ledger)
+        found, read_names, unreadable = [], [], []
+        for f in sorted(files, key=sl.syllabus_order):
+            try:
+                pages = file_pages(f)
+            except Exception as e:  # a scan or a damaged file: named, never a silent empty
+                unreadable.append(f"{f.name} ({e if isinstance(e, ValueError) else e.__class__.__name__})")
+                continue
+            if pages:
+                found.append(sl.read_syllabus(pages, f.name))
+                read_names.append(f.name)
+        merged = sl.merge(found)
+        entry = {"folder": folder.name, "files": read_names, "unreadable": unreadable,
+                 "found": merged, "course_file": str(dest) if dest else None}
+        if dest is None:
+            entry["skipped"] = "no course file in the ledger for this folder"
+        elif merged:
+            before = dest.read_text()
+            after, written, conflicts, gaps = sl.fill(before, merged, " and ".join(read_names), today)
+            entry.update(written=written, conflicts=conflicts, gaps=gaps)
+            if apply and after != before:
+                dest.write_text(after)
+        report[folder.name] = entry
+    if compare is not None:
+        return compare_ledgers(report, ledger, compare)
+    if quiet:
+        return report
+    for name, e in report.items():
+        print(f"{name}: {', '.join(e['files']) or 'nothing readable'}")
+        if e.get("skipped"):
+            print(f"  skipped: {e['skipped']}")
+            continue
+        for w in e.get("written", []):
+            print(f"  {'filled' if apply else 'would fill'} {w}")
+        for c in e.get("conflicts", []):
+            print(f"  left alone, differs: {c}")
+        for g in e.get("gaps", []):
+            print(f"  not in the syllabus: {g}")
+        for u in e["unreadable"]:
+            print(f"  can't read: {u}")
+    if not apply:
+        print("Nothing written: rerun with --apply.")
+    return 0
+
+
+def course_facts(ledger):
+    r = subprocess.run(["node", str(ROOT / "bin" / "coursework"), "show", "--json"],
+                       capture_output=True, text=True, env={**os.environ, "COURSEWORK_DIR": str(ledger)})
+    return {norm(c.get("code", "")): c for c in json.loads(r.stdout or "[]")}
+
+
+def compare_ledgers(report, scratch, real):
+    """Score the scratch ledger the syllabi filled against a ledger a person
+    filled by hand: per field, match, miss (the person has it, the syllabus
+    read didn't), conflict (both have it and they differ) or extra."""
+    got, want = course_facts(scratch), course_facts(real)
+    tally = {"match": 0, "miss": 0, "conflict": 0, "extra": 0}
+    rows = []
+
+    def score(course, field, mine, theirs, same):
+        kind = ("match" if same(mine, theirs) else "conflict") if mine and theirs else \
+               "miss" if theirs else "extra" if mine else None
+        if kind:
+            tally[kind] += 1
+            rows.append((course, field, kind, mine, theirs))
+
+    # Only courses a syllabus was read for: a course with none pulled (ACAD 185
+    # keeps its syllabus as a spreadsheet in Downloads) says nothing about the reader.
+    read_codes = {norm(Path(e["course_file"]).stem) for e in report.values() if e.get("course_file") and e["files"]}
+    for key, real_c in want.items():
+        mine_c = got.get(key)
+        if mine_c is None or not any(key.startswith(c) or c.startswith(key) for c in read_codes):
+            continue
+        code = real_c.get("code", key)
+        m_meets = [(tuple(m.get("days", [])), m.get("start"), m.get("end")) for m in (mine_c.get("meets") or [])]
+        r_meets = [(tuple(m.get("days", [])), m.get("start"), m.get("end")) for m in (real_c.get("meets") or [])
+                   if m.get("start")]
+        score(code, "class times", m_meets[:1], r_meets[:1], lambda a, b: a[0] == b[0])
+        m_room = (mine_c.get("meets") or [{}])[0].get("room", "") if mine_c.get("meets") else ""
+        r_room = r_meets and (real_c.get("meets") or [{}])[0].get("room", "")
+        score(code, "room", m_room, r_room, lambda a, b: norm(a) and norm(a) in norm(b))
+        mi, ri = mine_c.get("instructor"), real_c.get("instructor")
+        mi = mi if isinstance(mi, dict) else {}
+        r_text = json.dumps(ri) if ri else ""
+        ri_d = ri if isinstance(ri, dict) else {}
+        score(code, "instructor email", mi.get("email"), ri_d.get("email") or (re.search(r"[\w.]+@[\w.]+", r_text) or [None])[0],
+              lambda a, b: a.lower() == b.lower())
+        score(code, "office hours", mi.get("office_hours"), ri_d.get("office_hours"),
+              lambda a, b: bool(set(re.findall(r"\d{1,2}", a)) & set(re.findall(r"\d{1,2}", b))) or norm(a)[:10] in norm(b))
+        ma, ra = mine_c.get("absences") or {}, real_c.get("absences") or {}
+        score(code, "absences allowed", ma.get("allowed"), ra.get("allowed"), lambda a, b: a == b)
+        mg = [(g.get("name"), g.get("weight"), g.get("points")) for g in (mine_c.get("grading") or [])]
+        rg = [(g.get("name"), g.get("weight"), g.get("points")) for g in (real_c.get("grading") or [])]
+        score(code, "grading parts", mg, rg,
+              lambda a, b: len(a) == len(b) and sorted(x[1] or x[2] or 0 for x in a) == sorted(x[1] or x[2] or 0 for x in b))
+    for course, field, kind, mine, theirs in rows:
+        print(f"  {kind:<8} {course:<12} {field:<17} read {short(mine)}  ledger {short(theirs)}")
+    print(f"\n{tally['match']} match, {tally['miss']} miss, {tally['conflict']} conflict, {tally['extra']} extra "
+          f"across {len({r[0] for r in rows})} course(s) with a syllabus pulled.")
+    return 0
+
+
+def short(v):
+    s = json.dumps(v) if not isinstance(v, str) else v
+    return (s[:48] + "...") if len(s) > 51 else (s or "-")
+
+
 def main():
     ap = argparse.ArgumentParser(prog="chewbacca usc", add_help=True)
-    ap.add_argument("cmd", nargs="?", default="today", choices=["today", "setup", "lockin", "read"])
+    ap.add_argument("cmd", nargs="?", default="today", choices=["today", "setup", "lockin", "read", "syllabus"])
     ap.add_argument("target", nargs="?", help="read: a course code, a folder or a file")
     ap.add_argument("--find", help="read: only lines with all these words, each with its file and page")
     ap.add_argument("--apply", action="store_true", help="lockin: write the ledger and pull files")
     ap.add_argument("--out", default=str(Path(os.environ.get("COURSEWORK_DIR") or Path.home() / "coursework") / "slides"),
                     help="lockin: where lecture files go")
     ap.add_argument("--days", type=int, default=120, help="lockin: how far ahead to read the calendar")
+    ap.add_argument("--ledger", help="syllabus: the ledger to fill (default ~/coursework)")
+    ap.add_argument("--compare", help="syllabus: score what was read against this ledger, writing nothing there")
     ap.add_argument("--hall", choices=HALLS)
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args()
@@ -653,6 +815,10 @@ def main():
         return lockin(a.apply, Path(a.out).expanduser(), a.days)
     if a.cmd == "read":
         return read(a.target, a.find, Path(a.out).expanduser())
+    if a.cmd == "syllabus":
+        ledger = Path(a.ledger).expanduser() if a.ledger else LEDGER
+        return syllabus(a.apply, Path(a.out).expanduser(), ledger,
+                        Path(a.compare).expanduser() if a.compare else None)
     cfg = load_config()
     if a.hall:
         cfg["hall"] = a.hall

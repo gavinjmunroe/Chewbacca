@@ -4,11 +4,12 @@
     "claude-code": {
       "label": "Claude Code",
       "binary": "claude",
+      "app_binaries": ["~/Library/Application Support/Claude/claude-code/*/*/claude.app/Contents/MacOS/claude"],
       "instruction_file": "CLAUDE.md",
       "skills_dir": ".claude/skills",
       "config": ".claude/settings.json",
       "adapter": "claude",
-      "detect_paths": ["~/.claude"],
+      "detect_paths": ["~/.claude", "/Applications/Claude.app"],
       "apps": ["cli", "vscode", "desktop"],
       "model_flag": "--model",
       "model_discovery": "Use the runtime's model picker; availability depends on account and provider.",

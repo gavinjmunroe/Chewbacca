@@ -32,6 +32,18 @@ class RuntimeTests(unittest.TestCase):
         self.env.start()
         self.addCleanup(self.env.stop)
 
+    def test_claude_app_alone_counts_as_claude_code(self):
+        # 2026-10-13: the Code tab in the Claude app reads ~/.claude, needs no
+        # Terminal and no CLI. A Mac with only the app looked agentless, so
+        # --every-agent wired nothing for the person it was meant for.
+        apps = self.home / 'Apps'
+        apps.mkdir()
+        spec = runtime.registry()['runtimes']['claude-code']
+        with patch.dict(os.environ, {'CHEWBACCA_APPLICATIONS_DIR': str(apps), 'PATH': '/usr/bin:/bin'}):
+            self.assertFalse(runtime.detected(spec))
+            (apps / 'Claude.app').mkdir()
+            self.assertTrue(runtime.detected(spec))
+
     def test_first_session_connects_only_hosts_installed_after_setup(self):
         # 10/12 stranger run: setup --runtime claude-code, then the first
         # session's connect --new-only wrote Codex, Cursor and Gemini configs.

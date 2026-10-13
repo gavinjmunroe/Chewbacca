@@ -34,6 +34,8 @@ PROFILE="personal"
 DRY_RUN=0
 FAST=0
 PERSON_NAME=""
+TARBALL_FILE=""
+AGENTS_ONLY=0
 
 # Normalize harmless convenience flags. Permission changes require the exact
 # documented flag; a typo must not change the scope of an installation.
@@ -84,6 +86,13 @@ while [ $# -gt 0 ]; do
     --profile)   require_value "$@"; PROFILE="$2"; shift 2 ;;
     --name)      require_value "$@"; PERSON_NAME="$2"; shift 2 ;;
     --dry-run)   DRY_RUN=1; shift ;;
+    # A payload already on disk instead of the GitHub download: what the
+    # double-click Chewbacca Setup app carries, so it installs with the repo
+    # private and with no Terminal (tools/build_setup_app.sh).
+    --tarball)   require_value "$@"; TARBALL_FILE="$2"; shift 2 ;;
+    # Only wire the agents already on this Mac (setup.sh --every-agent): no
+    # Homebrew, no password, seconds. The Setup app's path.
+    --every-agent) AGENTS_ONLY=1; shift ;;
     --help)
       cat <<'HELP'
 Chewbacca full macOS installer
@@ -92,6 +101,8 @@ Chewbacca full macOS installer
   --fast            Install the smaller configuration set
   --dry-run         Preview before installing
   --pin REF         Install a specific version
+  --tarball FILE    Install from a downloaded payload instead of GitHub
+  --every-agent     Only set up the agents already here: no Homebrew, no password
   --full-send       Explicitly disable the supported agent permission prompts
   --help            Show this help
 
@@ -130,6 +141,23 @@ TOTAL=5
 step() { STEP=$((STEP + 1)); echo; say "[$STEP/$TOTAL] $1"; }
 
 # ── Introduce yourself before doing anything ─────────────────────────────────
+if [ "$AGENTS_ONLY" -eq 1 ]; then
+  # The full intro promises Homebrew, a password and ten minutes, none of
+  # which this path does. Say what it actually does.
+  cat <<INTRO
+
+  ${B}Chewbacca${N}
+  Sets up the assistant you already have so it knows your Mac and your week.
+
+  This copies Chewbacca into your own account (~/.chewbacca, ~/.claude,
+  ~/.local/bin) and wires it into each agent app already on this Mac. It asks
+  for no password, installs no Homebrew, and sends nothing about you anywhere.
+  Every agent file it changes is backed up beside itself first.
+
+  To remove it later: chewbacca uninstall
+
+INTRO
+else
 cat <<INTRO
 
   ${B}Chewbacca${N}
@@ -163,6 +191,7 @@ cat <<INTRO
   that makes the agent know you, which takes seconds instead.
 
 INTRO
+fi
 
 if [ "$DRY_RUN" -eq 1 ]; then
   # A dry run that only says "nothing was changed" answers the wrong
@@ -228,18 +257,24 @@ fi
 
 # Homebrew plus Apple's tools plus Node is a few gigabytes. Finding that out
 # halfway through, on a full laptop, is a bad ending to an install.
+# The agents-only path is the kit itself, about 100MB.
+NEED_GB=8; [ "$AGENTS_ONLY" -eq 1 ] && NEED_GB=1
 FREE_GB=$(df -g "$HOME" | awk 'NR==2 {print $4}')
-if [ "${FREE_GB:-99}" -lt 8 ]; then
-  bad "Only ${FREE_GB}GB free. This needs about 8GB. Free some space and re-run."
+if [ "${FREE_GB:-99}" -lt "$NEED_GB" ]; then
+  bad "Only ${FREE_GB}GB free. This needs about ${NEED_GB}GB. Free some space and re-run."
   exit 1
 fi
 ok "${FREE_GB}GB free"
 
-if ! curl -fsS --max-time 10 -o /dev/null https://github.com 2>/dev/null; then
+if [ -n "$TARBALL_FILE" ]; then
+  [ -f "$TARBALL_FILE" ] || { bad "No payload at $TARBALL_FILE."; exit 1; }
+  ok "installing from the copy that came with the app"
+elif ! curl -fsS --max-time 10 -o /dev/null https://github.com 2>/dev/null; then
   bad "Cannot reach github.com. Check your wifi and re-run."
   exit 1
+else
+  ok "online"
 fi
-ok "online"
 
 # ── 2. Apple's developer tools ───────────────────────────────────────────────
 step "Apple's developer tools"
@@ -319,7 +354,13 @@ if [ -n "$REF" ]; then
 else
   TARBALL="https://codeload.github.com/$REPO/tar.gz/refs/heads/$BRANCH"
 fi
-if ! curl -fsSL --max-time 120 "$TARBALL" | tar -xz -C "$HOME_DIR" --strip-components=1; then
+if [ -n "$TARBALL_FILE" ]; then
+  if ! tar -xzf "$TARBALL_FILE" -C "$HOME_DIR" --strip-components=1; then
+    bad "The payload that came with the app could not be unpacked."
+    restore_previous
+    exit 1
+  fi
+elif ! curl -fsSL --max-time 120 "$TARBALL" | tar -xz -C "$HOME_DIR" --strip-components=1; then
   bad "Download failed.${REF:+ Is $REF a real tag?}"
   restore_previous
   exit 1
@@ -408,7 +449,9 @@ ok "chewbacca command installed"
 # ── 4. Everything else ───────────────────────────────────────────────────────
 step "Installing the tools Claude will use"
 
-if [ -x "$HOME_DIR/bin/bootstrap.sh" ]; then
+# --every-agent asks for nothing outside the person's account, so it never
+# reaches Homebrew, which is the one step that wants their password.
+if [ "$AGENTS_ONLY" -eq 0 ] && [ -x "$HOME_DIR/bin/bootstrap.sh" ]; then
   # The profile decides whether GitHub is part of this install at all. Without
   # it, bootstrap demanded a GitHub account and a git identity from someone
   # installing the personal profile, which creates no repos and needs neither.
@@ -424,6 +467,7 @@ SETUP_ARGS=(--profile "$PROFILE")
 step "Setting up Claude"
 echo "      Name: ${PERSON_NAME:-not provided; your agent can ask later}."
 echo
+[ "$AGENTS_ONLY" -eq 1 ] && SETUP_ARGS=(--every-agent)
 bash "$HOME_DIR/setup.sh" "${SETUP_ARGS[@]}" || {
   bad "Setup stopped after a failure. Some changes may already be installed; chewbacca doctor can inspect them."
   exit 1
@@ -469,7 +513,20 @@ for candidate in "claude:Claude Code" "codex:Codex" "gemini:Gemini CLI"; do
   fi
 done
 
-if [ -n "$AGENT_CMD" ]; then
+# The Claude app's Code tab runs Claude Code with the same ~/.claude setup and
+# needs no Terminal (code.claude.com/docs/en/desktop, checked 2026-10-13). The
+# person this install is for has the app and a subscription and has never
+# opened Terminal, and the last screen used to send them there anyway.
+CLAUDE_APP=""
+for apps_dir in "${CHEWBACCA_APPLICATIONS_DIR:-/Applications}" "$HOME/Applications"; do
+  if [ -d "$apps_dir/Claude.app" ]; then CLAUDE_APP="$apps_dir/Claude.app"; break; fi
+done
+
+if [ -n "$CLAUDE_APP" ]; then
+  START_LINE="  To start it any time: open the Claude app, click ${B}Code${N}, choose Local,
+  and say hi. No Terminal needed."
+  SUBJECT="Claude"
+elif [ -n "$AGENT_CMD" ]; then
   START_LINE="  To start it any time: open Terminal and type ${B}${AGENT_CMD}${N}"
   SUBJECT="$AGENT_NAME"
 else
@@ -504,7 +561,12 @@ DONE
 # ends at a shell prompt, which is the single highest-abandonment moment in the
 # whole flow: ten minutes of work and then a blinking cursor. Needs a real
 # terminal, so this is skipped when the output is piped somewhere.
-if [ -n "$AGENT_CMD" ] && [ -t 0 ] && [ -t 1 ]; then
+if [ -n "$CLAUDE_APP" ] && [ -t 0 ] && [ -t 1 ]; then
+  # A person at a terminal who has the app: hand them to the app, where they
+  # will actually come back, rather than to a prompt in this window.
+  say "Opening the Claude app..."
+  open -a "$CLAUDE_APP" >/dev/null 2>&1 || true
+elif [ -n "$AGENT_CMD" ] && [ -t 0 ] && [ -t 1 ]; then
   say "Starting $AGENT_NAME..."
   sleep 1
   # The welcome step asks five tappable questions and saves what they mean,

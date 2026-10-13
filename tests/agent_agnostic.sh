@@ -60,6 +60,19 @@ echo "$out" | grep -q "using the agent already installed: codex" || fail "Codex 
 [ -e "$FAKE/h-app/.local/bin/claude" ] && fail "installed Claude Code on a Mac whose ChatGPT app carries Codex"
 [ -x "$FAKE/h-app/.local/bin/codex" ] || fail "no codex shim on PATH for the app-bundled Codex"
 
+# The Claude app only, nothing on PATH: the person with a Claude subscription
+# who has never opened Terminal. The app keeps its own Claude Code under
+# Application Support, so it must be found and shimmed, never downloaded a
+# second time (2026-10-13, normal-person run).
+CA="$FAKE/h-claude-app/Library/Application Support/Claude/claude-code/2.1.295/9d64/claude.app/Contents/MacOS"
+mkdir -p "$CA"; printf '#!/bin/sh\necho claude-from-app\n' > "$CA/claude"; chmod +x "$CA/claude"
+out="$(run_agent "$FAKE/h-claude-app" "$BASE" works.sh)"
+echo "$out" | grep -q "using the agent already installed: claude" || fail "the Claude app's own Claude Code was not used: $out"
+grep -q "chewbacca shim" "$FAKE/h-claude-app/.local/bin/claude" 2>/dev/null \
+  || fail "downloaded Claude Code on a Mac whose Claude app already carries it"
+[ "$(HOME="$FAKE/h-claude-app" "$FAKE/h-claude-app/.local/bin/claude")" = "claude-from-app" ] \
+  || fail "the claude shim does not run the app's copy"
+
 # Bare Mac: Claude Code is installed, and the plan is named before it is.
 out="$(run_agent "$FAKE/h-bare" "$BASE" works.sh)"
 [ -x "$FAKE/h-bare/.local/bin/claude" ] || fail "a bare Mac got no agent"

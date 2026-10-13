@@ -120,7 +120,10 @@ def detected(spec):
     """
     if locate_binary(spec):
         return True
-    return any(Path(os.path.expanduser(path)).exists() for path in spec.get('detect_paths', []))
+    apps = os.environ.get('CHEWBACCA_APPLICATIONS_DIR')
+    paths = [apps.rstrip('/') + path[len('/Applications'):] if apps and path.startswith('/Applications/') else path
+             for path in spec.get('detect_paths', [])]
+    return any(Path(os.path.expanduser(path)).exists() for path in paths)
 
 
 def selected(name):

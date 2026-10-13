@@ -54,6 +54,7 @@ relative link in here points nowhere.
 | [SYSTEM-PROMPTS.md](reference/SYSTEM-PROMPTS.md)                   | Eight techniques from production system prompts                                       |
 | [DECISION-STANDARDS.md](reference/DECISION-STANDARDS.md)           | The mathematical, creative, proprietary and coachable decision standards              |
 | [DECISION-LAB.md](reference/DECISION-LAB.md)                       | `bin/decision-lab`: bounded Jev-versus-baseline comparisons                           |
+| [DECISION-INBOX.md](reference/DECISION-INBOX.md)                   | The decision inbox: only the calls Caleb makes, each with a take, plus receipts       |
 | [MATH-GRAPH-CAPABILITIES.md](reference/MATH-GRAPH-CAPABILITIES.md) | The offline math, graph and evidence CLIs                                             |
 | [UX-LEARNING-FORMAT.md](reference/UX-LEARNING-FORMAT.md)           | The portable UX navigation map format, version 1                                      |
 | [UX-POLICY.md](reference/UX-POLICY.md)                             | `bin/ux-policy`: graph planner and bandit replay over UX maps                         |

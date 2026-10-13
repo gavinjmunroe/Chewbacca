@@ -86,8 +86,8 @@ On 2026-10-13 he pasted the first two minutes of a Zeutara call with Ryan and
 Jonah with "GIVE ME MEETING NOTES TO NOT LOOK STUPID PHONY PLZ", then
 "FUCKKKKK" when it got technical. What worked:
 
-- Pull the live numbers before writing a word (`scripts/scorecard.py` for
-  Zeutara). A real 7.1% beats any talking point, and a guessed one is the
+- Pull the live numbers before writing a word (for Zeutara, the scorecard
+  script in the zeutara-gtme repo, not this one). A real 7.1% beats any talking point, and a guessed one is the
   phony he asked not to sound like.
 - Write what to say, in the order he'll say it, one screen max. The last
   line of the transcript is the question to answer.

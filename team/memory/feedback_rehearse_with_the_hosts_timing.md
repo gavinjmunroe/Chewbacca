@@ -7,7 +7,7 @@ metadata:
 
 Every headless run of the agents glass before 10/13 called `window.__realmGlassShown(true)` after the page had mounted. Kyber calls it in the same breath as `view.load` (AppPane.swift attach), before any page script runs, so on a cold load (first open, new pipe token, a crashed page) the word was dropped and the page never showed its tiles: 0 tiles at 12 s against the live server, 9 tiles 319 ms after a late tell. Fixed in 29f21956 (nav.mjs shownNow: go by visibility until Kyber speaks; a WKWebView in no window reads "hidden", measured with a Swift probe).
 
-The same night a stranger-stopwatch run of setup.sh with `HOME=mktemp -d` replaced the real `com.chewbacca` launchd job with one pointing into the scratch kit (launchd's gui domain is per account, not per $HOME). When the scratch folder was deleted, realm-ui exited 2 on every start for an hour. Fixed in b5e3b041: launchd writes only from the account's own LaunchAgents.
+The same night a stranger-stopwatch run of setup.sh with `HOME=mktemp -d` replaced the real `com.chewbacca` launchd job with one pointing into the scratch kit (launchd's gui domain is per account, not per $HOME). The scratch folder was deleted, and from the first swap that ran realm-ui through `lib/listen_exec.py` beside that daemon (00:53) it exited 2 on every start, until the real job was put back at 00:56; any later start of a port-holding service would have failed the same way. Fixed in b5e3b041: launchd writes only from the account's own LaunchAgents.
 
 **Why:** both bugs passed every rehearsal because the rehearsal chose the timing and the environment the code was written for, not the ones the host imposes.
 

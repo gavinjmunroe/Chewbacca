@@ -22,7 +22,9 @@
 // this file. The token is the pipe's own, minted per server start, and is
 // never served over http: the HUD's web view sets window.__realmUiToken from
 // the 0600 state file before any script runs (AppPane.swift), and this takes
-// it off the window again. The engine's token never reaches the page.
+// it off the window again. With no Kyber, `realm-ui open` hands a normal
+// browser tab a one-time launch code instead (see fromLaunch below). The
+// engine's token never reaches the page.
 (() => {
   "use strict";
   const unsubscribe = () => {};
@@ -57,8 +59,44 @@
     return hit && typeof hit.path === "string" ? hit.path : "";
   };
 
-  const token = typeof window.__realmUiToken === "string" ? window.__realmUiToken : "";
+  // In a plain browser tab (no Kyber) the token comes from a one-time launch
+  // code `realm-ui open` put in the fragment: redeemed here, synchronously,
+  // because the renderer reads window.realm.token as it boots. The fragment
+  // is then stripped from the address bar and the token kept in this tab's
+  // sessionStorage, so a reload works and a copied URL carries nothing. A
+  // stale tab (the server restarted, so a new token) needs `realm-ui open`.
+  const SESSION_KEY = "realm-ui-token";
+  const fromLaunch = () => {
+    let code = "";
+    try {
+      const m = /(?:^#|&)launch=([A-Za-z0-9_-]+)/.exec(window.location.hash || "");
+      code = m ? m[1] : "";
+    } catch { return ""; }
+    if (!code) return "";
+    let got = "";
+    try {
+      const xhr = new window.XMLHttpRequest();
+      xhr.open("POST", "/realm-launch/redeem", false);
+      xhr.setRequestHeader("Content-Type", "text/plain");
+      xhr.send(code);
+      if (xhr.status === 200) got = String(xhr.responseText || "");
+    } catch { got = ""; }
+    try {
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    } catch { /* no history in a test */ }
+    return got;
+  };
+  const fromSession = () => {
+    try { return window.sessionStorage.getItem(SESSION_KEY) || ""; } catch { return ""; }
+  };
+  let token = typeof window.__realmUiToken === "string" ? window.__realmUiToken : "";
   try { delete window.__realmUiToken; } catch { /* set non-configurable */ }
+  if (!token) {
+    token = fromLaunch() || fromSession();
+    if (token) {
+      try { window.sessionStorage.setItem(SESSION_KEY, token); } catch { /* storage off */ }
+    }
+  }
 
   const bridge = {
     port: Number("__REALM_UI_PORT__"),

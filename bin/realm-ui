@@ -7,7 +7,15 @@
     realm-ui serve              the server in the foreground (what the daemon runs)
     realm-ui stop               stop it and take it off the daemon
     realm-ui status [--json]    built, running, url
-    realm-ui show               open it on the glass (the `realm` surface)
+    realm-ui show               open it on the glass (the `realm` surface); with no
+                                Kyber running it opens a browser tab instead
+    realm-ui open [--build] [--front|--background] [--print-url]
+                                open it in a normal browser tab, no Kyber needed: same
+                                page, same buttons. Starts the engine and the server if
+                                they're down. --print-url prints a one-time address
+                                instead of opening it (for a headless browser or ssh).
+                                --build builds the engine and the page first if they
+                                aren't (what `chewbacca agents` runs; ~80 s the first time)
 
 Realm is Carlton Aikins' agent workspace (github.com/31Carlton7/realm). The
 details are in bin/lib/realm_ui/__init__.py.
@@ -54,11 +62,23 @@ def main(argv: list) -> int:
                          if info["realmCommit"] else "")
                       + (f", running at {info['url']}" if info["running"] else ", not running"))
             return 0 if info["running"] else 3
+        if cmd == "open":
+            front = True if "--front" in rest else False if "--background" in rest else None
+            if "--build" in rest:
+                realm_ui.ensure_built()
+            got = realm_ui.open_in_browser(front=front, print_only="--print-url" in rest)
+            print(got if "--print-url" in rest else f"Opened the agents page in your browser: {got}")
+            return 0
         if cmd == "show":
             import surface_intent  # noqa: PLC0415
             ok = surface_intent.open_with_preset("realm", {})
-            print("Realm is up." if ok else "Realm didn't open.")
-            return 0 if ok else 1
+            if not ok:
+                # No Kyber on this Mac (or it's down): the same page in a tab.
+                got = realm_ui.open_in_browser()
+                print(f"No glass running, so it opened in your browser: {got}")
+                return 0
+            print("Realm is up.")
+            return 0
     except RuntimeError as err:
         print(f"realm-ui: {err}", file=sys.stderr)
         return 1

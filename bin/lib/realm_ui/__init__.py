@@ -346,3 +346,96 @@ def status() -> dict:
     return {"built": built(), "realmCommit": record.get("realmCommit", ""), "source": record.get("source", ""),
             "running": bool(live),
             "url": (live or {}).get("url", ""), "pid": (live or {}).get("pid")}
+
+
+# ── a normal browser tab, for a Mac with no Kyber ───────────────────────────
+# How long the CLI waits on the local server to mint a launch code. It answers
+# from memory in milliseconds; 5 s is a guessed ceiling, never measured.
+MINT_TIMEOUT_S = 5.0
+
+
+def _engine_up() -> bool:
+    try:
+        data = realm_client.read_engine(realm_client.realm_home())
+    except realm_client.RealmUnavailable:
+        return False
+    return realm_client.is_realm_server(data.get("pid", 0), realm_client.realm_home())
+
+
+def ensure_engine(run=subprocess.run) -> bool:
+    """Start the realm engine when nothing has. Kyber starts it on Caleb's Mac;
+    with no Kyber nothing did, and the page sat on "engine down"."""
+    if _engine_up():
+        return True
+    try:
+        done = run(["/usr/bin/env", "python3", str(ROOT / "bin" / "realm-engine"), "start"],
+                   capture_output=True, text=True, timeout=90)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return done.returncode == 0
+
+
+def ensure_built(run=subprocess.run, build_fn=None) -> None:
+    """Build the engine and the page when either is missing, so one command
+    takes a stranger from a checkout to the page. Both builds skip themselves
+    when already current. On 10/12 the stranger run spent 23 s on the engine
+    and 55 s on the page, the first time only."""
+    engine = run(["/usr/bin/env", "python3", str(ROOT / "bin" / "realm-engine"), "build"], timeout=1800)
+    if engine.returncode != 0:
+        raise RuntimeError("the realm engine did not build; see the lines above")
+    if not built():
+        (build_fn or build)()
+
+
+def mint_launch_code(live: dict) -> str:
+    """Trade the server's token (read from the 0600 state file) for a one-time
+    code the browser can carry in its address bar (server.mjs launchCodes)."""
+    import http.client  # noqa: PLC0415
+    port_n = int(live["port"])
+    conn = http.client.HTTPConnection("127.0.0.1", port_n, timeout=MINT_TIMEOUT_S)
+    try:
+        conn.request("POST", "/realm-launch/mint", body=b"",
+                     headers={"Host": f"127.0.0.1:{port_n}", "X-Glass-Token": str(live.get("token", ""))})
+        resp = conn.getresponse()
+        body = resp.read().decode("utf-8", "replace").strip()
+    except OSError as err:
+        raise RuntimeError(f"the Realm interface server did not answer: {err}") from None
+    finally:
+        conn.close()
+    if resp.status != 200 or not body:
+        raise RuntimeError(f"the Realm interface server refused a launch code ({resp.status} {body})")
+    return body
+
+
+def launch_url(live: dict, code: str) -> str:
+    return f"{live['url'].rstrip('/')}/#launch={code}"
+
+
+def opener_argv(url: str, front: bool) -> list:
+    """The command that opens url in the default browser. On a Mac `open -g`
+    keeps it behind whatever has focus: an agent running this must never pull
+    a window forward (feedback_nothing_takes_the_screen). A person at a
+    terminal asked to see it, so only then does it come to the front."""
+    if sys.platform == "darwin":
+        return ["/usr/bin/open"] + ([] if front else ["-g"]) + [url]
+    return [shutil.which("xdg-open") or "xdg-open", url]
+
+
+def open_in_browser(front: Optional[bool] = None, print_only: bool = False, run=subprocess.run,
+                    start_fn=None, engine_fn=None) -> str:
+    """The agents page in a normal browser tab, with the same buttons as on the
+    glass. Returns the address it opened (without the code)."""
+    if not built():
+        raise RuntimeError("Realm's interface is not built; run realm-ui build first")
+    if not (engine_fn or ensure_engine)():
+        raise RuntimeError("the realm engine is not running and would not start; see realm-engine status")
+    live = (start_fn or start)()
+    url = launch_url(live, mint_launch_code(live))
+    if print_only:
+        return url
+    if front is None:
+        front = sys.stdin.isatty() and sys.stdout.isatty()
+    done = run(opener_argv(url, front), capture_output=True, text=True, timeout=30)
+    if done.returncode != 0:
+        raise RuntimeError(f"could not open a browser: {(done.stderr or '').strip()[:200]}")
+    return live["url"]

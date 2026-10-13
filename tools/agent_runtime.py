@@ -719,6 +719,21 @@ def main():
     return 0
 
 
+def agents_command():
+    """How this person starts the agents page: `chewbacca agents` when that
+    name on their PATH is this checkout, else the checkout's own path. A
+    runtime-only install puts nothing on PATH, so the 10/12 stranger run had no
+    `chewbacca` to type."""
+    found = shutil.which('chewbacca')
+    ours = ROOT / 'bin' / 'chewbacca'
+    try:
+        if found and Path(found).resolve() == ours.resolve():
+            return 'chewbacca agents'
+    except OSError:
+        pass
+    return shlex.quote(str(ours)) + ' agents'
+
+
 def describe(command, output):
     if command == 'setup':
         print('Shared context: ' + output['brain_dir'])
@@ -736,6 +751,8 @@ def describe(command, output):
         if output['missing_context_sources']:
             print('Missing context: ' + ', '.join(output['missing_context_sources']))
         print('Model, account and permission settings preserved. Data imports and session openers are optional.')
+        print('Agents page: ' + agents_command() + ' puts it in a browser tab (no Kyber needed; '
+              'with Kyber it is on the glass).')
     elif command in ('plan', 'status'):
         print('Platform: ' + output['platform'])
         for runtime in output['runtimes']:

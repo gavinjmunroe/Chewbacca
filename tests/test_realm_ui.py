@@ -376,11 +376,97 @@ else:
         s, head = upgrade(origin, f"realm.{page_token}", host="localhost.evil.test:1")
         check("a rebinding Host on the socket is refused", head.startswith("HTTP/1.1 403"), head[:60])
         s.close()
+
+        # ── a normal browser tab: one-time launch codes (no Kyber) ──────────
+        def post(path, body="", headers=None):
+            import http.client  # noqa: PLC0415
+            c = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+            c.request("POST", path, body=body.encode(), headers={"Host": f"127.0.0.1:{port}", **(headers or {})})
+            r = c.getresponse()
+            out = (r.status, r.read().decode("utf-8", "replace"))
+            c.close()
+            return out
+
+        check("a launch code needs the server's token", post("/realm-launch/mint")[0] == 403)
+        check("a GET never mints", http("/realm-launch/mint").startswith("HTTP/1.1 405"))
+        st, code = post("/realm-launch/mint", headers={"X-Glass-Token": page_token})
+        check("the token mints a code that is not the token", st == 200 and len(code) >= 24 and page_token not in code, (st, code))
+        check("another origin cannot redeem a code", post("/realm-launch/redeem", code, {"Origin": "http://evil.test"})[0] == 403)
+        st, got = post("/realm-launch/redeem", code, {"Origin": origin})
+        check("this origin redeems the code for the pipe token", st == 200 and got == page_token, (st, got[:8]))
+        check("a code works once", post("/realm-launch/redeem", code, {"Origin": origin})[0] == 403)
+        live = {"port": port, "url": f"{origin}/", "token": page_token}
+        url = realm_ui.launch_url(live, realm_ui.mint_launch_code(live))
+        check("realm-ui open's address carries a code in the fragment, never the token",
+              url.startswith(f"{origin}/#launch=") and page_token not in url, url)
+        st, got = post("/realm-launch/redeem", url.split("#launch=", 1)[1], {"Origin": origin})
+        check("and that code redeems", st == 200 and got == page_token)
+        try:
+            realm_ui.mint_launch_code({**live, "token": "wrong"})
+            check("a wrong token is refused by the CLI too", False)
+        except RuntimeError:
+            check("a wrong token is refused by the CLI too", True)
     finally:
         proc.terminate()
         proc.wait(timeout=5)
         listener.close()
     check("the state file goes with the server", not state.exists())
+
+# ── realm-ui open: the browser path, with fakes ─────────────────────────────
+
+check("an agent opening the page never pulls the browser forward",
+      realm_ui.opener_argv("http://x/", front=False)[:2] == ["/usr/bin/open", "-g"] if sys.platform == "darwin"
+      else True)
+check("a person at a terminal gets it in front",
+      "-g" not in realm_ui.opener_argv("http://x/", front=True))
+ran = []
+fake_live = {"port": 1, "url": "http://127.0.0.1:1/", "token": "t"}
+real_mint, real_built = realm_ui.mint_launch_code, realm_ui.built
+realm_ui.mint_launch_code = lambda live: "CODE"
+realm_ui.built = lambda: True
+try:
+    got = realm_ui.open_in_browser(front=False, run=lambda argv, **k: ran.append(argv) or subprocess.CompletedProcess(argv, 0, "", ""),
+                                   start_fn=lambda: fake_live, engine_fn=lambda: True)
+    check("open hands the browser the one-time address and reports the plain one",
+          got == "http://127.0.0.1:1/" and ran and ran[0][-1] == "http://127.0.0.1:1/#launch=CODE", (got, ran))
+    printed = realm_ui.open_in_browser(print_only=True, run=lambda *a, **k: ran.append("ran"),
+                                       start_fn=lambda: fake_live, engine_fn=lambda: True)
+    check("--print-url opens nothing", printed.endswith("#launch=CODE") and ran.count("ran") == 0, printed)
+    try:
+        realm_ui.open_in_browser(front=False, run=lambda *a, **k: None, start_fn=lambda: fake_live, engine_fn=lambda: False)
+        check("an engine that won't start is named, not a blank page", False)
+    except RuntimeError as err:
+        check("an engine that won't start is named, not a blank page", "engine" in str(err), str(err))
+    realm_ui.built = lambda: False
+    try:
+        realm_ui.open_in_browser(front=False, start_fn=lambda: fake_live, engine_fn=lambda: True)
+        check("an unbuilt interface names the build step", False)
+    except RuntimeError as err:
+        check("an unbuilt interface names the build step", "realm-ui build" in str(err), str(err))
+finally:
+    realm_ui.mint_launch_code, realm_ui.built = real_mint, real_built
+
+# ── a stranger is told where the page is ──────────────────────────────────
+
+readme = (ROOT / "README.md").read_text()
+check("the README names the no-Kyber way to the agents page",
+      "chewbacca agents" in readme and "browser" in readme.split("chewbacca agents", 1)[1][:400])
+sys.path.insert(0, str(ROOT / "tools"))
+import io  # noqa: E402
+import contextlib  # noqa: E402
+import agent_runtime  # noqa: E402
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    agent_runtime.describe("setup", {"brain_dir": "/x", "created_context": False, "runtimes": [],
+                                     "shared_skills": {"conflicts": []}, "missing_dependencies": [],
+                                     "missing_context_sources": []})
+said = buf.getvalue()
+check("runtime setup says how to get to the agents page with a command that exists",
+      "Agents page:" in said and ("chewbacca agents" in said) and
+      (said.split("Agents page: ", 1)[1].startswith("chewbacca agents")
+       or Path(said.split("Agents page: ", 1)[1].split(" agents", 1)[0].strip("'")).is_file()), said)
+chew = (ROOT / "bin" / "chewbacca").read_text()
+check("chewbacca agents opens the page, building it first", 'exec python3 "$ROOT/bin/realm-ui" open --build' in chew)
 
 # ── the Swift side reads what the surface sends ─────────────────────────────
 

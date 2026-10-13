@@ -21,6 +21,11 @@ bash setup.sh --runtime codex --dry-run
 bash setup.sh --runtime codex
 ```
 
+To watch and drive your agents in a browser tab, run `bin/chewbacca agents`
+from the checkout. The first run builds the agents page (about 80 seconds),
+then it opens in your default browser with the same buttons as on the Kyber
+glass. No Kyber needed.
+
 Use `claude-code` or `both` instead when that matches your setup. You do not need
 a GitHub account or a name for runtime setup. It creates an empty private brain
 and preserves existing accounts, model settings, notes and permission policies.

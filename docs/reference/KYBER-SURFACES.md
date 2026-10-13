@@ -514,6 +514,16 @@ Aliases: `vscode`, `vs-code`, `claude`, `sessions`, `agent`, `realm`. Spoken:
 "show my agents", "pull up my claude sessions", "open the coding agents". A
 bare "show my sessions" and "show me Claude" stay with the model.
 
+With no Kyber, the same Realm page opens in a normal browser tab:
+`chewbacca agents` (or `realm-ui open`) starts the engine and the page server
+if they are down, trades the server's token for a one-time launch code (good
+once, for two minutes), and opens `http://127.0.0.1:47317/#launch=<code>`.
+`bridge.js` redeems the code from the page's own origin, drops it from the
+address bar and keeps the token in that tab's sessionStorage, so a reload
+works and a copied address carries nothing. An agent running it opens the tab
+in the background; a person at a terminal gets it in front. `realm-ui show`
+falls back to the browser tab when the glass isn't running.
+
 The list is every session the engine has, by space, with its state in words
 (waiting on you, working, failed, idle), what needs him first, and a header
 count ("3 sessions · 1 waiting on you · 1 working"). Open pins a session: its

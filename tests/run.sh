@@ -1831,6 +1831,8 @@ if group "hud"; then
     node --test "$ROOT/tests/test_realm_nav.mjs" "$ROOT/tests/test_realm_turn.mjs" "$ROOT/tests/test_realm_beats.mjs" \
       "$ROOT/tests/test_realm_regions.mjs" "$ROOT/tests/test_realm_new_agent.mjs" "$ROOT/tests/test_realm_folders.mjs" \
       "$ROOT/tests/test_realm_floating.mjs" "$ROOT/tests/test_realm_bridges.mjs"
+  check  "with no Kyber the agents page opens in a browser tab on a one-time launch code, never the long-lived token" \
+    node --test "$ROOT/tests/test_realm_launch.mjs"
   check  "engines run only remixable, local, spec-declared reads, and oss labels every license" \
     python3 "$ROOT/tests/test_surface_engines.py"
   check  "code is read only, refuses a path with a control, format or bidi character, and runs no repo filter" \

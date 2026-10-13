@@ -72,6 +72,14 @@ const ENGINE_HANDSHAKE_MS = 10_000;
 // The largest handshake response accepted from the engine before the pipe
 // gives up. Realm's 101 is under 300 bytes; 16 KiB is a guessed ceiling.
 const MAX_RESPONSE_HEAD = 16 * 1024;
+// How long a launch code from `realm-ui open` stays good. The code rides in
+// the URL `open` hands the default browser, so it must die fast and work once.
+// 120 s is a guessed ceiling for a cold browser start on a slow Mac, never
+// measured.
+export const LAUNCH_CODE_TTL_MS = 120_000;
+// Codes alive at once. `open` mints one per call; 16 is a guess that still
+// caps what a loop of mints can hold in memory.
+const MAX_LAUNCH_CODES = 16;
 
 export function parseArgs(argv) {
   const out = { port: 0 };
@@ -164,6 +172,81 @@ export function pageResponse(head, pageToken) {
     .join("\r\n");
 }
 
+/** One-time launch codes for a page with no Kyber to hand it the token.
+ *
+ *  The HUD's web view sets window.__realmUiToken before the page runs. A
+ *  plain browser tab has nothing like that, so the page came up blank with
+ *  "server token not provided to renderer" (stranger test, 10/12). `realm-ui
+ *  open` reads the token from the 0600 state file, trades it here for a code
+ *  that lives LAUNCH_CODE_TTL_MS and works once, and opens
+ *  <origin>/#launch=<code>. The fragment never reaches a server or a log;
+ *  bridge.js redeems it from this origin and strips it from the address bar.
+ *  The long-lived token itself never rides a command line or a URL. */
+export function launchCodes({ ttl = LAUNCH_CODE_TTL_MS, now = Date.now } = {}) {
+  const codes = new Map();
+  const sweep = () => {
+    for (const [code, born] of codes) if (now() - born > ttl) codes.delete(code);
+  };
+  return {
+    mint() {
+      sweep();
+      while (codes.size >= MAX_LAUNCH_CODES) codes.delete(codes.keys().next().value);
+      const code = randomBytes(24).toString("base64url");
+      codes.set(code, now());
+      return code;
+    },
+    redeem(code) {
+      sweep();
+      if (typeof code !== "string" || !codes.has(code)) return false;
+      codes.delete(code);
+      return true;
+    },
+  };
+}
+
+function readBody(req, limit = 1024) {
+  return new Promise((done) => {
+    let body = "";
+    req.setEncoding("utf8");
+    req.on("data", (chunk) => {
+      body += chunk;
+      if (body.length > limit) req.destroy();
+    });
+    req.on("end", () => done(body));
+    req.on("error", () => done(""));
+  });
+}
+
+/** POST /realm-launch/mint (the CLI, with the token) and
+ *  POST /realm-launch/redeem (the page, same origin, with a code). */
+function handleLaunch(req, res, { path, token, origin, launch }) {
+  if (path !== "/realm-launch/mint" && path !== "/realm-launch/redeem") return false;
+  const plain = { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" };
+  if (req.method !== "POST") {
+    res.writeHead(405, plain).end();
+    return true;
+  }
+  if (path === "/realm-launch/mint") {
+    if (!same(req.headers["x-glass-token"] ?? "", token)) {
+      res.writeHead(403, plain).end("token");
+      return true;
+    }
+    res.writeHead(200, plain).end(launch.mint());
+    return true;
+  }
+  // A page on another origin cannot redeem: a browser always sends its real
+  // Origin on a POST, and a code is single-use either way.
+  if (req.headers.origin !== origin) {
+    res.writeHead(403, plain).end("origin");
+    return true;
+  }
+  readBody(req).then((body) => {
+    if (launch.redeem(body.trim())) res.writeHead(200, plain).end(token);
+    else res.writeHead(403, plain).end("code");
+  });
+  return true;
+}
+
 function refuse(socket, status, why) {
   try {
     socket.end(
@@ -192,6 +275,7 @@ export function start({
   // The glass layer's routes (glass_routes.mjs): voice, focus, the stage's
   // file view and a hunk put back. Same token as the pipe.
   const glass = glassState();
+  const launch = launchCodes();
 
   const server = createServer((req, res) => {
     if (req.headers.host !== hostHeader) {
@@ -205,6 +289,7 @@ export function start({
       res.writeHead(400).end();
       return;
     }
+    if (handleLaunch(req, res, { path, token, origin, launch })) return;
     if (
       handleGlass(req, res, {
         path,

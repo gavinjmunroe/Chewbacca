@@ -49,9 +49,10 @@ SAFE = ['git', '-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', '
 def filters_off(repo):
     """-c overrides that empty every filter driver the repo's config names.
     Reading config runs nothing, so this is safe to ask first."""
-    names = git(repo, 'config', '--name-only', '--get-regexp', r'^filter\..*\.(clean|smudge|process)$') or ''
+    # NUL-separated: a filter's subsection name may hold spaces.
+    names = git(repo, 'config', '-z', '--name-only', '--get-regexp', r'^filter\..*\.(clean|smudge|process)$') or ''
     off = []
-    for name in sorted(set(names.split())):
+    for name in sorted({n for n in names.split('\0') if n}):
         off += ['-c', name + '=']
         off += ['-c', name.rsplit('.', 1)[0] + '.required=false']
     return off
@@ -106,7 +107,8 @@ def inspect(repo, email, since):
         return None
     author = ['--author=' + email] if email else []
     log = git(repo, 'log', '--branches', '--no-merges', '--since=' + since, '--format=%H', *author)
-    status = git(repo, 'status', '--porcelain', extra=filters_off(repo)) or ''
+    # Submodules carry their own config, so status never descends into them.
+    status = git(repo, 'status', '--porcelain', '--ignore-submodules=all', extra=filters_off(repo)) or ''
     remotes = (git(repo, 'remote') or '').split()
     # Unpushed means no remote branch holds the change. Matching on author time
     # plus subject, not on hash: a commit landed by cherry-pick or rebase gets a

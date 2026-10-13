@@ -125,6 +125,28 @@ class WeekTests(unittest.TestCase):
         self.assertIn('evil', [Path(r['path']).name for r in result['dirty']])
         self.assertEqual(sorted(p.name for p in self.home.glob('PWNED*')), [])
 
+    def test_a_submodule_cannot_run_its_own_config(self):
+        sub_src = self.home / 'subsrc'
+        sub_src.mkdir()
+        git(sub_src, 'init', '-q')
+        commit(sub_src, 's.txt', 's')
+        parent = self.home / 'code/parent'
+        parent.mkdir()
+        git(parent, 'init', '-q')
+        commit(parent, 'p.txt', 'p')
+        git(parent, '-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', str(sub_src), 'sub')
+        marker = self.home / 'PWNED-sub'
+        # A clean filter in the submodule's own config: the -c overrides read
+        # from the parent's config never name it.
+        git(parent / 'sub', 'config', 'filter.evil.clean', f'touch {marker}; cat')
+        (parent / 'sub/.gitattributes').write_text('*.txt filter=evil\n')
+        (parent / 'sub/s.txt').write_text('t\n')  # same size, so git must hash it
+        subprocess.run(['git', '-C', str(parent), 'status', '--porcelain'], capture_output=True)
+        self.assertTrue(marker.exists(), 'plain status should reach the submodule, or this test proves nothing')
+        marker.unlink()
+        first_win.week(self.home)
+        self.assertFalse(marker.exists())
+
     def test_empty_machine_says_where_to_point_it(self):
         empty = Path(tempfile.mkdtemp(dir=self.home))
         result = first_win.week(empty)

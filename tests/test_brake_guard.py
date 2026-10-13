@@ -40,16 +40,23 @@ def run(command, tool="Bash", cwd=ON_MAIN):
 
 
 check("the hook exists and is executable", HOOK.is_file() and os.access(HOOK, os.X_OK))
+# A syntax error makes bash exit 2, which a PreToolUse hook reads as a
+# refusal of EVERY command (10/13: one apostrophe in the python body did it).
+syntax = subprocess.run(["bash", "-n", str(HOOK)], capture_output=True, text=True)
+check("the hook parses, so it can never refuse everything", syntax.returncode == 0, syntax.stderr)
 for cmd in ["rm -rf ~", "rm -rf ~/", "rm -rf ~/*", "rm -fr $HOME", "rm -Rf /", "sudo rm -rf /*",
             "rm --recursive --force ~", "ls && rm -rf ~", f"rm -rf {Path.home()}",
             "git push --force origin main", "git push -f", "git push -f origin HEAD", "git push origin +main",
             "git push --force-with-lease origin master", "git -C repo push -f origin HEAD:main",
             "rm -vrf ~", "cd /tmp; rm -rf ~/.", "rm -rf $HOME/../" + Path.home().name, 'bash -c "rm -rf ~"',
             "true & rm -rf ~", "(rm -rf ~)", "env FOO=1 rm -rf /", "git push -f --all", "git push --mirror -f",
-            f"git -C {ON_MAIN} push -f", "git checkout main && git push -f"]:
+            f"git -C {ON_MAIN} push -f", "git checkout main && git push -f", "git push -f origin --branches",
+            "git push -f origin 'refs/heads/*:refs/heads/*'", "git push -f origin :", "GIT_DIR=x git push -f",
+            "git --git-dir=x push -f origin HEAD"]:
     code, err = run(cmd)
     check(f"refuses: {cmd}", code == 2 and "brake-guard" in err, (code, err))
-for cmd in ["git push -f", "git push -f origin HEAD", f"git -C {ON_FEAT} push -f"]:
+for cmd in ["git push -f", "git push -f origin HEAD", f"git -C {ON_FEAT} push -f", "git push -f origin feat/x:feat/x",
+            "git push -f origin HEAD:refs/heads/feat/y"]:
     code, err = run(cmd, cwd=ON_FEAT)
     check(f"lets through on a feature branch: {cmd}", code == 0, (code, err))
 for cmd in ["rm -rf ./build", "rm -rf ~/code/tmp", "rm -rf node_modules", 'echo "rm -rf ~"',

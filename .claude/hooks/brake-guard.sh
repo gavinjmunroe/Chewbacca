@@ -20,10 +20,11 @@ type hook_init >/dev/null 2>&1 && hook_init brake-guard.sh 5
 # Refuses, judged per simple command by its own words (so `echo "rm -rf ~"`
 # or a grep for it passes), with a `bash -c` body read as commands too:
 #   1. rm -rf, -fr, -Rf or --recursive --force on ~, ~/, ~/*, $HOME, / or /*
-#   2. git push with a force flag (or a +refspec) that names main or master,
-#      or --all / --mirror, or names no branch, HEAD or @ while main or master
-#      is checked out (read at -C when given; a branch it can't read, or a
-#      command that also runs cd, checkout or switch, counts as main)
+#   2. a forced git push (a force flag or a +refspec) unless every
+#      destination it names is a branch other than main or master. No branch,
+#      HEAD or @ is read as the checked-out branch at -C; a branch it can't
+#      read (GIT_DIR, --git-dir, a cd, checkout or switch in the same
+#      command), a glob, a bare `:`, --all, --mirror or --branches counts as main
 command -v python3 >/dev/null 2>&1 || exit 0
 INPUT=$(cat)
 REASON=$(printf '%s' "$INPUT" | python3 -I -c '
@@ -100,12 +101,18 @@ def current_branch(where):
 MAIN = re.compile(r"(^|[:+/])(main|master)$")
 
 def force_main(w):
+    """A forced push is let through only when every destination it names is
+    a branch other than main or master. Anything it cannot pin down (no
+    branch, HEAD or @ where the branch cannot be read, a glob, a bare `:`,
+    --all, --mirror, --branches) counts as main."""
     if len(w) < 2 or os.path.basename(w[0]) != "git":
         return False
-    i, where = 1, cwd
+    i, where, unsure = 1, cwd, bool(re.search(r"\bGIT_(DIR|WORK_TREE|NAMESPACE)=", cmd))
     while i < len(w) and w[i].startswith("-"):
         if w[i] == "-C" and i + 1 < len(w):
             where = os.path.join(where, os.path.expanduser(w[i + 1]))
+        if w[i].startswith(("--git-dir", "--work-tree", "--namespace")):
+            unsure = True
         i += 2 if w[i] in ("-C", "-c") else 1
     if i >= len(w) or w[i] != "push":
         return False
@@ -116,14 +123,27 @@ def force_main(w):
         or any(a.startswith("+") for a in args[1:])
     if not forced:
         return False
-    refs = [r.lstrip("+") for r in args[1:]]
-    if any(MAIN.search(r) for r in refs) or any(a in ("--all", "--mirror") for a in opts):
+    if any(a in ("--all", "--mirror", "--branches") for a in opts):
         return True
-    # No branch named, or HEAD / @: it pushes what is checked out. Unknown
-    # counts as main, so a failed lookup refuses rather than lets through.
-    if not refs or any(r.split(":")[0] in ("HEAD", "@") and (":" not in r or not r.split(":")[1]) for r in refs):
-        branch = current_branch(where)
+
+    def checked_out_is_main():
+        branch = None if unsure else current_branch(where)
         return branch is None or branch in ("main", "master")
+
+    refs = args[1:]
+    if not refs:
+        return checked_out_is_main()
+    for ref in refs:
+        r = ref.lstrip("+")
+        if r == ":" or "*" in r:
+            return True
+        dst = r.split(":", 1)[1] if ":" in r else r
+        if dst in ("", "HEAD", "@"):
+            if checked_out_is_main():
+                return True
+            continue
+        if MAIN.search(dst):
+            return True
     return False
 
 for seg, w in segments(cmd):

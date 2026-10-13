@@ -752,3 +752,16 @@ test("a code card is a grid, so lit and diff tints reach the end of a long line"
   assert.match(block, /grid-template-columns: minmax\(max-content, 1fr\);/);
   assert.match(/\.glass-line \{([^}]*)\}/.exec(css)[1], /display: block;/);
 });
+
+// 10/13, the A2 verifier, headless WebKit against the live server: the glass
+// pane measured rgba alpha 0.84 (his theme.ts writes --pane-alpha inline on
+// <html>, beating the 96% rule), and his hidden composer read through behind
+// a real permission card. Under the tiles and story is his own pane, so ours
+// is opaque, and the 96% for the rest of his frame has to win over inline.
+test("nothing of his reads through the tiles or the story", () => {
+  const css = readFileSync(new URL("../bin/lib/realm_ui/glass/glass.css", import.meta.url), "utf8");
+  assert.match(css, /--pane-alpha: 96% !important;/);
+  assert.match(css, /--ground-alpha: 96% !important;/);
+  const block = /\.glass-pane\[data-mode="tiles"\],\s*\.glass-pane\[data-mode="story"\] \{([^}]*)\}/.exec(css)[1];
+  assert.match(block, /background: var\(--canvas\);/);
+});

@@ -11,8 +11,15 @@
 :root[data-glass] {
   /* 96%, not his 84%: on 10/12 his desktop folder icons and their labels
    * read through the story at 84% and the panel looked like a tinted sheet
-   * over his wallpaper (live-test/first-live-1538.png). */
-  --pane-alpha: 96%;
+   * over his wallpaper (live-test/first-live-1538.png). !important because
+   * his theme.ts writes --pane-alpha inline on <html>, which beat this rule:
+   * the glass measured 0.84 alpha on 10/13 (headless WebKit, live server),
+   * so the 96% had never applied. */
+  --pane-alpha: 96% !important;
+  /* His sidebar's ground, by the same inline writer: at his default the
+   * whole frame outside the main pane measured 0.528 alpha over the
+   * wallpaper (10/13), the tinted sheet of the 3:38pm screenshot again. */
+  --ground-alpha: 96% !important;
   --glass-stage-w: min(30vw, 300px);
   --glass-bar-h: 52px;
   --glass-gap: 12px;
@@ -104,9 +111,13 @@
   border-bottom-right-radius: var(--radius-window, 16px);
   overflow: clip;
 }
+/* Opaque: under the tiles and the story is his own main pane, never the
+ * desktop, and at the pane ground's 84% his hidden composer ("Ask each
+ * time", the model chip, the folder chip) read through behind the Allow
+ * card and the story's doors (A2 verifier, 10/13, a real permission ask). */
 .glass-pane[data-mode="tiles"],
 .glass-pane[data-mode="story"] {
-  background: var(--pane-ground);
+  background: var(--canvas);
 }
 /* On the tiles nothing is open, so his pane bar (which names whatever his
  * layout last restored, the dead Gemini "Hello" on 10/12) is covered too.

@@ -1201,11 +1201,16 @@ export function GlassLayer({
     return () => window.removeEventListener("realm-glass-voice", onVoice);
   }, [store, tiles, picked, grow, host]);
 
-  // New agent: his own new-space sheet (name, folder, agent) over his
-  // workspace, with "Choose folder" answered on the glass (FolderPick.tsx).
-  // His store opens the new session in his focused pane, which the
-  // subscription above follows; the first turn then plays as the story.
-  // Closing the sheet without making one goes back to the tiles.
+  // New agent: his own new-space sheet (name, folder, agent), with "Choose
+  // folder" answered on the glass (FolderPick.tsx). The sheet sits over
+  // whatever the glass shows now (his sheet is a fixed layer above ours),
+  // never over his workspace: his app restores its last layout on boot, so
+  // behind the sheet was the dead Gemini "Hello" with its raw red error and
+  // a Gemini prompter (headless WebKit against the live server, 10/13 1:20am,
+  // the 3:38pm screenshot's problems 1 and 3 again). Create is a press in
+  // his frame, so the follower above takes the new session into his
+  // workspace (followHis); its first turn then plays as the story. Closing
+  // the sheet without making one leaves the glass where it was.
   const newFrom = useRef<{ before: string | null; sheet: boolean } | null>(
     null,
   );
@@ -1214,7 +1219,6 @@ export function GlassLayer({
       openSheet: (sheet: { kind: string }) => void;
     };
     newFrom.current = { before: focusRef.current, sheet: false };
-    setMode("work");
     st.openSheet({ kind: "new-space" });
   }, [store]);
   useEffect(
@@ -1234,10 +1238,7 @@ export function GlassLayer({
         pending.sheet = false;
         window.setTimeout(() => {
           if (newFrom.current !== pending) return;
-          if (focusRef.current === pending.before) {
-            newFrom.current = null;
-            setMode("tiles");
-          }
+          if (focusRef.current === pending.before) newFrom.current = null;
         }, ENGINE_ANSWER_MS);
       }),
     [store],

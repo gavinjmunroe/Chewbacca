@@ -370,3 +370,14 @@ test("a page Kyber loaded cold is shown by visibility until Kyber speaks", () =>
   assert.match(hook, /shownNow\(/, "useShown reads the one rule");
   assert.doesNotMatch(hook, /let kyberSays = false/, "Kyber's silence isn't a no");
 });
+
+// 10/13 1:20am, the A2 verifier against the live server: New agent switched
+// the glass to his workspace before opening his sheet, and his workspace was
+// his restored layout, the dead Gemini "Hello" with its raw red error and a
+// Gemini prompter. The sheet now sits over whatever the glass shows.
+test("New agent opens his sheet over the glass, never over his restored workspace", () => {
+  const src = readFileSync(new URL("../bin/lib/realm_ui/glass/GlassLayer.tsx", import.meta.url), "utf8");
+  const start = src.slice(src.indexOf("const startNew = useCallback"), src.indexOf("}, [store]);", src.indexOf("const startNew = useCallback")));
+  assert.match(start, /openSheet\(\{ kind: "new-space" \}\)/);
+  assert.doesNotMatch(start, /setMode\(/, "no mode change before the sheet");
+});

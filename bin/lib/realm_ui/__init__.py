@@ -228,7 +228,15 @@ def _alive(pid: int) -> bool:
 
 
 def _is_ours(pid: int) -> bool:
-    """The pid is our server.mjs, not a recycled pid."""
+    """The pid is our server.mjs, not a recycled pid. Read from the kernel
+    (procargs.py), so a sandboxed caller that can't exec `ps` still sees it."""
+    try:
+        import procargs  # noqa: PLC0415
+        got = procargs.args(pid)
+    except ImportError:
+        got = None
+    if got is not None:
+        return any(a.endswith("realm_ui/server.mjs") for a in got[0])
     try:
         out = subprocess.run(["ps", "-o", "command=", "-p", str(pid)], capture_output=True, text=True, timeout=5)
     except (OSError, subprocess.TimeoutExpired):

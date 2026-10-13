@@ -988,7 +988,7 @@ def test_engine_hands_over_on_kit_move():
             snap = base / "snapshots" / sha
             (snap / "bin" / "lib").mkdir(parents=True)
             shutil.copy(ROOT / "bin" / "realm-engine", snap / "bin" / "realm-engine")
-            for lib in ("realm_client.py", "kit_snapshot.py"):
+            for lib in ("realm_client.py", "kit_snapshot.py", "procargs.py"):
                 shutil.copy(ROOT / "bin" / "lib" / lib, snap / "bin" / "lib" / lib)
             (snap / "config" / "data" / "realm").mkdir(parents=True)
             shutil.copy(ROOT / "config" / "data" / "realm" / "origin-guard.mjs", snap / "config" / "data" / "realm")

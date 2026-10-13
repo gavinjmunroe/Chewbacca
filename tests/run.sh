@@ -1821,6 +1821,8 @@ if group "hud"; then
     python3 "$ROOT/tests/test_kit_snapshot.py"
   check  "Realm's own interface: built from Carlton's renderer, piped to the engine only from its own origin and token" \
     python3 "$ROOT/tests/test_realm_ui.py"
+  check  "the engine and the page server know their own processes from the kernel, even in a sandbox where ps can't run" \
+    python3 "$ROOT/tests/test_procargs.py"
   check  "Realm's glass layer rides on Carlton's renderer untouched, and the talk key fills only the agent that has the glass" \
     python3 "$ROOT/tests/test_realm_glass.py"
   check  "the stage follows the agent: a file while editing, a command while running, tests when run, then hunks to Keep or Reject" \

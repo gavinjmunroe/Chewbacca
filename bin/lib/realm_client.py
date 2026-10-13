@@ -194,6 +194,21 @@ def is_realm_server(pid: int, home: Path | None = None) -> bool:
     """
     if not pid_alive(pid):
         return False
+    home = home or realm_home()
+    # The kernel first: no exec, so it answers inside a sandbox where the
+    # setuid `ps` may not run (procargs.py). ps stays the fallback for a
+    # platform where the kernel won't say.
+    try:
+        import procargs  # noqa: PLC0415
+        got = procargs.args(pid)
+    except ImportError:
+        got = None
+    if got is not None:
+        argv, env = got
+        if not any(a.endswith("dist/main.js") for a in argv):
+            return False
+        value = env.get("REALM_HOME")
+        return bool(value) and _same_home(value, home)
     try:
         out = subprocess.run(["ps", "eww", "-o", "command=", "-p", str(pid)],
                              capture_output=True, text=True, timeout=5).stdout
@@ -201,7 +216,6 @@ def is_realm_server(pid: int, home: Path | None = None) -> bool:
         return False
     if "dist/main.js" not in out:
         return False
-    home = home or realm_home()
     # `ps eww` joins the environment with spaces, so a value cannot be split
     # out of it. A home with a space in its path (2026-10-05, verifier: "space
     # home/realm") never matched `\S+`, the engine stopped recognising its own

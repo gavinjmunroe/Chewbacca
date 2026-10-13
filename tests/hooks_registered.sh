@@ -28,7 +28,10 @@ setup = (root / "setup.sh").read_text()
 # calls it, and for Claude Code session-context.sh carries the same deadlines.
 # skill-route-shadow.sh is an opt-in experiment: a second, detached Jev call per
 # prompt to log beside skill-route's own route_shadow. Register it by hand.
-NOT_HOOKS = {"lib.sh", "statusline.sh", "coursework-context.sh", "skill-route-shadow.sh"}
+# brake-guard.sh is the runtime install's brake (tools/agent_runtime.py
+# CLAUDE_CHECKS): the full install writes the same refusals as settings.json
+# deny rules, so setup.sh doesn't register it (2026-10-13).
+NOT_HOOKS = {"lib.sh", "statusline.sh", "coursework-context.sh", "skill-route-shadow.sh", "brake-guard.sh"}
 
 registered = set(re.findall(r'hooks_dir \+ "/([\w.-]+\.sh)"', setup))
 registered |= set(re.findall(r'hooks/([\w.-]+\.sh)', setup))

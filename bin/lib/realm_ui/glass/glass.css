@@ -205,10 +205,19 @@
   font-size: var(--text-xs, 12px);
   color: var(--ink-2);
 }
+/* One line, whatever the tile's width: at 1440 x 900 a waiting tile's head
+ * wrapped to "Needs / you" beside "15m / 40s" (A2 verifier, 10/13). The
+ * clock never shrinks; the state word gives way first. */
 .glass-tile-state {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+  white-space: nowrap;
+}
+.glass-tile-age {
+  flex: none;
+  white-space: nowrap;
 }
 .glass-tile[data-tone="running"] .glass-tile-state {
   color: var(--accent-ink);
@@ -220,6 +229,7 @@
   color: var(--red);
 }
 .glass-dot {
+  flex: none;
   width: 6px;
   height: 6px;
   border-radius: 99px;
@@ -1101,6 +1111,14 @@
    stopped engine, beside the notice). */
 :root[data-glass-notice] #boot .boot-shine {
   animation: none;
+}
+
+/* Once his app has booted, his mark goes at once instead of fading for
+   200 ms: the glass draws its tiles on the same answer, and the fading cube
+   sat over the seventh tile in the first frame at 1440 x 900 (A2 verifier,
+   10/13, headless WebKit against the live server). */
+:root[data-glass] #boot[data-done] {
+  display: none;
 }
 
 /* "Choose folder" on the glass (FolderPick.tsx): his dialog shape, centred

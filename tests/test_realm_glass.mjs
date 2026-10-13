@@ -765,3 +765,20 @@ test("nothing of his reads through the tiles or the story", () => {
   const block = /\.glass-pane\[data-mode="tiles"\],\s*\.glass-pane\[data-mode="story"\] \{([^}]*)\}/.exec(css)[1];
   assert.match(block, /background: var\(--canvas\);/);
 });
+
+// 10/13, the A2 verifier at 1440 x 900: a waiting tile's head wrapped to
+// "Needs / you" beside "15m / 40s". The head is one line.
+test("a tile's state and clock never wrap", () => {
+  const css = readFileSync(new URL("../bin/lib/realm_ui/glass/glass.css", import.meta.url), "utf8");
+  assert.match(/\.glass-tile-state \{([^}]*)\}/.exec(css)[1], /white-space: nowrap;/);
+  assert.match(/\.glass-tile-age \{([^}]*)\}/.exec(css)[1], /white-space: nowrap;/);
+  // and its dot stays a dot when the head is tight (it squeezed to a bar)
+  assert.match(/\.glass-dot \{([^}]*)\}/.exec(css)[1], /flex: none;/);
+});
+
+// 10/13, the A2 verifier at 1440 x 900: his boot mark, a grey cube, faded
+// for 200 ms over the seventh tile in the first frame the tiles drew.
+test("his boot mark never fades over the tiles", () => {
+  const css = readFileSync(new URL("../bin/lib/realm_ui/glass/glass.css", import.meta.url), "utf8");
+  assert.match(css, /:root\[data-glass\] #boot\[data-done\] \{\s*display: none;/);
+});

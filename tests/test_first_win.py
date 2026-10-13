@@ -109,6 +109,22 @@ class WeekTests(unittest.TestCase):
         counted = subprocess.run(command, shell=True, capture_output=True, text=True).stdout.strip()
         self.assertEqual(counted, '2')
 
+    def test_a_cloned_repo_cannot_run_its_own_config(self):
+        # Any repo under ~/code may be a stranger's clone. Plain `git status`
+        # runs its core.fsmonitor command (seen: it touched the marker).
+        evil = self.home / 'code/evil'
+        evil.mkdir()
+        git(evil, 'init', '-q')
+        commit(evil, 'a.txt', 'x')
+        marker = self.home / 'PWNED'
+        git(evil, 'config', 'core.fsmonitor', f'touch {marker}.fsmonitor; echo')
+        git(evil, 'config', 'filter.evil.clean', f'touch {marker}.clean; cat')
+        (evil / '.gitattributes').write_text('*.txt filter=evil\n')
+        (evil / 'a.txt').write_text('changed\n')
+        result = first_win.week(self.home)
+        self.assertIn('evil', [Path(r['path']).name for r in result['dirty']])
+        self.assertEqual(sorted(p.name for p in self.home.glob('PWNED*')), [])
+
     def test_empty_machine_says_where_to_point_it(self):
         empty = Path(tempfile.mkdtemp(dir=self.home))
         result = first_win.week(empty)

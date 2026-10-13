@@ -38,9 +38,28 @@ MAX_REPOS = 400
 SKIP_DIRS = {'node_modules', '.venv', 'venv', 'vendor', 'target', 'dist', 'build', '.cache', 'Pods'}
 
 
-def git(repo, *args, timeout=10):
+# These repos are anything cloned under the home folder, and a repo's own
+# config can name programs git runs: an fsmonitor, hooks, an external diff, a
+# clean filter that `status` invokes. Same prefix as write_log.SAFE and
+# review_cross.GIT_SAFE, plus the filters, which read() switches off per repo.
+SAFE = ['git', '-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', '-c', 'diff.external=',
+        '-c', 'core.untrackedCache=false', '-c', 'protocol.allow=never']
+
+
+def filters_off(repo):
+    """-c overrides that empty every filter driver the repo's config names.
+    Reading config runs nothing, so this is safe to ask first."""
+    names = git(repo, 'config', '--name-only', '--get-regexp', r'^filter\..*\.(clean|smudge|process)$') or ''
+    off = []
+    for name in sorted(set(names.split())):
+        off += ['-c', name + '=']
+        off += ['-c', name.rsplit('.', 1)[0] + '.required=false']
+    return off
+
+
+def git(repo, *args, timeout=10, extra=()):
     try:
-        done = subprocess.run(['git', '-C', str(repo), *args], capture_output=True, text=True,
+        done = subprocess.run([*SAFE, *extra, '-C', str(repo), *args], capture_output=True, text=True,
                               timeout=timeout, env=dict(os.environ, GIT_OPTIONAL_LOCKS='0', LC_ALL='C'))
     except (OSError, subprocess.TimeoutExpired):
         return None
@@ -87,7 +106,7 @@ def inspect(repo, email, since):
         return None
     author = ['--author=' + email] if email else []
     log = git(repo, 'log', '--branches', '--no-merges', '--since=' + since, '--format=%H', *author)
-    status = git(repo, 'status', '--porcelain') or ''
+    status = git(repo, 'status', '--porcelain', extra=filters_off(repo)) or ''
     remotes = (git(repo, 'remote') or '').split()
     # Unpushed means no remote branch holds the change. Matching on author time
     # plus subject, not on hash: a commit landed by cherry-pick or rebase gets a

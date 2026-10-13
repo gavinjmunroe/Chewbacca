@@ -39,6 +39,7 @@ import os
 import re
 import shutil
 import subprocess
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
@@ -359,6 +360,41 @@ def humanize(word: str) -> str:
     return word[:1].upper() + word[1:].lower() if word else "Other"
 
 
+def token_spans(text: str) -> list[str]:
+    """Every `{{ ... }}` in Clay's text exactly as written, an AI brief's
+    nested lead token included in its outer span."""
+    spans, depth, start, i = [], 0, 0, 0
+    while i < len(text):
+        if text.startswith("{{", i):
+            start = i if depth == 0 else start
+            depth, i = depth + 1, i + 2
+        elif text.startswith("}}", i) and depth:
+            depth, i = depth - 1, i + 2
+            if depth == 0:
+                spans.append(text[start:i])
+        else:
+            i += 1
+    return spans
+
+
+def hides_anything(text: str, known: set[str]) -> bool:
+    """A draft the Diff cannot show honestly: a control, format or bidi
+    character, or a token the campaign does not already use.
+
+    The Diff draws tokens as their labels (`readable`), so a new
+    `{{ai:x|Opener|<brief>}}` read as "[AI line: Opener]" while its brief went
+    to Clay, which runs it once per lead. Text in the campaign is written by
+    other people and reaches the model, so a draft is the one route from that
+    text into every lead's inbox (security review, 2026-10-12).
+    """
+    if any(ch not in "\n\r\t" and unicodedata.category(ch) in ("Cc", "Cf", "Co", "Cs", "Zl", "Zp") for ch in text):
+        return True
+    rest = text
+    for span in sorted(known, key=len, reverse=True):
+        rest = rest.replace(span, "")
+    return "{{" in rest or "}}" in rest
+
+
 def proposal_from(answer: str, detail: dict | None) -> tuple[str, dict | None]:
     """Split the model's answer from a drafted change, and keep the change only
     if it names a real, editable step and says something new.
@@ -377,6 +413,10 @@ def proposal_from(answer: str, detail: dict | None) -> tuple[str, dict | None]:
     except json.JSONDecodeError:
         return text, None
     if not isinstance(asked, dict):
+        return text, None
+    known = {span for variant in (detail or {}).get("variants") or [] for step in variant.get("sequence") or []
+             for field in ("subject", "threadSubject", "body") for span in token_spans(str(step.get(field) or ""))}
+    if any(isinstance(asked.get(k), str) and hides_anything(asked[k], known) for k in ("subject", "body")):
         return text, None
     for variant in (detail or {}).get("variants") or []:
         if variant.get("id") != asked.get("variantId"):
@@ -979,6 +1019,8 @@ class Outbound(Provider):
         if code != 0:
             return Result(False, f"No answer: {(err or out or 'the model run failed').strip().splitlines()[0][:110]}")
         text, proposal = proposal_from(out, data.get("detail"))
+        if proposal:
+            proposal["campaign"] = self.campaign_id(data)
         self.proposal = proposal
         self.answered = True
         updates = {self.p("answer"): safe(text) or "The model answered with nothing.",
@@ -997,6 +1039,11 @@ class Outbound(Provider):
         campaign = self.campaign_id(data)
         if not binary or not campaign:
             return Result(False, "Not applied: Clay isn't connected.")
+        if proposal.get("campaign") != campaign:
+            # Step ids are checked against the campaign the draft was read from.
+            self.proposal = None
+            return Result(False, "Not applied: the campaign changed since this was drafted. Ask again.",
+                          updates={self.p("diff"): ""}, relayout=True)
         edit = ctx.home / ASK_DIR / "edit.json"
         write_private(edit, json.dumps({"ops": [proposal["op"]]}))
         _, error = self.clay(ctx, binary, ["campaigns", "sequence", "edit", campaign, "--input", str(edit)])

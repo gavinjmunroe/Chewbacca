@@ -32,6 +32,7 @@ close instead of a vague row he has to research.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -235,9 +236,17 @@ def decisions_in_report(text: str, source: str, at: float = 0.0) -> list[Item]:
             if not question:
                 continue
             options = ("Do it", "Later") if BLOCKED.match(part) else ("Go with my take", "Not now")
-            out.append(Item(DECISION, key=f"report:{source}:{clip(question, 60)}", text=question, source=source,
+            out.append(Item(DECISION, key=call_key(source, question, rec), text=question, source=source,
                             at=at, recommendation=rec, options=options if rec else (), sources=(source,)))
     return out
+
+
+def call_key(source: str, question: str, rec: str) -> str:
+    """A call's id is its content: a take that changes between the draw and
+    the press is a different call, so the press can't approve words he never
+    saw (security review on 0acab944)."""
+    digest_ = hashlib.sha1(f"{question}\n{rec}".encode()).hexdigest()[:12]
+    return f"report:{source}:{digest_}"
 
 
 def report_title(text: str) -> str:

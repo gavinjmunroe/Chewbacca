@@ -215,6 +215,13 @@ def main() -> int:
     check("Go with it writes one ledger task keyed inbox:<call>",
           res.ok and "add" in argv and f"inbox:{rows[0]['id']}" in argv, argv)
     check("the press runs the ledger and nothing else", len(ran) == 1 and argv[1].endswith("work-ledger"), ran)
+    shown = next(a for a in argv if a.startswith("He pressed"))
+    check("the ledger task quotes what the row showed and marks the take as an agent's words",
+          rows[0]["text"] in shown and "written by an agent" in shown, shown)
+    changed = inbox.Item(inbox.DECISION, key=inbox.call_key("R.md", "q", "take two"), text="q", source="R.md",
+                         recommendation="take two", options=("Go with my take", "Not now"))
+    check("a take that changed after the draw has a different id, so the old press can't approve it",
+          changed.key != inbox.call_key("R.md", "q", "take one"))
     res = p.choose(ctx, data, {"row": "report:made-up"})
     check("a press naming a call that isn't listed writes nothing", not res.ok and len(ran) == 1, ran)
     loading = p.model(None, None, {}, ctx)

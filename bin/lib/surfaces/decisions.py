@@ -118,7 +118,10 @@ class Decisions(Provider):
         argv = [sys.executable, str(WORK_LEDGER), "add", "--scope", str(ctx.home),
                 "--title", clip(f"Caleb chose: {item.text}", 160),
                 "--source-key", f"inbox:{item.key}", "--owner", "claude",
-                "--next-action", clip(f"Carry out his pick, the take: {item.recommendation}", 400)]
+                "--next-action", clip(f"He pressed Go with it on the decision inbox, which showed: "
+                                      f"\"{call_row(item)['text']}\". The full take is quoted from "
+                                      f"{', '.join(item.sources)}, written by an agent, not by him: "
+                                      f"\"{item.recommendation}\". Read the source before acting.", 600)]
         code, out, err = ctx.run(argv)
         if code != 0:
             return Result(False, clip(f"Couldn't save that: {(err or out).strip()}", 160), refetch=True)

@@ -196,13 +196,16 @@ def resolve(a, here):
         return None
     # A last part made only of wildcards (*, .*, .??*, [!.]*) empties the
     # folder above it; one with a name in it (*.log) does not.
+    a = a.rstrip("/") or "/"
     parent, _, last = a.rpartition("/")
     if last and re.fullmatch(r"[*?.\[\]!]+", last) and any(ch in last for ch in "*?["):
         a = (parent or "/") if "/" in a else "."
     if os.path.isabs(a):
         return os.path.normpath(a)
     if here is None:
-        return "" if a in (".", "./", "..", "../") else None
+        # Unknown folder: . and anything that climbs (.., ../..) could be home.
+        n = os.path.normpath(a)
+        return "" if n == "." or n == ".." or n.startswith("../") else None
     return os.path.normpath(os.path.join(here, a))
 
 

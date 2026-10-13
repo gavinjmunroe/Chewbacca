@@ -58,7 +58,8 @@ for cmd in ["rm -rf ~", "rm -rf ~/", "rm -rf ~/*", "rm -fr $HOME", "rm -Rf /", "
             'git push --force origin "$(git branch --show-current)"', "git push -f origin $BR",
             # The review of f83ffe76: cd options, a -c body after options, env -S, wildcard-only globs.
             "cd -P ~ && rm -rf .", 'bash -c -e "rm -rf ~"', 'env -S "rm -rf ~"', "rm -rf ~/.??*", "rm -rf /?*",
-            "git push --force-with-leas origin main", "(cd /tmp) && rm -rf .",
+            "git push --force-with-leas origin main", "(cd /tmp) && rm -rf .", "cd ~ && rm -rf ../.. | cat",
+            "rm -rf ~/*/",
             "git push -f origin 'refs/heads/*:refs/heads/*'", "git push -f origin :", "GIT_DIR=x git push -f",
             "git --git-dir=x push -f origin HEAD"]:
     code, err = run(cmd)

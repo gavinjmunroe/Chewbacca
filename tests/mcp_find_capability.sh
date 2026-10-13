@@ -48,7 +48,10 @@ SEALED = [
     ("how many absences do I have left", "coursework.attendance"),
     ("is the mic on", "meetings.recorder"),
 ]
-SEALED_FLOOR = 6
+# 4afcaa75 (10/11) deleted the sealed "can I use AI on the WRIT essay" with the
+# AI-policy read it pointed at, and that question ranked first: the same code
+# went from 6 of 10 to 5 of 9 (both runs on 10/13), so the floor follows the set.
+SEALED_FLOOR = 5
 
 def ranked(cases):
     lines = [json.dumps({"jsonrpc": "2.0", "id": i, "method": "tools/call",

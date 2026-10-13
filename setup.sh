@@ -3731,6 +3731,18 @@ fi
 # contacts, the screen. Ending there, with no way back, is what reads as
 # malware to a careful person, and a careful person is exactly the one worth
 # keeping.
+# REA is offered here and never installed: it's a fast-moving third-party pin
+# with 170 tools, so adding it is the person's call. The offer only shows when
+# it's absent and this Mac's Node can run it.
+REA_LINE="$(python3 "$SCRIPT_DIR/tools/rea_kit.py" status --line 2>/dev/null)"
+case "$REA_LINE" in
+  "REA: not installed (optional; \`chewbacca rea install\`"*)
+    echo ""
+    echo -e "  ${BLD}Optional:${NC}"
+    echo "    chewbacca rea install   adds REA, so agents can trace how another app or"
+    echo "                            site does one thing; its own setup asks first"
+    ;;
+esac
 echo ""
 echo -e "  ${BLD}If you want it gone:${NC}"
 echo "    chewbacca uninstall --dry-run   lists every path, changes nothing"

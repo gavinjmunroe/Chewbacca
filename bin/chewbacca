@@ -72,6 +72,7 @@ COMMANDS=(
   "gtme-signals|list recent SEC Form D raises as buying signals"
   "gtme-grade|run the five pre-send gates on one campaign; launch-guard needs its pass"
   "gtme-reply|classify a cold-email reply, clean its text, and gate auto-send, offline"
+  "rea|how another app does one thing: REA status, a scoped Electron trace, a native overview (optional)"
   "resolve|answer a fact question (an address, a phone, a site) from every source before asking a person"
   "gtme-rules|which client rulings run as code, and check text a client will read"
   "gtme-dnc|may we email this address: one check across the graph, DNC lists and the Clay blocklist"
@@ -155,6 +156,12 @@ gtme-dedupe)
 agent)
   shift
   exec python3 "$ROOT/tools/agent_runtime.py" "$@"
+  ;;
+rea)
+  # REA (rea-agents) behind a deadline, thinned binaries and a scoped input.
+  # Not a bin/ tool, so the kit never shadows REA's own `rea` on PATH.
+  shift
+  exec python3 "$ROOT/tools/rea_kit.py" "$@"
   ;;
 clay)
   # Clay through the CLI, its own frontend API (api-anything), or the UI

@@ -691,6 +691,7 @@ if group "tools"; then
   check  "amber-mcp imports 10,000 contacts deduplicated, one user per store" python3 "$ROOT/tests/test_amber_mcp.py"
   check  "site finds what the kit knows and snaps a page by role" python3 "$ROOT/tests/test_site.py"
   check  "site-gate research refuses a site with no research receipt" python3 "$ROOT/tests/test_site_gate_research.py"
+  check  "chewbacca rea: optional, deadline kills the group, thins universal binaries, scopes seeds" python3 "$ROOT/tests/test_rea_kit.py"
   check  "amber-user: two people, each recalls their own and never the other's" python3 "$ROOT/tests/test_amber_tenants.py"
   check  "amber agent: greets its own person, recalls across sessions, Jev off until opted in" python3 "$ROOT/tests/test_amber_agent.py"
   check  "amber-redact: known and pattern values never leak, the gap is measured" python3 "$ROOT/tests/test_amber_redact.py"

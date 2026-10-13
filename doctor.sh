@@ -512,6 +512,13 @@ else
   warn "Codex AGENTS.md is stale; run python3 tools/agents_md.py"
 fi
 
+# REA (rea-agents) is optional, so this is one line of information and never a
+# warning: present or not, pinned version, which agents have the MCP, and
+# whether native analysis works. Offline and under a second; it reads config
+# and looks for Ghidra, a JDK 21 and Hopper, and never runs REA itself.
+REA_LINE="$(python3 "$BACKEND_ROOT/tools/rea_kit.py" status --line 2>/dev/null)"
+[ -n "$REA_LINE" ] && ok "$REA_LINE"
+
 section "macOS tools"
 
 if [ "$(uname)" != "Darwin" ]; then

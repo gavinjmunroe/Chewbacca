@@ -32,37 +32,54 @@ plus its callers and constants; a browser click to its request and script.
   (upstream issue #2290). What it did see: 100 IPC operations, 99 of them
   with computed channel names, so literal pairing found nothing.
 - MCP `binary_session` returned 227,158 characters, over the client limit.
-- Native: Ghidra 12.1.4 and JDK 21 pass `rea doctor --provider ghidra`, but
-  the MCP registration has no `GHIDRA_INSTALL_DIR`, so every native tool
-  reports provider_missing until that env is added to the `rea` entry.
-  Hopper and IDA are not installed.
+- Native: Ghidra 12.1.4 and JDK 21 are installed. The CLI needs the env and a
+  thinned binary, which `chewbacca rea native` supplies; the MCP needs
+  `chewbacca rea wire --apply`. Hopper and IDA are not installed.
 
 ## How to run it
+
+Start with `chewbacca rea`. It holds the scoping, thinning and deadlines that
+the raw tool gets wrong on a Mac, and it works, or says why not, whether REA
+is installed or not.
+
+- `chewbacca rea status`: installed, pinned version, which agents have the
+  MCP, and whether native analysis works here.
+- `chewbacca rea scope <App.app|app.asar|dir> "<seed>"`: extracts the ASAR,
+  keeps the files holding the seed plus the preloads, runs REA on those under
+  a deadline, prints the contextBridge and IPC counts and the Evidence path.
+  Files over 1 MB come back as `read_these`: grep and read them by hand.
+  Claude.app with seed `openExternal`: 12 s, 2 files, 23 contextBridge APIs;
+  the whole app died at file 8 of 427.
+- `chewbacca rea native <binary|App.app>`: thins the universal Mach-O to the
+  host slice and runs the Ghidra overview with its env set. Ghidra refuses
+  every universal binary, which is every app on a Mac; thinned, Cardhop's
+  8.6 MB binary mapped 20,979 functions in 4 min 13 s.
+- `chewbacca rea wire --apply`: adds GHIDRA_INSTALL_DIR and JAVA_HOME to the
+  rea MCP entries so `open_binary` works. Hand the MCP the thinned path that
+  `native` prints.
+
+Then:
 
 1. Start from one question and one seed: a visible string, an API name, a
    channel, a URL. Never "analyze the whole app".
 2. Try plain reading first: if grepping the bundle for the seed answers it,
    stop. A creator's test cloned one feature in 5 minutes without REA and 27
    with it, and the plain one was better.
-3. Scope before analyzing, since 6.4.0 has no file selector, so extract the ASAR
-   (`npx -y @electron/asar extract <app.asar> <dir>`), grep for the seed, copy
-   the matching bundle and its preload into a small directory, and analyze
-   that. VS Code extensions are plain folders under `~/.vscode/extensions`.
-4. Codesigned Mac apps need `--integrity-policy record-and-continue`.
-5. Read summary-first: over MCP pass `detail: "summary"` and page with
+3. Read summary-first: over MCP pass `detail: "summary"` and page with
    `inspect_analysis_view` by the parent Evidence ID. Never paste a full
-   result into context.
-6. When channels are dynamic, take REA's line and column and read the
-   minified source there, the way the Notion case study does.
-7. Put a deadline on every CLI call, because it can hang after a failure.
-   GNU `timeout` is not on this Mac:
-   `perl -e 'alarm shift; exec @ARGV' 600 npx -y rea-agents@6.4.0 ...`.
-   Anything over a few files goes through `chewbacca jobs submit --heavy`.
-8. Web: start Chrome with a throwaway profile and a debug port, opened in the
-   background, then `list-browser-targets` and `inspect-web-page
---observation-ms 10000 --include-json-body-shapes` around one click. Hand
-   the request shape to api-anything.
-9. Runtime tools (Electron/Node inspector, process capture, LLDB, Frida, adb)
+   result into context; two scoped Claude.app files were 41 MB of Evidence.
+4. When channels are dynamic (Claude.app: 1,333 of 1,340), take REA's line
+   and column and read the minified source there, the way the Notion case
+   study does.
+5. Websites: don't run REA's static analyzer on a site's chunks. The 39
+   Next.js chunks of uselemma.ai (1.6 MB) timed out at 6 min 40 s with 4
+   parsed and left a worker running; grep found the same three `/api/` routes
+   in 0.02 s. For a live click's request, REA's CDP capture (start Chrome with
+   a throwaway profile and a debug port in the background, then
+   `list-browser-targets` and `inspect-web-page --observation-ms 10000
+   --include-json-body-shapes`) can feed api-anything, but api-anything's own
+   capture does that job first.
+6. Runtime tools (Electron/Node inspector, process capture, LLDB, Frida, adb)
    run or touch the real program with Caleb's permissions. REA's own security
    page says it is not a sandbox. Use them only on a target he named.
 

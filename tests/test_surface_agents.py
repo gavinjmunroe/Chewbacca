@@ -25,6 +25,7 @@ write=True, so a write the surface makes outside a press fails here as it
 would against the real client.
 Run: python3 tests/test_surface_agents.py
 """
+from __future__ import annotations
 import json
 import os
 import sys

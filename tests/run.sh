@@ -684,6 +684,11 @@ if group "tools"; then
   # dead end with nothing failing: 13 such references sat in 5 skills on
   # 2026-10-10, including a whole corpus tool that only existed on one Mac.
   check  "skills name no dangling paths or commands" bash "$ROOT/tests/skill_refs_check.sh"
+  # Stock /usr/bin/python3 is 3.9: ten files with `dict | None` annotations
+  # failed to import there on 2026-10-13 and took seven checks red at once.
+  check  "every Python file imports on 3.9 (no bare X | None annotations)" /usr/bin/python3 "$ROOT/tests/py39_annotations_check.py"
+  expect "a bare X | None annotation is caught" "fails to import on Python 3.9" \
+    bash -c "printf 'def f(x: int | None): pass\n' > '$TMP/py39bad.py'; /usr/bin/python3 '$ROOT/tests/py39_annotations_check.py' '$TMP/py39bad.py' || true"
   # Perplexity imports skills as zips; every repo skill must package cleanly.
   check  "every skill packages for Perplexity" bash -c "python3 '$ROOT/tools/agent_runtime.py' export --runtime perplexity-computer --destination '$TMP/px' >/dev/null && [ \"\$(ls '$TMP/px/skills' | wc -l)\" -eq \"\$(ls -d '$ROOT'/skills/*/SKILL.md | wc -l)\" ] && ! grep -q '/Users/' '$TMP/px/CHEWBACCA.md'"
   check  "AGENTS.md exports for other agents" python3 "$ROOT/tools/agents_md.py" "$TMP"

@@ -21,6 +21,7 @@ Memory: `$BOB_MEMORY_DIR` (default `~/.bob/memory`), the same directory as
 `project.json` and the voice transcript. `asks/<id>.json` is an open ask,
 `asks/<id>.answer` its answer.
 """
+from __future__ import annotations
 import json
 import os
 import re

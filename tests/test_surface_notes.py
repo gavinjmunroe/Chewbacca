@@ -6,6 +6,7 @@ HTML is plain text formatting, and read back after.
 A fake `mac notes` in memory and a fake display. Nothing reads or writes the
 real Notes, and nothing here ever calls edit, delete or add.
 """
+from __future__ import annotations
 import json
 import re
 import sys

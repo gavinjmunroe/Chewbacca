@@ -23,6 +23,7 @@ Where it looks: READINGS_DIRS (colon-separated), else $COURSEWORK_DIR, else
 that is the one token every "Read <Author>, <Title>" ledger entry shares with
 how a downloaded PDF is usually named.
 """
+from __future__ import annotations
 import argparse
 import json
 import os

@@ -16,6 +16,7 @@ THE FIXTURES are made up, in the shapes the Clay CLI prints in its own help
 from plugin 2.25.0, read 2026-10-08). No signed-in workspace was available on
 this Mac, so no real campaign's JSON could be copied.
 """
+from __future__ import annotations
 import json
 import os
 import sys

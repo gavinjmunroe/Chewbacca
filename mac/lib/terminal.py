@@ -31,6 +31,7 @@ that decides on its own to run `chewie terminal submit` presses nothing.
 `CHEWIE_TERMINAL_ANSWER=1`, which hud-listen's answer-word path sets. `answer
 no` and `interrupt` press Escape and need no gate.
 """
+from __future__ import annotations
 import argparse
 import json
 import os

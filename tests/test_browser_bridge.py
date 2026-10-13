@@ -1,6 +1,7 @@
 """browser-bridge runs text that came off a web page, so its first-word
 allowlist must not include anything that runs code the page chooses.
 Run: python3 tests/test_browser_bridge.py"""
+from __future__ import annotations
 import importlib.machinery
 import importlib.util
 import os

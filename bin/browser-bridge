@@ -42,6 +42,7 @@ treated as one:
 None of that makes this safe to leave running unattended. It makes it safe
 enough to use while watching it, which is what it is for.
 """
+from __future__ import annotations
 import argparse
 import http.server
 import json

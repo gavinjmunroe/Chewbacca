@@ -48,6 +48,7 @@ FIELDS = {
     "refused_senders_source": ("str", (), "who refused them, and when"),
     "presend": ("obj", (), "pre-send gate limits: {per_campaign_firm, per_firm_total}"),
     "voice": ("obj", ("clay",), "how mail reads: {first_name, sign_off, banned_words}"),
+    "offer_facts": ("obj", (), "what a reply's next step may say: {raises_debt, call_with}"),
     "channels": ("obj", ("clay",), "where replies land: {togari_client, slack_channel}"),
     # In the Clay contract because `gtme ready` counts an unread-client check it
     # can't run as a blocker: the 2026-10-13 dry-run client reached every gate
@@ -204,6 +205,8 @@ def check_entry(entry: dict, doc: dict) -> dict:
             for k in ("per_campaign_firm", "per_firm_total"):
                 if k in v and not (isinstance(v[k], int) and v[k] >= 1):
                     errors.append(f"presend.{k}: should be a whole number of at least 1")
+        if key == "offer_facts" and "raises_debt" in v and not isinstance(v["raises_debt"], bool):
+            errors.append("offer_facts.raises_debt: should be true or false")
         if key == "report" and v.get("day") and str(v["day"]).lower() not in DAYS:
             errors.append(f"report.day: {v['day']!r} is not a weekday name")
     if entry.get("rulings_path"):

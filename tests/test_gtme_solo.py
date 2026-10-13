@@ -393,6 +393,23 @@ class Solo(unittest.TestCase):
         self.run_cli("inbox", "--client", "Dana Co", "--json")
         self.assertEqual(len((self.d / "replies.jsonl").read_text().splitlines()), 2)
 
+    def test_a_form_reply_names_this_clients_sender_never_jonah(self):
+        # Until 2026-10-13 every own-inbox client's form reply read "Fill out
+        # their form as Jonah", Zeutara's principal.
+        self.ready()
+        b = self.batch()
+        self.run_cli("send", "--client", "Dana Co", "--batch", b["id"], "--gap", "0")
+        sent = {json.loads(x)["email"]: json.loads(x)["thread"] for x in (self.d / "sent.jsonl").read_text().splitlines()}
+        self.threads.write_text(json.dumps({
+            sent["maria@crumbcorner.test"]: [["maria@crumbcorner.test",
+                                              "Please fill out our intake form at https://crumbcorner.test/form"]],
+        }))
+        self.assertEqual(self.run_cli("inbox", "--client", "Dana Co", "--json"), 0)
+        row = json.loads((self.d / "replies.jsonl").read_text().splitlines()[0])
+        self.assertEqual(row["kind"], "form")
+        self.assertIn("as Dana", row["next"])
+        self.assertNotIn("Jonah", row["next"])
+
     # autosend
 
     def sent_threads(self):

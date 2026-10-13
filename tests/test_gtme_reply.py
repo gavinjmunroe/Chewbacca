@@ -20,6 +20,13 @@ reply = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(reply)
 CASES = json.loads((ROOT / "tests" / "fixtures" / "gtme-reply" / "reply_intent_cases.json")
                    .read_text(encoding="utf-8"))
+# Shared byte for byte with togari-platform's
+# src/agents/smartlead-responder/__tests__/reply-copy-cases.json; both suites pin
+# this hash (feedback_ported_logic_fix_both_copies.md).
+COPY_FILE = ROOT / "tests" / "fixtures" / "gtme-reply" / "reply-copy-cases.json"
+COPY_SHA256 = "cf3d9f40ffb8429fe95e1439947b6698c418a7df1b1c648caa2cf246de443ac4"
+COPY_CASES = json.loads(COPY_FILE.read_text(encoding="utf-8"))
+ZEUTARA_COPY = COPY_CASES["clients"]["zeutara"]
 
 EM = "—"
 EN = "–"
@@ -50,7 +57,7 @@ class ReplyIntentRealReplies(unittest.TestCase):
         for case in CASES["zeutara"] + CASES["qube"]:
             with self.subTest(case["from"]):
                 intent = reply.reply_intent(case["body"], lead_email=case["from"],
-                                            company_name="Qube Finance")
+                                            company_name="Qube Finance", client=ZEUTARA_COPY)
                 self.assertEqual(intent["kind"], case["kind"])
                 if case["step"]:
                     self.assertIn(case["step"], intent["nextStep"])
@@ -378,6 +385,51 @@ class HostileInput(unittest.TestCase):
                 "reply": "yes, let's talk", "lead_id": 1, "campaign_id": 1}
         for bad in (0, -1, 2, "0", float("nan")):
             self.assertFalse(reply.auto_sendable({**base, "threshold": bad})["ok"], bad)
+
+
+
+class ReplyCopyReadsTheClient(unittest.TestCase):
+    """Move 4 (2026-10-13): next steps name the client's own principal and facts."""
+
+    def test_same_corpus_as_togari(self):
+        import hashlib
+        self.assertEqual(hashlib.sha256(COPY_FILE.read_bytes()).hexdigest(), COPY_SHA256)
+
+    def test_every_client_case_matches_togari(self):
+        for name, facts in COPY_CASES["clients"].items():
+            for case in COPY_CASES["inputs"]:
+                with self.subTest(client=name, case=case["id"]):
+                    got = reply.reply_intent(case["body"], lead_email="a@fund.example",
+                                             company_name=case["company"], client=facts)
+                    self.assertEqual({"kind": got["kind"], "nextStep": got["nextStep"]},
+                                     COPY_CASES["expected"][name][case["id"]])
+
+    def test_copy_facts_from_a_config_entry(self):
+        zeutara = {"name": "Zeutara", "voice": {"first_name": "Jonah"},
+                   "offer_facts": {"raises_debt": False, "call_with": "the founder"}}
+        self.assertEqual(reply.copy_facts(zeutara), ZEUTARA_COPY)
+        solo = {"name": "Firm Foundation DFW", "sender_company": "Firm Foundation"}
+        self.assertEqual(reply.copy_facts(solo, "Gavin Munroe"),
+                         {"principal": "Gavin", "clientName": "Firm Foundation"})
+        self.assertIsNone(reply.copy_facts({"name": "Nobody"}))
+
+    def test_a_solo_client_form_reply_never_says_jonah(self):
+        facts = reply.copy_facts({"name": "Firm Foundation"}, "Gavin Munroe")
+        step = reply.reply_intent("Please fill out our intake form at https://church.example/form",
+                                  client=facts)["nextStep"]
+        self.assertIn("as Gavin", step)
+        self.assertNotIn("Jonah", step)
+        for case in CASES["zeutara"] + CASES["qube"]:
+            self.assertNotRegex(reply.reply_intent(case["body"], lead_email=case["from"])["nextStep"],
+                                "Jonah|Zeutara")
+
+    def test_autosend_reason_names_the_clients_principal(self):
+        base = {"threshold": 0.9, "sentiment": "interested", "confidence": 0.95,
+                "draft": "Tuesday works.", "reply": "Can you send the deck?",
+                "lead_id": 1, "campaign_id": 2}
+        self.assertIn("reply reads as deck, which needs a person", reply.auto_sendable(base)["reasons"])
+        pat = {**base, "client": {"principal": "Pat", "clientName": "Harborline"}}
+        self.assertIn("reply reads as deck, which needs Pat", reply.auto_sendable(pat)["reasons"])
 
 
 if __name__ == "__main__":

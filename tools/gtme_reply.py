@@ -13,7 +13,8 @@ whether a drafted answer may go out with nobody pressing anything.
 Lead names and auto-replies are synced from src/replies/lead-name.ts and
 card-copy.ts (cleanLeadName, feederAppendsE, isAutoReply).
 
-Synced from togari-platform 8d7ad77 (these four unchanged since 9faffef), src/agents/smartlead-responder/*:
+Synced from togari-platform 8d7ad77 (these four unchanged since 9faffef), src/agents/smartlead-responder/*,
+and reply-intent.ts's next-step copy from 9cc43db (the client's own facts, never Jonah's):
   reply-intent.ts   replyIntent, AUTO_HANDLED
   reply-text.ts     cleanReplyText, stripEmDashes
   fit-review.ts     readableReply, splitCampaign
@@ -416,21 +417,52 @@ def _own_words(text):
     return WHITESPACE_RUN.sub(" ", " ".join(lines[:end] if end > 0 else lines))
 
 
-def reply_intent(reply_text, lead_email=None, sending_email=None, company_name=None):
-    """replyIntent(): the kind of reply and the one thing to do next."""
+def copy_facts(entry, sender_name=None):
+    """The client facts a next step names, from a clients.json entry: togari's
+    ReplyCopy {principal, clientName, raisesDebt?, callWith?}, same keys, so one
+    case file (tests/fixtures/gtme-reply/reply-copy-cases.json) checks both copies.
+
+    principal is voice.first_name, else the first word of the sender's name (the
+    own-inbox path). None when the entry gives no principal: the next steps then
+    name no one rather than borrowing Zeutara's."""
+    entry = entry if isinstance(entry, dict) else {}
+    voice = entry.get("voice") if isinstance(entry.get("voice"), dict) else {}
+    principal = voice.get("first_name") or ((sender_name or "").split() or [""])[0]
+    if not principal:
+        return None
+    facts = entry.get("offer_facts") if isinstance(entry.get("offer_facts"), dict) else {}
+    out = {"principal": principal,
+           "clientName": entry.get("sender_company") or entry.get("name") or ""}
+    if isinstance(facts.get("raises_debt"), bool):
+        out["raisesDebt"] = facts["raises_debt"]
+    if facts.get("call_with"):
+        out["callWith"] = facts["call_with"]
+    return out
+
+
+def reply_intent(reply_text, lead_email=None, sending_email=None, company_name=None, client=None):
+    """replyIntent(): the kind of reply and the one thing to do next.
+
+    client is copy_facts() output; only the wording reads it, never the kind."""
     result = _reply_intent(to_js(reply_text or ""), to_js(lead_email or ""),
-                           to_js(sending_email or ""), company_name and to_js(company_name))
+                           to_js(sending_email or ""), company_name and to_js(company_name),
+                           {k: to_js(v) if isinstance(v, str) else v for k, v in client.items()}
+                           if isinstance(client, dict) else None)
     return {k: ([from_js(a) for a in v] if isinstance(v, list) else from_js(v))
             for k, v in result.items()}
 
 
-def _reply_intent(reply_text, lead_email, sending_email, company_name):
+def _reply_intent(reply_text, lead_email, sending_email, company_name, copy=None):
     # Bounded before any regex runs: the email and URL patterns backtrack
     # polynomially on long runs without a match, and a reply's own words are
     # never this long. Only the quoted thread and footers are.
     text = _own_words(reply_text[:MAX_INPUT])
     lead_email = lead_email.lower()
     company = company_name or "the company"
+    copy = copy or {}
+    principal = copy.get("principal") or ""
+    as_principal = f" as {principal}" if principal else ""
+    call = f"a call with {copy['callWith']}" if copy.get("callWith") else "a call"
     others = _emails_in(text, [lead_email, sending_email])
     links = _urls_in(text)
 
@@ -454,7 +486,9 @@ def _reply_intent(reply_text, lead_email, sending_email, company_name):
 
     if LENDER.search(text):
         return {"kind": "pass", "label": "Lender, not an equity investor",
-                "nextStep": "No reply needed. Zeutara isn't raising debt, so it's logged as replied."}
+                "nextStep": f"No reply needed. {copy.get('clientName')} isn't raising debt, so it's logged as replied."
+                if copy.get("raisesDebt") is False
+                else "No reply needed. They're a lender, so it's logged as replied."}
 
     if OUT_OF_OFFICE.search(text):
         # A person, not an autoresponder, saying when to come back: one investor
@@ -489,12 +523,12 @@ def _reply_intent(reply_text, lead_email, sending_email, company_name):
                               if not lead_email or _domain_of(lead_email) not in u.lower()), None)
                      or (links[0] if links else None))
         return {"kind": "form", "label": "Wants a form filled out",
-                "nextStep": f"Fill out their form as Jonah with {company}'s details: {form_link}"
-                if form_link else f"Fill out the form on their website as Jonah with {company}'s details."}
+                "nextStep": f"Fill out their form{as_principal} with {company}'s details: {form_link}"
+                if form_link else f"Fill out the form on their website{as_principal} with {company}'s details."}
 
     if DECK.search(text):
         return {"kind": "deck", "label": "Wants the deck",
-                "nextStep": f"Send the {company} deck, then offer a call with the founder."}
+                "nextStep": f"Send the {company} deck, then offer {call}."}
 
     if LATER.search(text):
         weeks = WEEKS.search(text.lower())
@@ -507,10 +541,11 @@ def _reply_intent(reply_text, lead_email, sending_email, company_name):
 
     if "?" in text and QUESTION_TOPIC.search(text):
         return {"kind": "question", "label": "Asked a question",
-                "nextStep": "Answer it in Jonah's words, then offer a call with the founder."}
+                "nextStep": f"Answer it in {principal}'s words, then offer {call}."
+                if principal else f"Answer it, then offer {call}."}
 
     if INTERESTED.search(text):
-        return {"kind": "interested", "label": "Interested", "nextStep": "Book the call with the founder."}
+        return {"kind": "interested", "label": "Interested", "nextStep": f"Book the call with {copy['callWith']}." if copy.get("callWith") else "Book the call."}
 
     return {"kind": "unclear", "label": "Needs a read", "nextStep": "Read their reply and decide."}
 
@@ -714,7 +749,7 @@ def _is_number(value):
 
 
 def auto_sendable(verdict):
-    """autoSendable() with its reasons: every check must pass or Jonah sees the card.
+    """autoSendable() with its reasons: every check must pass or the client's principal sees the card.
 
     verdict: {sentiment, confidence, threshold, draft, reply, lead_id,
     campaign_id, lead_email?, sending_email?}. ok is exactly the upstream boolean;
@@ -746,10 +781,12 @@ def auto_sendable(verdict):
             reasons.append("draft carries a link, address, number or figure")
     if not verdict.get("lead_id") or not verdict.get("campaign_id"):
         reasons.append("reply is missing the lead or campaign id")
+    client = verdict.get("client") if isinstance(verdict.get("client"), dict) else None
     intent = reply_intent(verdict.get("reply") or "", verdict.get("lead_email"),
-                          verdict.get("sending_email"))
+                          verdict.get("sending_email"), client=client)
     if intent["kind"] not in BASIC_KINDS:
-        reasons.append(f"reply reads as {intent['kind']}, which needs Jonah")
+        who = (client or {}).get("principal") or "a person"
+        reasons.append(f"reply reads as {intent['kind']}, which needs {who}")
     return {"ok": not reasons, "reasons": reasons, "intent": intent["kind"]}
 
 
@@ -845,6 +882,8 @@ def main(argv=None):
     intent.add_argument("--lead-email", help="the address that replied, never listed as a new contact")
     intent.add_argument("--sending-email", help="our mailbox, never listed as a new contact")
     intent.add_argument("--company", help="the company being pitched, used in the next step")
+    intent.add_argument("--client", help="name the next step for this clients.json client "
+                                          "(its voice.first_name and offer_facts); default names no one")
 
     clean = commands.add_parser(
         "clean", help="strip HTML, entities, quoted thread and signature",
@@ -890,8 +929,15 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         if args.command == "intent":
+            facts = None
+            if args.client:
+                import gtme_config
+                entry = gtme_config.client(args.client)
+                if entry is None:
+                    raise ValueError(f"no client named {args.client} in clients.json")
+                facts = copy_facts(entry)
             result = reply_intent(_read_text(args.file), args.lead_email, args.sending_email,
-                                  args.company)
+                                  args.company, client=facts)
             result["autoHandled"] = result["kind"] in AUTO_HANDLED
         elif args.command == "clean":
             text = clean_reply_text(_read_text(args.file))

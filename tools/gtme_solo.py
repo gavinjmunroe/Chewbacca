@@ -883,8 +883,22 @@ def plain_text(payload: dict) -> str:
     return ""
 
 
+def reply_copy(client: str, plan: dict):
+    """What a reply's next step may name for this client: its clients.json entry,
+    else the plan's sender. Before 2026-10-13 a form reply here read "Fill out
+    their form as Jonah", Zeutara's principal, on a Firm Foundation card."""
+    try:
+        import gtme_config
+        entry = gtme_config.client(client) or {}
+    except (ImportError, OSError, ValueError):
+        entry = {}
+    sender = (plan.get("sender") or {}).get("name") or ""
+    return gtme_reply.copy_facts(entry or {"name": client}, sender)
+
+
 def cmd_inbox(a) -> int:
     plan = plan_of(a.client)
+    facts = reply_copy(a.client, plan)
     d = cdir(a.client)
     me = ((plan.get("sender") or {}).get("email") or "").lower()
     seen = {r["gmail_id"] for r in jsonl(d / "replies.jsonl")}
@@ -906,7 +920,7 @@ def cmd_inbox(a) -> int:
             if msg.get("id") in seen or not frm or frm == me or "SENT" in (msg.get("labelIds") or []):
                 continue
             text = gtme_reply.clean_reply_text(plain_text(msg.get("payload") or {}) or msg.get("snippet") or "")
-            v = gtme_reply.reply_intent(text, first["email"], me, first["lead"].get("company"))
+            v = gtme_reply.reply_intent(text, first["email"], me, first["lead"].get("company"), client=facts)
             row = {"email": first["email"], "from": frm, "gmail_id": msg.get("id"), "kind": v["kind"],
                    "label": v["label"], "next": v["nextStep"], "text": text[:2000], "at": op.stamp()}
             append(d / "replies.jsonl", row)
@@ -981,7 +995,8 @@ def auto_answer(client: str, plan: dict, first: dict, tid: str, heads: dict, frm
     check = gtme_reply.auto_sendable({"sentiment": "interested", "confidence": confidence,
                                       "threshold": plan.get("autosend_threshold", AUTOSEND_THRESHOLD),
                                       "draft": answer, "reply": text, "lead_id": first["email"],
-                                      "campaign_id": client, "lead_email": first["email"], "sending_email": me})
+                                      "campaign_id": client, "lead_email": first["email"], "sending_email": me,
+                                      "client": reply_copy(client, plan)})
     if not check["ok"]:
         return False
     sender = plan.get("sender") or {}

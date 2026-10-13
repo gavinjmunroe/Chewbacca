@@ -73,6 +73,8 @@ def main():
 
     check("Bash curl to a new host is caught", api_grow.handle(ev(
         "PostToolUse", "Bash", command="curl -s 'https://api.weather.gov/points/34,-118'")) is not None)
+    check("a shell variable never joins the host", [api_grow.host_of(u) for u in api_grow.urls_from_hook(ev(
+        "PostToolUse", "Bash", command='curl -sL "https://www.uselemma.ai$p" -o x'))] == ["uselemma.ai"])
     check("Bash with no web tool is ignored", api_grow.urls_from_hook(ev(
         "PostToolUse", "Bash", command="echo https://example.org > notes.txt")) == [])
 

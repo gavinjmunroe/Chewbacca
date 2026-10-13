@@ -48,7 +48,9 @@ NEVER_TEACH = (
     "usctts.com", "calebnewton.me",
 )
 AUTH_HOST = re.compile(r"^(login|auth|sso|accounts?|signin|id|oauth)\.")
-URL_RE = re.compile(r"https?://[^\s'\"<>()\\]+")
+# A URL in a shell command ends at `$` or a backtick: 2026-10-12, a loop's
+# curl "https://www.uselemma.ai$p" filed a host named "uselemma.ai$p".
+URL_RE = re.compile(r"https?://[^\s'\"<>()\\$`]+")
 
 
 def host_of(url: str) -> str:

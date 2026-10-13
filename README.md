@@ -1,4 +1,19 @@
-# Start with the agent you already use
+# Dotfiles for your coding agents
+
+One command gives Claude Code, Codex, Cursor, Gemini CLI and VS Code the same
+skills, rules and context. It backs up every file it changes before touching
+it, and the first thing it prints is your week from git: what you shipped, and
+what exists only on this laptop.
+
+```sh
+git clone --depth 1 https://github.com/calebnewtonusc/Chewbacca && bash Chewbacca/setup.sh --every-agent
+```
+
+On a fresh clone in a scratch home folder with all five agents present, that
+line printed in 3.4 to 6.2 seconds with no prompts (3 runs). Every number has a
+receipt you can rerun: [three showcases](docs/showcases/README.md).
+
+## Start with the agent you already use
 
 Chewbacca shares context and skills across supported coding agents. Choose the
 small runtime setup first; add personal sources and machine tools when useful.

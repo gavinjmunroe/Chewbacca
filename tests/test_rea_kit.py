@@ -122,6 +122,15 @@ def main() -> int:
         assert res["ok"], res
         assert res["summary"]["context_bridge_apis"] == 1 and res["summary"]["parsed_javascript_files"] == 2, res
         assert [Path(p).name for p in res["read_these"]] == ["huge.js"], res
+        # The CLI gives counts; tracing needs the MCP pair, handed over ready.
+        nxt = res["mcp_next"][0]
+        assert nxt["analyze_javascript_application"]["input_path"] == res["scoped_dir"], nxt
+        assert nxt["analyze_javascript_application"]["detail"] == "summary", nxt
+        assert nxt["trace_application_feature"]["seed"]["value"] == "openThing", nxt
+        (app / "build" / "small.js").write_text("nothing\n")
+        res = rk.scope(str(app), "openThing", 8, deadline=10)
+        assert res["code"] == "only_large_files" and "MCP" in res["message"], res
+        assert res["mcp_next"][0]["analyze_javascript_application"]["input_path"].endswith("huge.js"), res
         res = rk.scope(str(app), "notThere", 8, deadline=10)
         assert res["code"] == "seed_not_found", res
     # 8. Doctor reports it and setup offers it, both through the one status line.

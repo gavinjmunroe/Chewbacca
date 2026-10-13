@@ -709,6 +709,7 @@ if group "tools"; then
   check  "site-gate research refuses a site with no research receipt" python3 "$ROOT/tests/test_site_gate_research.py"
   check  "chewbacca rea: optional, deadline kills the group, thins universal binaries, scopes seeds" python3 "$ROOT/tests/test_rea_kit.py"
   check  "chewbacca rea mcp: open_binary gets a thinned slice, every call has a deadline, REA's group dies with the agent" python3 "$ROOT/tests/test_rea_mcp_proxy.py"
+  check  "reverse-engineering skill: every route names a real REA tool and a measured time" python3 "$ROOT/tests/test_rea_skill.py"
   check  "amber-user: two people, each recalls their own and never the other's" python3 "$ROOT/tests/test_amber_tenants.py"
   check  "amber agent: greets its own person, recalls across sessions, Jev off until opted in" python3 "$ROOT/tests/test_amber_agent.py"
   check  "amber-redact: known and pattern values never leak, the gap is measured" python3 "$ROOT/tests/test_amber_redact.py"

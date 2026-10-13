@@ -77,8 +77,12 @@ SOURCE_TIMEOUT_MS = 60000
 # which the whole-app run stalled, and a seed matching more is too vague.
 MAX_SCOPE_FILES = 8
 # Bigger single files go to plain reading instead: Claude.app's 6.9 MB main
-# chunk is where the whole-app run stalled, and one 1.6 MB set of web chunks
-# timed out at file 4. Files above this are listed, never analyzed.
+# chunk is where the whole-app CLI run stalled, and one 1.6 MB set of web
+# chunks timed out at file 4. Files above this are listed, never analyzed here.
+# Those two failures were the CLI path, not REA's limit: on 2026-10-13 the MCP
+# (`detail: "summary"`, 4096 MB heap) parsed 408 of Claude.app's 427 files in
+# 5 min and all 38 web chunks in 106 s, and one 403 KB chunk alone in 12 s.
+# So a big file goes to the MCP by itself, not to this CLI batch.
 MAX_FILE_BYTES = 1_000_000
 
 
@@ -557,7 +561,9 @@ def scope(target: str, seed: str, limit: int, deadline: float) -> Dict:
     if not hits:
         if large:
             return {"ok": False, "code": "only_large_files", "read_these": large,
-                    "message": "%r is only in files over %d bytes, which REA stalls on; grep and read them" % (seed, MAX_FILE_BYTES)}
+                    "message": "%r is only in files over %d bytes; analyze each alone over the MCP "
+                               "(analyze_javascript_application, detail summary) or grep and read it" % (seed, MAX_FILE_BYTES),
+                    "mcp_next": [mcp_call(p, seed) for p in large]}
         return {"ok": False, "code": "seed_not_found", "message": "%r appears in no JS file under %s" % (seed, root)}
     slug = re.sub(r"[^A-Za-z0-9]+", "-", seed)[:24].strip("-") or "seed"
     sdir = CACHE / "scoped" / ("%s-%s" % (root.name, slug))
@@ -581,7 +587,23 @@ def scope(target: str, seed: str, limit: int, deadline: float) -> Dict:
     if res.get("ok"):
         ev = res.pop("evidence")
         res["summary"] = summarize_js(ev)
+    # The CLI answers counts only. Tracing the seed needs the graph retained in
+    # an MCP session, which the CLI has no way to keep between commands.
+    res["mcp_next"] = [mcp_call(str(sdir), seed)]
     return res
+
+
+def mcp_call(path: str, seed: str) -> Dict:
+    """The two MCP calls that trace a seed through a scoped tree: analyze with
+    the graph kept server side, then trace from the returned parent ID. On
+    2026-10-13 this pair answered in 11 to 14 s for 1 to 4 files."""
+    return {"analyze_javascript_application": {"input_path": str(path), "detail": "summary",
+                                               "integrity_policy": "record-and-continue",
+                                               "max_heap_mb": 4096},
+            "trace_application_feature": {"application": {"kind": "retained-evidence",
+                                                          "evidence_id": "<parent_evidence_id>"},
+                                          "seed": {"kind": "string", "value": seed, "match": "contains"},
+                                          "direction": "both"}}
 
 
 def summarize_js(ev: Dict) -> Dict:

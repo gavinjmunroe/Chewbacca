@@ -7,107 +7,116 @@ triggers: >-
 
 # Reverse engineering with REA
 
-REA (`rea-agents`, MIT, github.com/morluto/rea) is installed as the `rea` MCP
-server in Claude Code and Codex, pinned to 6.4.0, plus the upstream skill
-`reverse-engineer-anything`. Read that skill for tool routing. This one holds
-what was measured on this Mac and the limits that decide whether to use it.
+REA (`rea-agents`, MIT, github.com/morluto/rea) is the `rea` MCP server in
+Claude Code and Codex, pinned to 6.4.0 and booted through `chewbacca rea mcp`,
+plus the upstream skill `reverse-engineer-anything`. This file is the
+operator's guide: which tool answers which question, with what arguments, and
+how long it took on this Mac.
 
-Full research: `~/.chewbacca/overnight/rea-research-report.md` (2026-10-12).
+Measurements: `~/.chewbacca/overnight/d1013/REPORT-rea-redo.md` (2026-10-13,
+load 17 to 40). Earlier research: `~/.chewbacca/overnight/rea-research-report.md`.
 
-## What it is good for
+## Drive it through the MCP, not the CLI
 
-One feature, traced through shipped bytes, with every claim tied to a file,
-line and column or an address. The case studies that hold up are all small:
-an Electron export through preload, IPC and main handler; one native function
-plus its callers and constants; a browser click to its request and script.
+Every failure we blamed on REA on 10/12 came from the CLI. The CLI returns the
+whole Evidence record inline and keeps nothing between commands, so a big app
+fills memory and a trace has nothing to trace. The MCP keeps the analysis in
+the session and hands back a summary plus a `parent_evidence_id`.
 
-## What was measured here
+Same Claude.app, same REA 6.4.0:
 
-- The 6-file Notes example: 4.3 s, 393 KB of Evidence, IPC channel paired to
-  its handler.
-- Claude.app's app.asar (44 MB, 427 JS files): refused by default
-  (`artifact_integrity_mismatch`, codesigned native addons). With
-  `--integrity-policy record-and-continue` it died at file 8 of 427 after
-  about 4.5 minutes, wrote a 98 MB error JSON, and the CLI never exited
-  (upstream issue #2290). What it did see: 100 IPC operations, 99 of them
-  with computed channel names, so literal pairing found nothing.
-- MCP `binary_session` returned 227,158 characters, over the client limit.
-- Native through the MCP: through the bare npx server, `open_binary` on
-  universal /usr/bin/uuidgen said ok and every read after it failed with
-  Ghidra's `architecture_unsupported`. Through `chewbacca rea mcp` the same
-  call read the thinned slice in 8.5 s, and `open_binary` on
-  /Applications/Cardhop.app mapped 20,985 functions and 26,193 strings in
-  266 s (2026-10-13). Hopper and IDA are not installed.
+- CLI, defaults: died at file 8 of 427 after 4.5 min, 98 MB error JSON, hung
+  until killed at 12.5 min.
+- MCP, `detail: "summary"`, `integrity_policy: "record-and-continue"`,
+  `max_heap_mb: 4096`, `analysis_timeout_ms: 120000`: finished in 5 min, 408
+  of 427 parsed, nothing hung or leaked.
 
-## How to run it
+uselemma.ai's Next.js chunks: CLI 4 of 39 parsed in 6 min 40 s; MCP 38 of 38
+in 106 s.
 
-Start with `chewbacca rea`. It holds the scoping, thinning and deadlines that
-the raw tool gets wrong on a Mac, and it works, or says why not, whether REA
-is installed or not.
+## Which tool answers which question
 
-- `chewbacca rea status`: installed, pinned version, which agents have the
-  MCP, and whether native analysis works here.
-- `chewbacca rea scope <App.app|app.asar|dir> "<seed>"`: extracts the ASAR,
-  keeps the files holding the seed plus the preloads, runs REA on those under
-  a deadline, prints the contextBridge and IPC counts and the Evidence path.
-  Files over 1 MB come back as `read_these`: grep and read them by hand.
-  Claude.app with seed `openExternal`: 12 s, 2 files, 23 contextBridge APIs;
-  the whole app died at file 8 of 427.
-- `chewbacca rea native <binary|App.app>`: thins the universal Mach-O to the
-  host slice and runs the Ghidra overview with its env set. Ghidra refuses
-  every universal binary, which is every app on a Mac; thinned, Cardhop's
-  8.6 MB binary mapped 20,979 functions in 4 min 13 s.
-- `chewbacca rea install`: a pinned local copy of rea-agents under
-  ~/.chewbacca/rea/pkg, then `wire`. The MCP answers initialize in 0.9 to
-  1.1 s from it, against 1.3 to 1.7 s through npx with a warm cache and 4.0 s
-  cold, and it boots with no registry.
-- `chewbacca rea wire --apply`: points the rea MCP entries in Claude Code and
-  Codex at `chewbacca rea mcp`, the proxy in front of REA. It finds Ghidra and
-  JDK 21 at launch, hands `open_binary` the host's slice of a universal binary
-  or of an `.app` bundle's executable, and kills REA's whole process tree,
-  Ghidra's JVM included, when a call passes 900 s, a cancelled call passes
-  30 s, or the agent goes away. So over the MCP, open the app or binary
-  itself; there is no thinned path to copy across.
+| Question                                                                  | Tool and arguments                                                                                                                                                                                 | Time here                                                                                  | Grep instead?                                                                                                                                                      |
+| ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| What's in this Electron app: windows, preload bridges, IPC, sender checks | `analyze_javascript_application` on the `app.asar`, `detail: "summary"`, `integrity_policy: "record-and-continue"`, `max_heap_mb: 4096`                                                            | Claude.app 5 min: 14 windows, 52 bridge APIs, 1,508 IPC ops (10 literal), 63 sender checks | Grep can't tell an IPC channel from an EventEmitter `.on("error")`                                                                                                 |
+| How one IPC channel reaches its window and main side                      | Scope to the files holding the channel, `analyze_javascript_application` (summary), then `trace_application_feature` with `seed: {kind: "channel", value, match: "contains"}`, `direction: "both"` | 3 files: 14 s total                                                                        | Grep finds the files; REA tied Claude.app's LocalExecConsent channel to its BrowserWindow (sandbox, contextIsolation on, nodeIntegration off) at a line and column |
+| Which fetch a bundle makes, at what column                                | Scope to the chunk, analyze, then `trace_javascript_semantics` with `seed: {kind: "endpoint", value}`, `direction: "backward-provenance"`                                                          | 1 chunk: 11 s                                                                              | Usually no: grep shows the same call and its body                                                                                                                  |
+| What requests a page really sends, in what order, on a click              | `capture_browser_scenario`, `browser: {mode: "launch", executable_path: <chrome-headless-shell>, headless: true}`, actions `goto`/`click`/`wait_for_timeout`, `capture: {events: ["network"]}`     | 6.6 s                                                                                      | Yes, it answers what grep can't: see below                                                                                                                         |
+| Routes and endpoints in a live page's loaded scripts                      | Start the Playwright headless shell with a debug port in the background, `list_browser_targets`, then `analyze_web_bundle` with `observation_ms: 2000`                                      | 10 s, 121 scripts                                                                          | Close call. It dropped grep's fake hit but missed PostHog's paths and mislabels `x.get("age")` as an endpoint                                                      |
+| Read a HAR someone saved                                                  | `inspect_web_network_capture`, `format: "har"`                                                                                                                                                     | not timed                                                                                  | n/a                                                                                                                                                                |
+| Which native function uses this string                                    | `open_binary` on the binary or `.app` (the proxy thins it), then `trace_feature` with `query`, then `close_binary`                                                                                 | uuidgen: 11 s; Cardhop open: 266 s                                                         | Yes: `strings` can't say which function references it                                                                                                              |
+| One native function's code                                                | `open_binary`, `search_procedures` or `trace_feature`, then `analyze_function` / `procedure_pseudo_code`                                                                                           | not timed here; the open is the slow part (Cardhop 266 s) | n/a                                                                                                                                                                |
 
-Then:
+## The four rules that decide whether it works
 
-1. Start from one question and one seed: a visible string, an API name, a
-   channel, a URL. Never "analyze the whole app".
-2. Try plain reading first: if grepping the bundle for the seed answers it,
-   stop. A creator's test cloned one feature in 5 minutes without REA and 27
-   with it, and the plain one was better.
-3. Read summary-first: over MCP pass `detail: "summary"` and page with
-   `inspect_analysis_view` by the parent Evidence ID. Never paste a full
-   result into context; two scoped Claude.app files were 41 MB of Evidence.
-4. When channels are dynamic (Claude.app: 1,333 of 1,340), take REA's line
-   and column and read the minified source there, the way the Notion case
-   study does.
-5. Websites: use grep, not REA. The 39 Next.js chunks of uselemma.ai
-   (1.6 MB) timed out at 6 min 40 s with 4 parsed and left a worker running;
-   grep found the same three `/api/` routes in 0.02 s. On 2026-10-13 REA's
-   browser tools were tried on the three things api-anything couldn't learn
-   (LibCal's room names, LibCal's grid endpoint, YC's x-inertia-version):
-   fetching the page and grepping answered all 3 in 0.2 to 0.6 s with the
-   value; `inspect-web-page` took 16 s each, held 2 of 3 somewhere in up to
-   410 KB of Evidence and missed the YC value, which sits in an HTML
-   attribute; `analyze-web-bundle` found 0 of 3; a reload during observation
-   failed every time (`target_unavailable`). REA stays off the web path.
-6. Runtime tools (Electron/Node inspector, process capture, LLDB, Frida, adb)
-   run or touch the real program with Caleb's permissions. REA's own security
-   page says it is not a sandbox. Use them only on a target he named.
+1. **Inventory whole, trace scoped.** The whole-app graph keeps relationships
+   for only 29 of Claude.app's 427 files (398 hit the result budget, keeping
+   static facts only), so every seed traced on it came back `no-match`. Grep
+   the bundle for the seed, copy those few files plus `package.json` into a
+   scratch dir keeping their paths, and analyze that. `chewbacca rea scope`
+   does the copy and prints the two MCP calls (`mcp_next`) to run next.
+2. **Summary first, then pages.** Pass `detail: "summary"` and read further
+   with `inspect_analysis_view` on the `parent_evidence_id`. On a whole-app
+   graph every view repeats about 680 KB of limitations, more than a client
+   shows; page modules 8 at a time and save the file the client writes.
+3. **Narrow every semantic trace.** A 403 KB Claude Code UI chunk hit REA's
+   100,000-node semantic ceiling, and a forward trace from one property came
+   back over the 10 MB MCP response cap. Seed an endpoint, literal or channel,
+   set a direction, and add `allowed_relations` when the first try overflows.
+4. **Headless only.** `capture_browser_scenario` with `mode: "launch"` and
+   `headless: true` opens no window. Use Playwright's `chrome-headless-shell`
+   (`~/Library/Caches/ms-playwright/chromium_headless_shell-*/`), never the
+   user's Chrome. Kill any headless shell you started for `analyze_web_bundle`.
+   Locators must match one element: `a[href='/careers']` matched 4 and failed;
+   `header a[href='/careers']` worked.
+
+## What the live click showed that grep couldn't
+
+On uselemma.ai, grep listed six `/api/` strings. The live capture showed
+which requests actually go out: the page, a PostHog relay under
+`/relay-fgLF/` (a POST to `flags`), a Next.js prefetch of
+`/careers?_rsc=...`, and Google Analytics. Clicking Careers sent nothing
+new, because the prefetch had already loaded it. `/api/agent` is a string in
+a demo trace span and is never called. Use the capture when the question is
+"what does this page send", and feed the request shapes to api-anything.
+
+## When grep or api-anything is still the right call
+
+- Finding which file holds a string: grep, 0.02 to 0.3 s on 195 MB.
+- Listing route strings or reading one fetch's body: grep plus reading the
+  minified source at the column.
+- Getting data out of a site again and again: api-anything. REA observes; it
+  doesn't build a replayable operation.
+- Dynamic IPC names (Claude.app: 1,497 of 1,508): REA reports them as
+  unknown. Read the source at its line and column, as the Notion showcase does.
+- A simple clone: a creator's test took 27 min with REA and 5 without.
+
+## Setup checks
+
+- `chewbacca rea status`: installed, pin, which agents have the MCP, native
+  readiness. Ghidra and JDK 21 are found at launch by the proxy.
+- The proxy kills REA's whole tree, Ghidra's JVM included, at 900 s per call,
+  30 s after a cancel, or when the agent exits. After a long run,
+  `ps -axo pid,command | grep rea.mjs` should show only the live servers.
+- Codesigned Mac apps need `integrity_policy: "record-and-continue"`: the
+  default refuses Claude.app in 4.8 s because signing rewrites its native
+  addons after the ASAR hashes were taken.
+- Hopper and IDA aren't installed; Ghidra covers native.
 
 ## Limits to say out loud
 
 - Breaking changes land almost daily (4.0 to 6.4 between Oct 5 and Oct 11).
-  Keep the pin; saved Evidence from another minor will not validate.
-- Results are large. The token bill, not the analysis, is usually the cost.
-- Static analysis cannot prove what runs; computed names and obfuscation stay
-  unknown, and REA says so. Report its unknowns as unknowns.
-- The star count (42 on Oct 2, 155K on Oct 12) is not evidence of quality.
+  Keep the pin; saved Evidence from another minor won't validate.
+- Results are large; the token bill is usually the real cost.
+- Static analysis can't prove what runs. Report REA's unknowns as unknowns,
+  and check `endpoint` hits: `t.get("kind")` came back as a network endpoint.
+- Runtime tools (Electron inspector, process capture, LLDB, Frida, adb) run or
+  touch the real program with the user's permissions. Use them only on a
+  target the user named.
 
 ## The line
 
 Inspect to learn the mechanism, then build ours from scratch. Never copy
-protected code or assets into Caleb's or a client's product, never bypass DRM,
-license checks or anti-cheat, and never put another company's internals into
-client-facing copy. REA's DISCLAIMER.md refuses the same list.
+protected code or assets into a product, never bypass DRM, license checks or
+anti-cheat, and never put another company's internals into client-facing
+copy. REA's DISCLAIMER.md refuses the same list.

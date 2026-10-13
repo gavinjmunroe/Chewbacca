@@ -95,6 +95,7 @@ one call, and a lapsed session renews itself from Chrome:
 - Anything else: `brightspace get /le/1.75/<ou>/<path>`
 
 Never-dos, in his words (2026-10-11, mid quiz):
+
 - "IT should never take this long to find a place you already know": the
   first call for anything Brightspace is `brightspace due` or the api op,
   never grep, `find`, `chewie web` or a screenshot.
@@ -218,6 +219,27 @@ deadline):
   trackers in a Google Sheet, created in his Drive with the Drive connector,
   and the reply leads with the link. Upload as text/markdown with no emojis:
   Drive's import turned them into mojibake.
+
+When the writing has to be the user's own words (after a teammate called a
+draft slop), skip the comparison draft. Caleb, 2026-10-13: "Give me series of
+mcq, than idea to say in my own words... Also give me 1 paragraph to read to
+tell me everything I needa know." So:
+
+- Open with one plain paragraph covering the deadline, what's in the doc, what's theirs,
+  the bar (the teammate's `slop-check --essay` score) and the core idea.
+- Each MCQ gets a one-line "in ur words" prompt after it. The user writes
+  the prose; the agent scores each paragraph against the teammate's before it
+  goes in.
+- Read the doc and the group chat for who owns what before writing MCQs. On
+  2026-10-13 the first batch covered the synthesis, and four minutes later a
+  DM with the teammate moved the synthesis to him and the Miyake section to
+  Caleb. The truncated `people texts` view hid the deal. Read the full DM text
+  before building the questions.
+- When he points to an old paper as the model ("Refer to my gesm papers"),
+  score it first. His GESM 120 papers scored 44 and 76 on `--essay`, with 6 to
+  10 "not X, but Y" lines and zero contractions. Take their structure (the
+  reframed thesis, the one-word close read, a job for each source) and leave
+  their register.
 
 ## Reading a syllabus into the ledger
 

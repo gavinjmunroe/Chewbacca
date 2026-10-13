@@ -8,6 +8,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -193,6 +194,31 @@ class WeekTests(unittest.TestCase):
         line = next(l for l in path.read_text().splitlines() if l.startswith('- evil: ') and 'uncommitted' in l)
         self.assertFalse(marker.exists())
         subprocess.run(line.split('`')[1], shell=True, capture_output=True)
+        self.assertFalse(marker.exists())
+
+    def test_a_signed_commit_cannot_run_the_repos_verifier(self):
+        repo = self.home / 'code/signed'
+        repo.mkdir()
+        git(repo, 'init', '-q')
+        commit(repo, 'a.txt', 'x')
+        out = lambda *a: subprocess.run(['git', '-C', str(repo), *a], capture_output=True, text=True).stdout.strip()
+        body = (f'tree {out("rev-parse", "HEAD^{tree}")}\nparent {out("rev-parse", "HEAD")}\n'
+                f'author Dev <{EMAIL}> {int(time.time())} +0000\ncommitter Dev <{EMAIL}> {int(time.time())} +0000\n'
+                'gpgsig -----BEGIN PGP SIGNATURE-----\n x\n -----END PGP SIGNATURE-----\n\nsigned\n')
+        signed = subprocess.run(['git', '-C', str(repo), 'hash-object', '-t', 'commit', '-w', '--stdin'],
+                                input=body, capture_output=True, text=True).stdout.strip()
+        git(repo, 'update-ref', 'refs/heads/main', signed)
+        marker = self.home / 'PWNED-gpg'
+        verifier = self.home / 'verifier.sh'
+        verifier.write_text(f'#!/bin/sh\ntouch {marker}\nexit 1\n')
+        verifier.chmod(0o755)
+        git(repo, 'config', 'log.showSignature', 'true')
+        git(repo, 'config', 'gpg.program', str(verifier))
+        subprocess.run(['git', '-C', str(repo), 'log', '-1'], capture_output=True)
+        self.assertTrue(marker.exists(), 'plain log should run the verifier, or this test proves nothing')
+        marker.unlink()
+        result = first_win.week(self.home)
+        first_win.receipt(result, self.home / '.chewbacca/receipts')
         self.assertFalse(marker.exists())
 
     def test_empty_machine_says_where_to_point_it(self):

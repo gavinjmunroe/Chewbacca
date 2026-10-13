@@ -44,7 +44,10 @@ SKIP_DIRS = {'node_modules', '.venv', 'venv', 'vendor', 'target', 'dist', 'build
 # clean filter that `status` invokes. Same prefix as write_log.SAFE and
 # review_cross.GIT_SAFE, plus the filters, which read() switches off per repo.
 SAFE = ['git', '-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', '-c', 'diff.external=',
-        '-c', 'core.untrackedCache=false', '-c', 'protocol.allow=never']
+        '-c', 'core.untrackedCache=false', '-c', 'protocol.allow=never',
+        # log.showSignature makes `log` run the signature verifier the repo names.
+        '-c', 'log.showSignature=false', '-c', 'gpg.program=false', '-c', 'gpg.ssh.program=false',
+        '-c', 'gpg.x509.program=false']
 
 
 SAFE_NAME = re.compile(r'filter\.[A-Za-z0-9_.-]+\.(clean|smudge|process)')

@@ -58,6 +58,7 @@ COMMANDS=(
   "update|pull the latest, show what changed, re-run setup"
   "changelog|what changed between versions"
   "agents|the agents page in your browser tab (builds it on first run, no Kyber needed)"
+  "stranger|time a new dev's install in a scratch HOME: prompts, errors, clone to first agent answer"
   "skills|list, search, or show a skill"
   "commands|list, search, or show a slash command"
   "why|which rule or skill governs a behavior; --refused says what refused and why"
@@ -163,6 +164,10 @@ agents)
   # page is on the glass (`realm-ui show`); this needs neither Kyber nor PATH.
   shift
   exec python3 "$ROOT/bin/realm-ui" open --build "$@"
+  ;;
+stranger)
+  shift
+  exec python3 "$ROOT/tools/stranger_run.py" "$@"
   ;;
 rea)
   # REA (rea-agents) behind a deadline, thinned binaries and a scoped input.

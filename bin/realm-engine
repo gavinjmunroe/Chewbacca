@@ -44,6 +44,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parent.parent
@@ -558,7 +559,25 @@ def agents_dir() -> Path:
                 or Path.home() / "Library" / "LaunchAgents").expanduser()
 
 
+def foreign_agents() -> Optional[str]:
+    """Why launchd must not be touched from here, or None: the rule is
+    daemon_register.agents_vs_own (a scratch-HOME install replaced the real
+    com.chewbacca on 2026-10-13). A fake launchctl (CHEWBACCA_LAUNCHCTL,
+    tests) is always called."""
+    if os.environ.get("CHEWBACCA_LAUNCHCTL"):
+        return None
+    import daemon_register  # noqa: PLC0415
+    return daemon_register.agents_vs_own(agents_dir())
+
+
+LAUNCHD_WRITES = {"bootstrap", "bootout", "kickstart", "enable", "disable", "load", "unload"}
+
+
 def launchctl(*args: str) -> subprocess.CompletedProcess:
+    if args and args[0] in LAUNCHD_WRITES:
+        foreign = foreign_agents()
+        if foreign:
+            return subprocess.CompletedProcess(["launchctl", *args], 0, "", "")
     exe = os.environ.get("CHEWBACCA_LAUNCHCTL") or "/bin/launchctl"
     return subprocess.run([exe, *args], capture_output=True, text=True, timeout=30)
 
@@ -585,7 +604,10 @@ def install() -> int:
     got = launchctl("bootstrap", domain, str(path))
     if got.returncode:
         return die(f"launchctl bootstrap said {got.returncode}: {(got.stderr or got.stdout).strip()[:200]}")
-    print(json.dumps({"installed": str(path), "label": LABEL}))
+    out = {"installed": str(path), "label": LABEL}
+    if foreign_agents():
+        out["notLoaded"] = foreign_agents()
+    print(json.dumps(out))
     return 0
 
 

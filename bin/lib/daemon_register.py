@@ -118,10 +118,40 @@ def unregister(name: str) -> None:
         pass
 
 
+def own_agents() -> Path:
+    import pwd  # noqa: PLC0415
+    return Path(pwd.getpwuid(os.getuid()).pw_dir) / "Library" / "LaunchAgents"
+
+
+def agents_vs_own(agents: Path, own: Optional[Path] = None) -> Optional[str]:
+    """Why `agents` isn't this account's LaunchAgents, or None when it is.
+
+    launchd's gui/<uid> domain is one per account whatever $HOME says. On
+    2026-10-13 at 00:04 setup.sh in a scratch HOME booted out the real
+    com.chewbacca and loaded one pointing into the scratch kit; once that was
+    deleted, realm-ui exited 2 on every start and the agents page was down.
+    Only an install whose LaunchAgents is the account's own may change what
+    launchd runs. Same folder by device and inode (a symlink, /private/tmp vs
+    /tmp, a HOME spelled /users/... all match), by path case folded when
+    either doesn't exist yet. chewbacca-daemon's agentsVsOwn is the same rule."""
+    own = own or own_agents()
+    why = "{} isn't this account's LaunchAgents ({})".format(agents, own)
+    try:
+        a, b = os.stat(str(agents)), os.stat(str(own))
+        return None if (a.st_dev, a.st_ino) == (b.st_dev, b.st_ino) else why
+    except OSError:
+        same = os.path.abspath(str(agents)).lower() == os.path.abspath(str(own)).lower()
+        return None if same else why
+
+
 def retire(label: str) -> None:
     """Unload an old per-job LaunchAgent and move its plist out of LaunchAgents."""
     plist = AGENTS / "{}.plist".format(label)
-    subprocess.run(["launchctl", "bootout", "gui/{}/{}".format(os.getuid(), label)], capture_output=True)
+    # gui/<uid> is one per account whatever $HOME says: from a scratch HOME
+    # this would unload the real job by the same label (agents_vs_own).
+    if os.environ.get("CHEWBACCA_LAUNCHCTL") or not agents_vs_own(AGENTS):
+        subprocess.run([os.environ.get("CHEWBACCA_LAUNCHCTL") or "launchctl", "bootout",
+                        "gui/{}/{}".format(os.getuid(), label)], capture_output=True)
     if plist.exists():
         legacy = DAEMON_DIR / "legacy"
         legacy.mkdir(parents=True, exist_ok=True)

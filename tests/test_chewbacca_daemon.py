@@ -901,5 +901,88 @@ class ListenExecTests(unittest.TestCase):
             shutil.rmtree(tmp, ignore_errors=True)
 
 
+SANDBOX = shutil.which("sandbox-exec")
+# Every launchd write below runs where /bin/launchctl can't start, so even the
+# old code these fail on can't touch the real gui domain while proving it.
+NO_LAUNCHCTL = '(version 1)(allow default)(deny process-exec (literal "/bin/launchctl"))'
+
+
+@unittest.skipUnless(NODE and SANDBOX, "node and sandbox-exec needed")
+class ScratchHomeLeavesLaunchdAlone(unittest.TestCase):
+    """2026-10-13 00:04: setup.sh in a scratch HOME replaced the real
+    com.chewbacca with one pointing into the scratch kit. When that folder was
+    deleted, realm-ui exited 2 on every start (listen_exec.py beside a deleted
+    daemon) and the agents page was down. Only the account's own LaunchAgents
+    may change what launchd runs."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        (self.tmp / "agents").mkdir()
+        self.env = dict(os.environ, HOME=str(self.tmp),
+                        CHEWBACCA_DAEMON_DIR=str(self.tmp / "daemon"),
+                        CHEWBACCA_LAUNCH_AGENTS=str(self.tmp / "agents"),
+                        CHEWBACCA_DAEMON_LOGS=str(self.tmp / "logs"),
+                        CHEWBACCA_KIT=str(self.tmp / "kit"))
+        self.env.pop("CHEWBACCA_LAUNCHCTL", None)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def sandboxed(self, argv, env=None):
+        return subprocess.run([SANDBOX, "-p", NO_LAUNCHCTL, *argv], capture_output=True,
+                              text=True, env=env or self.env, timeout=60)
+
+    def test_same_folder_rule_matches_aliases_and_refuses_others(self):
+        own = self.tmp / "Own" / "Library" / "LaunchAgents"
+        own.mkdir(parents=True)
+        (self.tmp / "link").symlink_to(own)
+        other = self.tmp / "other"
+        other.mkdir()
+        cases = [(own, True), (self.tmp / "link", True),
+                 (Path(str(own).replace("/Own/", "/own/")), True),  # APFS folds case
+                 (Path("/private" + str(own)) if not str(own).startswith("/private") else own, True),
+                 (other, False), (self.tmp / "missing", False)]
+        sys.path.insert(0, str(ROOT / "bin" / "lib"))
+        import daemon_register  # noqa: PLC0415
+        js = node_eval("const d=require(%s);console.log(JSON.stringify(%s.map(([a,o])=>d.agentsVsOwn(a,o)===null)))" % (
+            json.dumps(str(DAEMON)), json.dumps([[str(a), str(own)] for a, _ in cases])), self.env)
+        for (agents, want), got_js in zip(cases, js):
+            self.assertEqual(daemon_register.agents_vs_own(agents, own) is None, want, agents)
+            self.assertEqual(got_js, want, agents)
+
+    def test_daemon_install_in_scratch_home_writes_plist_and_never_loads_it(self):
+        r = self.sandboxed([NODE, str(DAEMON), "install"])
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertTrue((self.tmp / "agents" / "com.chewbacca.plist").exists())
+        self.assertIn("not loaded into launchd", r.stdout)
+
+    def test_a_fake_launchctl_is_still_called(self):
+        log = self.tmp / "calls"
+        fake = self.tmp / "fake-launchctl"
+        fake.write_text("#!/bin/sh\necho \"$@\" >> {}\n".format(log))
+        fake.chmod(0o755)
+        r = self.sandboxed([NODE, str(DAEMON), "install"], dict(self.env, CHEWBACCA_LAUNCHCTL=str(fake)))
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("bootstrap gui/", log.read_text())
+
+    def test_realm_engine_launchctl_skips_writes_from_a_scratch_home(self):
+        code = ("import importlib.machinery,importlib.util,sys;"
+                "l=importlib.machinery.SourceFileLoader('re',sys.argv[1]);"
+                "s=importlib.util.spec_from_loader('re',l);m=importlib.util.module_from_spec(s);l.exec_module(m);"
+                "print(m.launchctl('bootstrap','gui/0','/nope').returncode, bool(m.foreign_agents()))")
+        r = self.sandboxed(["/usr/bin/python3", "-c", code, str(ROOT / "bin" / "realm-engine")],
+                           dict(self.env, CHEWBACCA_LAUNCH_AGENTS_DIR=str(self.tmp / "agents")))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.split(), ["0", "True"])
+
+    def test_daemon_register_retire_skips_bootout_from_a_scratch_home(self):
+        (self.tmp / "agents" / "com.example.old.plist").write_text("<plist/>")
+        code = ("import sys;sys.path.insert(0,sys.argv[1]);import daemon_register as d;"
+                "d.retire('com.example.old');print('ok')")
+        r = self.sandboxed(["/usr/bin/python3", "-c", code, str(ROOT / "bin" / "lib")])
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertFalse((self.tmp / "agents" / "com.example.old.plist").exists())
+
+
 if __name__ == "__main__":
     unittest.main()

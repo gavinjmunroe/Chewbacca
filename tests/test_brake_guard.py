@@ -45,10 +45,11 @@ for cmd in ["rm -rf ~", "rm -rf ~/", "rm -rf ~/*", "rm -fr $HOME", "rm -Rf /", "
             "git push --force origin main", "git push -f", "git push -f origin HEAD", "git push origin +main",
             "git push --force-with-lease origin master", "git -C repo push -f origin HEAD:main",
             "rm -vrf ~", "cd /tmp; rm -rf ~/.", "rm -rf $HOME/../" + Path.home().name, 'bash -c "rm -rf ~"',
-            "true & rm -rf ~", "(rm -rf ~)", "env FOO=1 rm -rf /"]:
+            "true & rm -rf ~", "(rm -rf ~)", "env FOO=1 rm -rf /", "git push -f --all", "git push --mirror -f",
+            f"git -C {ON_MAIN} push -f", "git checkout main && git push -f"]:
     code, err = run(cmd)
     check(f"refuses: {cmd}", code == 2 and "brake-guard" in err, (code, err))
-for cmd in ["git push -f", "git push -f origin HEAD"]:
+for cmd in ["git push -f", "git push -f origin HEAD", f"git -C {ON_FEAT} push -f"]:
     code, err = run(cmd, cwd=ON_FEAT)
     check(f"lets through on a feature branch: {cmd}", code == 0, (code, err))
 for cmd in ["rm -rf ./build", "rm -rf ~/code/tmp", "rm -rf node_modules", 'echo "rm -rf ~"',

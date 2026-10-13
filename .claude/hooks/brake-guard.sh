@@ -21,8 +21,9 @@ type hook_init >/dev/null 2>&1 && hook_init brake-guard.sh 5
 # or a grep for it passes), with a `bash -c` body read as commands too:
 #   1. rm -rf, -fr, -Rf or --recursive --force on ~, ~/, ~/*, $HOME, / or /*
 #   2. git push with a force flag (or a +refspec) that names main or master,
-#      or names no branch, HEAD or @ while main or master is checked out
-#      (a branch it can't read counts as main)
+#      or --all / --mirror, or names no branch, HEAD or @ while main or master
+#      is checked out (read at -C when given; a branch it can't read, or a
+#      command that also runs cd, checkout or switch, counts as main)
 command -v python3 >/dev/null 2>&1 || exit 0
 INPUT=$(cat)
 REASON=$(printf '%s' "$INPUT" | python3 -I -c '
@@ -82,9 +83,15 @@ def rm_home(w):
         "--recursive" in long and ("--force" in long or any("f" in g for g in shorts)))
     return rf and any(target(a) in (home, "/") for a in w[1:] if not a.startswith("-"))
 
-def current_branch():
+# A cd, checkout or switch anywhere in the command moves what HEAD means
+# before the push runs, so the branch read now would be the wrong one.
+MOVES = re.compile(r"\b(cd|pushd|popd|checkout|switch|worktree)\b")
+
+def current_branch(where):
+    if MOVES.search(cmd):
+        return None
     try:
-        out = subprocess.run(["git", "-C", cwd, "symbolic-ref", "--short", "-q", "HEAD"],
+        out = subprocess.run(["git", "-C", where, "symbolic-ref", "--short", "-q", "HEAD"],
                              capture_output=True, text=True, timeout=3)
     except (OSError, subprocess.TimeoutExpired):
         return None
@@ -95,8 +102,10 @@ MAIN = re.compile(r"(^|[:+/])(main|master)$")
 def force_main(w):
     if len(w) < 2 or os.path.basename(w[0]) != "git":
         return False
-    i = 1
+    i, where = 1, cwd
     while i < len(w) and w[i].startswith("-"):
+        if w[i] == "-C" and i + 1 < len(w):
+            where = os.path.join(where, os.path.expanduser(w[i + 1]))
         i += 2 if w[i] in ("-C", "-c") else 1
     if i >= len(w) or w[i] != "push":
         return False
@@ -108,12 +117,12 @@ def force_main(w):
     if not forced:
         return False
     refs = [r.lstrip("+") for r in args[1:]]
-    if any(MAIN.search(r) for r in refs):
+    if any(MAIN.search(r) for r in refs) or any(a in ("--all", "--mirror") for a in opts):
         return True
     # No branch named, or HEAD / @: it pushes what is checked out. Unknown
     # counts as main, so a failed lookup refuses rather than lets through.
     if not refs or any(r.split(":")[0] in ("HEAD", "@") and (":" not in r or not r.split(":")[1]) for r in refs):
-        branch = current_branch()
+        branch = current_branch(where)
         return branch is None or branch in ("main", "master")
     return False
 

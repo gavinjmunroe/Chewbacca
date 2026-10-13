@@ -24,7 +24,11 @@ END = '<!-- CHEWBACCA RUNTIME END -->'
 # permission dialogs, app control) remain opt-in through their native setup.
 CLAUDE_CHECKS = {
     'UserPromptSubmit': ['kit-route.sh', 'skill-route.sh', 'method-guard.sh', 'model-route.sh'],
-    'PreToolUse': ['write-log.sh', 'submit-guard.sh', 'browser-ux-guard.sh', 'focus-guard.sh', 'env-guard.sh', 'fusion-guard.sh', 'ux-guard.sh'],
+    # brake-guard and destructive-guard: the full installer's brakes (its
+    # settings.json deny list) for an install that promises no permission
+    # changes. The 10/12 stranger run let `rm -rf ~` and a force push to main
+    # through on a runtime install.
+    'PreToolUse': ['write-log.sh', 'brake-guard.sh', 'destructive-guard.sh', 'submit-guard.sh', 'browser-ux-guard.sh', 'focus-guard.sh', 'env-guard.sh', 'fusion-guard.sh', 'ux-guard.sh'],
     'PostToolUse': ['write-log.sh', 'prose-guard.sh', 'untrusted-screen.sh'],
     'Stop': ['slop-guard.sh', 'prayer-guard.sh', 'handoff-guard.sh', 'durable-guard.sh', 'vibe-guard.sh'],
 }
@@ -38,6 +42,8 @@ CLAUDE_MATCHERS = {
     'submit-guard.sh': 'mcp__chrome-devtools__.*|Bash|mcp__peekaboo__.*',
     'browser-ux-guard.sh': 'Bash|mcp__peekaboo__.*',
     'focus-guard.sh': 'Bash',
+    'brake-guard.sh': 'Bash',
+    'destructive-guard.sh': 'Bash',
     'env-guard.sh': 'Write',
     'fusion-guard.sh': 'Write|Edit|MultiEdit',
     'ux-guard.sh': 'Write|Edit',

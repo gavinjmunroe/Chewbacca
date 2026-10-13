@@ -698,6 +698,7 @@ if group "tools"; then
   check  "amber agent: greets its own person, recalls across sessions, Jev off until opted in" python3 "$ROOT/tests/test_amber_agent.py"
   check  "amber-redact: known and pattern values never leak, the gap is measured" python3 "$ROOT/tests/test_amber_redact.py"
   check  "agent-history: one search over Claude Code and Codex transcripts, no fake secret survives" python3 "$ROOT/tests/test_agent_history.py"
+  check  "a runtime install refuses rm -rf ~ and a force push to main, and nothing a real session ran" python3 "$ROOT/tests/test_brake_guard.py"
   # The craft gate is the only thing making the demo rules fire rather than sit
   # in a markdown file, so its fail-closed behaviour is the property to pin.
   check  "craft-gate refuses a craft nobody studied" bash -c "! CRAFT_DIR='$TMP/craft-empty' python3 '$ROOT/bin/craft-gate' pitch-deck >/dev/null 2>&1"

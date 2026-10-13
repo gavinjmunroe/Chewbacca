@@ -34,6 +34,24 @@ contrived, 2 variants of 3 messages per offer, and anyone the sender already
 knows gets a text, not a cold email. gtme-grade now scores his sender-first
 opener as passing instead of failing it.
 
+**The 10-12 launch day, in Caleb's words, and what each one means:**
+
+- "DONT TELL ME UR READY IF THIS SHIT IS HAPPENING": the word ready, or "good
+  until X", only follows a `chewbacca gtme ready` pass. ready-guard refuses it
+  otherwise.
+- "Never lie to me bro": report the blocker list as it stands, the same turn,
+  even when it is long.
+- "Never tell anyone to press anything in clay themselves": the agent starts
+  a graded draft with `chewbacca clay campaign-status ... status=START`.
+- "Fuck perplexity it's too expensive": no paid per-lead line without his
+  yes on the credit cost; a second variant can be free (reordered founder
+  story vs number first, as on 10-12).
+- "Everything should be togari": agents never post in a client's Slack as
+  him. client-post-guard refuses it; Togari's bot is the voice there.
+- Credit the right person: the Perplexity line was Maggie's process, Sagar's
+  rule was only "2 variants of 3 messages". Name whose rule it is before
+  citing it.
+
 Everything BMA has built is in [references/bma/](references/bma/README.md):
 how the live Togari bot classifies and answers replies, the bar a reply must
 clear before it sends with nobody looking, its scoring rubrics and vendor

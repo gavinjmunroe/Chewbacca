@@ -1433,17 +1433,22 @@ def verify(ws, cid, action):
     return ""
 
 
-PRESEND = Path(os.path.expanduser("~/.chewbacca/state/send-gate-receipt.json"))
-
-
-def presend_ok(allow_no_lines=False):
-    """The client's pre-send gate (zeutara-gtme scripts/pre_send_gate.py) must
-    also have passed in full in the last 12 hours on unchanged files. This was
-    launch-guard's first check; it moved here with the rest on 2026-10-10."""
-    try:
-        r = json.loads(PRESEND.read_text())
-    except (OSError, ValueError):
-        return "no pre-send gate receipt (scripts/pre_send_gate.py with every check on)"
+def presend_ok(client, allow_no_lines=False):
+    """This client's pre-send gate (gtme_presend.py) must also have passed in
+    full in the last 12 hours on unchanged files. This was launch-guard's first
+    check; it moved here with the rest on 2026-10-10. Until 2026-10-13 the
+    receipt was one file for every client, so one client's pass unlocked
+    another's launch; now each client has its own and only that one counts."""
+    presend = sibling("gtme_presend")
+    if not client:
+        return "no client named, so no client's pre-send gate can cover this"
+    r = presend.read_receipt(client)
+    if r is None:
+        return f"no pre-send gate receipt for {client} (gtme presend with every check on)"
+    # Two names can share a file name ("Acme Test", "acme-test"); the name
+    # inside is what counts, and a receipt naming nobody counts for nobody.
+    if r.get("client") != client:
+        return f"the pre-send gate receipt on file for {client} was written for {r.get('client')}"
     # full_but_lines is every check except the personal first line, for a
     # sequence that carries no per-lead line (the 10-12 signal-split drafts).
     # Only a launch accepts it, where the launch grade's own merge-field gate
@@ -1477,7 +1482,15 @@ def verify_request(ws, cid, action, audience=None):
         receipt_file(ws, cid, ACTIONS[0])  # validates ws and cid
     except ValueError as exc:
         return str(exc)
-    why = presend_ok(allow_no_lines=action == "launch")
+    # The pre-send receipt that counts is the one for the client this
+    # workspace belongs to; a workspace no client names has none.
+    try:
+        entry, why = sibling("gtme_config").client_for_workspace(ws)
+    except (OSError, ValueError) as exc:  # a config that can't be read refuses
+        return f"cannot read the GTM client config: {exc}"
+    if why:
+        return why
+    why = presend_ok(entry.get("name"), allow_no_lines=action == "launch")
     if why:
         return why
     if action == "launch":

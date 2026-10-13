@@ -524,6 +524,10 @@ if group "gtme"; then
   # CHECKED, an expired pre-send receipt and "L.P." in the firm names.
   check "gtme ready says READY only when every campaign passes every gate" \
     python3 "$ROOT/tests/test_gtme_ready.py"
+  # 2026-10-13: one pre-send receipt served every client, and the gate lived in
+  # one client's repo with that client's refused senders as constants.
+  check "gtme presend reads the client's config and writes that client's receipt only" \
+    python3 "$ROOT/tests/test_gtme_presend.py"
   # 2026-10-13: 97 executable lines hard-coded one client and its rulings had
   # two homes; the clients.json entry is the contract a second client fills in.
   check "gtme config checks a client entry, resolves its one workspace, keeps rulings in one file" \

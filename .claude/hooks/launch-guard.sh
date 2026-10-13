@@ -94,25 +94,37 @@ if not fresh or rec.get("session_id") != session or rec.get("v") != 2 or rec.get
     sys.exit(1)
 if mode != "launch":
     sys.exit(0)
+# One receipt per client since 2026-10-13. A click can't be tied to a client,
+# so a fresh, unchanged pass for any one client opens it, as the single shared
+# receipt did before; the send path itself checks the right client's.
+def intact(r):
+    if not (0 <= time.time() - int(r.get("time", 0)) < WINDOW):
+        return False
+    if not (r.get("full") or r.get("full_but_lines")):
+        return False
+    hashes = r.get("hashes") or {}
+    if not hashes:
+        return False
+    for p, h in hashes.items():
+        try:
+            with open(p, "rb") as f:
+                if hashlib.sha256(f.read()).hexdigest() != h:
+                    return False
+        except OSError:
+            return False
+    return True
+d = os.path.join(state, "send-gate-receipts")
 try:
-    r = json.load(open(os.path.join(state, "send-gate-receipt.json")))
-except Exception:
-    sys.exit(1)
-if not (0 <= time.time() - int(r.get("time", 0)) < WINDOW):
-    sys.exit(1)
-if not (r.get("full") or r.get("full_but_lines")):
-    sys.exit(1)
-hashes = r.get("hashes") or {}
-if not hashes:
-    sys.exit(1)
-for p, h in hashes.items():
+    names = sorted(n for n in os.listdir(d) if n.endswith(".json"))
+except OSError:
+    names = []
+for n in names:
     try:
-        with open(p, "rb") as f:
-            if hashlib.sha256(f.read()).hexdigest() != h:
-                sys.exit(1)
-    except OSError:
-        sys.exit(1)
-sys.exit(0)
+        if intact(json.load(open(os.path.join(d, n)))):
+            sys.exit(0)
+    except Exception:
+        continue
+sys.exit(1)
 PY
 }
 
@@ -391,7 +403,7 @@ case "$tool" in
       refuse "only Caleb's own chat message (clay-chat-approval.sh) may write the chat approval."
     fi
     if printf '%s' "$lower" | grep -qE 'send-gate-receipt|launch-guard-last-url'; then
-      refuse "only scripts/pre_send_gate.py may write the send-gate receipt."
+      refuse "only the pre-send gate (chewbacca gtme presend) may write a send-gate receipt."
     fi
     if printf '%s' "$lower" | grep -qE 'state/gtme-grade|state" *[,/+] *"?gtme-grade|gtme-grade\.key|gtme_grade_key'; then
       refuse "only gtme-grade may touch a grade receipt or its key."

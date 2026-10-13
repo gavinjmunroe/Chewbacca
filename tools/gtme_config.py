@@ -224,6 +224,9 @@ def check_entry(entry: dict, doc: dict) -> dict:
         shared = {_norm(n) for n in names_of(entry) if n} & {_norm(n) for n in names_of(other) if n}
         if shared:
             errors.append(f"name or alias {sorted(shared)} is also {other.get('name')}'s")
+        if name and slug(name) == slug(other.get("name") or ""):
+            errors.append(f"{name} and {other.get('name')} share the file name {slug(name)}, so their "
+                          f"pre-send receipts would land in one file")
         ws = set(map(str, entry.get("workspaces") or [])) & set(map(str, other.get("workspaces") or []))
         if ws:
             errors.append(f"workspaces {sorted(ws)} are also {other.get('name')}'s")

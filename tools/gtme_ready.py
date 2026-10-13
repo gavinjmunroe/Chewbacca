@@ -271,8 +271,8 @@ def run_campaigns(entries, ddir, ready, client, ws):
     return out
 
 
-def check_presend():
-    why = gtme_grade.presend_ok(allow_no_lines=True)
+def check_presend(client):
+    why = gtme_grade.presend_ok(client, allow_no_lines=True)
     return {"name": "pre-send gate receipt", "status": "FAIL" if why else "PASS", "first": why}
 
 
@@ -429,7 +429,7 @@ def main(argv=None):
         print(f"chewbacca gtme ready: {why}", file=sys.stderr)
         return 2
     rows = run_campaigns(entries, str(Path(drafts).resolve().parent), ready, cfg["name"], ws)
-    checks = [check_presend(), check_owed(cfg["name"], a.inbox, a.slack)]
+    checks = [check_presend(cfg["name"]), check_owed(cfg["name"], a.inbox, a.slack)]
     if not entries:
         checks.append({"name": "campaigns", "status": "FAIL", "first": "the drafts file lists no campaigns"})
     n_block = blockers(rows, checks)

@@ -2285,6 +2285,9 @@ def main(argv=None) -> int:
     if argv and argv[0] == "config":
         import gtme_config
         return gtme_config.main(argv[1:])
+    if argv and argv[0] == "presend":
+        import gtme_presend
+        return gtme_presend.main(argv[1:])
     if argv and argv[0] in ("sender", "find", "verify", "batch", "send", "inbox", "reply", "today", "package",
                             "costs", "autosend", "share", "copy", "week"):
         import gtme_solo

@@ -146,8 +146,9 @@ class World:
         src.write_text("email\n")
         state = self.home / ".chewbacca" / "state"
         state.mkdir(parents=True, exist_ok=True)
-        (state / "send-gate-receipt.json").write_text(json.dumps(
-            {"time": int(time.time()) - (0 if fresh else 13 * 3600), "full": True,
+        (state / "send-gate-receipts").mkdir(exist_ok=True)
+        (state / "send-gate-receipts" / "acme.json").write_text(json.dumps(
+            {"time": int(time.time()) - (0 if fresh else 13 * 3600), "client": "Acme", "full": True,
              "hashes": {str(src): hashlib.sha256(b"email\n").hexdigest()}}))
 
     def env(self):

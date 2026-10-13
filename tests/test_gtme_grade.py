@@ -190,9 +190,18 @@ if receipt.is_file():
     # --verify also wants the client's full pre-send gate receipt.
     presend_in = c.home / "presend.csv"
     presend_in.write_text("email\n")
-    (c.home / ".chewbacca" / "state" / "send-gate-receipt.json").write_text(json.dumps(
-        {"time": int(time.time()), "full": True,
+    # The receipt that counts is the one for the client this workspace belongs to.
+    (c.home / ".chewbacca" / "gtm").mkdir(parents=True, exist_ok=True)
+    (c.home / ".chewbacca" / "gtm" / "clients.json").write_text(json.dumps(
+        {"clients": [{"name": "Grade Test", "workspaces": ["1372623"]},
+                     {"name": "Other Test", "workspaces": ["42"]}]}))
+    rdir = c.home / ".chewbacca" / "state" / "send-gate-receipts"
+    rdir.mkdir(parents=True, exist_ok=True)
+    (rdir / "grade-test.json").write_text(json.dumps(
+        {"time": int(time.time()), "client": "Grade Test", "full": True,
          "hashes": {str(presend_in): hashlib.sha256(b"email\n").hexdigest()}}))
+    venv.pop("GTM_CONFIG", None)
+    venv.pop("GTME_CLIENTS", None)
 
     def verify(action="launch", campaign="cam_test1", ws="1372623"):
         return subprocess.run([sys.executable, str(TOOL), "--verify", "--ws", ws, "--campaign", campaign,

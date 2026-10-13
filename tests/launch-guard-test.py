@@ -54,7 +54,9 @@ def run(tool, tool_input, receipt=None, files=None, last_url=None, chat=None):
                     fh.write(content)
                 hashes[p] = hashlib.sha256(recorded.encode()).hexdigest()
             receipt["hashes"] = hashes
-        with open(os.path.join(state, "send-gate-receipt.json"), "w") as fh:
+        # One receipt per client since 2026-10-13.
+        os.makedirs(os.path.join(state, "send-gate-receipts"), exist_ok=True)
+        with open(os.path.join(state, "send-gate-receipts", "test-client.json"), "w") as fh:
             json.dump(receipt, fh)
     # These cases test the pre-send half; a passing gtme-grade receipt is always
     # present so only that half decides. tests/test_launch_guard_grade.py covers

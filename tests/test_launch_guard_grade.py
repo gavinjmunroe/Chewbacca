@@ -72,17 +72,25 @@ class Env:
                         CHEWBACCA_CLAY_FIXTURES=self.clay_fx, CLAY_WORKSPACE_ID=WS,
                         API_ANYTHING_HOME=os.path.join(self.home, "engine"),
                         CHEWBACCA_CLAY_MEASURED=os.path.join(self.home, "measured.json"),
-                        GTM_CONFIG=os.path.join(self.home, "no-clients.json"))
+                        GTM_CONFIG=os.path.join(self.home, "clients.json"))
         self.env.pop("CHEWBACCA_NO_SEND", None)
         with open(self.env["CHEWBACCA_CLAY_MEASURED"], "w") as fh:
             fh.write("{}")
+        # One synthetic client owns the test workspace: the pre-send receipt a
+        # START needs is that client's own (2026-10-13).
+        with open(self.env["GTM_CONFIG"], "w") as fh:
+            json.dump({"clients": [{"name": "Guard Test", "workspaces": [WS]}]}, fh)
 
-    def presend(self):
+    def receipt(self, client="guard-test"):
+        return os.path.join(self.state, "send-gate-receipts", client + ".json")
+
+    def presend(self, client="Guard Test"):
         lst = os.path.join(self.home, "list.csv")
         with open(lst, "w") as fh:
             fh.write("email\n")
-        with open(os.path.join(self.state, "send-gate-receipt.json"), "w") as fh:
-            json.dump({"time": int(time.time()), "full": True,
+        os.makedirs(os.path.join(self.state, "send-gate-receipts"), exist_ok=True)
+        with open(self.receipt(client.lower().replace(" ", "-")), "w") as fh:
+            json.dump({"time": int(time.time()), "client": client, "full": True,
                        "hashes": {lst: hashlib.sha256(b"email\n").hexdigest()}}, fh)
 
     def campaign(self, cid, status="draft", segment="audseg_one"):
@@ -187,10 +195,10 @@ check("a launch grade on one workspace does not start the campaign in another", 
 # A no-lines pre-send pass covers a launch, never add-leads.
 e = Env()
 e.presend()
-r = json.load(open(os.path.join(e.state, "send-gate-receipt.json")))
+r = json.load(open(e.receipt()))
 r.pop("full")
 r["full_but_lines"] = True
-json.dump(r, open(os.path.join(e.state, "send-gate-receipt.json"), "w"))
+json.dump(r, open(e.receipt(), "w"))
 e.grade("cam_alpha", "add-leads")
 v = subprocess.run([sys.executable, os.path.join(TOOLS, "gtme_grade.py"), "--verify", "--ws", WS, "--campaign", "cam_alpha",
                     "--action", "add-leads", "--audience", "audseg_one"], capture_output=True, text=True, env=e.env, timeout=60)
@@ -251,6 +259,7 @@ e = Env()
 e.presend()
 e.grade("cam_alpha", "add-leads")
 e.env.pop("CLAY_WORKSPACE_ID")
+e.env["GTM_CONFIG"] = os.path.join(e.home, "no-clients.json")
 open(os.path.join(e.clay_fx, "cli", "add-leads.json"), "w").write(json.dumps({"exit": 0, "stdout": "{}", "stderr": ""}))
 code, out = e.clay(*ADD, "campaign=cam_alpha", answer="add-leads")
 check("add-leads with no workspace set and no client config refuses, with no built-in workspace",
@@ -259,12 +268,53 @@ cfg = os.path.join(e.home, "clients.json")
 with open(cfg, "w") as fh:
     json.dump({"clients": [{"name": "Second Test Client", "workspaces": ["4000004"]}]}, fh)
 e.env["GTM_CONFIG"] = cfg
+e.presend("Second Test Client")
 code, out = e.clay(*ADD, "campaign=cam_alpha", answer="add-leads")
 check("a grade in another workspace does not cover add-leads for the configured client's workspace",
       refused(code, out, "in workspace 4000004"), out)
 e.grade("cam_alpha", "add-leads", ws="4000004")
 code, out = e.clay(*ADD, "campaign=cam_alpha", answer="add-leads")
 check("add-leads checks the grade in the one workspace the client config names", sends(code, out), out)
+
+# One pre-send receipt per client (2026-10-13). Before, one shared file meant a
+# second client's pass unlocked the first client's START for 12 hours.
+e = Env()
+with open(e.env["GTM_CONFIG"], "w") as fh:
+    json.dump({"clients": [{"name": "Guard Test", "workspaces": [WS]},
+                           {"name": "Firm Test", "workspaces": ["5000005"]}]}, fh)
+e.presend("Firm Test")
+e.grade("cam_alpha", "launch")
+open(os.path.join(e.clay_fx, "api-anything", "setCampaignStatus.json"), "w").write(json.dumps(SENT))
+code, out = e.clay(*START, "--allow-writes", answer="campaign-status")
+check("another client's pre-send pass does not unlock this client's START",
+      refused(code, out, "no pre-send gate receipt for Guard Test"), out)
+e.presend("Guard Test")
+code, out = e.clay(*START, "--allow-writes", answer="campaign-status")
+check("this client's own pre-send pass does", sends(code, out), out)
+r = json.load(open(e.receipt()))
+r["client"] = "Firm Test"
+json.dump(r, open(e.receipt(), "w"))
+code, out = e.clay(*START, "--allow-writes", answer="campaign-status")
+check("a receipt filed under this client but written for another is refused",
+      refused(code, out, "was written for Firm Test"), out)
+r.pop("client")
+json.dump(r, open(e.receipt(), "w"))
+code, out = e.clay(*START, "--allow-writes", answer="campaign-status")
+check("a receipt that names no client counts for no client", refused(code, out, "was written for None"), out)
+with open(e.env["GTM_CONFIG"], "w") as fh:
+    fh.write("{not json")
+e.presend("Guard Test")
+code, out = e.clay(*START, "--allow-writes", answer="campaign-status")
+check("an unreadable client config refuses the START", refused(code, out, "cannot read the GTM client config"), out)
+e = Env()
+e.presend()
+e.grade("cam_alpha", "launch", ws="6000006")
+with open(e.env["GTM_CONFIG"], "w") as fh:
+    json.dump({"clients": [{"name": "Guard Test", "workspaces": [WS]}]}, fh)
+v = subprocess.run([sys.executable, os.path.join(TOOLS, "gtme_grade.py"), "--verify", "--ws", "6000006",
+                    "--campaign", "cam_alpha", "--action", "launch"], capture_output=True, text=True, env=e.env, timeout=60)
+check("a workspace no client names has no pre-send receipt to stand on",
+      v.returncode == 2 and "belongs to no client" in v.stderr, v.stderr)
 
 # 3. The shell allowlist.
 

@@ -107,6 +107,13 @@ class ConfigTest(unittest.TestCase):
         self.assertIn("workspaces ['9001'] are also Northwind Test Co's", errs)
         self.assertIn("is also Northwind Test Co's", errs)
 
+    def test_two_names_with_one_file_name_is_an_error(self):
+        twin = dict(self.solo, name="northwind-test co")
+        write(self.cfg, {"clients": [self.clay, twin]})
+        r = self.gtme("config", "check", "--client", "northwind-test co", "--json")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("share the file name northwind-test-co", " ".join(json.loads(r.stdout)["clients"][0]["errors"]))
+
     def test_unknown_client_is_a_usage_error(self):
         self.assertEqual(self.gtme("config", "check", "--client", "Nobody").returncode, 2)
 

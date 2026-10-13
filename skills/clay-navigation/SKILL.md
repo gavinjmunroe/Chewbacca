@@ -205,8 +205,9 @@ same turn it happens, never only a new line of prose.
 
 - Launching on lists nobody fully checked (2026-10-04: refused sender domains,
   19 false "X backed Y" lines, two CFOs, prior recipients re-emailed). Guard:
-  `launch-guard.sh` refuses launch, resume or enroll without a full, unchanged
-  `pre_send_gate.py` pass from the last 12 hours.
+  `chewbacca clay` refuses a START or add-leads without a full, unchanged
+  `chewbacca gtme presend --client <name>` pass from the last 12 hours, for that
+  campaign's own client (one receipt per client since 2026-10-13).
 - Unverified addresses (2026-09-28: 27% bounced). Guard: the gate refuses any
   row without a mailbox verifier verdict.
 - A personalized line naming an investment from purchased-file data. Guard: the

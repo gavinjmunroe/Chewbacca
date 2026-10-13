@@ -410,7 +410,20 @@ else:
         proc.terminate()
         proc.wait(timeout=5)
         listener.close()
-    check("the state file goes with the server", not state.exists())
+    # A SIGTERM is a daemon swap: the file stays so the next copy on the
+    # port keeps the token and Kyber keeps its page (10/13).
+    check("a SIGTERM leaves the state file for the next copy", state.exists())
+
+# `realm-ui stop`, asked for by name, removes it and so rotates the token.
+_saved_state_file = realm_ui.state_file
+gone_state = TMP / "stop-state.json"
+gone_state.write_text("{}")
+realm_ui.state_file = lambda: gone_state
+try:
+    realm_ui.stop(unregister=False)
+finally:
+    realm_ui.state_file = _saved_state_file
+check("realm-ui stop removes the state file, so the next start mints a new token", not gone_state.exists())
 
 # ── realm-ui open: the browser path, with fakes ─────────────────────────────
 

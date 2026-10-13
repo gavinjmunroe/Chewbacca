@@ -408,10 +408,16 @@ def stop(unregister: bool = True) -> bool:
         except ImportError:
             pass
     live = running()
-    if not live:
-        return False
-    os.kill(live["pid"], signal.SIGTERM)
-    return True
+    if live:
+        os.kill(live["pid"], signal.SIGTERM)
+    # The server leaves its state file on SIGTERM so a daemon swap keeps the
+    # pipe token (server.mjs keptToken). A stop asked for by name removes it,
+    # so the next start mints a new token.
+    try:
+        state_file().unlink()
+    except FileNotFoundError:
+        pass
+    return bool(live)
 
 
 def status() -> dict:

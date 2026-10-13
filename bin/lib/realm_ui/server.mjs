@@ -37,7 +37,6 @@ import {
   renameSync,
   statSync,
   existsSync,
-  unlinkSync,
   watchFile,
   unwatchFile,
 } from "node:fs";
@@ -512,16 +511,14 @@ if (
   }
   const { server, url } = await start(args);
   console.log(JSON.stringify({ ready: true, url }));
+  // A SIGTERM leaves the state file: it is how chewbacca-daemon moves this
+  // service to new code, and the next copy on the port keeps the token in it
+  // (keptToken), so Kyber's kept page stays loaded. Before 10/13 this removed
+  // it, and even a stop-start swap cost Kyber a reload. `realm-ui stop`
+  // removes the file itself, which is what rotates the token; a file left by
+  // a dead server is harmless, since realm_ui.running() checks the pid.
   const stop = () => {
     server.close();
-    if (args.state) {
-      try {
-        if (JSON.parse(readFileSync(args.state, "utf8")).pid === process.pid)
-          unlinkSync(args.state);
-      } catch {
-        /* gone */
-      }
-    }
     process.exit(0);
   };
   process.on("SIGTERM", stop);

@@ -291,7 +291,7 @@ def note_for(data, error: str | None, empty: str, stale_at: datetime | None = No
 
 KINDS = ("needs-you", "missing", "today", "tasks", "conversations", "people", "person", "space", "music", "files",
          "oss", "engine", "code", "notes", "github", "whatsapp", "meetings", "agents", "apps", "dash-notes",
-         "doc", "setup", "realm", "outbound")
+         "doc", "setup", "realm", "outbound", "decisions")
 # Kinds that need an argument: `person karthik`, `space school`, `engine ollama-models`.
 # `oss` is not one: it opens empty, and "what replaces Notion" seeds its query
 # with the preset {"/oss/q": "Notion"} instead.
@@ -301,7 +301,7 @@ PARAMETRIC = ("person", "space", "engine")
 def make(kind: str, arg: str = "") -> Provider:
     """A provider instance. Walk surfaces read the graph; music and files are
     thin surfaces over their own CLI and folder."""
-    from . import agents, apps, code, engine, files, github, meetings, music, notes, oss, outbound, setup, walks, whatsapp  # noqa: PLC0415  cycle-free lazy load
+    from . import agents, apps, code, decisions, engine, files, github, meetings, music, notes, oss, outbound, setup, walks, whatsapp  # noqa: PLC0415  cycle-free lazy load
     if kind == "realm":
         from . import realm_app  # noqa: PLC0415  Carlton's own interface, served by bin/realm-ui
 
@@ -325,7 +325,7 @@ def make(kind: str, arg: str = "") -> Provider:
         "music": music.Music, "files": files.Files,
         "code": code.Code, "notes": notes.Notes, "github": github.GitHub, "whatsapp": whatsapp.WhatsApp,
         "meetings": meetings.Meetings, "agents": agents.Agents, "apps": apps.Apps, "setup": setup.Setup,
-        "outbound": outbound.Outbound,
+        "outbound": outbound.Outbound, "decisions": decisions.Decisions,
     }
     if kind == "person":
         return walks.Person(arg)
@@ -363,6 +363,8 @@ ALIASES = {
     "set-up": "setup", "onboarding": "setup", "onboard": "setup", "welcome": "setup",
     "clay": "outbound", "campaign": "outbound", "campaigns": "outbound", "cold-email": "outbound",
     "cold-emails": "outbound", "sequence": "outbound",
+    "decide": "decisions", "decision": "decisions", "only-you": "decisions", "my-calls": "decisions",
+    "decision-inbox": "decisions",
 }
 
 

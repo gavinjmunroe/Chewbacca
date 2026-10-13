@@ -1965,6 +1965,8 @@ if group "hud"; then
     python3 "$ROOT/tests/test_ide_git.py"
   check  "the launcher lists only real surfaces and the hud-apps sentence reaches it, not genui" \
     python3 "$ROOT/tests/test_surface_apps.py"
+  check  "the decision inbox draws only calls with a take and receipts with proof, and a press only writes the ledger" \
+    python3 "$ROOT/tests/test_decision_inbox.py"
   check  "setup lists what's left, one press each, the recording press is the only yes, a real press registers MCP" \
     python3 "$ROOT/tests/test_surface_setup.py"
   check  "a sentence opens the right surface and a near miss goes to the model" \

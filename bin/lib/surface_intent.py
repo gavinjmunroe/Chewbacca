@@ -97,6 +97,8 @@ NOUNS = {
     # model, which can ask whether that is a person.
     "agents": r"(?:realm sessions|realm agents|the engine's sessions)",
     "outbound": r"(?:outbound|clay|clay campaigns?|campaigns?|cold emails?|cold email campaigns?|email campaigns?|sequence)",
+    # The decision inbox (bin/lib/decision_inbox.py): what only he can decide.
+    "decisions": r"(?:decisions|calls only i can make|decision inbox|calls to make)",
     # "Show me the built in hud apps" went to genui on 2026-10-05, and the
     # model drew six boxes that named two surfaces that do not exist.
     "apps": r"(?:(?:built ?in |kyber |hud )*(?:hud )?apps|(?:all )?(?:the )?surfaces|launcher|launchpad|everything (?:kyber|the hud) (?:has|can do))",
@@ -126,6 +128,12 @@ EXTRA = [
         r"^(?:what did (?:we|they|i) (?:decide|agree(?: on)?)(?: (?:on|in) (?:the|my|that) (?:call|meeting))?"
         r"|what came out of (?:my|the|that) (?:last )?(?:call|meeting)"
         r"|what (?:was|got) decided(?: (?:on|in) (?:the|my|that) (?:call|meeting))?)(?: today)?$")),
+    # "We good?" and "progress?" were typed into tabs on 10/12; the answer to
+    # both is this panel, with the calls only he can make on top.
+    ("decisions", re.compile(
+        r"^(?:what do i (?:need|have) to decide|what(?:'s|s| is) my call|what needs my (?:call|decision|ok)"
+        r"|we good|progress|any decisions(?: for me)?|what (?:do|does) (?:you|the agents) need from me)"
+        r"(?: today| right now| now)?$")),
     ("apps", re.compile(r"^(?:what (?:apps|surfaces) (?:are there|do (?:i|you) have)|what can (?:kyber|the hud) do)(?: now)?$")),
     # The rest of the install, one press each (bin/lib/surfaces/setup.py).
     # "Set up my permissions" is PERMISSIONS above, matched first.
@@ -142,7 +150,7 @@ CLOSE = re.compile(
     r"^(?:close|hide|take down|dismiss|get rid of) (?:my |the )?"
     r"(?P<what>day|today|calendar|messages|texts|mail|email|inbox|conversations|tasks|to ?dos?|people|"
     r"music|player|downloads|files|needs you|missing|notes|github|prs|code|changes|meetings|calls|granola|agents|"
-    r"outbound|clay|campaign|campaigns|"
+    r"outbound|clay|campaign|campaigns|decisions|"
     r"all(?: the)? surfaces|surfaces|everything)(?: surface| panel)?$")
 CLOSE_NAMES = {"day": "today", "calendar": "today", "texts": "conversations", "messages": "conversations",
                "mail": "conversations", "email": "conversations", "inbox": "conversations",
@@ -457,5 +465,6 @@ def perform(command: Command, run=subprocess.run, ask=None, spawn=subprocess.Pop
               "code": "What changed is up.", "notes": "Your notes are up.", "github": "GitHub's up.",
               "meetings": "Your meetings are up.", "agents": "Your agents are up.",
               "realm": "Your agents are up.",
-              "outbound": "The campaign's up."}
+              "outbound": "The campaign's up.",
+              "decisions": "Here's what only you can decide."}
     return Outcome(True, spoken.get(command.name, "It's up."))

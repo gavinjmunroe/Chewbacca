@@ -23,8 +23,18 @@ kyber-surfaces close all
 ```
 
 Kinds: `needs-you`, `missing`, `today`, `tasks`, `conversations`, `people`,
-`person <name>`, `space <name>`, `music`, `files`, `meetings`, `doc`, `setup`, `outbound`. `kyber-surfaces list` shows
+`person <name>`, `space <name>`, `music`, `files`, `meetings`, `doc`, `setup`, `outbound`, `decisions`. `kyber-surfaces list` shows
 what is open and where; `activity` shows what the panels did.
+
+`decisions` is the decision inbox: only the calls Caleb has to make, each with
+the agent's take and a Go with it press, then a count of what got done today
+and the newest receipts with proof. "We good?" and "progress?" to the bar open
+it. A call with no take is never drawn, so an agent that hands him a call
+writes it as `Ur call: <the question>. My take: <what you'd do>.` on one line,
+and a click only he can make as `BLOCKED: <the step> (<how>)`. The feed's one
+owner is bin/lib/decision_inbox.py; `decision-inbox digest` is the same feed as
+one phone text, a draft that is never sent. See
+[docs/reference/DECISION-INBOX.md](../../docs/reference/DECISION-INBOX.md).
 
 `setup` answers "set up chewbacca" and "what's left to set up": the steps
 `chewbacca welcome stack` lists, each with one Set up press that runs

@@ -49,7 +49,10 @@ FIELDS = {
     "presend": ("obj", (), "pre-send gate limits: {per_campaign_firm, per_firm_total}"),
     "voice": ("obj", ("clay",), "how mail reads: {first_name, sign_off, banned_words}"),
     "channels": ("obj", ("clay",), "where replies land: {togari_client, slack_channel}"),
-    "client_slack": ("obj", (), "the client's Slack ids: {user, me, conversations}"),
+    # In the Clay contract because `gtme ready` counts an unread-client check it
+    # can't run as a blocker: the 2026-10-13 dry-run client reached every gate
+    # PASS and still read NOT READY until this was set.
+    "client_slack": ("obj", ("clay",), "the client's Slack ids: {user, me, conversations}"),
     "report": ("obj", ("clay",), "the weekly numbers: {recipient, day}"),
     "ready": ("obj", (), "inputs `gtme ready` uses when the drafts file names none"),
     "reply_labels": ("list[obj]", (), "where reply labels are read from"),

@@ -42,7 +42,8 @@ class ConfigTest(unittest.TestCase):
             "campaign_name": "Northwind | {company} | {date} tier {tier}", "data_dir": str(self.tmp / "data"),
             "rulings_path": str(self.decisions), "refused_senders": ["^admin@"],
             "voice": {"first_name": "Riley", "sign_off": "Riley"},
-            "channels": {"togari_client": "northwind"}, "report": {"recipient": "Morgan", "day": "Friday"}}
+            "channels": {"togari_client": "northwind"}, "report": {"recipient": "Morgan", "day": "Friday"},
+            "client_slack": {"user": "U_T", "me": ["U_M"], "conversations": ["C_T"]}}
         self.solo = {"name": "Harbor Church Test", "sender_company": "Harbor Test",
                      "state_dir": str(self.tmp / "data")}
         self.cfg = write(self.tmp / "gtm" / "clients.json", {"clients": [self.clay, self.solo]})
@@ -76,7 +77,7 @@ class ConfigTest(unittest.TestCase):
         write(self.cfg, {"clients": [{"name": "Northwind Test Co", "workspaces": ["9001"]}]})
         r = self.gtme("config", "check", "--client", "northwind test co")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("contract 2 of 11 fields", r.stdout)
+        self.assertIn("contract 2 of 12 fields", r.stdout)
         self.assertIn("missing  principal", r.stdout)
 
     def test_broken_fields_are_errors(self):

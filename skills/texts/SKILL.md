@@ -332,6 +332,26 @@ moves while you draft: on 2026-10-12 Sagar sent four texts (3:54 to 3:59pm)
 asking three direct questions while six drafts answered his 3:51 message, and
 the miss only surfaced when voice-check reprinted the thread.
 
+The rest of that night's corrections, all on the same Sagar text:
+
+- Grep his own sent lines (`->`) in the thread and cut anything he already
+  said. "Bro don't repeat things we've already said that's low aura": the
+  draft re-ran Eigen's $15M (sent 10/8) and "you hired me for Amber" (sent
+  that afternoon).
+- Cut true points that don't serve the ask. He called the unissued-shares
+  question "irrelevant" and a dropped product "pointless to include".
+- No nudge after a strong message. A one-line follow-up was "protentious";
+  the silence was the move.
+- Firm words stay calm: he asked for "not sustainable" over "abusive", and
+  "gray area" read better than "cloud". Receipts from their own texts and
+  documents do the humbling, never insults.
+- When he states a new position mid-draft, say in one line where it
+  contradicts what he already sent ("for the non Amber work absolutely, I
+  refuse to do that work for free" vs "out of BMA even paid"), then build it.
+
+The version he sent answered Sagar's three numbered questions in order, then
+gave short lines on his position. Sagar: "Thank you I will think about this".
+
 ## Sending
 
 To send, use `people send`, and only when the user asked for a specific

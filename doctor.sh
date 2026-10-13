@@ -58,7 +58,13 @@ for a in "$@"; do
 done
 
 PASS=0; FAIL=0; WARN=0
-FIXED=0
+FIXED=0; SKIPPED=0
+KIT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# How to run this kit's own command on this Mac: `chewbacca` when it's on
+# PATH, else the checkout's own path. A runtime install puts nothing on PATH,
+# so the 10/12 stranger run got fix lines naming a command it didn't have.
+if command -v chewbacca >/dev/null 2>&1; then CHEW="chewbacca"; else CHEW="$KIT_ROOT/bin/chewbacca"; fi
+runnable() { case "$1" in "chewbacca "*) printf '%s' "$CHEW ${1#chewbacca }" ;; *) printf '%s' "$1" ;; esac; }
 
 declare -a PROBLEMS=()
 # Every result, for --json and for the history file. A check that only ever
@@ -78,18 +84,24 @@ ok()   { PASS=$((PASS+1)); record pass "$1" ""; logline "pass  $1"; [ "$QUIET" -
 # MCP server used to look identical.
 bad()  { local sev="${3:-major}"
          if muted "$1"; then WARN=$((WARN+1)); record muted "$1" "$sev"; return 0; fi
+         if not_installed_here; then SKIPPED=$((SKIPPED+1)); record skip "$1" "$sev"; logline "skip  $1 (not part of a runtime install)"; return 0; fi
+         set -- "$1" "$(runnable "${2:-}")" "$sev"
          FAIL=$((FAIL+1)); record fail "$1" "$sev"
          logline "FAIL[$sev]  $1${2:+ | fix: $2}"; PROBLEMS+=("[$sev] $1${2:+ -> $2}")
          [ "$JSON" -eq 1 ] || echo -e "  ${RED}FAIL${NC}  ${BLD}$sev${NC}  $1"
          [ -n "${2:-}" ] && [ "$JSON" -eq 0 ] && echo -e "        ${YLW}fix:${NC} $2"
          return 0; }
 warn() { if muted "$1"; then record muted "$1" minor; return 0; fi
+         if not_installed_here; then SKIPPED=$((SKIPPED+1)); record skip "$1" minor; logline "skip  $1 (not part of a runtime install)"; return 0; fi
          WARN=$((WARN+1)); record warn "$1" "${2:-minor}"; logline "warn  $1"
          [ "$QUIET" -eq 1 ] || echo -e "  ${YLW}warn${NC}  $1"; }
 section() { SECTION="$1"; logline ""; logline "== $1"; [ "$QUIET" -eq 1 ] || echo -e "\n${BLD}$1${NC}"; }
 # Run a repair when --fix is on, and say what it did. A checker that names a
 # problem and hands it back is doing half a job it could finish itself.
 fixable() {
+  # Never repair a part a runtime install doesn't install: --fix there
+  # would quietly turn it into a different install than the one chosen.
+  not_installed_here && return 1
   local what="$1"; shift
   if [ "$FIX" -eq 1 ]; then
     if "$@" >/dev/null 2>&1; then
@@ -107,6 +119,18 @@ CLAUDE_DIR="$HOME/.claude"
 # absent reports the install working as designed as if it were a problem. Four
 # yellow lines after a successful install reads as "it did not work".
 PROFILE="$(cat "$CLAUDE_DIR/.chewbacca-profile" 2>/dev/null || echo developer)"
+# A runtime install (setup.sh --runtime NAME, the README's checkout path)
+# writes shared context, skills and hooks and says it installs nothing else.
+# Judged as the full install it read as broken: exit 2 with 20 to 22
+# failures in the 10/12 and 10/13 stranger runs, every one for a part it
+# never installs. The full installer writes .chewbacca-profile; this doesn't.
+if [ ! -f "$CLAUDE_DIR/.chewbacca-profile" ] && ls "$HOME/.chewbacca/runtime-installs/"*.json >/dev/null 2>&1; then
+  PROFILE=runtime
+fi
+# The sections a runtime install never writes. Their findings are recorded
+# as skipped, counted, and named in the verdict, never hidden.
+RUNTIME_SKIPS="|Standards|macOS tools|The display|Documented tools|Version|Always-on imports|Kits|People|Coursework|"
+not_installed_here() { [ "$PROFILE" = runtime ] && case "$RUNTIME_SKIPS" in *"|${SECTION:-}|"*) true ;; *) false ;; esac; }
 for_profile() {
   case "$PROFILE" in
     personal) [ "$1" = "personal" ] ;;
@@ -1398,6 +1422,7 @@ fi
 # ── Verdict ───────────────────────────────────────────────────────────────────
 logline ""
 logline "$PASS passed, $WARN warnings, $FAIL failures (profile: $PROFILE)"
+[ "$SKIPPED" -gt 0 ] && logline "$SKIPPED findings skipped: not part of a runtime install"
 
 # History. "It started failing three days ago" was unanswerable.
 HIST="$HOME/.chewbacca/doctor-history.log"
@@ -1408,8 +1433,8 @@ printf '%s|%s|%s|%s|%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$PASS" "$WARN" "$FAIL"
 
 if [ "$JSON" -eq 1 ]; then
   {
-    printf '{"pass":%s,"warn":%s,"fail":%s,"fixed":%s,"profile":"%s","version":"%s","checks":[' \
-      "$PASS" "$WARN" "$FAIL" "$FIXED" "$PROFILE" "$REPO_VER"
+    printf '{"pass":%s,"warn":%s,"fail":%s,"fixed":%s,"skipped":%s,"profile":"%s","version":"%s","checks":[' \
+      "$PASS" "$WARN" "$FAIL" "$FIXED" "$SKIPPED" "$PROFILE" "$REPO_VER"
     first=1
     for r in "${RESULTS[@]}"; do
       IFS='|' read -r status message severity sect <<< "$r"
@@ -1428,6 +1453,13 @@ if [ "$JSON" -eq 1 ]; then
 fi
 
 echo ""
+# A runtime install's skipped findings, said once, so a clean verdict never
+# reads as "the whole kit works" when only part of it was installed.
+if [ "$SKIPPED" -gt 0 ]; then
+  echo -e "  This is a runtime install (context, skills and hooks), so $SKIPPED findings about"
+  echo -e "  parts it doesn't install were skipped. The full install: bash $KIT_ROOT/setup.sh --dry-run"
+  echo ""
+fi
 
 if [ "$FAIL" -eq 0 ]; then
   echo -e "${GRN}${BLD}Everything works.${NC}${GRN} $PASS checks passed.${NC}"
@@ -1448,9 +1480,9 @@ for prob in "${PROBLEMS[@]}"; do
 done
 echo ""
 echo -e "  ${BLD}Ask your active agent to repair these findings.${NC}"
-echo "    \"run chewbacca doctor and fix whatever it reports\""
+echo "    \"run $CHEW doctor and fix whatever it reports\""
 echo ""
 echo "  The full diagnostic log is at"
 echo "    $LOG"
-[ "$FIX" -eq 0 ] && echo "  Or try: chewbacca doctor --fix"
+[ "$FIX" -eq 0 ] && echo "  Or try: $CHEW doctor --fix"
 exit 2

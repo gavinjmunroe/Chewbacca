@@ -364,6 +364,7 @@ if group "doctor"; then
   check  "--json is valid JSON" bash -c "bash '$ROOT/doctor.sh' --json | python3 -m json.tool"
   check  "--json stays valid JSON when a leak is found" bash "$ROOT/tests/test_doctor_json_leak.sh"
   check  "a CLAUDE.md with no @ imports is reported, not passed" bash "$ROOT/tests/test_doctor_zero_imports.sh"
+  check  "a runtime install is judged as one: skipped parts counted and named, every printed command exists" bash "$ROOT/tests/test_doctor_runtime_profile.sh"
   expect "--json carries severities" '"severity"' bash -c "bash '$ROOT/doctor.sh' --json"
   expect "--json carries sections" '"section"' bash -c "bash '$ROOT/doctor.sh' --json"
 

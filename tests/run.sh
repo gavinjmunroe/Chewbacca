@@ -517,6 +517,8 @@ if group "gtme"; then
     bash "$ROOT/tests/portable_code.sh" "$ROOT"
   check "a post tagging a client waits for a fresh, clean gtme done" \
     bash "$ROOT/tests/client_ask_guard.sh"
+  check "agents never post in a client's Slack conversations as Caleb; Togari does" \
+    bash "$ROOT/tests/client_post_guard.sh"
   check "chewbacca pdf makes PDFs in seconds and a hand-rolled print is pointed at it" \
     bash "$ROOT/tests/chewbacca_pdf.sh"
   check "gtme-jev holds an email Jev flags or couldn't check, in one call per email" \

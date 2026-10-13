@@ -320,3 +320,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_gtme_done_misses_forwards: gtme done called 2 replies owed that were a founder-meeting yes and a Togari-forwarded OOO; read the thread first, fix done to count forwards (10/12)
 - feedback_ready_means_gtme_ready_passed: a launch is ready only when `chewbacca gtme ready` prints READY; a Zeutara launch was called "good until Jonah responds" with 1 of 14 graded, ready-guard refuses it now (10/12)
 - feedback_never_do_what_sagar_wouldnt: check every GTM change against references/sagar.md first; a GEX rewrite to 90/100 made his founder-story copy contrived ("NEVER DO SMTH SAGAR WOULDNT DO", 10/12)
+- feedback_client_channels_are_togari: agents never post in client Slack conversations as Caleb; Togari is the voice ("Everything should be togari", 13 posts from his acc 10/11-12); client-post-guard refuses

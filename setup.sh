@@ -3794,7 +3794,7 @@ echo ""
 # draft of this block said "this installer sends nothing anywhere", which is
 # false: the GitHub path below creates two repos and pushes to them.
 echo -e "  ${BLD}What leaves this Mac:${NC}"
-echo "    Your prompts go to Anthropic, the same as any Claude Code session."
+echo "    $(bash "$SCRIPT_DIR/bin/lib/prompts-go-to.sh")"
 if [ "$NO_GITHUB" -eq 1 ]; then
   echo "    Your second brain is a folder on this disk. Nothing here pushes it."
 else

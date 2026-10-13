@@ -808,6 +808,8 @@ fi
 
 # ── installer ─────────────────────────────────────────────────────────────────
 if group "installer"; then
+  check  "the install summary names who gets the prompts for the agent this Mac has" \
+    bash "$ROOT/tests/prompts_go_to.sh" "$ROOT"
   check  "--help works" bash "$ROOT/setup.sh" --help
   expect "--dry-run defaults bypass off" "bypass perms:    no" bash "$ROOT/setup.sh" --dry-run --name CI --repo-dir "$TMP/ci"
   check  "--dry-run writes nothing" bash -c "test ! -d '$TMP/ci'"

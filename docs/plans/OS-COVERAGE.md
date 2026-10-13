@@ -10,21 +10,34 @@ the History database of both profiles. Chrome's `visit_duration` counts a tab
 that stayed open in the background, so its hours overstate time looked at and
 only the ranking is trusted. Re-measure before reordering.
 
+## Re-measured 2026-10-13, the 7 days from 10/7
+
+From `screen-time` and `screen-time --sites`, which now does the Chrome split
+from copies of every profile's History. 63 h on this Mac. VS Code 22.0 h and
+the Claude app 11.8 h belong to the IDE work. Of Chrome's 14.4 h: github.com
+3.5 h (40 repo pages, 37 settings and access pages), the GTM table site 3.1 h,
+google.com search 1.8 h, usctts.com 0.8 h, linkedin.com 0.8 h, mail 0.3 h,
+docs 0.3 h, calendar 0.2 h. Messages 6.5 h, Slack 1.7 h, FaceTime 1.5 h,
+Preview 0.9 h, Granola 0.9 h, WhatsApp 0.9 h. Slack reached the graph that
+day (row below) and Doc edits got a can-edit check; every other gap is on the
+work ledger as replace-apps-2026-10-13-N. Full table:
+~/.chewbacca/overnight/d1013/REPORT-replace-apps.md.
+
 ## Native apps, foreground hours in 14 days
 
-| App      | Hours | Replaced by                                          | Status      |
-| -------- | ----- | ---------------------------------------------------- | ----------- |
-| Chrome   | 15.8  | the sites below, one by one                          | see below   |
+| App      | Hours | Replaced by                                                                                                                            | Status      |
+| -------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| Chrome   | 15.8  | the sites below, one by one                                                                                                            | see below   |
 | VS Code  | 11.7  | session surfaces: Send types into open idle sessions, Fork and send otherwise; `code` surface: changed repos, diff, preview, read only | building    |
-| Messages | 7.1   | `messages`, `person`, `needs-you` surfaces           | building    |
-| FaceTime | 3.4   | a call surface: start, accept, who is on             | not started |
-| Codex    | 3.3   | session surfaces, Codex transcripts                  | building    |
-| Notes    | 1.5   | `notes` surface over Apple Notes via `mac notes`: newest 6, preview, append one line to a text-only note | partial     |
-| Granola  | 0.8   | `meetings` surface over Anarlog's CLI: calls, decisions, action items as guessed tasks, transcript pages; ingested into the graph | partial     |
-| Slack    | 0.7   | a Slack surface over the Slack MCP, read first       | not started |
-| Finder   | 0.7   | `files` surface                                      | building    |
-| WhatsApp | 0.4   | threads into the graph via `wacli`                   | not started |
-| Spotify  | 0.2   | `music` surface via `hud-music`                      | building    |
+| Messages | 7.1   | `messages`, `person`, `needs-you` surfaces                                                                                             | building    |
+| FaceTime | 3.4   | a call surface: start, accept, who is on                                                                                               | not started |
+| Codex    | 3.3   | session surfaces, Codex transcripts                                                                                                    | building    |
+| Notes    | 1.5   | `notes` surface over Apple Notes via `mac notes`: newest 6, preview, append one line to a text-only note                               | partial     |
+| Granola  | 0.8   | `meetings` surface over Anarlog's CLI: calls, decisions, action items as guessed tasks, transcript pages; ingested into the graph      | partial     |
+| Slack    | 0.7   | a Slack surface over the Slack MCP, read first                                                                                         | not started |
+| Finder   | 0.7   | `files` surface                                                                                                                        | building    |
+| WhatsApp | 0.4   | threads into the graph via `wacli`                                                                                                     | not started |
+| Spotify  | 0.2   | `music` surface via `hud-music`                                                                                                        | building    |
 
 ## Chrome sites, ranked (Work profile, the one with the volume)
 

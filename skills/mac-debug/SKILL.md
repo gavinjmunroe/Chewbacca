@@ -22,6 +22,7 @@ chewie doctor --secure-input     # is the keyboard being blocked
 ## By symptom
 
 ### Typing does nothing, no error
+
 **Secure Input.** A password field has focus somewhere, and macOS discards synthetic
 keystrokes with no error. It is a process-global reference-counted flag, so one stuck
 app starves the whole system.
@@ -34,6 +35,7 @@ Nonzero is the pid holding it. Fix: `open -a Finder`, retry. If an app is stuck,
 and unfocus it, or quit it.
 
 ### An app reopens on its own after you quit or force quit it
+
 **Something sent it an AppleScript.** `tell application "X"` launches X if it isn't
 running, and `mac mail`, `mac calendar` and friends do exactly that. A background
 poller turns one launch into "it keeps coming back". Find the poller:
@@ -49,10 +51,12 @@ closed. On 2026-10-09 kyber-surfaces read unread mail every 60 s and reopened Ma
 after every force quit (b9b9323e, test in tests/test_osgraph.py).
 
 ### Clicks do nothing from inside an app
+
 **App Sandbox** silently blocks `CGEvent.post`. No error. No fix inside the sandbox;
 this is why every serious macOS automation tool ships outside the App Store.
 
 ### Accessibility tree is empty or all elements unnamed
+
 **Chromium builds it lazily.** Chrome, Edge, VS Code, Slack, Discord, Notion, Figma,
 Spotify.
 
@@ -67,48 +71,70 @@ If that returns `kAXErrorAttributeUnsupported` (-25208) on a non-Chromium app, t
 genuinely has no tree and you are at layer 5.
 
 ### Clicks land at double the offset
+
 **Retina.** Screenshots are 2x device pixels; `CGEvent` takes screen points. Halve the
 coordinate, or stop using coordinates and use refs.
 
 ### Clicks land on the wrong monitor
+
 Multi-display origins go negative. Use `CGGetActiveDisplayList` geometry, do not assume
 0,0.
 
 ### Clicking a ref hits the wrong element
+
 **Stale ref.** It was scoped to a snapshot from before the UI changed. Re-snapshot after
 any sheet, navigation, resize, or scroll.
 
 ### AppleScript errors
-| Code | Meaning | Fix |
-|------|---------|-----|
-| -1743 | Not authorized | `tccutil reset AppleEvents`, retry in the foreground |
-| -600 | App not running | `open -a "App"`, then poll until System Events sees it |
-| -1712 | Timeout (~2min) | `with timeout of 300 seconds`. Check for a blocking modal |
-| -1728 | Object does not exist | Not permissions. Read the app's dictionary |
-| -1750 | errOSASystemError | Usually TCC, reported uselessly |
+
+| Code  | Meaning               | Fix                                                       |
+| ----- | --------------------- | --------------------------------------------------------- |
+| -1743 | Not authorized        | `tccutil reset AppleEvents`, retry in the foreground      |
+| -600  | App not running       | `open -a "App"`, then poll until System Events sees it    |
+| -1712 | Timeout (~2min)       | `with timeout of 300 seconds`. Check for a blocking modal |
+| -1728 | Object does not exist | Not permissions. Read the app's dictionary                |
+| -1750 | errOSASystemError     | Usually TCC, reported uselessly                           |
 
 ### `defaults write` had no effect
+
 Apps cache preferences in memory and rewrite on quit. Write with the app closed, or
 restart it. `killall cfprefsd` if a read looks stale.
 
 ### `chat.db` rows have NULL text
+
 Bodies moved to `attributedBody` on Ventura and later. Decode the typed stream, or use
 `mac_messages_mcp`.
 
 ### "database is locked"
+
 Open read-only (`file:...?mode=ro`) or copy to `/tmp` first.
 
 ### `do JavaScript` fails in Safari
+
 Develop > Allow JavaScript from Apple Events is off by default. Enable the Develop menu
 in Safari > Settings > Advanced first.
 
 ### The web task dies at a login page
+
 A fresh Playwright browser has no profile. Attach to the user's running Chrome:
 `open -a "Google Chrome" --args --remote-debugging-port=9222`.
 
 ### It worked yesterday
+
 Almost always: the TCC prompt was dismissed once and never returns, or the host app
 changed (different terminal, an update that re-signed the binary). `chewie doctor`.
+
+### The Dock or "nav bar" twitches like something is about to open
+
+Caleb, 2026-10-13: "My nav bar keeps oscialling back and forth like smth is gonna
+open but then nothing spawns in". The Dock shifts to make room for a short-lived
+app that dies before its icon draws. Sample, don't guess: run
+`lsappinfo list | grep -E '^ *[0-9]+\) "'` ten times a second for a few seconds
+and count names whose ASN keeps changing. Then walk `ps -o ppid=` up from one of
+them to the loop that spawns it. That day it was the inbox read falling back to
+`clay-inbox`, which called the inbox read again: 7 nested copies, each launching
+a Chrome. Never patch the app that flashes (appctl was BackgroundOnly and
+innocent) before the parent chain says who launched it.
 
 ## Inspecting an element by hand
 

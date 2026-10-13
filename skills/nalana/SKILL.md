@@ -113,3 +113,35 @@ the MCP and write it to a 0600 scratch file, never print it). POST
 then poll `/state` until `is_processing` and `is_thinking` are both false; the
 last `conversation` entry carries its own review score. It binds to the
 active object, so save the scene first.
+
+## Logo iteration: never-dos from the TTS helmet nights (2026-10-11 and 10-12)
+
+Thirty-six corrections across two nights, most of them the same few mistakes.
+
+- **Never leave the version he approved.** He said "bro this is TUFFFFFF" exactly
+  once, at v39. Fifty versions later he wrote "wtf is this shit" and "Scan this
+  whole chat and then lock in". Before any rebuild, grep the transcript for his
+  approvals and build on the approved file. A new pipeline (flat sweeps, puffy
+  extrusions, an analytic shell) is a reset he has to ask for.
+- **Never patch a cylinder into a head.** A revolved ring plus a dome reads as "a
+  trash can" every time ("THE TRASH CAN IS BACK!", "2 trash cans/target red balls
+  got fused together poorly", "Should it rlly just be a cylinder with a lid?").
+  The head reads from silhouette: brow shelf, cheek blades pointing past the
+  chin, egg bowl, neck guard. Change the outline, not the surface.
+- **Never draw a letter onto armor.** "The S CANT LOOK FORCED". The S is the
+  negative space between real parts (cheek edge on the left, the neck guard's
+  curled inside on the right), seen from the logo angle, "not the side".
+- **His spatial descriptions are the spec, read twice.** "the top of the back
+  part should be much higher up, above where the top of the front mask is... then
+  the back curls back inward so the INSIDE fills the gap, in the background not
+  the foreground". Restate it in one line before modeling, and build that, not a
+  near cousin (a scroll lip, a wave fin and a skirt flap all missed).
+- **One material per color.** "the decoration brought in 2 new textures which
+  sucks for a logo". Noise textures read Object coords of the main mesh so scale
+  matches on every part.
+- **No dark fills and no Vader.** "the fake black part looks gimmicky", "a trojan
+  not darth vader". Insides are see-through or red.
+- **Never claim a win before he sees it.** A render rated 8/10 at 11pm drew "wtf is
+  this shit" at 5:46am. Report what reads and what doesn't, plainly.
+- **Every render, three sizes.** Full, 128px and 48px before it goes in
+  ~/Downloads/TTS logos.

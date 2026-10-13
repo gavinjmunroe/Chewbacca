@@ -679,6 +679,15 @@ class UnwatchedCodeTests(unittest.TestCase):
         self.assertEqual(self.drew_on_screen(), [])
         self.assertEqual(os.listdir(os.path.join(self.tmp, "approvals", "pending")), [])
 
+    def test_todays_usc_order_take_from_a_test_draws_nothing(self):
+        # 1:52pm exactly: an order always asks for a press, mode file or not.
+        with mock.patch.dict(os.environ, {"CHEWBACCA_SEND_APPROVALS": os.path.join(self.tmp, "a"),
+                                          "CHEWBACCA_VERDICT_LOG": os.path.join(self.tmp, "v.tsv")}), \
+                mock.patch.object(sa, "_policy_refusal", return_value=None):
+            with self.assertRaises(sa.NoApproval):
+                sa.take("usc-order", "Bowls", "1 bowl", chain=AGENT_CHAIN, always_press=True)
+        self.assertEqual(self.drew_on_screen(), [])
+
     def test_each_marker_alone_means_unwatched(self):
         live = {"env": {}, "argv": ["/k/bin/people"], "modules": {}, "chain": [(9, "/bin/zsh"), (8, "claude")]}
         self.assertIsNone(sa.unwatched(**live))

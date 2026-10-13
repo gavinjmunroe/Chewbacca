@@ -524,6 +524,10 @@ if group "gtme"; then
   # CHECKED, an expired pre-send receipt and "L.P." in the firm names.
   check "gtme ready says READY only when every campaign passes every gate" \
     python3 "$ROOT/tests/test_gtme_ready.py"
+  # 2026-10-13: 97 executable lines hard-coded one client and its rulings had
+  # two homes; the clients.json entry is the contract a second client fills in.
+  check "gtme config checks a client entry, resolves its one workspace, keeps rulings in one file" \
+    python3 "$ROOT/tests/test_gtme_config.py"
   check "shipped code works on anyone's machine: no home paths, personal mailboxes or client ids" \
     bash "$ROOT/tests/portable_code.sh" "$ROOT"
   check "a post tagging a client waits for a fresh, clean gtme done" \

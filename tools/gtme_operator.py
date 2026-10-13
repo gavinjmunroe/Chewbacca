@@ -777,11 +777,26 @@ def add_ruling(client: str, rule: str, who: str, source: str | None = None) -> d
         entry = {"name": client, "workspaces": []}
         cfg["clients"].append(entry)
     today = utc_now().date().isoformat()
-    for r in entry.get("rulings") or []:
+    # A client with a rulings_path keeps its rulings in that DECISIONS.json and
+    # nowhere else: until 2026-10-13 this wrote to clients.json while the
+    # client-rulings hook and the team read DECISIONS.json, two homes for one rule.
+    owner = Path(os.path.expanduser(entry["rulings_path"])) if entry.get("rulings_path") else None
+    if owner is not None:
+        doc = read_json(owner, None)
+        if not isinstance(doc, dict) or not isinstance(doc.get("rulings"), list):
+            raise ValueError(f"{owner} has no rulings list, so the ruling has nowhere to go")
+        existing = doc["rulings"]
+    else:
+        existing = entry.get("rulings") or []
+    for r in existing:
         if _same(r.get("rule", ""), rule) and (r.get("status") or "active") == "active":
             return r
     ruling = {"id": slug(rule)[:48], "rule": rule, "who": who, "date": today,
               "source": " ".join(safe(source or f"chewbacca gtme rule, {today}", 200).split()), "status": "active"}
+    if owner is not None:
+        doc["rulings"].append(ruling)
+        write_json(owner, doc)
+        return dict(ruling, where=str(owner))
     entry.setdefault("rulings", []).append(ruling)
     write_json(config_path(), cfg)
     return ruling
@@ -817,6 +832,11 @@ def rulings_for(client: str) -> list[dict]:
     own = own_decisions(client)
     if own and own.resolve() not in {f.resolve() for f in files}:
         files.append(own)
+    for c in cfg.get("clients") or [] if isinstance(cfg, dict) else []:
+        if isinstance(c, dict) and _same(c.get("name", ""), client) and c.get("rulings_path"):
+            named = Path(os.path.expanduser(c["rulings_path"]))
+            if named.exists() and named.resolve() not in {f.resolve() for f in files}:
+                files.append(named)
     for path in files:
         d = read_json(path, {})
         if not isinstance(d, dict):
@@ -2223,7 +2243,8 @@ def cmd_rule(a, t: Teacher) -> int:
     except ValueError as err:
         print(f"chewbacca gtme rule: {err}", file=sys.stderr)
         return 2
-    t.say(f"Ruling saved for {a.client}: \"{r['rule']}\" ({r['who']}, {r['date']}).")
+    t.say(f"Ruling saved for {a.client}: \"{r['rule']}\" ({r['who']}, {r['date']})"
+          + (f" in {r['where']}." if r.get("where") else "."))
     t.say("brief, next and report now check every recommendation against it and say so, naming "
           f"{r['who']}, when one would cross it.")
     return 0
@@ -2261,6 +2282,9 @@ def main(argv=None) -> int:
     if argv and argv[0] == "ready":
         import gtme_ready
         return gtme_ready.main(argv[1:])
+    if argv and argv[0] == "config":
+        import gtme_config
+        return gtme_config.main(argv[1:])
     if argv and argv[0] in ("sender", "find", "verify", "batch", "send", "inbox", "reply", "today", "package",
                             "costs", "autosend", "share", "copy", "week"):
         import gtme_solo

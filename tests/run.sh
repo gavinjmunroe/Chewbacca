@@ -273,6 +273,7 @@ if group "people"; then
       bash "$ROOT/tests/people_send.sh" "${P[@]}"
     # 2026-10-10: one inbox for every network. Bridged rows land one person
     # per address, reply in their own room, and nothing leaves in a test.
+    check "a WAL store with no -wal or -shm still reads, and only reads" /usr/bin/python3 "$ROOT/tests/test_sqlite_ro.py"
     check "chewbacca chat files bridged threads by address, sends only to their room, and never sends in a test" \
       bash "$ROOT/tests/chewbacca_chat.sh" "$ROOT"
     check "texts owed lists who is waiting and drafts wait for a number" \

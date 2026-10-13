@@ -25,6 +25,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import osgraph
+from sqlite_ro import open_ro
 from osgraph import Graph, Identities, Node, me_node, person_node, space_node
 
 SOURCE = "chats"
@@ -60,7 +61,7 @@ def chats(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
         return report
     since = (ctx.now() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
     marks = ",".join("?" * len(BRIDGED))
-    db = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=2)
+    db = open_ro(path, timeout=2)
     try:
         rows = db.execute(
             f"""SELECT msg_id, person_id, who, handle, from_me, body, sent_at, room, source FROM messages

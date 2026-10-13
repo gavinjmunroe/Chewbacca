@@ -40,6 +40,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from sqlite_ro import open_ro
+
 NODE_TYPES = frozenset({
     "Person", "Thread", "Message", "MailItem", "Event", "Assignment", "Task",
     "Project", "Space", "Track", "File", "Day",
@@ -440,7 +442,7 @@ class Identities:
         if not self.ok:
             return
         try:
-            db = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=2)
+            db = open_ro(path, timeout=2)
         except sqlite3.Error:
             self.ok = False
             return

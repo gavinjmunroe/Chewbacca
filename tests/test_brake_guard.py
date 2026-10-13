@@ -51,6 +51,11 @@ for cmd in ["rm -rf ~", "rm -rf ~/", "rm -rf ~/*", "rm -fr $HOME", "rm -Rf /", "
             "rm -vrf ~", "cd /tmp; rm -rf ~/.", "rm -rf $HOME/../" + Path.home().name, 'bash -c "rm -rf ~"',
             "true & rm -rf ~", "(rm -rf ~)", "env FOO=1 rm -rf /", "git push -f --all", "git push --mirror -f",
             f"git -C {ON_MAIN} push -f", "git checkout main && git push -f", "git push -f origin --branches",
+            # The review of 523b677d (10/13): each of these reached the guard and got through.
+            "rm -rf ${HOME}", 'rm -rf "${HOME}"', "cd ~ && rm -rf .", "cd ~ && rm -rf *", "rm -rf ~/..",
+            'bash -lc "rm -rf ~"', 'bash -c "echo hi; rm -rf ~"', "sudo -u me rm -rf ~", "nice -n 5 rm -rf ~",
+            "timeout 9 rm -rf ~", "eval rm -rf ~", 'echo "$(rm -rf ~)"', "{ rm -rf ~; }",
+            'git push --force origin "$(git branch --show-current)"', "git push -f origin $BR",
             "git push -f origin 'refs/heads/*:refs/heads/*'", "git push -f origin :", "GIT_DIR=x git push -f",
             "git --git-dir=x push -f origin HEAD"]:
     code, err = run(cmd)
@@ -59,11 +64,16 @@ for cmd in ["git push -f", "git push -f origin HEAD", f"git -C {ON_FEAT} push -f
             "git push -f origin HEAD:refs/heads/feat/y"]:
     code, err = run(cmd, cwd=ON_FEAT)
     check(f"lets through on a feature branch: {cmd}", code == 0, (code, err))
-for cmd in ["rm -rf ./build", "rm -rf ~/code/tmp", "rm -rf node_modules", 'echo "rm -rf ~"',
+for cmd in ['echo "a && rm -rf ~ && b"', f"cd {ON_FEAT} && git push --force-with-lease",
+            "git push --force-if-includes origin main", 'rm -rf "$(mktemp -d)"', "rm -rf .", "rm -rf *",
+            "find . -name x -exec rm -rf {} +", "cd ~/code && rm -rf old-thing",
+            "rm -rf ./build", "rm -rf ~/code/tmp", "rm -rf node_modules", 'echo "rm -rf ~"',
             "grep -n 'rm -rf ~' notes.md", "git push origin main", "git push --force origin feat/x",
             "git push -f origin my-branch", "git commit -m 'never git push -f main'"]:
     code, err = run(cmd)
     check(f"lets through: {cmd}", code == 0, (code, err))
+code, _ = run("rm -rf *", cwd=Path.home())
+check("rm -rf * in your home folder is refused", code == 2)
 code, _ = run("rm -rf ~", tool="Write")
 check("only Bash is judged", code == 0)
 _, err = run("rm -rf ~")

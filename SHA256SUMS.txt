@@ -7,7 +7,7 @@ b9b8f16866a8894bc088331065eb4cc6aa80fe0df2c86c915f10e95833e59f1a  .claude/hooks/
 5befb13c6a377810d4fd502103207909db1b9eb16631f1ead0d576a9a6a5b85a  .claude/hooks/auto-push.sh
 a6727f860fc6578e607364d75a920f71f23a3f69d6110e2c5a7a8772cf9d901a  .claude/hooks/brain-recall.sh
 25f5c8bf4b70229fa7b02115256a7ed742c5cc5cb5743650a9f87f86a97b18ee  .claude/hooks/brain-sync.sh
-731cefd94bb8a99560773eeaf138aea9b6a98402531f0610e1fc26c3f4203bdf  .claude/hooks/brake-guard.sh
+54efaabd0194e422e92c790553abc3a65ce9933cc6e88402510eff655369d4f8  .claude/hooks/brake-guard.sh
 266509fe7ac9f31bc190a80ef4417888e681b57bd51ce3f14092896e8318742a  .claude/hooks/browser-ux-guard.sh
 17c4fd1f57b4e8b47a0aec13542ee45c4ee71150849becfe18063cf702c3db18  .claude/hooks/chat-approval.sh
 3458c4a234cc71ffdb2bbaa69dd8852f9b6eeae5087552f9c404f6de898cbfb5  .claude/hooks/chatdb-guard.sh

@@ -34,13 +34,14 @@ closed (so any prompt would fail the run), and stops the clock when the week
 line prints. Then it checks every backup against the original's SHA-256, runs
 the undo, and checks every config is back byte for byte.
 
-Three runs on 2026-10-13, a 14-core Mac under load 25 to 34 from other work:
+Four runs on 2026-10-13, a 14-core Mac under load 23 to 34 from other work (run 4 is the final code, after review fixes):
 
 | Run | Load | Clone | Clone to first win | Prompts | Errors |
 | --- | --- | --- | --- | --- | --- |
 | 1 | 33.6 | 4.8 s | 6.2 s | 0 | 0 |
 | 2 | 26.0 | 2.1 s | 3.4 s | 0 | 0 |
 | 3 | 25.4 | 2.6 s | 4.7 s | 0 | 0 |
+| 4 | 23.1 | 2.0 s | 3.2 s | 0 | 0 |
 
 Every run: 5 of 5 backups matched the original, each person's own entries
 (`theirs` MCP servers, `their-model`) survived, and undo restored all 5 files.

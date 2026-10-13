@@ -10,7 +10,7 @@ git clone --depth 1 https://github.com/calebnewtonusc/Chewbacca && bash Chewbacc
 ```
 
 On a fresh clone in a scratch home folder with all five agents present, that
-line printed in 3.4 to 6.2 seconds with no prompts (3 runs). Every number has a
+line printed in 3.2 to 6.2 seconds with no prompts (4 runs). Every number has a
 receipt you can rerun: [three showcases](docs/showcases/README.md).
 
 ## Start with the agent you already use
@@ -82,7 +82,7 @@ publication. Use `skills/setup/SKILL.md` for a requested setup.
 
 <!-- BEGIN GENERATED: counts -->
 
-One command installs **57 slash commands, 192 skills (71 written here, 8 cloned from upstream, 113 from 8 skill packs), 7 MCP servers, 84 hooks, 4 subagents, 9 command-line tools and 12 always-on standards (plus 4 that load only when the work calls for them).** About 873,000 lines, every one of them plain text you can read.
+One command installs **57 slash commands, 192 skills (71 written here, 8 cloned from upstream, 113 from 8 skill packs), 7 MCP servers, 84 hooks, 4 subagents, 9 command-line tools and 12 always-on standards (plus 4 that load only when the work calls for them).** About 874,000 lines, every one of them plain text you can read.
 
 <!-- END GENERATED: counts -->
 

@@ -7,6 +7,7 @@ business has. This runs the rest on their own Mac, from their own Gmail:
 
     chewbacca gtme sender --client X --name "Dana Ruiz" --address "12 Main St, Austin TX"
     chewbacca gtme find   --client X        emails + a sourced fact from each company's own site
+    chewbacca gtme verify --client X [--spend N]   optional: check each email through treg first
     chewbacca gtme batch  --client X        today's emails, frozen, shown in full, with an id
     chewbacca gtme send   --client X --batch ID [--dry-run]
     chewbacca gtme inbox  --client X        replies sorted; opt-outs and bounces suppressed
@@ -294,8 +295,20 @@ def cmd_find(a) -> int:
         out.append({**{k: r.get(k, "") for k in op.LIST_COLUMNS}, "email": addr, "email_source": where,
                     "role_inbox": "yes" if addr and ROLE.match(addr) else "", "site_fact": fact,
                     "site_fact_source": fact_url})
+    # A rerun of find keeps what was already paid for: verdicts, and emails a
+    # paid lookup found, which the site still won't print.
+    old = d / "leads.csv"
+    prior = list(csv.DictReader(old.open())) if old.exists() else []
+    known = {r["email"].lower(): r.get("email_verdict", "") for r in prior if r.get("email")}
+    bought = {(r.get("company"), r.get("website"), r.get("name")): r for r in prior
+              if (r.get("email_source") or "").startswith("treg ")}
+    for r in out:
+        paid_row = bought.get((r.get("company"), r.get("website"), r.get("name")))
+        if not r["email"] and paid_row:
+            r["email"], r["email_source"] = paid_row["email"].lower(), paid_row["email_source"]
+        r["email_verdict"] = known.get(r["email"], "") if r["email"] else ""
     paid = paid_lookups(a, out) if a.paid else None
-    cols = op.LIST_COLUMNS + ["email_source", "role_inbox", "site_fact", "site_fact_source"]
+    cols = op.LIST_COLUMNS + ["email_source", "role_inbox", "site_fact", "site_fact_source", "email_verdict"]
     with (d / "leads.csv").open("w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=cols)
         w.writeheader()
@@ -326,7 +339,7 @@ def paid_lookups(a, rows: list[dict]) -> str:
     spend_file = cdir(a.client) / "spend.jsonl"
     customer = op.slug(a.client)
     limit = a.spend if a.spend is not None else 0.0
-    spent, tried, hit = 0.0, 0, 0
+    spent, tried, hit, unsure = 0.0, 0, 0, 0
     for r in want:
         if a.spend is None and tried == 1:
             break
@@ -340,9 +353,17 @@ def paid_lookups(a, rows: list[dict]) -> str:
             return f"Paid lookups stopped: {err}"
         tried += 1
         spent += res["cost_usd"]
-        if res["email"] and res.get("verdict") not in ("invalid", "undeliverable"):
-            hit += 1
+        # Only a mailbox the check called valid. catch_all, risky and unknown
+        # were all let through before 2026-10-13; see treg_client.SENDABLE.
+        # A paid-for address is kept either way, with its verdict, so batch
+        # holds it and the next run never buys the same lookup again.
+        if res["email"]:
             r["email"], r["email_source"] = res["email"], f"treg {res['served_by'] or 'finder'} {res['call_id']}"
+            r["email_verdict"] = res.get("verdict") or "unknown"
+            if r["email_verdict"] == treg_client.SENDABLE:
+                hit += 1
+            else:
+                unsure += 1
     left = len(want) - tried
     if a.spend is None:
         each = max(spent, 0.0001)
@@ -350,8 +371,77 @@ def paid_lookups(a, rows: list[dict]) -> str:
                 f"The other {left} would cost about ${each * left:.2f} at that rate, up to "
                 f"${treg_client.FIND_MAX_USD * left:.2f} at the per-lookup cap. Nothing more was spent; "
                 f"approve an amount with --spend.")
-    return (f"Paid lookups: {tried} tried, {hit} found, ${spent:.2f} spent of the ${limit:.2f} approved. "
-            f"{left} left.")
+    kept_out = (f" {unsure} more came back but didn't verify as a live mailbox, so batches hold them."
+                if unsure else "")
+    return (f"Paid lookups: {tried} tried, {hit} found and verified, ${spent:.2f} spent of the ${limit:.2f} "
+            f"approved. {left} left.{kept_out}")
+
+
+def cmd_verify(a) -> int:
+    """Checks each lead's email with treg's routed verifier before it goes out
+    from their own inbox, where a bounce costs the person's own sender
+    reputation. Optional: with no treg token it says so and changes nothing.
+    Same gate as paid lookups: no --spend prices ONE check and stops."""
+    plan = plan_of(a.client)
+    pkg = package_of(plan)
+    d = cdir(a.client)
+    leads_csv = d / "leads.csv"
+    if not leads_csv.exists():
+        raise Refused(f"No leads yet. Run `chewbacca gtme find --client \"{a.client}\"` first.")
+    with leads_csv.open() as f:
+        reader = csv.DictReader(f)
+        cols, rows = list(reader.fieldnames or []), list(reader)
+    if "email_verdict" not in cols:
+        cols.append("email_verdict")
+    off = suppressed(a.client)
+    want = [r for r in rows if r.get("email") and not r.get("email_verdict") and r["email"].lower() not in off]
+    if not want:
+        print("Every lead with an email already has a verdict. Nothing to check.")
+        return 0
+    if not treg_client.token():
+        print(f"{len(want)} emails aren't verified, and there's no treg token on this Mac, so nothing was checked. "
+              "Verifying is optional: sign in at treg.to and save the token to the Keychain as treg-token "
+              "to check them before they go out.")
+        return 0
+    customer, limit = op.slug(a.client), a.spend if a.spend is not None else 0.0
+    spent, tried, counts, stop = 0.0, 0, {}, ""
+
+    def save():
+        with leads_csv.open("w", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=cols)
+            w.writeheader()
+            for r in rows:
+                w.writerow({k: op.csv_cell(str(r.get(k) or "")) for k in cols})
+
+    # Saved after every check, so a verdict already paid for survives Ctrl-C.
+    for r in want:
+        if a.spend is None and tried == 1:
+            break
+        if a.spend is not None and spent + treg_client.VERIFY_MAX_USD > limit:
+            break
+        try:
+            res = treg_client.verify_email(email=r["email"], customer=customer, spend_file=d / "spend.jsonl",
+                                           budget_usd=pkg["data_budget_usd"], now=op.utc_now())
+        except treg_client.Refused as err:
+            stop = f" Stopped: {err}"
+            break
+        tried += 1
+        spent += res["cost_usd"]
+        r["email_verdict"] = res["verdict"]
+        counts[res["verdict"]] = counts.get(res["verdict"], 0) + 1
+        if res["verdict"] == "invalid":
+            suppress(a.client, r["email"], f"treg verify: invalid ({res['served_by'] or 'verifier'} {res['call_id']})")
+        save()
+    left = len(want) - tried
+    tally = ", ".join(f"{n} {v}" for v, n in sorted(counts.items())) or "none"
+    if a.spend is None:
+        print(f"Priced one check: ${spent:.4f}, {tally}. The other {left} would cost up to "
+              f"${treg_client.VERIFY_MAX_USD * left:.2f} at the per-check cap. Nothing more was spent; approve an "
+              f"amount with --spend.{stop}")
+    else:
+        print(f"Verified {tried}: {tally}. ${spent:.2f} spent of the ${limit:.2f} approved, {left} left. Invalid "
+              f"addresses are suppressed; catch_all, risky and unknown are held out of batches.{stop}")
+    return 0
 
 
 def cmd_package(a) -> int:
@@ -596,6 +686,9 @@ def cmd_batch(a) -> int:
                 "line": lead["line"], "line_source": extra.get("source") or "",
                 "body": f"{body}\n\n{footer(sender)}"}
         bad = problems(mail)
+        verdict = (r.get("email_verdict") or "").strip()
+        if verdict and verdict != treg_client.SENDABLE:
+            bad.append(f"the email verified as {verdict}, not a live mailbox")
         if plan.get("require_line") and not lead["line"]:
             bad.append("the first email needs its personal line and this lead has none yet")
         (held if bad else mails).append({**mail, "held_for": bad} if bad else mail)
@@ -1157,6 +1250,9 @@ def main(argv=None) -> int:
     p.add_argument("--limit", type=int, default=200)
     p.add_argument("--paid", action="store_true", help="look up missing emails through treg, billed to this customer")
     p.add_argument("--spend", type=float, help="dollars approved for paid lookups (without it: price one only)")
+    p = sub.add_parser("verify", help="check each lead's email through treg before it goes out (optional)")
+    p.add_argument("--client", required=True)
+    p.add_argument("--spend", type=float, help="dollars approved for checks (without it: price one only)")
     p = sub.add_parser("package", help="what this customer's subscription includes, and what it costs us")
     p.add_argument("--client", required=True)
     p.add_argument("--data-budget", dest="data_budget_usd", type=float)
@@ -1210,7 +1306,7 @@ def main(argv=None) -> int:
     try:
         if shared:
             sync_pull(a.client)
-        code = {"sender": cmd_sender, "find": cmd_find, "batch": cmd_batch, "send": cmd_send,
+        code = {"sender": cmd_sender, "find": cmd_find, "verify": cmd_verify, "batch": cmd_batch, "send": cmd_send,
                 "inbox": cmd_inbox, "reply": cmd_reply, "today": cmd_today, "package": cmd_package,
                 "costs": cmd_costs, "autosend": cmd_autosend, "share": cmd_share,
                 "copy": cmd_copy, "week": cmd_week}[a.cmd](a)

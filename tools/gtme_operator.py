@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import functools
 import html
 import json
 import os
@@ -589,6 +590,17 @@ def draft_copy(ans: dict, cta: str) -> list[dict]:
     ]
 
 
+@functools.lru_cache(maxsize=1)
+def treg_token() -> str:
+    """treg is an optional engine: detected here, never required. Cached, since
+    the Keychain read is a subprocess and build_plan runs often."""
+    try:
+        import treg_client
+    except ImportError:
+        return ""
+    return treg_client.token()
+
+
 def plan_steps(plan: dict, clay_connected: bool) -> list[dict]:
     c = plan["client"]
     test = plan["first_test"]["contacts"]
@@ -611,6 +623,14 @@ def plan_steps(plan: dict, clay_connected: bool) -> list[dict]:
                                                 f"--address \"...\""},
             {"do": "Find each company's email and a fact on its own website", "cost": "free",
              "gate": "read only, no approval", "command": f"chewbacca gtme find --client \"{c}\""},
+        ]
+        if treg_token():
+            # Only offered where treg is set up; the path works without it.
+            steps.append({"do": "Price ONE email check through treg, then approve the rest",
+                          "cost": "up to 1.5 cents a check, billed to this client",
+                          "gate": "needs your approval for any amount past the first check",
+                          "command": f"chewbacca gtme verify --client \"{c}\""})
+        steps += [
             {"do": "Today's batch: read every email, then ok it in chat", "cost": "free",
              "gate": "needs your ok (it sends email)", "command": f"chewbacca gtme today --client \"{c}\""},
         ]
@@ -2241,8 +2261,8 @@ def main(argv=None) -> int:
     if argv and argv[0] == "ready":
         import gtme_ready
         return gtme_ready.main(argv[1:])
-    if argv and argv[0] in ("sender", "find", "batch", "send", "inbox", "reply", "today", "package", "costs",
-                            "autosend", "share", "copy", "week"):
+    if argv and argv[0] in ("sender", "find", "verify", "batch", "send", "inbox", "reply", "today", "package",
+                            "costs", "autosend", "share", "copy", "week"):
         import gtme_solo
         return gtme_solo.main(argv)
     if not argv or argv[0].startswith("-") and argv[0] not in ("-h", "--help"):

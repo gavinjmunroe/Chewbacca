@@ -99,7 +99,15 @@ reply`, which makes a Gmail draft and never sends. - A lead with a name but no e
      amount the person approves goes in `--spend`. Every call is billed to
      that customer and capped at 5 cents. `chewbacca gtme costs` is the
      month's real cost per customer, and `gtme package` sets the mailboxes,
-     domains, data budget and price.
+     domains, data budget and price. A paid find only keeps an email its
+     same-call check calls valid; catch_all, risky and unknown stay out.
+   - Before the first batch, if treg is set up (a `treg-token` in the
+     Keychain or `TREG_TOKEN`), run `chewbacca gtme verify`. It prices ONE
+     check through treg's routed verifier (list $0 to $0.0138, capped at
+     1.5 cents) and stops; an approved `--spend` checks the rest. Invalid
+     addresses are suppressed and anything not valid is held from batches.
+     It's optional: with no token it says so and changes nothing. Their own
+     Gmail takes every bounce, and Zeutara's unverified 9/28 send bounced 27%.
      Volume starts at 5 a day and tops out at 20, because it is their primary
      inbox. Say so if they ask for more. More volume means separate sending
      domains, which cost money and need their ok.

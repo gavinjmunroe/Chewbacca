@@ -33,6 +33,23 @@ BASE = os.environ.get("TREG_BASE", "https://treg.to")
 # allows any one mid-priced provider and stops a long chain of billed misses.
 # Guessed from the catalog range, not measured on our own lists.
 FIND_MAX_USD = 0.05
+# Most one verify may cost. The routed verifier's 11 children list $0 to
+# $0.0138 a check (treg catalog get treg.people.email.verify, 2026-10-13), so
+# this reaches every one of them and no chain of misses past the dearest.
+VERIFY_MAX_USD = 0.015
+# The only verdict that goes out. treg's own study (treg.to/gtm-engineering,
+# chapter 8, 2026-10-07): a finder "found" 60 of 60 people from title searches,
+# and 32 verified deliverable, 16 risky, 4 unknown, 8 invalid. Its catalog
+# notes a team that sent to catch-all hits unverified and "bounced on most of
+# them" (contracts.yaml, 2026-09-06). Zeutara's unverified 9/28 send bounced 27%.
+SENDABLE = "valid"
+# treg's verdict words (contracts.yaml people.email.verify), plus the provider
+# words a direct verify returns in output.status that mean the same thing.
+_VERDICT_WORDS = {"valid": "valid", "deliverable": "valid", "ok": "valid", "safe": "valid",
+                  "invalid": "invalid", "undeliverable": "invalid", "bad": "invalid",
+                  "mailbox_not_found": "invalid", "catch_all": "catch_all", "catch-all": "catch_all",
+                  "accept_all": "catch_all", "acceptall": "catch_all", "risky": "risky",
+                  "unknown": "unknown"}
 TIMEOUT = 30
 
 
@@ -139,5 +156,32 @@ def find_email(*, domain: str, full_name: str, customer: str, spend_file: Path, 
     verdict = ((res["raw"].get("_treg") or {}).get("verification") or {}).get("verdict") \
         if isinstance(res["raw"], dict) else None
     res["email"] = (out.get("email") or "").lower() or None
-    res["verdict"] = verdict
+    res["verdict"] = verdict_word(verdict) if verdict else None
+    return res
+
+
+def verdict_word(word) -> str:
+    """One of valid, invalid, catch_all, risky, unknown. Anything treg or a
+    provider says that isn't on the list counts as unknown, never as valid."""
+    return _VERDICT_WORDS.get(str(word or "").strip().lower().replace(" ", "_"), "unknown")
+
+
+def verify_email(*, email: str, customer: str, spend_file: Path, budget_usd: float,
+                 now: datetime | None = None) -> dict:
+    """Whether a mailbox takes mail, from treg's routed verifier, billed to this
+    customer. Adds "verdict" (a verdict_word) to call()'s result."""
+    res = call("treg.people.email.verify", {"email": email}, customer=customer, spend_file=spend_file,
+               budget_usd=budget_usd, max_cost_usd=VERIFY_MAX_USD, now=now)
+    out = res["output"] if isinstance(res["output"], dict) else {}
+    # The routed answer keeps the provider's own word in output.status and a
+    # bare output.valid; a catch-all domain can say valid=true, so the word wins.
+    if out.get("valid") is False:
+        res["verdict"] = "invalid" if verdict_word(out.get("status")) in ("valid", "unknown") \
+            else verdict_word(out.get("status"))
+    elif out.get("status"):
+        res["verdict"] = verdict_word(out["status"])
+    elif isinstance(out.get("valid"), bool):
+        res["verdict"] = "valid" if out["valid"] else "invalid"
+    else:
+        res["verdict"] = "unknown"
     return res

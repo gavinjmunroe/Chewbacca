@@ -1835,6 +1835,8 @@ if group "hud"; then
   check  "kyber-surfaces parses" python3 -m py_compile "$ROOT/bin/kyber-surfaces"
   check  "the OS graph refuses bad edges, fuses only via people, answers its questions" \
     python3 "$ROOT/tests/test_osgraph.py"
+  check  "the trust statement covers every source the OS graph reads, in plain words" \
+    python3 "$ROOT/tests/test_trust.py"
   # The desktop home panel's feed: throwaway git repos under a temp home, so
   # the person's own repos and git config never decide a result.
   check  "the home feed lists his recent repos, skips chores and others' commits, and writes owner-only" \

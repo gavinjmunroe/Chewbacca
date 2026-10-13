@@ -58,6 +58,7 @@ COMMANDS=(
   "update|pull the latest, show what changed, re-run setup"
   "changelog|what changed between versions"
   "agents|the agents page in your browser tab (builds it on first run, no Kyber needed)"
+  "trust|what stays on this Mac and what leaves it, in plain words"
   "week|your week in one line from the git repos here: shipped, uncommitted, unpushed, with a receipt"
   "stranger|time a new dev's install in a scratch HOME: prompts, errors, clone to first agent answer"
   "skills|list, search, or show a skill"
@@ -165,6 +166,11 @@ agents)
   # page is on the glass (`realm-ui show`); this needs neither Kyber nor PATH.
   shift
   exec python3 "$ROOT/bin/realm-ui" open --build "$@"
+  ;;
+trust)
+  # What stays on this Mac and what leaves it, in plain words (config/trust.json).
+  shift
+  exec python3 "$ROOT/tools/trust.py" "$@"
   ;;
 week)
   # Your week in one line from the git repos on this machine, with a receipt.

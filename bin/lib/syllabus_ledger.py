@@ -543,3 +543,52 @@ def merge(found_list):
 def syllabus_order(path):
     name = path.name.lower()
     return (bool(re.search(r"\blab\b|addendum", name)), name)
+
+
+# ── released scores onto the grading parts ───────────────────────────────────
+# `coursework grade` said "nothing graded yet" over a 71 on a midterm (USC
+# week walk, 2026-10-13): the ledger has the weights, Brightspace has the
+# scores, and nothing joined them. A score lands on a part only when the names
+# are the same item ("Midterm 1" and "Midterm I"); a quiz inside a "Weekly
+# quizzes" part is one of many, and averaging them would be a guess. On
+# Caleb's real Fall 2026 grades (read 2026-10-13) all 35 released items were
+# members like that, so this scored none of them; reading Brightspace's own
+# category totals is the next step, not a looser name match.
+
+ROMAN = {"i": "1", "ii": "2", "iii": "3", "iv": "4", "v": "5"}
+
+
+def item_key(name):
+    words = re.findall(r"[a-z]+|\d+", name.lower())
+    return tuple(ROMAN.get(w, w) for w in words if w not in ("exam", "the"))
+
+
+def add_scores(text, grades, today):
+    """(new_text, scored, unmatched). grades: [{name, points, out_of}] for
+    one course. Parts that already have a score are never touched."""
+    scored, unmatched = [], []
+    lines = text.split("\n")
+    parts = {}
+    in_grading = False
+    for i, line in enumerate(lines):
+        if re.match(r"^grading:", line):
+            in_grading = True
+            continue
+        if in_grading and re.match(r"^\S", line):
+            in_grading = False
+        m = in_grading and re.match(r'^\s*-\s*\{\s*name:\s*"?([^",}]+)"?\s*,.*\}\s*$', line)
+        if m:
+            parts[item_key(m.group(1))] = i
+    for g in grades:
+        if g.get("points") is None or not g.get("out_of"):
+            continue
+        i = parts.get(item_key(g["name"]))
+        if i is None:
+            unmatched.append(g["name"])
+            continue
+        if re.search(r"\bscore:", lines[i]):
+            continue
+        source = q(f"Brightspace grades ({g['name']}), read {today}")
+        lines[i] = re.sub(r"\s*\}\s*$", f", score: {g['points']:g}, max: {g['out_of']:g}, score_source: {source} }}", lines[i])
+        scored.append(f"{g['name']} {g['points']:g}/{g['out_of']:g}")
+    return "\n".join(lines), scored, unmatched

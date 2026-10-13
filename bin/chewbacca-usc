@@ -15,6 +15,8 @@ chewbacca usc: a USC student's day in one screen, for any student on any Mac.
   chewbacca usc syllabus        what every pulled syllabus says about class times,
                                 office hours, absences and grading, and what it
                                 would fill (--apply writes empty fields only)
+  chewbacca usc grades          released Brightspace scores onto the ledger's
+                                matching grading parts (--apply writes)
   chewbacca usc --hall evk      pick the dining hall (parkside, evk, university-village)
   chewbacca usc --json          the same, as data
 
@@ -471,6 +473,8 @@ def lockin(apply, out, days, retried=False):
         # or grading, and every answer is in a syllabus lockin just pulled.
         print()
         syllabus(True, out, LEDGER)
+        print()
+        grades(True, LEDGER)
     return 0
 
 
@@ -740,6 +744,37 @@ def syllabus(apply, slides, ledger, compare=None, quiet=False):
     return 0
 
 
+def grades(apply, ledger, quiet=False):
+    """Released Brightspace scores onto the ledger's matching grading parts,
+    so `coursework grade` has something to add up."""
+    sys.path.insert(0, str(ROOT / "bin" / "lib"))
+    import syllabus_ledger as sl
+    r = subprocess.run([sys.executable, str(ROOT / "bin" / "brightspace"), "grades", "--json"],
+                       capture_output=True, text=True)
+    try:
+        courses = json.loads(r.stdout)
+    except json.JSONDecodeError:
+        print("Grades: " + signed_out(r.stderr.strip() or r.stdout.strip() or "no answer"))
+        return 3
+    today = dt.date.today().isoformat()
+    print("Grades from Brightspace:")
+    for c in courses:
+        dest = course_file_for(Path(c["course"].replace(" ", "-")), ledger)
+        if dest is None or not c["grades"]:
+            continue
+        before = dest.read_text()
+        after, scored, unmatched = sl.add_scores(before, c["grades"], today)
+        if apply and after != before:
+            dest.write_text(after)
+        for s_ in scored:
+            print(f"  {c['course']:<10} {'scored' if apply else 'would score'} {s_}")
+        if unmatched:
+            print(f"  {c['course']:<10} no single grading part for: {', '.join(unmatched)}")
+    if not apply:
+        print("Nothing written: rerun with --apply.")
+    return 0
+
+
 def course_facts(ledger):
     r = subprocess.run(["node", str(ROOT / "bin" / "coursework"), "show", "--json"],
                        capture_output=True, text=True, env={**os.environ, "COURSEWORK_DIR": str(ledger)})
@@ -804,7 +839,7 @@ def short(v):
 
 def main():
     ap = argparse.ArgumentParser(prog="chewbacca usc", add_help=True)
-    ap.add_argument("cmd", nargs="?", default="today", choices=["today", "setup", "lockin", "read", "syllabus"])
+    ap.add_argument("cmd", nargs="?", default="today", choices=["today", "setup", "lockin", "read", "syllabus", "grades"])
     ap.add_argument("target", nargs="?", help="read: a course code, a folder or a file")
     ap.add_argument("--find", help="read: only lines with all these words, each with its file and page")
     ap.add_argument("--apply", action="store_true", help="lockin: write the ledger and pull files")
@@ -822,6 +857,8 @@ def main():
         return lockin(a.apply, Path(a.out).expanduser(), a.days)
     if a.cmd == "read":
         return read(a.target, a.find, Path(a.out).expanduser())
+    if a.cmd == "grades":
+        return grades(a.apply, Path(a.ledger).expanduser() if a.ledger else LEDGER)
     if a.cmd == "syllabus":
         ledger = Path(a.ledger).expanduser() if a.ledger else LEDGER
         return syllabus(a.apply, Path(a.out).expanduser(), ledger,

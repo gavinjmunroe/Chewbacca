@@ -57,6 +57,12 @@ pick one yourself. "not in the syllabus" means read that course by hand with
 `chewbacca usc read <CODE>` (often a section list where only the student knows
 theirs, or a schedule on another file). "can't read" is a scan.
 
+Then it puts released Brightspace scores on grading parts with the same name
+("Midterm 1" on "Midterm I"), each with `score_source`. One quiz of many is
+never averaged into a "Weekly quizzes" part: it prints "no single grading
+part for" and the score stays in Brightspace. `chewbacca usc grades` runs that
+step alone.
+
 `chewbacca usc syllabus` runs the same read alone and writes nothing;
 `--apply` writes, `--ledger DIR` fills another ledger, and `--compare DIR`
 scores the result against a hand-filled ledger without touching it.

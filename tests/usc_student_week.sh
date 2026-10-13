@@ -125,6 +125,24 @@ oh="$(node "$ROOT/bin/coursework" show bisc --json 2>&1 | $PY -c 'import json,sy
 [ "$oh" = "Wed 1-2pm ZHS 260 | BISC 120 Syllabus.pdf, page 1" ] \
   && ok "lockin --apply reads the syllabus it pulled into the ledger, with the page" || no "lockin syllabus fill: $oh / $applied"
 
+# ── Friday: released scores land on the ledger's grading parts ───────────────
+cat >> "$COURSEWORK_DIR/courses/bisc-120.yml" <<'Y'
+grading_model: weighted
+grading:
+  - { name: "Midterm I", points: 100, source: "syllabus p5" }
+  - { name: "Final Exam", points: 100, source: "syllabus p5" }
+  - { name: "Weekly Quizzes", points: 20, source: "syllabus p5" }
+Y
+sc="$($PY "$ROOT/bin/chewbacca-usc" grades --apply 2>&1)"
+gr="$(node "$ROOT/bin/coursework" grade bisc 2>&1)"
+printf '%s' "$gr" | grep -q "standing      71.0%" && printf '%s' "$sc" | grep -q "no single grading part for: Weekly Quiz 5, Lab 5 Report" \
+  && grep -q 'score: 71, max: 100, score_source: "Brightspace grades (Midterm 1)' "$COURSEWORK_DIR/courses/bisc-120.yml" \
+  && ok "coursework grade adds up the 71 on Midterm 1, and one quiz of many isn't guessed into a part" \
+  || no "grades into ledger: $sc / $gr"
+before="$(cksum < "$COURSEWORK_DIR/courses/bisc-120.yml")"
+$PY "$ROOT/bin/chewbacca-usc" grades --apply > /dev/null 2>&1
+[ "$before" = "$(cksum < "$COURSEWORK_DIR/courses/bisc-120.yml")" ] && ok "a second grades --apply writes nothing" || no "grades rerun changed the ledger"
+
 S="$COURSEWORK_DIR/slides"
 mkdir -p "$S/BISC-120/Lectures" "$S/PSYC-100/Readings"
 $PY - "$S" <<'PY'

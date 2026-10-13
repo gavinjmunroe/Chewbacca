@@ -34,7 +34,7 @@ work ledger as replace-apps-2026-10-13-N. Full table:
 | Codex    | 3.3   | session surfaces, Codex transcripts                                                                                                    | building    |
 | Notes    | 1.5   | `notes` surface over Apple Notes via `mac notes`: newest 6, preview, append one line to a text-only note                               | partial     |
 | Granola  | 0.8   | `meetings` surface over Anarlog's CLI: calls, decisions, action items as guessed tasks, transcript pages; ingested into the graph      | partial     |
-| Slack    | 0.7   | a Slack surface over the Slack MCP, read first                                                                                         | not started |
+| Slack    | 0.7   | DMs, group DMs and @-mentions in needs-you and person, from slacrawl (ingest_slack.py); replies not yet | partial     |
 | Finder   | 0.7   | `files` surface                                                                                                                        | building    |
 | WhatsApp | 0.4   | threads into the graph via `wacli`                                                                                                     | not started |
 | Spotify  | 0.2   | `music` surface via `hud-music`                                                                                                        | building    |

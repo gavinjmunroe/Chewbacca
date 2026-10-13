@@ -137,6 +137,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - reference_voice_agent_e2e_test: prove a browser voice agent works headless by feeding a spoken WAV as the fake mic; caught askforthefire's white-box WebGL bug (10/10)
 - reference_kyber_invisible_to_screenshots: Kyber's glass never shows in screencapture, so a HUD card can't be verified by screenshot; what to use instead
 - reference_watch_skill: Watch Skill (oxbshw/watch-skill) is installed globally: video/screen perception +...
+- reference_rea_reverse_engineering: REA (rea-agents 6.4.0) is the rea MCP: one scoped feature at a time; whole big ASARs fail, native needs GHIDRA_INSTALL_DIR in its env
 - reference_writing_toolchain: Four writing tools are installed and they overlap; which one to reach for, plus...
 
 - reference_setup_installs_from_checkout: setup re-execs from ~/code/chewbacca; source_sync catches it up, update needs a 2nd setup run; verify hooks w grep settings

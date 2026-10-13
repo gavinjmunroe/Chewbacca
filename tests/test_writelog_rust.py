@@ -199,6 +199,27 @@ class JournalParity(unittest.TestCase):
         self.call(lambda: self.write(f'raw/{decomposed}', 'accented'))
         self.call(lambda: (self.brain / 'raw' / decomposed).unlink())
 
+    def test_background_writers_are_dropped_the_same_way_from_the_journal(self):
+        # 2026-10-12 shadow log: 14,690 of the 14,691 rows only the binary
+        # logged were a background job's or the brain mirror's writes, each
+        # credited to whatever call was open. With the run marked, both
+        # implementations drop them; the call's own write still lands.
+        regions = self.folder / 'shared/background-writers.tsv'
+        regions.parent.mkdir(parents=True, exist_ok=True)
+        mark = lambda kind, pid, root: regions.open('a').write(f'{kind}\t{time.time():.6f}\t{pid}\t{self.brain / root}\n')
+        (self.brain / 'raw/creators').mkdir(parents=True)
+        mark('begin', os.getpid(), 'raw/creators')
+        self.call(lambda: (self.write('raw/creators/t1.md', 'job'), self.write('notes/mine.md', 'call')))
+        for n in range(40):
+            self.write(f'chewbacca/kit/snapshots/fb5d/{n}.py', str(n))
+        self.call(lambda: None)
+        def mirror_delete():
+            mark('begin', 99999999, 'chewbacca')
+            shutil.rmtree(self.brain / 'chewbacca/kit')
+            mark('end', 99999999, 'chewbacca')
+        self.call(mirror_delete)
+        self.assertEqual(self.rows('python'), [('parity', str(self.brain / 'notes/mine.md'), 'bash')])
+
     def test_watcher_restart_mid_call_keeps_the_call(self):
         # Review, 2026-10-11: a restart reseeded the state and dropped every
         # brain row of the calls in flight.
@@ -238,6 +259,31 @@ class JournalParity(unittest.TestCase):
                                  '--log', str(self.folder / 'real.tsv'), '--shadow', str(self.folder / 'real.shadow.tsv')],
                                 capture_output=True, text=True)
         self.assertEqual(parity.returncode, 0, parity.stdout)
+
+    def test_a_call_the_shadow_hands_back_is_noted_and_never_counts_as_a_miss(self):
+        # 2026-10-12: 29 rows only Python logged, for one worktree checkout,
+        # and the shadow run's stderr went nowhere, so nothing said whether
+        # the binary had handed the call back or failed on it.
+        env = dict(self.base, CHEWBACCA_WRITELOG_BIN=str(BIN), CHEWBACCA_WRITELOG_MODE='shadow',
+                   CHEWBACCA_WRITE_LOG=str(self.folder / 'real.tsv'),
+                   CHEWBACCA_SESSION_STATE=str(self.folder / 'real-state'))
+        data = {'command': f'cd ~nosuchuser-zz; cd {self.brain} && echo x > notes/a.md'}  # `cd ~user`: Python's to answer
+        for event in ('PreToolUse', 'PostToolUse'):
+            if event == 'PostToolUse':
+                self.write('notes/a.md', 'handed back')
+            payload = {'hook_event_name': event, 'session_id': 'back', 'tool_name': 'Bash',
+                       'tool_use_id': 'back-1', 'cwd': str(self.outside), 'tool_input': data}
+            subprocess.run(['bash', str(HOOK)], input=json.dumps(payload), text=True, capture_output=True,
+                           cwd=str(self.outside), env=env, timeout=20, check=True)
+        self.assertEqual(len((self.folder / 'real.tsv').read_text().splitlines()), 1)
+        missed = (self.folder / 'real.shadow.tsv.misses').read_text().splitlines()
+        self.assertEqual([m.split('\t')[1:] for m in missed],
+                         [['back', 'PreToolUse', 'fallback', 'back-1'], ['back', 'PostToolUse', 'fallback', 'back-1']])
+        parity = subprocess.run([sys.executable, str(ROOT / 'tools/writelog_parity.py'),
+                                 '--log', str(self.folder / 'real.tsv'), '--shadow', str(self.folder / 'real.shadow.tsv'),
+                                 '--since', '0'], capture_output=True, text=True)
+        self.assertEqual(parity.returncode, 0, parity.stdout)
+        self.assertIn('handed back to python 1', parity.stdout)
 
     def test_watcher_dying_mid_call_falls_back_to_a_real_status(self):
         def kill_and_write():

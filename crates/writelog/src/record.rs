@@ -32,7 +32,7 @@ const EXACT_TOOLS: [&str; 4] = ["Write", "Edit", "MultiEdit", "NotebookEdit"];
 const PATCH_PREFIXES: [&str; 4] = ["*** Add File: ", "*** Update File: ", "*** Delete File: ", "*** Move to: "];
 /// Same as write_log.py: a changed file's mtime falls inside the call, give
 /// or take filesystem timestamp granularity. Guessed, never measured there.
-const MTIME_SLACK: f64 = 2.0;
+pub const MTIME_SLACK: f64 = 2.0;
 /// Same as write_log.py: no tool call runs for a day, so an older snapshot is
 /// an orphan, swept at most hourly.
 const SNAPSHOT_MAX_AGE: f64 = 24.0 * 3600.0;
@@ -470,6 +470,32 @@ fn parse_call(raw: &[u8], proc_cwd: &str) -> Result<Option<Call>, ()> {
     Ok(Some(Call { sid, event, tool, tool_name, cwd, input }))
 }
 
+/// In shadow mode, a call the binary handed back or couldn't observe leaves
+/// one row in `<shadow log>.misses`: `time session event fallback|unavailable tool-id`.
+/// The shadow run's stderr goes nowhere, so without this a row only Python
+/// logged can't be told from a real miss (2026-10-12: 29 rows of one
+/// worktree checkout, cause unrecorded). tools/writelog_parity.py reads it.
+pub fn note_miss(raw: &[u8], what: &str) {
+    let cwd = std::env::current_dir().map(|p| p.to_string_lossy().into_owned()).unwrap_or_else(|_| "/".into());
+    let Ok(p) = paths(true, &cwd) else { return };
+    let v = json::parse(raw).unwrap_or(Value::Null);
+    let field = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or("").replace(['\t', '\r', '\n'], " ");
+    let id = if v.get("tool_use_id").is_some() { field("tool_use_id") } else { field("tool_call_id") };
+    let row = format!("{:.6}\t{}\t{}\t{}\t{}\n", crate::now(), field("session_id"), field("hook_event_name"), what, id);
+    if let Some(dir) = Path::new(&p.log).parent() {
+        let _ = std::fs::DirBuilder::new().recursive(true).mode(0o700).create(dir);
+    }
+    let file = format!("{}.misses", p.log);
+    // Shadow mode is meant to end, but nothing rotates this. Guessed, never
+    // measured: 16 MB is ~200,000 rows, far past any shadow run so far.
+    if std::fs::metadata(&file).map(|m| m.len() > 16 << 20).unwrap_or(false) {
+        return;
+    }
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).mode(0o600).open(&file) {
+        let _ = f.write_all(row.as_bytes());
+    }
+}
+
 pub fn run(shadow: bool, raw: &[u8]) -> Outcome {
     let proc_cwd = match std::env::current_dir() {
         Ok(p) => p.to_string_lossy().into_owned(),
@@ -534,6 +560,7 @@ fn record(call: &Call, repos: &Repos, exact: &BTreeSet<String>, keys: &[(String,
         .unwrap_or(60.0);
     let mut rows: Vec<String> = Vec::new();
     let is_pre = call.event == "PreToolUse";
+    let mut regions: Option<Vec<crate::background::Region>> = None;
     for (repo, key) in keys {
         let snap_path = state.join(format!("{key}.rw.json"));
         let prior = load_snap(&snap_path)?;
@@ -603,6 +630,12 @@ fn record(call: &Call, repos: &Repos, exact: &BTreeSet<String>, keys: &[(String,
                 let stale = started != 0.0 && !committed.contains(path) && !touched_in_window(path, started, now);
                 if claimed.contains(path) || stale || unnamed_long {
                     continue;
+                }
+                if started != 0.0 && !committed.contains(path) {
+                    let rs = regions.get_or_insert_with(|| crate::background::regions(now));
+                    if crate::background::wrote(path, rs, started, now) {
+                        continue;
+                    }
                 }
                 rows.push(format!("{:.6}\t{}\t{}\tbash\n", now, call.sid, path));
             }

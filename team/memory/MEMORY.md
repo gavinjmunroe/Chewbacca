@@ -323,3 +323,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_client_channels_are_togari: agents never post in client Slack conversations as Caleb; Togari is the voice ("Everything should be togari", 13 posts from his acc 10/11-12); client-post-guard refuses
 - feedback_client_channel_posts_one_line: client-channel status posts are ONE line (who, company, first sentence, Togari replied); full They wrote/We sent quotes were "wayyyy too big" (10/12)
 - reference_slack_delete_own_posts: slackcli cannot delete; chat.delete w its keychain xoxc + URL-encoded xoxd cookie, dry-run list + backup first (10/12)
+- feedback_background_writers_say_so: no unprivileged way to know which process wrote a file, so background work marks its run (heavy/net jobs from cwd, `--writes`, `write_log.py background`); 14,691 shadow rows on 10/12 were a job and a mirror credited to open calls

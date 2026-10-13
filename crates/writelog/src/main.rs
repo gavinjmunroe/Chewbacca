@@ -16,6 +16,7 @@
 //! It never fails a tool call: every error is the same one-line warning
 //! write_log.py prints, and exit 0.
 
+mod background;
 mod gitio;
 mod journal;
 mod json;
@@ -69,8 +70,15 @@ fn hook(shadow: bool, script: Option<&str>) -> i32 {
     }
     match std::panic::catch_unwind(|| record::run(shadow, &payload)) {
         Ok(record::Outcome::Done) => 0,
-        Ok(record::Outcome::Fallback) => if shadow { 0 } else { fall_back(script, &payload) },
+        Ok(record::Outcome::Fallback) if shadow => {
+            record::note_miss(&payload, "fallback");
+            0
+        }
+        Ok(record::Outcome::Fallback) => fall_back(script, &payload),
         Ok(record::Outcome::Unavailable) | Err(_) => {
+            if shadow {
+                record::note_miss(&payload, "unavailable");
+            }
             eprintln!("write-log: repository observation unavailable; durability evidence may be incomplete.");
             0
         }

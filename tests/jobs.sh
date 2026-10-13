@@ -7,6 +7,8 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 J="$ROOT/bin/chewbacca-jobs"
 export JOBS_DIR; JOBS_DIR="$(mktemp -d)"
+# Where a job marks itself as a background writer: never the user's own.
+export CHEWBACCA_BACKGROUND_WRITERS="$JOBS_DIR/background-writers.tsv"
 trap 'for d in "$JOBS_DIR"/*/; do p=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]+\"job.json\")).get(\"pid\") or \"\")" "$d" 2>/dev/null); [ -n "$p" ] && kill -CONT -"$p" 2>/dev/null; [ -n "$p" ] && kill -TERM -"$p" 2>/dev/null; done; rm -rf "$JOBS_DIR"' EXIT
 fail=0
 status() { python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['status'])" "$JOBS_DIR/$1/job.json"; }
@@ -132,4 +134,33 @@ third=$("$J" submit --after "$dead" -- sh -c 'echo ran' | cut -d' ' -f1)
 settle "$third" done
 check "a failed job still releases what waits on it" "$(status "$third")" done
 check "--after an unknown job is refused" "$("$J" submit --after 0000-nope -- true 2>&1 | grep -c 'no job')" 1
+
+# A job writing inside a repo says so, so the write-log never credits its
+# files to whatever tab's call is open. 2026-10-12: the creator-transcripts
+# job (cwd raw/creators in the brain) put its transcripts on other tabs' calls.
+bw="$CHEWBACCA_BACKGROUND_WRITERS"
+repo=$(mktemp -d); git -C "$repo" init -q; mkdir -p "$repo/raw/creators"
+repo=$(cd "$repo" && pwd -P)
+inner=$(cd "$repo/raw/creators" && "$J" submit --net -- sh -c 'echo t > t.md' | cut -d' ' -f1)
+settle "$inner" done
+check "a net job in a repo's subfolder marks its run there" "$(cut -f1,4 "$bw" 2>/dev/null | tr '\t\n' ' ')" "begin $repo/raw/creators end $repo/raw/creators "
+: > "$bw"
+build=$(cd "$repo/raw/creators" && "$J" submit --build -- true | cut -d' ' -f1)
+settle "$build" done
+check "a build there claims nothing on its own" "$(wc -c < "$bw" | tr -d ' ')" 0
+top=$(cd "$repo" && "$J" submit -- true | cut -d' ' -f1)
+settle "$top" done
+check "a job at a repo's top marks nothing on its own" "$(wc -c < "$bw" | tr -d ' ')" 0
+named=$(cd "$repo" && "$J" submit --writes "$repo/raw" -- true | cut -d' ' -f1)
+settle "$named" done
+check "--writes names the folder" "$(cut -f1,4 "$bw" | tr '\t\n' ' ')" "begin $repo/raw end $repo/raw "
+: > "$bw"
+long=$(cd "$repo/raw/creators" && "$J" submit --net -- sh -c 'trap "echo cleaned > trapped; exit 0" TERM; sleep 30 & wait' | cut -d' ' -f1)
+settle "$long" running
+for _ in $(seq 1 50); do grep -q begin "$bw" 2>/dev/null && break; sleep 0.1; done
+"$J" kill "$long" >/dev/null
+for _ in $(seq 1 50); do grep -q end "$bw" 2>/dev/null && break; sleep 0.1; done
+check "a killed job still ends its run" "$(cut -f1 "$bw" | tr '\n' ' ')" "begin end "
+check "and its own TERM trap still runs" "$(cat "$repo/raw/creators/trapped" 2>/dev/null)" cleaned
+rm -rf "$repo"
 exit "$fail"

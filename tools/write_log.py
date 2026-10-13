@@ -111,6 +111,215 @@ def touched_in_window(path, start, end):
     return start - MTIME_SLACK <= modified <= end + MTIME_SLACK
 
 
+# Background writers: work no tool call started (a queued job, a scheduled
+# mirror) that writes into a repo the calls watch. Neither a status diff nor
+# FSEvents says which process wrote a file, and macOS has no unprivileged way
+# to ask (fs_usage and Endpoint Security need root), so the processes that
+# start background work say so here: one row when it begins and one when it
+# ends, with their pid and the directory it writes. A changed path under a
+# region whose run overlapped the call, written inside that run, is the
+# background work's, never the call's.
+#
+# On 2026-10-12 the creator-transcripts job (cwd raw/creators, 1009-191645)
+# and the 21:30 people-sync mirror of ~/.chewbacca into the brain put 14,690
+# rows into the Rust shadow log and 32 into this one, every one of them
+# credited to whichever tab's call happened to be open: 3,111 kit-snapshot
+# deletions went to one Bash call in the togari tab.
+#
+#     begin <ts> <pid> <root>      end <ts> <pid> <root>
+#
+# A begin with no end whose pid is gone (the supervisor was killed) claims
+# nothing: no end time means no window to check a write against. The cost of
+# the rule: a call's own Bash write under a region, made while that run is
+# going, is dropped too. Unattributable either way, so nobody claims it.
+BACKGROUND_FILE = 'background-writers.tsv'
+# Rewritten once past this, keeping two days. Guessed, never measured: a row
+# is ~90 bytes, so 256 KB is ~2,800 rows, more than a week of the ~140 jobs a
+# day the queue ran on 2026-10-09 to 10-12.
+BACKGROUND_MAX = 256 << 10
+BACKGROUND_KEEP = 2 * 24 * 3600
+# Exactly what background_mark writes: the binary parses the same way, so a
+# hand-edited row the two would read differently is skipped by both.
+BACKGROUND_ROW = re.compile(r'(begin|end)\t([0-9]+(?:\.[0-9]+)?)\t([0-9]+)\t([^\t\r\n]+)\r?')
+
+
+def background_path(home=None):
+    if os.environ.get('CHEWBACCA_BACKGROUND_WRITERS'):
+        return Path(os.environ['CHEWBACCA_BACKGROUND_WRITERS']).expanduser()
+    home = home or Path(os.environ.get('CHEWBACCA_HOME') or Path.home() / '.chewbacca').expanduser()
+    return Path(home) / BACKGROUND_FILE
+
+
+def background_mark(kind, pid, roots, path=None, now=None):
+    """Append begin or end rows for `roots`. Never raises: a job never fails
+    over its bookkeeping."""
+    try:
+        path = path or background_path()
+        now = time.time() if now is None else now
+        rows = ''.join(f'{kind}\t{now:.6f}\t{pid}\t{root}\n' for root in roots
+                       if root and not any(c in str(root) for c in '\t\r\n'))
+        if not rows:
+            return
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_APPEND, 0o600)
+        with os.fdopen(fd, 'r+', encoding='utf-8', errors='replace') as stream:
+            fcntl.flock(stream, fcntl.LOCK_EX)
+            stream.write(rows)
+            stream.flush()
+            if os.fstat(stream.fileno()).st_size > BACKGROUND_MAX:
+                stream.seek(0)
+                kept = _pruned(stream.read().split('\n'), now)
+                stream.seek(0)
+                stream.truncate()
+                stream.write(''.join(line + '\n' for line in kept))
+    except Exception:  # noqa: BLE001  bookkeeping only; see the docstring
+        pass
+
+
+def _parse(lines):
+    """[(index, kind, when, pid, root)] for the rows both readers accept."""
+    out = []
+    for index, line in enumerate(lines):
+        match = BACKGROUND_ROW.fullmatch(line)
+        if match and int(match.group(3)) <= 0x7fffffff:  # a pid_t, as the binary reads it
+            out.append((index, match.group(1), float(match.group(2)), int(match.group(3)), match.group(4)))
+    return out
+
+
+def _pruned(lines, now):
+    # Rows from the last two days, plus the begin of a run still going however
+    # old (the creator-transcripts job ran 10/9 19:15 to 10/12 22:25). A begin
+    # whose end is gone too would read as a run that never ended.
+    rows = _parse(lines)
+    keep = {i for i, kind, when, pid, root in rows if now - when < BACKGROUND_KEEP}
+    for i, begin in _open_begins(rows):
+        if _live_since(begin[3], begin[2]):
+            keep.add(i)
+    return [lines[i] for i in sorted(keep)]
+
+
+def _open_begins(rows):
+    """[(index, row)] of begins no end closed."""
+    stacks = {}
+    for row in rows:
+        i, kind, when, pid, root = row
+        if kind == 'begin':
+            stacks.setdefault((pid, root), []).append((i, row))
+        elif stacks.get((pid, root)):
+            stacks[(pid, root)].pop()
+    return [entry for stack in stacks.values() for entry in stack]
+
+
+_PROC_START = None
+
+
+def _proc_start(pid):
+    """When `pid` started, from libproc's proc_bsdinfo (offset 120 holds
+    pbi_start_tvsec on macOS), or None when it can't be read."""
+    global _PROC_START
+    if _PROC_START is None:
+        try:
+            import ctypes
+            import ctypes.util
+            lib = ctypes.CDLL(ctypes.util.find_library('proc') or '/usr/lib/libproc.dylib')
+            buffer = ctypes.create_string_buffer(136)
+
+            def read(p):
+                if lib.proc_pidinfo(p, 3, ctypes.c_uint64(0), buffer, 136) != 136:
+                    return None
+                sec = int.from_bytes(buffer.raw[120:128], 'little')
+                usec = int.from_bytes(buffer.raw[128:136], 'little')
+                return sec + usec / 1e6
+            _PROC_START = read
+        except (OSError, AttributeError):
+            _PROC_START = lambda p: None  # noqa: E731
+    return _PROC_START(pid)
+
+
+def _live_since(pid, begin):
+    """The process that wrote a begin at `begin` is still running: its pid is
+    alive and that pid didn't start after the row (a reused pid after a
+    reboot or a SIGKILL would otherwise keep a dead run open forever)."""
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except PermissionError:
+        pass
+    except (OSError, OverflowError):
+        return False
+    started = _proc_start(pid)
+    return started is None or started <= begin + MTIME_SLACK
+
+
+def background_regions(now, path=None):
+    """[(root, begin, end)] from the background log. An open run is live up
+    to now while its process is."""
+    path = path or background_path()
+    try:
+        with open(path, encoding='utf-8', errors='replace') as stream:
+            fcntl.flock(stream, fcntl.LOCK_SH)  # never a prune half-written
+            lines = stream.read().split('\n')
+    except OSError:
+        return []
+    rows = _parse(lines)
+    regions = []
+    stacks = {}
+    for i, kind, when, pid, root in rows:
+        if kind == 'begin':
+            stacks.setdefault((pid, root), []).append(when)
+        elif stacks.get((pid, root)):
+            regions.append((root, stacks[(pid, root)].pop(), when))
+    for (pid, root), begins in stacks.items():
+        regions.extend((root, begin, now) for begin in begins if _live_since(pid, begin))
+    return regions
+
+
+def background_wrote(path, regions, start, end):
+    """True when a background run that overlapped [start, end] covers `path`
+    and the path was written (or deleted) inside that run."""
+    modified = None
+    for root, begin, finish in regions:
+        if path != root and not path.startswith(root.rstrip(os.sep) + os.sep):
+            continue
+        if begin - MTIME_SLACK > end or finish + MTIME_SLACK < start:
+            continue
+        if modified is None:
+            try:
+                modified = os.lstat(path).st_mtime
+            except FileNotFoundError:
+                return True  # a deletion inside a run that was deleting
+            except OSError:
+                return False
+        if begin - MTIME_SLACK <= modified <= finish + MTIME_SLACK:
+            return True
+    return False
+
+
+def background_run(argv):
+    """`write_log.py background --root DIR... -- CMD...`: run CMD as this
+    process's child, marked as a background writer of each DIR."""
+    roots = []
+    while argv and argv[0] != '--':
+        flag = argv.pop(0)
+        if flag == '--root' and argv:
+            roots.append(os.path.realpath(os.path.expanduser(argv.pop(0))))
+    if not argv or argv[0] != '--' or len(argv) < 2:
+        print('usage: write_log.py background --root DIR [--root DIR]... -- CMD...', file=sys.stderr)
+        return 2
+    import signal
+    # Marked before the child exists, so its first write is already inside.
+    background_mark('begin', os.getpid(), roots)
+    try:
+        child = subprocess.Popen(argv[1:])
+        for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+            signal.signal(sig, lambda signum, frame: child.send_signal(signum))
+        code = child.wait()
+    finally:
+        background_mark('end', os.getpid(), roots)
+    return code if code >= 0 else 128 - code
+
+
 def context_dirs():
     """The context repos brain-sync commits from: the env, else setup's
     ~/.claude/d1-config.sh. Watched on every call because a Bash write there
@@ -362,6 +571,7 @@ def record(payload):
         rows = []
         now = time.time()
         exact = exact_targets(payload)
+        regions = None
         for repo in repos:
             tool = payload.get('tool_use_id') or payload.get('tool_call_id')
             native = bool(tool)
@@ -402,6 +612,11 @@ def record(payload):
                     stale = started and path not in committed and not touched_in_window(path, started, now)
                     if path in claimed or stale or unnamed_long:
                         continue
+                    if started and path not in committed:
+                        if regions is None:
+                            regions = background_regions(now)
+                        if background_wrote(path, regions, started, now):
+                            continue
                     rows.append(f'{now:.6f}\t{sid}\t{path}\tbash\n')
             remaining = 1 if is_pre else max(0, pending - 1)
             keep = not is_pre and remaining
@@ -429,6 +644,8 @@ def record(payload):
 
 
 def main():
+    if sys.argv[1:2] == ['background']:
+        return background_run(sys.argv[2:])
     try:
         record(json.load(sys.stdin))
     except (OSError, ValueError, subprocess.TimeoutExpired):

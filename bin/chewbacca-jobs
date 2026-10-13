@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """chewbacca jobs: one queue for every long or heavy job on this Mac, owned by the Mac, not a tab.
 
-  chewbacca jobs submit [--heavy|--build|--net] [--title T] [--after ID]... -- <command...>
+  chewbacca jobs submit [--heavy|--build|--net] [--title T] [--after ID]... [--writes DIR]... -- <command...>
                                                                        queue it (starts now if there's room
-                                                                       and every --after job has ended)
+                                                                       and every --after job has ended);
+                                                                       --writes names a folder it writes
+                                                                       in a repo tabs work in, so the
+                                                                       write-log never credits its files
+                                                                       to a tab's call
   chewbacca jobs list [--all]                                          what's queued, running, paused, done
   chewbacca jobs log <id> [-n N]                                       tail a job's output
   chewbacca jobs kill <id>                                             stop it
@@ -188,7 +192,7 @@ def signal_group(j, sig):
 # --------------------------------------------------------------- commands
 
 def submit(argv):
-    cls, title, after = "light", None, []
+    cls, title, after, wrote = "light", None, [], []
     while argv and argv[0] != "--":
         a = argv.pop(0)
         if a == "--heavy":
@@ -201,8 +205,10 @@ def submit(argv):
             title = argv.pop(0)
         elif a == "--after":
             after.append(argv.pop(0))
+        elif a == "--writes":
+            wrote.append(os.path.realpath(os.path.expanduser(argv.pop(0))))
     if not argv or argv[0] != "--" or len(argv) < 2:
-        sys.exit("usage: chewbacca jobs submit [--heavy|--build|--net] [--title T] [--after ID]... -- <command...>")
+        sys.exit("usage: chewbacca jobs submit [--heavy|--build|--net] [--title T] [--after ID]... [--writes DIR]... -- <command...>")
     for dep in after:
         if db().execute("SELECT 1 FROM jobs WHERE id = ?", (dep,)).fetchone() is None:
             sys.exit(f"no job {dep} to run after")
@@ -210,7 +216,7 @@ def submit(argv):
     j = {"id": time.strftime("%m%d-%H%M%S-") + uuid.uuid4().hex[:4], "cmd": cmd, "cwd": os.getcwd(),
          "class": cls, "title": title or " ".join(cmd)[:80], "status": "queued",
          "owner": os.environ.get("CLAUDE_SESSION_ID") or os.environ.get("TERM_SESSION_ID") or "",
-         "created": time.time(), "pid": None, "exit": None, "after": after}
+         "created": time.time(), "pid": None, "exit": None, "after": after, "writes": wrote}
     with write():
         save(j)
     tick(quiet=True)
@@ -257,11 +263,61 @@ def resume(j, now):
     save(j)
 
 
+def write_log():
+    """tools/write_log.py beside this file, or None: a job never fails over
+    the write-log's bookkeeping."""
+    path = pathlib.Path(__file__).resolve().parent.parent / "tools" / "write_log.py"
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("chewbacca_write_log", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    except Exception:  # noqa: BLE001  any failure here only loses attribution
+        return None
+
+
+def writes(j):
+    """What the job writes, for the write-log: its --writes dirs, and for a
+    heavy or net job its cwd when that's a folder inside a repository.
+    2026-10-12: the creator-transcripts job (heavy) ran in
+    ~/second-brain/raw/creators, and every transcript it wrote was logged as a
+    write by whichever tab's call was open. A build or a light job claims
+    nothing on its own: run from crates/writelog, a cargo build writes only
+    the ignored target/, and claiming its cwd would drop a tab's real edits
+    there for the whole build (review, 10/12). Nor does a cwd at a repo's top."""
+    roots = [os.path.realpath(w) for w in j.get("writes") or []]
+    cwd = j.get("cwd") or ""
+    if cwd and os.path.isdir(cwd) and j.get("class") in ("heavy", "net"):
+        top = subprocess.run(["git", "-C", cwd, "rev-parse", "--show-toplevel"],
+                             capture_output=True, text=True, timeout=10)
+        here = os.path.realpath(cwd)
+        if top.returncode == 0 and os.path.realpath(top.stdout.strip()) != here:
+            roots.append(here)
+    return roots
+
+
 def _run(job_id):
     j = get(job_id)
-    with open(DIR / job_id / "out.log", "ab") as log:
-        code = subprocess.call(["nice", "-n", str(NICE[j["class"]])] + j["cmd"],
-                               stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+    wl = write_log()
+    try:
+        roots = writes(j) if wl else []
+    except (OSError, subprocess.SubprocessError):
+        roots = []
+    if roots:
+        wl.background_mark("begin", os.getpid(), roots)
+        # `jobs kill` signals the whole group, this supervisor included. It
+        # waits for the command instead of dying, so the run gets its end row;
+        # raising here would make subprocess.call SIGKILL the command before
+        # its own TERM trap ran (review, 10/12).
+        signal.signal(signal.SIGTERM, lambda signum, frame: None)
+    try:
+        with open(DIR / job_id / "out.log", "ab") as log:
+            code = subprocess.call(["nice", "-n", str(NICE[j["class"]])] + j["cmd"],
+                                   stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+    finally:
+        if roots:
+            wl.background_mark("end", os.getpid(), roots)
     with write():
         j = get(job_id)
         if j["status"] != "killed":

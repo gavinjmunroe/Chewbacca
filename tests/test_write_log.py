@@ -102,6 +102,89 @@ class WriteLogTests(unittest.TestCase):
         self.hook('PostToolUse', self.outside, data, tool='Bash')
         self.assertEqual(self.records(), [])
 
+    def background(self, *rows):
+        path = Path(self.env['CHEWBACCA_HOME']) / 'background-writers.tsv'
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open('a') as stream:
+            for kind, pid, root in rows:
+                stream.write(f'{kind}\t{time.time():.6f}\t{pid}\t{root}\n')
+
+    def test_a_background_jobs_write_during_a_call_is_not_the_calls(self):
+        # 2026-10-12: the creator-transcripts job (cwd raw/creators in the
+        # brain) wrote transcripts all night, and each one was logged as a
+        # write by whichever tab's Bash call was open at that moment.
+        self.env['PERSONAL_CONTEXT_DIR'] = str(self.repo)
+        creators = self.repo / 'raw/creators'
+        creators.mkdir(parents=True)
+        self.background(('begin', os.getpid(), str(creators)))  # this test is the live job
+        data = {'command': 'ls'}
+        self.hook('PreToolUse', self.outside, data, tool='Bash', call='bg-1')
+        (creators / '2026-08-27-grok-bot-is-amazing.md').write_text('a transcript')
+        self.policy.write_text('the call itself wrote this')
+        self.hook('PostToolUse', self.outside, data, tool='Bash', call='bg-1')
+        self.assertEqual([r.split('\t')[2] for r in self.records()], [str(self.policy)])
+
+    def test_a_mirror_deletion_inside_a_run_that_ended_is_not_the_calls(self):
+        # 2026-10-12 22:38: people-sync's rsync --delete removed a pruned kit
+        # snapshot from the brain's mirror of ~/.chewbacca, and 3,111 of the
+        # deletions were logged as one togari-tab Bash call's writes.
+        self.env['PERSONAL_CONTEXT_DIR'] = str(self.repo)
+        mirror = self.repo / 'chewbacca/kit/snapshots/fb5d4a1e'
+        mirror.mkdir(parents=True)
+        (mirror / 'README.md').write_text('a copy of the kit')
+        data = {'command': 'ls'}
+        self.hook('PreToolUse', self.outside, data, tool='Bash', call='bg-2')
+        self.background(('begin', 99999999, str(self.repo / 'chewbacca')))
+        shutil.rmtree(self.repo / 'chewbacca/kit/snapshots')
+        self.background(('end', 99999999, str(self.repo / 'chewbacca')))
+        self.hook('PostToolUse', self.outside, data, tool='Bash', call='bg-2')
+        self.assertEqual(self.records(), [])
+
+    def test_a_background_run_claims_only_its_own_window_and_folder(self):
+        self.env['PERSONAL_CONTEXT_DIR'] = str(self.repo)
+        (self.repo / 'raw').mkdir()
+        # Ended before this call began, and a killed one that never ended.
+        path = Path(self.env['CHEWBACCA_HOME']) / 'background-writers.tsv'
+        path.parent.mkdir(parents=True)
+        path.write_text(f'begin\t{time.time() - 600}\t1\t{self.repo}/raw\n'
+                        f'end\t{time.time() - 300}\t1\t{self.repo}/raw\n'
+                        f'begin\t{time.time() - 60}\t99999999\t{self.repo}/raw\n')
+        data = {'command': 'python3 tools/note.py'}
+        self.hook('PreToolUse', self.outside, data, tool='Bash', call='bg-3')
+        (self.repo / 'raw/note.md').write_text('the call wrote this')
+        self.hook('PostToolUse', self.outside, data, tool='Bash', call='bg-3')
+        self.assertEqual([r.split('\t')[2] for r in self.records()], [str(self.repo / 'raw/note.md')])
+
+    def test_background_rows_parse_strictly_and_a_reused_pid_reopens_nothing(self):
+        # Review, 10/12: a pid reused after a reboot kept a dead run open,
+        # pruning dropped the end that closed it, and rows Python and the
+        # binary read differently ('1_0', '+3', a pid past pid_t) split them.
+        sys.path.insert(0, str(ROOT / 'tools'))
+        self.addCleanup(sys.path.remove, str(ROOT / 'tools'))
+        import write_log
+        me = os.getpid()
+        path = self.folder / 'bg.tsv'
+        path.write_text(f'begin\t10.0\t7\t/b/raw\nbegin\t11.0\t8\t/b/x\nend\t20.0\t7\t/b/raw\n'
+                        f'begin\t{time.time():.6f}\t{me}\t/b/live\nbegin\t1000\t{me}\t/b/reused\nnoise\n'
+                        f'begin\t1_0\t{me}\t/py-only\nbegin\t+3\t{me}\t/rust-only\nbegin\t3\t99999999999\t/too-big\n')
+        got = sorted((r, b) for r, b, e in write_log.background_regions(time.time(), path))
+        self.assertEqual([r for r, b in got], ['/b/live', '/b/raw'])
+        # A prune keeps a closed run's begin and end together, or neither.
+        now = time.time() + 10 * 24 * 3600
+        kept = write_log._pruned(path.read_text().split('\n'), now)
+        self.assertFalse(any('/b/raw' in line for line in kept))
+        self.assertTrue(any('/b/live' in line for line in kept))
+
+    def test_the_background_wrapper_marks_its_run_and_passes_the_exit_code(self):
+        out = self.repo / 'mirror'
+        result = subprocess.run([sys.executable, str(ROOT / 'tools/write_log.py'), 'background',
+                                 '--root', str(out), '--', 'sh', '-c', f'mkdir -p {out} && echo x > {out}/f; exit 3'],
+                                env=self.env, capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 3, result.stderr)
+        rows = (Path(self.env['CHEWBACCA_HOME']) / 'background-writers.tsv').read_text().splitlines()
+        self.assertEqual([r.split('\t')[0] for r in rows], ['begin', 'end'])
+        self.assertEqual({r.split('\t')[3] for r in rows}, {os.path.realpath(out)})
+
     def test_context_repository_does_not_claim_files_already_dirty(self):
         self.env['PERSONAL_CONTEXT_DIR'] = str(self.repo)
         self.policy.write_text('another session wrote this earlier')

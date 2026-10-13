@@ -121,6 +121,28 @@ with nothing team-specific in the kit:
 Code lives once, in the kit. The team repo holds only its rulings, copy,
 lists and ledger (`ops/README.md` in gavinjmunroe/firm-foundation is the model).
 
+## Video in outbound (2026-10-12, Firm Foundation)
+
+Caleb: "The video will make response rate 100x" and "This gotta result in a
+rlly high response rate". The reply-rate lifts quoted for video (3x to 4x)
+come almost entirely from Loom and Vidyard selling video, and video links in a
+first cold email cost deliverability. So:
+
+- Email 1 stays plain text. Its last line offers the video ("Want a 60 second
+  video of what we'd change on yours?"), and a yes already counts as a reply.
+- The video they get is about them. The first seconds show their own thing
+  (for churches, their homepage scrolled on a phone, from the audit numbers),
+  and the base cut goes after that.
+- Email 2 links a thumbnail for anyone who didn't answer email 1.
+- Split the first 40 sends between the video offer and the plain email. If the
+  video half doesn't reply more, drop the video.
+- Before scripting, ask the founders the questions that decide it: the one
+  ask, real proof, whether to name their school, tone per segment, and
+  whether sends wait on the video. The Firm Foundation list is in their
+  Downloads, "Firm Foundation video questions.md".
+- `gtme batch` and `gtme today` read the ledger's own lines.json. Pass
+  `--lines` only to override it (10/12: 252 leads held because nobody passed it).
+
 ## Client rulings beat your strategy (2026-10-09)
 
 Every client repo keeps `DECISIONS.json`: each standing ruling from the client

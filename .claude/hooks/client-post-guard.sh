@@ -32,7 +32,7 @@ case "$tool" in
   *) exit 0 ;;
 esac
 [ -n "$target" ] || exit 0
-TARGET="$target" python3 - <<'PY'
+TARGET="$target" python3 -I - <<'PY'
 import json, os, re, sys
 cfg = os.path.expanduser(os.environ.get("CHEWBACCA_GTM_CLIENTS", "~/.chewbacca/gtm/clients.json"))
 try:

@@ -23,7 +23,7 @@ command -v jq >/dev/null 2>&1 || exit 0
 cmd="$(jq -r '.tool_input.command // empty' 2>/dev/null)"
 [ -n "$cmd" ] || exit 0
 printf '%s' "$cmd" | grep -qE 'slackcli[[:space:]]+messages[[:space:]]+send' || exit 0
-CMD="$cmd" python3 - <<'PY'
+CMD="$cmd" python3 -I - <<'PY'
 import json, os, re, shlex, sys, time
 cmd = os.environ["CMD"]
 cfg_path = os.path.expanduser(os.environ.get("CHEWBACCA_GTM_CLIENTS", "~/.chewbacca/gtm/clients.json"))

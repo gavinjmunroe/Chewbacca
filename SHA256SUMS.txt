@@ -13,8 +13,8 @@ d8f5e0f3645011a6c96c7447c3e8ca4b1a29d7f4b1e74edd402338d2587330b2  .claude/hooks/
 3458c4a234cc71ffdb2bbaa69dd8852f9b6eeae5087552f9c404f6de898cbfb5  .claude/hooks/chatdb-guard.sh
 087dc7c3bee9b5ff422d01452337d10e3b84cf31c40d7328a1dee5afd536fe8b  .claude/hooks/clay-native-guard.sh
 d02147af3d0573e3970975d37c0c951d045f165fa9582fdffc25f1ee5ac3431f  .claude/hooks/clay-reply-guard.sh
-8c13ef2b650c5fc1d76a3629bdf8d236923ed9b95c8839170aa5ec626fc86cbd  .claude/hooks/client-ask-guard.sh
-58a589e3bcf9e927fda1a5449d9c706650b363cbe9f7b62ad1b686f3b3e79642  .claude/hooks/client-post-guard.sh
+f4bbc63f30c4c816558f987535988ce6b62f82ebe66d700a8c23cf4db5eb7046  .claude/hooks/client-ask-guard.sh
+e0d60d5f488817f5f59bbf740cddd01dbc8974420a65a2f414cf6c1d10b3c2c4  .claude/hooks/client-post-guard.sh
 c5d7b0db396449034ca4b4010f04aa5644dd19268abb83d3ccb4230bb004bddb  .claude/hooks/client-rulings.sh
 4f672620fc9ae3899a8bd134fbad1ab8c49bc3f3b37706ec3682aed243ab1692  .claude/hooks/coursework-context.sh
 86f870318c9bbd7a51448f1bc4cc52fd03a7dc20f707fc72da330641f00a05da  .claude/hooks/design-context.sh

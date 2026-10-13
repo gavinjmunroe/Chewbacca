@@ -68,6 +68,7 @@ relative link in here points nowhere.
 | [VOICE-DESIGN.md](reference/VOICE-DESIGN.md)                       | How the voice answers and the reasoning behind each rule                              |
 | [CLOUDFLARE.md](reference/CLOUDFLARE.md)                           | Workers, D1, KV, R2 and Queues patterns                                               |
 | [ECOSYSTEM.md](reference/ECOSYSTEM.md)                             | A curated map of vibe coding tools and repos                                          |
+| [TOGARI-PARITY.md](reference/TOGARI-PARITY.md)                     | Each Togari platform capability and what answers it in Chewbacca, read 2026-10-10     |
 
 ## Plans
 
@@ -106,6 +107,10 @@ relative link in here points nowhere.
 | [LINKS-FROM-CALEB.md](plans/LINKS-FROM-CALEB.md)       | Every link Caleb sent on 2026-10-08 and what happened to each                       |
 | [ANIMATION-ART-REPOS.md](plans/ANIMATION-ART-REPOS.md) | Animation and art tooling catalog, 2026-10-09                                       |
 | [REPO-GRAPH.md](plans/REPO-GRAPH.md)                   | Counts and triage from `bin/repo-graph`, built 2026-10-09                           |
+| [context-budget.md](plans/context-budget.md)           | What every session pays in tokens before the first word, measured 2026-10-11        |
+| [one-supervisor.md](plans/one-supervisor.md)           | One supervisor swaps every long-lived process together on a kit move, 2026-10-11    |
+| [reengineer-flat-plan.md](plans/reengineer-flat-plan.md) | The reengineer steps in order, each with its test and number, 2026-10-11          |
+| [send-approval.md](plans/send-approval.md)             | Send approval as a type that only a press can make, 2026-10-11                      |
 
 The roadmap and backlog live at the repo root: [ROADMAP.md](../ROADMAP.md)
 orders the next work and keeps the earlier product priorities that used to sit

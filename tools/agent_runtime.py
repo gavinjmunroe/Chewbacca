@@ -601,6 +601,24 @@ def terminal_shims(bin_dir=None):
     return written
 
 
+def remember_hosts_at_setup():
+    """Every host already installed when the person chose a runtime counts as
+    seen, connected or not, so the SessionStart `connect --new-only` wires
+    only an app installed AFTER setup. Without this the 10/12 stranger run's
+    first session wrote Codex, Cursor and Gemini configs though setup was run
+    for claude-code alone. `agent connect` (no --new-only) still wires all."""
+    ledger = shared_home() / 'connected.json'
+    try:
+        known = set(json.loads(ledger.read_text()).get('hosts', []))
+    except (OSError, ValueError):
+        known = set()
+    try:
+        present = set(selected('all'))
+    except ValueError:
+        present = set()
+    context.atomic_write(ledger, json.dumps({'hosts': sorted(known | present)}) + '\n')
+
+
 def connect(new_only=False):
     """Wire every installed host from the same sources, then remember which.
 
@@ -662,6 +680,7 @@ def main():
         output = plan(args.runtime)
     elif args.command == 'setup':
         output = setup(args.runtime, args.brain_dir, args.import_claude_skills, args.name, args.team, args.no_team)
+        remember_hosts_at_setup()
     elif args.command == 'status':
         output = status(args.runtime)
     elif args.command == 'remove':

@@ -32,6 +32,28 @@ class RuntimeTests(unittest.TestCase):
         self.env.start()
         self.addCleanup(self.env.stop)
 
+    def test_first_session_connects_only_hosts_installed_after_setup(self):
+        # 10/12 stranger run: setup --runtime claude-code, then the first
+        # session's connect --new-only wrote Codex, Cursor and Gemini configs.
+        wired = []
+        with patch.object(runtime, 'selected', side_effect=lambda name: ['claude-code', 'codex', 'cursor']
+                          if name == 'all' else name.split(',')):
+            runtime.remember_hosts_at_setup()
+            with patch.object(runtime, 'setup', side_effect=lambda names, *a, **k: wired.append(names) or None), \
+                    patch.object(runtime, 'terminal_shims', return_value=[]), \
+                    patch.object(runtime, 'export_chat', return_value=None):
+                first = runtime.connect(new_only=True)
+        self.assertEqual(first['connected_now'], [])
+        self.assertEqual(wired, [])
+        with patch.object(runtime, 'selected', side_effect=lambda name: ['claude-code', 'codex', 'cursor', 'gemini']
+                          if name == 'all' else name.split(',')), \
+                patch.object(runtime, 'setup', side_effect=lambda names, *a, **k: wired.append(names) or None), \
+                patch.object(runtime, 'terminal_shims', return_value=[]), \
+                patch.object(runtime, 'export_chat', return_value=None):
+            later = runtime.connect(new_only=True)
+        self.assertEqual(later['connected_now'], ['gemini'])
+        self.assertEqual(wired, ['gemini'])
+
     @unittest.skipUnless(tomllib, 'tomllib needs Python 3.11+')
     def test_codex_install_needs_no_claude_and_preserves_configuration(self):
         home = context.codex_home()

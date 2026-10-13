@@ -86,8 +86,8 @@ const MAX_CODE_TRIES = 3;
 // configured the client, never by the agent talking to it.
 //
 // A process nobody is watching (a no-send run, the suite, node --test,
-// pytest, a job-queue job) writes the code to the fake sink instead, the
-// same rule and file as tools/send_approval.py unwatched(). 2026-10-13
+// pytest, a job-queue job) shows nothing and notes the refused draft in the
+// fake sink, the same rule and file as tools/send_approval.py unwatched(). 2026-10-13
 // 1:52pm: a test drew a real order code on Caleb's live HUD.
 const UNWATCHED_ENV = ["CHEWBACCA_NO_SEND", "CHEWBACCA_SUITE", "PYTEST_CURRENT_TEST", "NODE_TEST_CONTEXT", "CHEWBACCA_JOB"];
 function unwatched(env = process.env) {
@@ -107,15 +107,18 @@ function showCode(bin, code, what) {
       return false;
     }
   }
+  // Never the code itself: every marker unwatched() reads is one an agent can
+  // set, so a code in a file would be a code it could read and redeem
+  // (security review, 10/13). The draft is refused with nothing to redeem.
   const why = unwatched();
   if (why) {
     try {
-      const row = { at: Date.now() / 1000, code, what: String(what || "").slice(0, 140), why };
+      const row = { at: Date.now() / 1000, what: String(what || "").slice(0, 140), why };
       fs.appendFileSync(codeSink(), JSON.stringify(row) + "\n", { mode: 0o600 });
-      return true;
     } catch {
-      return false;
+      // the note is a courtesy; the refusal below is the rule
     }
+    return false;
   }
   const q = (v) => JSON.stringify(String(v));
   const short = String(what || "").slice(0, 140);

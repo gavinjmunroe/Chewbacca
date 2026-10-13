@@ -659,10 +659,25 @@ class UnwatchedCodeTests(unittest.TestCase):
         # Today's case exactly: a test file run directly, no suite markers.
         for name in ("CHEWBACCA_NO_SEND", "CHEWBACCA_SUITE", "PYTEST_CURRENT_TEST", "CHEWBACCA_JOB"):
             os.environ.pop(name, None)
-        self.assertTrue(sa.show_code("424242", "usc-order to Bowls: 1 bowl"))
+        self.assertFalse(sa.show_code("424242", "usc-order to Bowls: 1 bowl"))
         self.assertEqual(self.drew_on_screen(), [])
-        rows = [json.loads(line) for line in Path(self.sink).read_text().splitlines()]
-        self.assertEqual(rows[-1]["code"], "424242")
+        # The sink notes the refused send but never holds a code an agent
+        # could read back and redeem.
+        sink = Path(self.sink).read_text()
+        self.assertIn("usc-order to Bowls", sink)
+        self.assertNotIn("424242", sink)
+
+    def test_an_unwatched_take_leaves_no_code_to_redeem(self):
+        Path(self.tmp, "approvals").mkdir()
+        Path(self.tmp, "approvals", "mode").write_text("press\n")
+        with mock.patch.dict(os.environ, {"CHEWBACCA_SEND_APPROVALS": os.path.join(self.tmp, "approvals"),
+                                          "CHEWBACCA_VERDICT_LOG": os.path.join(self.tmp, "v.tsv"),
+                                          "CHEWBACCA_JOB": "1013-x"}), \
+                mock.patch.object(sa, "_policy_refusal", return_value=None):
+            with self.assertRaises(sa.NoApproval):
+                sa.take("usc-order", "Bowls", "1 bowl", chain=AGENT_CHAIN)
+        self.assertEqual(self.drew_on_screen(), [])
+        self.assertEqual(os.listdir(os.path.join(self.tmp, "approvals", "pending")), [])
 
     def test_each_marker_alone_means_unwatched(self):
         live = {"env": {}, "argv": ["/k/bin/people"], "modules": {}, "chain": [(9, "/bin/zsh"), (8, "claude")]}
@@ -697,9 +712,10 @@ class UnwatchedCodeTests(unittest.TestCase):
                               "CHEWBACCA_JOB", "CHEWBACCA_MCP_APPROVAL_OUT")}
         for name in ("CHEWBACCA_NO_SEND", "CHEWBACCA_SUITE", "NODE_TEST_CONTEXT", "CHEWBACCA_JOB"):
             r = self.real_run(["node", "-e", js], env=dict(clean, **{name: "1"}), capture_output=True, text=True)
-            self.assertEqual(r.stdout.strip(), "true", name + r.stderr[-300:])
+            self.assertEqual(r.stdout.strip(), "false", name + r.stderr[-300:])
             self.assertFalse(mark.exists(), "%s: the code was drawn on the HUD" % name)
-        self.assertIn("135790", Path(self.sink).read_text())
+        self.assertIn("usc-order to Bowls", Path(self.sink).read_text())
+        self.assertNotIn("135790", Path(self.sink).read_text())
         r = self.real_run(["node", "-e", js], env=clean, capture_output=True, text=True)
         self.assertTrue(mark.exists(), "a watched MCP server stopped drawing codes: " + r.stderr[-300:])
 

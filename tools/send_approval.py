@@ -397,29 +397,32 @@ def code_sink():
         tempfile.gettempdir(), "chewbacca-send-codes-%d.jsonl" % os.getuid())
 
 
-def _to_sink(code, what, why):
-    """The fake screen: one JSON line per code, readable only by this user.
-    A test that plays the person reads its code from here."""
+def _to_sink(what, why):
+    """The fake screen: one JSON line per refused code, readable only by this
+    user, and never the code itself. Every marker unwatched() reads is one an
+    agent can set, so a code written here would be a code an agent could read
+    and redeem (security review, 10/13). No code is drawn, show_code answers
+    False, and the send is refused with no pending code to guess at."""
     try:
         fd = os.open(code_sink(), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
         with os.fdopen(fd, "a", encoding="utf-8") as fh:
-            fh.write(json.dumps({"at": time.time(), "code": code, "what": what[:140], "why": why}) + "\n")
-        return True
+            fh.write(json.dumps({"at": time.time(), "what": what[:140], "why": why}) + "\n")
     except OSError:
-        return False
+        pass
+    return False
 
 
 def show_code(code, what):
     """Put the code in front of the person and nowhere else. True when some
     surface took it. CHEWBACCA_SEND_CODE_SHOW=off shows nothing (the tests);
     it can only hide a code, never reveal one. A process nobody is watching
-    (unwatched()) writes it to the fake sink instead of the HUD or a
-    notification."""
+    (unwatched()) shows nothing: it notes the refused send in the fake sink
+    and the send is refused."""
     if os.environ.get("CHEWBACCA_SEND_CODE_SHOW") == "off":
         return False
     why = unwatched()
     if why:
-        return _to_sink(code, what, why)
+        return _to_sink(what, why)
     q = json.dumps
     lines = [
         "@ send-code at=top w=440 life=%d" % RESHOW_AFTER,

@@ -188,8 +188,12 @@ def messages(ctx, chat: str = "", after: datetime | None = None, limit: int = MO
 def when(stamp) -> datetime | None:
     if not isinstance(stamp, str) or not stamp or stamp.startswith("0001-"):
         return None
+    # Stock /usr/bin/python3 is 3.9, whose fromisoformat refuses an offset
+    # without its colon ("-0700"), so every row read as undated and the list
+    # stopped sorting by time (test_surface_whatsapp, 10/13). Add the colon.
+    stamp = re.sub(r"([+-]\d{2})(\d{2})$", r"\1:\2", stamp.replace("Z", "+00:00"))
     try:
-        moment = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+        moment = datetime.fromisoformat(stamp)
     except ValueError:
         return None
     if moment.tzinfo is None:

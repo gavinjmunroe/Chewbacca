@@ -648,8 +648,13 @@ class HookTests(unittest.TestCase):
                        'turn_id': 'test', 'last_assistant_message':
                        'In conclusion, let us delve into this robust tapestry. '
                        'It is not about X, it is about Y.'}
-            result = hooks.dispatch(payload)
-            self.assertEqual(result['decision'], 'block')
+            # Since 1c0459a2 (10/11) no Stop guard refuses a reply: a refusal
+            # only showed Caleb a second copy. The bundled scanners still run,
+            # and their flags wait in voice-flags.pending for the next turn.
+            self.assertEqual(hooks.dispatch(payload), {})
+            pending = Path(os.environ['CHEWBACCA_HOME']) / 'voice-flags.pending'
+            self.assertTrue(pending.is_file(), 'the bundled scanners flagged nothing')
+            self.assertIn('banned-word', pending.read_text())
             payload['stop_hook_active'] = True
             self.assertEqual(hooks.dispatch(payload), {})
 

@@ -372,7 +372,13 @@ class RuntimeTests(unittest.TestCase):
                                 capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout)['runtimes'][0]['id'], 'codex')
-        self.assertEqual(list(self.home.iterdir()), [])
+        # Apple's /usr/bin/python3 (3.9) puts its own bytecode cache under
+        # ~/Library/Caches/com.apple.python whenever it imports anything; that
+        # is the interpreter's write, not setup's (seen 10/13 in a temp HOME).
+        made = [p for p in self.home.rglob('*')
+                if p.relative_to(self.home).parts[:3] != ('Library', 'Caches', 'com.apple.python')
+                and p.relative_to(self.home).parts not in (('Library',), ('Library', 'Caches'))]
+        self.assertEqual(made, [])
 
 
 if __name__ == '__main__':

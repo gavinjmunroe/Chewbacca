@@ -517,6 +517,8 @@ export function failedAt(story) {
 // you to sign in: This client is no longer supported ..." did, and was the
 // three-line headline of 10/12. Six is guessed.
 const FAILED_HEADLINE_WORDS = 6;
+// What a provider's sentence may hold to be shown as our headline.
+const PLAIN_WORDS = /^[A-Za-z][A-Za-z ',.!?-]*$/;
 
 const FAILED_WORDS = {
   asked: "Failed before it started",
@@ -562,7 +564,14 @@ export function headline(story, b = beat(story), { who = "" } = {}) {
     // A short first sentence is its own name ("Usage limit reached.");
     // anything longer is small print.
     const first = firstSentence(story.failure);
-    return first && first.split(/\s+/).length <= FAILED_HEADLINE_WORDS ? first : "It stopped with an error";
+    // A usage limit is named: the provider's own line came through on the
+    // 10/12 evening rehearsal as "Claude AI usage limit reached|1788555903",
+    // a reset timestamp glued on with a pipe, in 40 pt type.
+    if (/usage limit/i.test(story.failure ?? "")) return `${who || "It"} hit ${who ? "its" : "a"} usage limit`;
+    // Only plain words are ever the headline: no pipes, codes, paths or links.
+    return first && first.split(/\s+/).length <= FAILED_HEADLINE_WORDS && PLAIN_WORDS.test(first)
+      ? first
+      : "It stopped with an error";
   }
   if (b === "reading") {
     const last = story.reads[story.reads.length - 1];
@@ -588,31 +597,33 @@ export function headline(story, b = beat(story), { who = "" } = {}) {
   return n ? `Changed ${filesWord(n)}` : "Done";
 }
 
-/** The one decision waiting on the person, or null. A failed turn's call is
- *  what it is and the one thing to do, with the system's own words under it. */
+/** The one decision waiting on the person, or null. Every call is one short
+ *  line and its presses, each press with the key that does it (`key`, drawn
+ *  as a hint on the button; Story.tsx binds them).
+ *
+ *  A failed turn is one line and ONE press. On 10/12 the call under "Gemini
+ *  can't sign in" said it three times (headline, a 14-word line, three lines
+ *  of the provider's raw words) and offered two presses; every shipped app
+ *  studied says it once with one action (Realm's Sign in, Cursor's Try
+ *  again, Linear's Reload, ux-universe-report.md, steal list 9). The raw
+ *  words are one press away, in the transcript. */
 export function decision(story, { kept = false, who = "" } = {}) {
   const f = failedFault(story);
   if (f && !story.permission) {
-    const name = who || "this agent";
-    const signedOut = f.name === "signed-out";
+    if (f.name === "signed-out")
+      // Claude's own login dying can't be answered with "use Claude": his
+      // transcript's install card has Sign in.
+      return who === "Claude"
+        ? { kind: "failed", line: "Claude needs to sign in again.", verbs: [{ id: "answer", text: "Sign Claude in", key: "\u21b5" }] }
+        : {
+            kind: "failed",
+            line: `${who || "Its"}${who ? "'s" : ""} login is dead. Claude can do this.`,
+            verbs: [{ id: "new", text: "Use Claude instead", key: "\u21b5" }],
+          };
     return {
       kind: "failed",
-      // Claude's own login dying can't be answered with "use Claude".
-      line: signedOut
-        ? who === "Claude"
-          ? "Claude's login is dead. Sign Claude in again, then ask again."
-          : `${name}'s login is dead. Use Claude for this, or sign ${name} in again.`
-        : `${f.what} ${f.fix}`,
-      detail: f.detail,
-      verbs: signedOut
-        ? [
-            { id: "new", text: who === "Claude" ? "New agent" : "New agent with Claude" },
-            { id: "answer", text: "See the full error" },
-          ]
-        : [
-            { id: "answer", text: "See the full error" },
-            { id: "new", text: "New agent" },
-          ],
+      line: "The whole error is in the transcript.",
+      verbs: [{ id: "answer", text: "Read the error", key: "\u21b5" }],
     };
   }
   const perm = story.permission;
@@ -621,7 +632,7 @@ export function decision(story, { kept = false, who = "" } = {}) {
       return {
         kind: "question",
         line: "It's waiting on your answer",
-        verbs: [{ id: "answer", text: "Answer it" }],
+        verbs: [{ id: "answer", text: "Answer it", key: "\u21b5" }],
       };
     // Allow is offered only when the whole request is on the glass, and the
     // button never carries a shortened command: what runs is in the figure,
@@ -632,8 +643,8 @@ export function decision(story, { kept = false, who = "" } = {}) {
         requestId: perm.requestId,
         line: "This request is too long to show here, or hides characters. Read it in full first.",
         verbs: [
-          { id: "answer", text: "Read it in the transcript" },
-          { id: "deny", text: "Deny" },
+          { id: "answer", text: "Read it in the transcript", key: "\u21b5" },
+          { id: "deny", text: "Deny", key: "\u2318\u232b" },
         ],
       };
     }
@@ -643,10 +654,17 @@ export function decision(story, { kept = false, who = "" } = {}) {
       // Seven words: the needs-you story was 49 words with the ten-word
       // line it had (realm-morning-verify.md, 10/12), over the 45 a block
       // may hold on first view.
-      line: "Allow runs exactly what's on the right.",
+      // Never "on the right": below 1000 pt the story is one column and the
+      // request sits above the call (10/12 evening frames, 1246 screen).
+      line: "Allow runs exactly what's shown.",
+      // Three labeled choices, each with its key, as Realm's own card and
+      // every app studied draw it (Claude.app, Cursor, Codex, the Claude
+      // Code extension; steal list 8). Allow always is his engine's own
+      // `allow_always` (contracts rpc.ts, sessions.respondPermission).
       verbs: [
-        { id: "allow", text: "Allow" },
-        { id: "deny", text: "Deny" },
+        { id: "allow", text: "Allow", key: "\u21b5" },
+        { id: "allow_always", text: "Always allow", key: "\u21e7\u21b5" },
+        { id: "deny", text: "Deny", key: "\u2318\u232b" },
       ],
     };
   }
@@ -654,8 +672,8 @@ export function decision(story, { kept = false, who = "" } = {}) {
   if (!story.stage.running && n && !kept) {
     return {
       kind: "review",
-      line: `${filesWord(n)} changed. Reject any change on the right, or keep them all.`,
-      verbs: [{ id: "keep", text: `Keep all ${filesWord(n)}` }],
+      line: `${filesWord(n)} changed. Reject any one, or keep them all.`,
+      verbs: [{ id: "keep", text: `Keep all ${filesWord(n)}`, key: "\u21b5" }],
     };
   }
   return null;
@@ -724,4 +742,25 @@ export function fromHistory(list) {
   let s = emptyStory();
   for (const ev of list.slice(start)) s = tell(s, ev);
   return s;
+}
+
+// How long after a call appears its keys do nothing. Claude.app ignores its
+// permission keys for 400 ms after the card shows and on key repeat
+// (ux-universe-report.md, steal list 8): a Return pressed for the composer a
+// beat before the request landed must never become Allow. Their number,
+// never measured here.
+export const KEY_GUARD_MS = 400;
+
+/** The verb a key answers on the story's call, or null. Return is the
+ *  call's first press, Shift+Return its second (Always allow), Cmd+Delete is
+ *  Deny, and 1 to 9 are the presses in order, as the hints on the buttons
+ *  say. Nothing within KEY_GUARD_MS of the call appearing, nothing on a held
+ *  key's repeat, nothing with Ctrl or Alt held. */
+export function callKey(call, { key, shift = false, meta = false, ctrl = false, alt = false, repeat = false, sinceShown = Infinity }) {
+  if (!call || repeat || ctrl || alt || sinceShown < KEY_GUARD_MS) return null;
+  const want =
+    key === "Enter" && !meta ? (shift ? "⇧↵" : "↵") : key === "Backspace" && meta && !shift ? "⌘⌫" : null;
+  if (want) return call.verbs.find((v) => v.key === want)?.id ?? null;
+  if (!meta && !shift && /^[1-9]$/.test(key)) return call.verbs[Number(key) - 1]?.id ?? null;
+  return null;
 }

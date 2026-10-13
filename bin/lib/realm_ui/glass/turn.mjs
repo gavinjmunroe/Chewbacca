@@ -822,8 +822,11 @@ const lineOf = (t) =>
 
 /** What the glass holds at rest, for any number of agents and turns: at most
  *  MAX_TILES tiles of one line each, at most WAIT_KEEP things waiting on him,
- *  and counts for the rest. `agents` maps session id to step()'s state. */
-export function restingView(sessions, agents = {}, truths = {}, asked = false, now = Date.now()) {
+ *  and counts for the rest. `agents` maps session id to step()'s state.
+ *  `max` is MAX_TILES unless he pressed "Show all", which draws every one
+ *  (Cursor's Archived (n) and Claude.app's session list never leave a count
+ *  with no way in; steal list 4). */
+export function restingView(sessions, agents = {}, truths = {}, asked = false, now = Date.now(), max = MAX_TILES) {
   const drawn = [];
   for (const s of sessions) {
     const pid = s.providerSessionId;
@@ -836,10 +839,10 @@ export function restingView(sessions, agents = {}, truths = {}, asked = false, n
   drawn.sort((a, b) => rank(a.t, now) - rank(b.t, now) || (b.t.at || b.s.updatedAt || 0) - (a.t.at || a.s.updatedAt || 0));
   const waiting = drawn.filter((d) => d.t.phase === "needs-you");
   return Object.freeze({
-    tiles: drawn.slice(0, MAX_TILES).map(({ s, t }) =>
+    tiles: drawn.slice(0, max).map(({ s, t }) =>
       Object.freeze({ id: s.id, title: clip(words(s.title) || "Untitled", FOLD_CHARS), word: word(t), tone: tone(t), line: lineOf(t), turn: t }),
     ),
-    moreAgents: Math.max(0, drawn.length - MAX_TILES),
+    moreAgents: Math.max(0, drawn.length - max),
     waiting: waiting.slice(0, WAIT_KEEP).map(({ s, t }) => Object.freeze({ id: s.id, title: clip(words(s.title) || "Untitled", 40), question: lineOf(t) })),
     moreWaiting: Math.max(0, waiting.length - WAIT_KEEP),
   });

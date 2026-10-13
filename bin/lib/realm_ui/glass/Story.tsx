@@ -45,6 +45,7 @@ import {
 import {
   beat,
   beatLine,
+  callKey,
   decision,
   emptyStory,
   figure,
@@ -104,8 +105,18 @@ type Call = {
   requestId?: string;
   line: string;
   detail?: string;
-  verbs: { id: string; text: string }[];
+  verbs: { id: string; text: string; key?: string }[];
 } | null;
+// A focused control that owns its own keys: Return on it is that control,
+// never the call's first press. Realm's own card holds the same rule ("A
+// focused control wins", PermissionCard.tsx): the first build here turned
+// Return on a focused Deny into Allow (review, 10/12).
+const OWNS_KEYS =
+  'button,a[href],input,textarea,select,[contenteditable],[role="button"],[role="option"],[role="menuitem"],[role="tab"],.cm-editor,.xterm';
+// His main pane, which the story covers (GlassLayer.tsx MAIN).
+const HIDDEN_UNDER_STORY = "#root .app > .main";
+const OVERLAY =
+  '[role="dialog"],[role="alertdialog"],[role="menu"],[role="listbox"],[aria-modal="true"]';
 
 // A pasted screenshot is stored as Claude Code's own marker, "[Image:
 // original 2048x2048, displayed at ...]"; it reads as the image it was.
@@ -325,7 +336,7 @@ export function Story({
       const pending = (story as unknown as StoryShape).permission;
       if (
         call.kind === "permission" &&
-        (id === "allow" || id === "deny") &&
+        (id === "allow" || id === "allow_always" || id === "deny") &&
         pending?.requestId === call.requestId &&
         pending !== null &&
         (id === "deny" || (pending.view.exact && wantsInView))
@@ -344,6 +355,65 @@ export function Story({
     },
     [call, onTranscript, onNew, session.id, story, keptKey, wantsInView],
   );
+
+  // The call's keys, as its buttons' hints say (beats.mjs callKey): Return
+  // is the first press, Shift+Return Always allow, Cmd+Delete Deny, 1 to 9
+  // the presses in order. Never while he types or one of his menus or
+  // sheets is open, never on a held key, never in the first KEY_GUARD_MS of
+  // a call, and Allow by key waits on the same whole-request-in-view gate as
+  // its button.
+  const callId = call ? `${call.kind}:${call.requestId ?? ""}:${call.line}` : "";
+  const callShown = useRef(0);
+  useEffect(() => {
+    callShown.current = Date.now();
+  }, [callId]);
+  useEffect(() => {
+    if (!call || loadFault) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.isComposing) return;
+      // His composer keeps focus under the story (his app focuses it on
+      // open), where he can't see it or type in it: only a field he can see,
+      // outside his main pane, is his typing. The first build skipped every
+      // key for that hidden composer (headless WebKit, 10/12 evening).
+      const t = document.activeElement;
+      if (t && t !== document.body && t.closest?.(OWNS_KEYS) && !t.closest?.(HIDDEN_UNDER_STORY)) return;
+      if (document.querySelector(OVERLAY)) return;
+      const id = callKey(call, {
+        key: e.key,
+        shift: e.shiftKey,
+        meta: e.metaKey,
+        ctrl: e.ctrlKey,
+        alt: e.altKey,
+        repeat: e.repeat,
+        sinceShown: Date.now() - callShown.current,
+      });
+      if (!id) return;
+      if ((id === "allow" || id === "allow_always") && !wantsInView) return;
+      e.preventDefault();
+      e.stopPropagation();
+      answer(id);
+    };
+    // Capture: GlassLayer stops keys bound for his hidden pane at the
+    // window, and this must still hear them.
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [call, loadFault, answer, wantsInView]);
+
+  // Stop, one press while his engine runs the turn (Claude.app, Realm and
+  // Cursor each keep one beside the running status; steal list 11). Only a
+  // turn his engine runs: an imported tab runs in its own terminal, where
+  // realm's interrupt can't reach it.
+  const [stopFault, setStopFault] = useState<Fault | null>(null);
+  const stoppable = session.status === "running";
+  // A failed Stop says so only while there's still a turn to stop.
+  useEffect(() => {
+    if (!stoppable) setStopFault(null);
+  }, [stoppable]);
+  const stop = useCallback(() => {
+    void within(rpc().call("sessions.interrupt", { id: session.id }), "engine-down", HISTORY_ANSWER_MS).then((r) =>
+      setStopFault(r.ok ? null : r.fault),
+    );
+  }, [session.id]);
 
   return (
     <section
@@ -408,16 +478,20 @@ export function Story({
                 className="glass-word"
                 data-tone={v.id === "deny" ? "bad" : undefined}
                 onClick={() => answer(v.id)}
-                disabled={v.id === "allow" && !wantsInView}
+                data-verb={v.id}
+                disabled={(v.id === "allow" || v.id === "allow_always") && !wantsInView}
                 title={
                   v.id === "keep"
                     ? "Leaves every change as the agent wrote it. Nothing is written."
-                    : v.id === "allow" && !wantsInView
-                      ? "Bring the whole request on the right into view first."
-                      : undefined
+                    : (v.id === "allow" || v.id === "allow_always") && !wantsInView
+                      ? "Bring the whole request into view first."
+                      : v.id === "allow_always"
+                        ? `Allows this and the same again in this session without asking.`
+                        : undefined
                 }
               >
                 {v.text}
+                {v.key && <kbd className="glass-key">{v.key}</kbd>}
               </button>
             ))}
           </div>
@@ -476,6 +550,16 @@ export function Story({
       )}
 
       <nav className="story-doors" data-region="doors" aria-label="The transcript">
+        {stopFault && (
+          <span className="glass-fault-what" role="alert">
+            {stopFault.what}
+          </span>
+        )}
+        {stoppable && (
+          <button type="button" className="glass-button" data-tone="bad" onClick={stop}>
+            Stop
+          </button>
+        )}
         <button
           type="button"
           className="glass-button"

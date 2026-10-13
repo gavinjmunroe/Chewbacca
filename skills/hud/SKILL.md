@@ -658,7 +658,7 @@ Regions, each with one job:
    turn that changed code and proved nothing says so, plainly.
 6. **Your call** (bottom left): the one decision waiting on him, with the
    press that answers it and what it does. A permission is "Allow runs
-   exactly what's on the right" with Allow and Deny, and the figure draws the
+   exactly what's shown" with Allow, Always allow and Deny, and the figure draws the
    request as the thing it is: a command as its lines, an edit as the file
    with its lines out and in, a write as the file and what goes in it. One
    typed view per tool kind (beats.mjs REQUESTS, Story.tsx REQUEST_VIEWS),
@@ -940,6 +940,41 @@ Read from the bundles of Claude.app, the Claude Code and Codex VS Code extension
 13. **One action tray at a time, chosen by priority, same keys everywhere.** Cursor agents window shows one tray picked by a fixed priority list (error first), Cmd+Enter primary, Cmd+Shift+Enter secondary, Esc dismiss. Glass: `call` already shows one `decision()`; make its order explicit (fault > permission > question > review > done) and bind the same three keys to whatever is there.
 14. **Messages queue instead of failing.** Claude.app holds messages while signed out, rate limited or archived and sends when cleared, plus "Send now"; Claude Code ext "Queue another message..." shown as "You, queued"; Cursor queued follow-ups editable/send now/remove; Codex queue, steer, interrupt. Glass: Reply from the story queues into his composer and shows "Queued, sends when it's free" on the tile.
 15. **Attention outside the window.** Codex desktop dock badge, tray menu (Running, Unread, Pinned), notifications you can reply to, a floating overlay that answers approvals; Linear and Notion deep links (`linear://` + localhost handoff, `notion://`). Glass: Kyber menu bar count of waiting agents, a voice "next waiting" intent in `voiceIntent`, and a deep link that opens the glass straight to one session's story.
+
+### Applied on the glass (10/12 evening, ux-apply)
+
+Which of the list the glass does now, each with its test in
+tests/test_realm_steal.mjs and its frame in the ux-apply rehearsal:
+
+- **6, keys between sessions:** 1 to 9 open the tile with that number,
+  drawn on the tile (nav.mjs tileKey).
+- **4, no count without a way in:** "Show all N agents" under the tiles
+  draws every one; every opening is back to nine.
+- **8, permission:** Allow (Return), Always allow (Shift+Return, his
+  engine's `allow_always`), Deny (Cmd+Delete), and 1 to 3, each key drawn on
+  its press. No key works in the first 400 ms of a call or on a held key's
+  repeat (beats.mjs callKey, KEY_GUARD_MS), and Allow by key waits on the
+  same whole-request-in-view gate as the button. Keys never reach his main
+  pane while the tiles or the story cover it: his hidden permission card
+  kept focus on its Allow and answered a Return there, past both gates.
+- **9, one error, one press:** a failed turn's call is one line of at most
+  eight words and one press ("Gemini's login is dead. Claude can do this."
+  with Use Claude instead). The headline is plain words only; a usage limit
+  is named ("Claude hit its usage limit"), and anything with a pipe, code or
+  link is "It stopped with an error". The provider's words are the
+  transcript's.
+- **11, Stop and Escape:** Stop is a door on the story while his engine runs
+  the turn (sessions.interrupt). Escape in his composer is his interrupt;
+  elsewhere in the transcript it steps back to the story (nav.mjs escapeOn).
+- **12, review bar:** the review's bar stays put and counts ("2 files, 8
+  changes to decide") with Next change; only the hunks scroll, and each
+  hunk's Keep and Reject ride sticky at its top.
+- **13, same keys everywhere:** Return is every call's first press.
+
+Not done, on purpose: 2 (his sidebar's Needs you is on screen now and
+answers in place), 1, 7 and 10 of his frame (done by c5d9f458). Not done
+yet: 3 (a seven-day filter), 5 (Cmd+K on the tiles), 10 (a live timer:
+the typed turn has no start time), 14, 15.
 
 Also clever, not ranked: Cursor sends separate user-facing and model-facing tool errors ("Tool call failed" goes to the model); Claude.app and the Claude Code ext warn before an expensive re-read ("Your next message re-reads all {tokens} tokens. Compact first"); Claude.app moves keyboard focus to the next row when you dismiss one; Notion queues navigation commands until the page is ready (`sendOrQueueNavigationCommand`) and keeps the current URL on reload; Linear's `applicable(ctx)` hides "Go to X" while you are on X.
 

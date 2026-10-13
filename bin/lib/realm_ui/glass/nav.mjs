@@ -24,9 +24,16 @@ export const opening = () =>
   Object.freeze({ mode: "tiles", focus: null, picked: NO_PICK });
 
 /** One key on the tiles. Arrows pick (the first press picks the first
- *  tile); Return opens only a tile he picked. */
+ *  tile); Return opens only a tile he picked; 1 to 9 open the tile with
+ *  that number on it, one press, as Claude.app's Cmd+1..9 switch sessions
+ *  (ux-universe-report.md, steal list 6). A digit past the last tile does
+ *  nothing. */
 export function tileKey(picked, n, key, cols = COLS) {
   if (!n) return { picked: NO_PICK, open: false, handled: false };
+  if (/^[1-9]$/.test(key)) {
+    const at = Number(key) - 1;
+    return at < n ? { picked: at, open: true, handled: true } : { picked, open: false, handled: false };
+  }
   const move = {
     ArrowRight: 1,
     ArrowLeft: -1,
@@ -113,6 +120,22 @@ export function followRow({ mode, rowActive, focused, known, current }) {
   if (mode !== "tiles" && focused === current) return null;
   if (!known) return { mode: "work", focus: focused, keep: false };
   return { mode: mode === "work" ? "work" : "story", focus: focused, keep: false };
+}
+
+/** What Escape does on the glass. `typing` is his focus in a text field
+ *  (his composer), `editor` in the code editor or a terminal, `overlay` one
+ *  of his menus, sheets or lists open.
+ *
+ *  "his" leaves the key to his page: bridge.js then sees a page that wants
+ *  it and never closes the glass. In the transcript with his composer
+ *  focused that is his Escape-to-interrupt, as in Realm, Claude.app and
+ *  Cursor (steal list 11). Before 10/12 the glass took that Escape to go
+ *  back to the story, so his interrupt never ran. Bar's Story button is the
+ *  labeled way back. */
+export function escapeOn({ mode, overlay = false, typing = false, editor = false }) {
+  if (mode === "tiles" || overlay || editor) return "his";
+  if (mode === "work") return typing ? "his" : "story";
+  return "tiles";
 }
 
 /** The labeled buttons the glass bar shows in each mode. One press each to

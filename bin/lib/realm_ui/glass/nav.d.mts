@@ -41,3 +41,9 @@ export function followRow(state: {
   known: boolean;
   current: string | null;
 }): null | { mode: "tiles" | "story" | "work"; focus: string | null; keep: boolean };
+export function escapeOn(state: {
+  mode: "tiles" | "story" | "work";
+  overlay?: boolean;
+  typing?: boolean;
+  editor?: boolean;
+}): "his" | "story" | "tiles";

@@ -194,15 +194,10 @@ test("a failed turn is told as a named state, never the raw error", () => {
   assert.ok(line.split(/\s+/).length <= 6);
   const call = b.decision(st, { who: "Gemini" });
   assert.equal(call.kind, "failed");
-  assert.match(call.line, /Gemini's login is dead\. Use Claude/);
-  assert.deepEqual(
-    call.verbs.map((v) => v.id),
-    ["new", "answer"],
-  );
-  assert.ok(
-    GEMINI.startsWith(call.detail.slice(0, 40)),
-    "the raw words are the small print",
-  );
+  assert.equal(call.line, "Gemini's login is dead. Claude can do this.");
+  // One line, one press: the raw words are the transcript's, one press away.
+  assert.deepEqual(call.verbs.map((v) => [v.id, v.text]), [["new", "Use Claude instead"]]);
+  assert.equal(call.detail, undefined, "no raw provider words on the call");
   // Claude signed out is never told to use Claude.
   const claude = b.decision(st, { who: "Claude" });
   assert.doesNotMatch(claude.line, /Use Claude/);

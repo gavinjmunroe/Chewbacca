@@ -144,7 +144,7 @@ test("a permission is the one decision, says what Allow runs, and goes once answ
   const d = s.decision(asking);
   assert.equal(d.kind, "permission");
   assert.equal(d.requestId, "p1");
-  assert.deepEqual(d.verbs.map((v) => v.text), ["Allow", "Deny"], "Allow never carries a shortened command");
+  assert.deepEqual(d.verbs.map((v) => v.text), ["Allow", "Always allow", "Deny"], "Allow never carries a shortened command");
   assert.equal(asking.permission.view.shown, 'Bash: {"command":"npm test -- orgs"}', "the figure shows the whole request");
   const answered = s.tell(
     asking,
@@ -161,7 +161,7 @@ test("Allow is offered only when the whole request is on the glass", () => {
       ev(3, "permission_request", { requestId: "p", toolName, input, title: "Allow?", suggestions: [] }),
     ]);
   const ids = (st) => s.decision(st).verbs.map((v) => v.id);
-  assert.deepEqual(ids(ask({ command: "npm test && echo ok" })), ["allow", "deny"]);
+  assert.deepEqual(ids(ask({ command: "npm test && echo ok" })), ["allow", "allow_always", "deny"]);
   // A tail pushed out of sight behind a bidi override, a zero-width space,
   // a Hangul filler or a variation selector.
   for (const sneak of ["\u202e", "\u200b", "\u3164", "\ufe0f", "\u2800", "\u{e0100}"]) {
@@ -471,7 +471,7 @@ test("a turn that edited files holds its beat until its diff lands, then is Done
 test("a settled diff asks once: keep them all, which writes nothing", () => {
   const d = s.decision(play(TURN));
   assert.equal(d.kind, "review");
-  assert.deepEqual(d.verbs, [{ id: "keep", text: "Keep all 1 file" }]);
+  assert.deepEqual(d.verbs, [{ id: "keep", text: "Keep all 1 file", key: "\u21b5" }]);
   assert.equal(
     s.decision(play(TURN), { kept: true }),
     null,
@@ -486,7 +486,15 @@ test("a failed turn says what failed in its headline", () => {
     ev(4, "status", { status: "error" }),
   ]);
   assert.equal(s.beat(st), "failed");
-  assert.equal(s.headline(st), "Usage limit reached.");
+  assert.equal(s.headline(st, "failed", { who: "Claude" }), "Claude hit its usage limit");
+  const died = (message) =>
+    play([...TURN.slice(0, 2), ev(3, "error", { message }), ev(4, "status", { status: "error" })]);
+  assert.equal(s.headline(died("Model overloaded. Try again soon.")), "Model overloaded.");
+  // The provider's line as it came through on the 10/12 evening rehearsal:
+  // a reset timestamp glued on with a pipe. Never a headline.
+  assert.equal(s.headline(died("Claude AI usage limit reached|1788555903"), "failed", { who: "Claude" }), "Claude hit its usage limit");
+  assert.equal(s.headline(died("ENOENT: spawn gemini")), "It stopped with an error");
+  assert.equal(s.headline(died("Bad gateway 502")), "It stopped with an error");
 });
 
 test("the beat line reads past beats, lights the current one, and dims what is ahead", () => {

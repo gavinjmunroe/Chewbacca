@@ -313,6 +313,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_morning_done_means_seen_live: a UI job is "done" only once seen on the live surface; otherwise say landed or rehearsed and list what was never pressed ("Ur sure the IDE is done?", 10/12)
 - feedback_agents_send_by_default: agents send texts and emails on their own; the step 12 press gate is opt-in (mode file), never default ("of course it should be able to send", 10/12)
 - feedback_glass_keeps_visible_buttons: the agents glass keeps labeled buttons to all sessions, new and back; subtraction hid Carlton's nav and the first live test had no way out ("the future is intuitive ux!", 10/12)
+- feedback_covered_pane_is_inert: what the glass covers of Carlton's app is inert; his hidden permission card kept focus on Allow and a Return answered it past every gate (10/12 evening)
 - feedback_held_stderr_leaks_to_children: a hook holding the host stderr on fd 8 leaked it into the watchdog sleep and every `&` spawn (5 s EOF per hook); take the fd after forks, `8>&-` on spawns, time EOF in tests (10/12)
 - feedback_agent_starts_the_campaign: nobody is told to press anything in Clay; the agent sends status=START itself, draft only, launch grade + pre-send gate + chat ok (10/12)
 - feedback_big_json_edit_reflows: an Edit to clay.json came back as a 6,537-line formatter reflow; patch big JSON specs by script and check diff --stat (10/12)

@@ -50,7 +50,7 @@ import { rpc } from "../src/rpc/client";
 import type { AppState } from "../src/state/store";
 import { Spinner } from "../src/components/Spinner";
 import { Story } from "./Story";
-import { NO_PICK, SEED_EVENTS, barButtons, followHis, followRow, opening, tileKey, tilesReady, toSeed } from "./nav.mjs";
+import { NO_PICK, SEED_EVENTS, barButtons, escapeOn, followHis, followRow, opening, tileKey, tilesReady, toSeed } from "./nav.mjs";
 import { editRange, excerpt, lostFocus, reviewDecided, voiceIntent } from "./model.mjs";
 import {
   atRest,
@@ -299,6 +299,9 @@ export function GlassLayer({
   // poll and live event, and a slot would hand Return or the talk key to
   // whichever agent moved into it (review of the 10/12 fix).
   const [pickedId, setPickedId] = useState<string | null>(null);
+  // Every agent drawn as a tile, not only the first MAX_TILES: his "Show
+  // all" under the tiles. Back to nine on every opening.
+  const [everyone, setEveryone] = useState(false);
   const [sessions, setSessions] = useState<Record<string, Session>>({});
   // One typed agent per session (turn.mjs), stepped from realm's events.
   // Each holds its current turn and a few one-line folds, never history.
@@ -423,6 +426,7 @@ export function GlassLayer({
     setMode(first.mode);
     setFocus(first.focus);
     setPickedId(null);
+    setEveryone(false);
     setLight(null);
     morphing.current = false;
   }, [shown, opens]);
@@ -485,8 +489,8 @@ export function GlassLayer({
   // (TRUTH_BEAT_MS, else TRUTH_REST_MS). Computed from the last answer.
   const resting = useMemo(
     () =>
-      restingView(Object.values(sessions), agents, truths, truthAsked),
-    [sessions, agents, truths, truthAsked],
+      restingView(Object.values(sessions), agents, truths, truthAsked, Date.now(), everyone ? Infinity : undefined),
+    [sessions, agents, truths, truthAsked, everyone],
   );
   const busy = !atRest(resting);
   // Read through refs so a tile changing tone never restarts the ask: on
@@ -847,13 +851,17 @@ export function GlassLayer({
     };
     w.__realmGlass = {
       onEscape: () => {
-        if (modeRef.current === "tiles") return false;
-        if (document.querySelector(OVERLAY)) return false;
         const f = document.activeElement;
-        if (f && f.closest?.(".cm-editor,.xterm")) return false;
+        const where = escapeOn({
+          mode: modeRef.current,
+          overlay: Boolean(document.querySelector(OVERLAY)),
+          typing: Boolean(f && f !== document.body && f.closest?.('input,textarea,select,[contenteditable=""],[contenteditable="true"]')),
+          editor: Boolean(f && f.closest?.(".cm-editor,.xterm")),
+        });
+        if (where === "his") return false;
         (f as HTMLElement | null)?.blur?.();
         // The transcript steps back to the story; the story to the tiles.
-        if (modeRef.current === "work") setMode("story");
+        if (where === "story") setMode("story");
         else shrink();
         return true;
       },
@@ -863,20 +871,57 @@ export function GlassLayer({
     };
   }, [shrink]);
 
-  // Arrows walk the tiles and Return grows one, while nothing of his is open.
+  // Keys never reach his main pane while ours covers it. His app keeps
+  // focus there (his permission card focuses its Allow), and on the 10/12
+  // evening rehearsal a Return on the story answered Allow through his
+  // hidden card: past our 400 ms guard and our whole-request-in-view gate.
+  // Stopped at the window, before it reaches his card; our own listeners
+  // are on the window too and still hear it. Escape is bridge.js's.
+  //
+  // His pane is `inert` while covered, so nothing in it can hold focus or be
+  // clicked: stopping his React handlers alone left the browser's own Return
+  // on his focused Allow button, which clicks it (review of this change,
+  // 10/12). `hold` is the second line: Return and Space aimed at the pane
+  // are cancelled outright, down and up, and nothing else reaches him.
+  useEffect(() => {
+    if (mode === "work") return;
+    const cover = () => {
+      const el = document.querySelector<HTMLElement>(MAIN);
+      if (el && !el.inert) el.inert = true;
+    };
+    cover();
+    // His Main remounts across boot and layout changes.
+    const off = store.subscribe(cover);
+    const hold = (e: KeyboardEvent) => {
+      const t = e.target as Element | null;
+      if (e.key === "Escape" || !t?.closest?.(MAIN)) return;
+      if (e.key === "Enter" || e.key === " ") e.preventDefault();
+      e.stopPropagation();
+    };
+    window.addEventListener("keydown", hold, true);
+    window.addEventListener("keyup", hold, true);
+    return () => {
+      off();
+      window.removeEventListener("keydown", hold, true);
+      window.removeEventListener("keyup", hold, true);
+      const el = document.querySelector<HTMLElement>(MAIN);
+      if (el) el.inert = false;
+    };
+  }, [mode, store]);
+
+  // Arrows walk the tiles, Return grows one, 1 to 9 open one, while nothing
+  // of his is open. A field under the tiles (his main pane) isn't his
+  // typing: he can't see it.
   useEffect(() => {
     if (mode !== "tiles") return;
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
       if (document.querySelector(OVERLAY)) return;
+      // Only keys with no control of his focused: on the body, a tile, or
+      // his covered pane. A focused row in his sidebar or rail keeps its own
+      // keys (this listener is on the capture phase, before his).
       const t = document.activeElement;
-      if (
-        t &&
-        t !== document.body &&
-        !t.classList.contains("glass-tile") &&
-        t.closest?.("input,textarea,[contenteditable]")
-      )
-        return;
+      if (t && t !== document.body && !t.classList.contains("glass-tile") && !t.closest?.(MAIN)) return;
       const k = tileKey(picked, tiles.length, e.key);
       if (!k.handled) return;
       e.preventDefault();
@@ -884,8 +929,8 @@ export function GlassLayer({
       const tile = tiles[k.picked];
       if (k.open && tile) grow(tile.id);
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, [mode, tiles, picked, grow, pick]);
 
   // Voice from the HUD talk key, through realm-ui's /glass/events.
@@ -1128,6 +1173,8 @@ export function GlassLayer({
           onPick={pick}
           onGrow={grow}
           onNew={startNew}
+          everyone={everyone}
+          onEveryone={setEveryone}
         />
       )}
       {mode === "story" && focused && (
@@ -1291,7 +1338,7 @@ function Nav(props: {
         </>
       ) : (
         <span className="glass-nav-hint">
-          {mode === "tiles" ? "Pick a tile, or any session in the sidebar" : ""}
+          {mode === "tiles" ? "Pick a tile or press its number, or any session in the sidebar" : ""}
         </span>
       )}
       <button type="button" className="glass-nav-new" onClick={onNew}>
@@ -1331,8 +1378,12 @@ function TileField(props: {
   onPick: (i: number) => void;
   onGrow: (id: string) => void;
   onNew: () => void;
+  everyone: boolean;
+  onEveryone: (all: boolean) => void;
 }) {
   const {
+    everyone,
+    onEveryone,
     leaving,
     resting,
     sessions,
@@ -1413,6 +1464,11 @@ function TileField(props: {
                   <span className="glass-tile-age">
                     {age(tile.turn.at || s?.updatedAt)}
                   </span>
+                  {i < 9 && (
+                    <kbd className="glass-key glass-tile-key" aria-hidden="true">
+                      {i + 1}
+                    </kbd>
+                  )}
                 </span>
                 <span className="glass-tile-title">{tile.title}</span>
                 {tile.line && tile.line !== tile.title && (
@@ -1426,13 +1482,19 @@ function TileField(props: {
           })}
         </div>
       )}
-      {resting.moreAgents > 0 && (
-        <p className="glass-more">
-          {resting.moreAgents} more{" "}
-          {resting.moreAgents === 1 ? "agent" : "agents"}
-          {resting.moreWaiting > 0 && `, ${resting.moreWaiting} waiting on you`}
-          {", all in the sidebar"}
-        </p>
+      {known && (resting.moreAgents > 0 || everyone) && (
+        // A count with no way in was the 10/12 tiles' last line ("8 more
+        // agents, all in the sidebar", behind his Show more). Now a press.
+        <button
+          type="button"
+          className="glass-button glass-more"
+          onClick={() => onEveryone(!everyone)}
+          aria-expanded={everyone}
+        >
+          {everyone
+            ? "Show the first nine"
+            : `Show all ${tiles.length + resting.moreAgents} agents`}
+        </button>
       )}
     </div>
   );
@@ -1827,6 +1889,15 @@ export function Review({
       </Card>
     );
   const shown = (files ?? []).filter((f) => f.hunks.length || f.fault);
+  // The hunks still waiting on Keep or Reject, counted over every file, and
+  // the first of them for Next change (Cursor's review bar: "3 of 7",
+  // Review next; steal list 12).
+  const left = shown.reduce((n, f) => n + f.hunks.filter((_, i) => !f.kept.has(i)).length, 0);
+  const next = (from: HTMLElement) => {
+    const el = from.closest(".glass-card")?.querySelector<HTMLElement>('.glass-review-body .glass-hunk:not([data-state="kept"])');
+    el?.scrollIntoView({ block: "start", behavior: reduceMotion() ? "auto" : "smooth" });
+    el?.querySelector<HTMLElement>(".glass-hunk-actions .glass-word")?.focus({ preventScroll: true });
+  };
   if (!shown.length && !past) return null;
   return (
     <Card kind="review">
@@ -1835,12 +1906,24 @@ export function Review({
           {past} more {past === 1 ? "file's" : "files'"} changes aren't shown here. The transcript has them.
         </p>
       )}
-      <header className="glass-card-head">
+      <header className="glass-card-head glass-review-bar">
         <span className="glass-verb">Changes</span>
         <span className="glass-path">
           {shown.length} {shown.length === 1 ? "file" : "files"}
+          {", "}
+          {left ? `${left} ${left === 1 ? "change" : "changes"} to decide` : "all decided"}
         </span>
+        {left > 0 && (
+          <button type="button" className="glass-word glass-review-next" onClick={(e) => next(e.currentTarget)}>
+            Next change
+          </button>
+        )}
       </header>
+      {/* The bar stays put above this, and only the hunks scroll: each
+          hunk's Keep and Reject ride sticky at the top of this box. With
+          the bar inside the same scroller they slid under it (10/12
+          evening, 1246 review walk). */}
+      <div className="glass-review-body">
       {shown.map((f) => {
         const decided = f.hunks.length > 0 && f.hunks.every((_, i) => f.kept.has(i));
         const dir = f.path.split("/").slice(0, -1).join("/");
@@ -1885,17 +1968,6 @@ export function Review({
                     </p>
                   ) : (
                     <>
-                      <pre className="glass-code">
-                        {h.lines.slice(0, 40).map((l, j) => (
-                          <span key={j} className="glass-line" data-diff={l.kind}>
-                            <span className="glass-ln">{l.newLine ?? l.oldLine ?? ""}</span>
-                            <span className="glass-sign">
-                              {l.kind === "add" ? "+" : l.kind === "del" ? "-" : " "}
-                            </span>
-                            {l.text || " "}
-                          </span>
-                        ))}
-                      </pre>
                       <div className="glass-hunk-actions">
                         <button
                           type="button"
@@ -1915,6 +1987,17 @@ export function Review({
                           {base(f.path)}
                         </button>
                       </div>
+                      <pre className="glass-code">
+                        {h.lines.slice(0, 40).map((l, j) => (
+                          <span key={j} className="glass-line" data-diff={l.kind}>
+                            <span className="glass-ln">{l.newLine ?? l.oldLine ?? ""}</span>
+                            <span className="glass-sign">
+                              {l.kind === "add" ? "+" : l.kind === "del" ? "-" : " "}
+                            </span>
+                            {l.text || " "}
+                          </span>
+                        ))}
+                      </pre>
                     </>
                   )}
                 </div>
@@ -1923,6 +2006,7 @@ export function Review({
           </div>
         );
       })}
+      </div>
     </Card>
   );
 }

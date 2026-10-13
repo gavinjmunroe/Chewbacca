@@ -158,6 +158,7 @@ export function restingView(
   truths?: Record<string, Truth | null>,
   asked?: boolean,
   now?: number,
+  max?: number,
 ): Resting;
 export const FRESH_FAIL_MS: number;
 export const SIGNED_OUT: RegExp;

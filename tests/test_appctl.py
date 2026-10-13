@@ -5,6 +5,7 @@ The first driver assertion is a REFUSAL (feedback_a_silent_guard_proves_nothing)
 a Return key to Finder without --yes must exit 4 before any key is sent.
 """
 import json
+import os
 import platform
 import shutil
 import subprocess
@@ -225,18 +226,26 @@ if platform.system() == "Darwin" and shutil.which("swiftc"):
                 check("a Move to Trash menu item is refused without --yes", menu.returncode == 4)
             # The security review's case: "OK" under a destructive alert.
             # osascript's own alert gives a real dialog with no app to set up.
+            # That dialog is real: it opens on the person's screen and takes
+            # focus, so the suite never runs it. 2026-10-13: every suite run
+            # drew "Permanently delete all 172,703 items?" over Caleb's work
+            # for up to 5 s. CHEWBACCA_LIVE_DIALOGS=1 runs it on purpose.
             import time
-            alert = subprocess.Popen(["osascript", "-e", 'display dialog "Permanently delete all 172,703 items?" '
+            if not os.environ.get("CHEWBACCA_LIVE_DIALOGS"):
+                print("skip alert gate check: it opens a real dialog on the screen; CHEWBACCA_LIVE_DIALOGS=1 runs it")
+            alert = None if not os.environ.get("CHEWBACCA_LIVE_DIALOGS") else subprocess.Popen(["osascript", "-e", 'display dialog "Permanently delete all 172,703 items?" '
                                       'buttons {"Cancel", "OK"} default button "OK"'],
                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             try:
                 seen = None
-                for _ in range(20):
+                for _ in range(20 if alert else 0):
                     time.sleep(0.25)
                     seen = subprocess.run([str(out), "see", "osascript"], capture_output=True, text=True)
                     if seen.returncode == 0 and '"OK"' in seen.stdout:
                         break
-                if seen is None or seen.returncode != 0:
+                if alert is None:
+                    pass
+                elif seen is None or seen.returncode != 0:
                     print("skip alert gate check: alert not readable (accessibility?)")
                 else:
                     ok = subprocess.run([str(out), "press", "osascript", "OK"], capture_output=True, text=True)
@@ -246,7 +255,8 @@ if platform.system() == "Darwin" and shutil.which("swiftc"):
                     cancel = subprocess.run([str(out), "press", "osascript", "Cancel"], capture_output=True, text=True)
                     check("Cancel in the same alert passes without --yes", cancel.returncode == 0)
             finally:
-                alert.kill()
+                if alert:
+                    alert.kill()
             missing = subprocess.run([str(out), "see", "no-such-app-zz"], capture_output=True, text=True)
             check("an unknown app fails with a fix", missing.returncode == 1 and "fix" in missing.stderr)
 else:

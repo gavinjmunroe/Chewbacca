@@ -32,6 +32,12 @@ def export(rows=None, headers=None):
     return stream.getvalue()
 
 
+def write_csv(path, text):
+    """Path.write_text(newline=) is 3.10; stock /usr/bin/python3 is 3.9."""
+    with open(path, "w", newline="") as handle:
+        handle.write(text)
+
+
 class FixtureTests(unittest.TestCase):
     def codes(self, document, text):
         return {error["code"] for error in checker.check(document, text)["errors"]}
@@ -91,14 +97,14 @@ class FixtureTests(unittest.TestCase):
             expected = Path(directory) / "expected.json"
             actual = Path(directory) / "actual.csv"
             expected.write_text(json.dumps(fixture()))
-            actual.write_text(export(), newline="")
+            write_csv(actual, export())
             command = [sys.executable, str(ROOT / "bin/clay-fixture-check"), "--fixture", str(expected), "--actual", str(actual)]
             success = subprocess.run(command, capture_output=True, text=True)
             self.assertEqual(success.returncode, 0, success.stderr)
             verdict = json.loads(success.stdout)
             self.assertTrue(verdict["ok"])
             self.assertEqual(len(verdict["sha256"]["actual"]), 64)
-            actual.write_text(export([["r1", "private-sentinel-name", "", "SEND"]]), newline="")
+            write_csv(actual, export([["r1", "private-sentinel-name", "", "SEND"]]))
             failure = subprocess.run(command, capture_output=True, text=True)
             self.assertEqual(failure.returncode, 1)
             self.assertFalse(json.loads(failure.stdout)["ok"])

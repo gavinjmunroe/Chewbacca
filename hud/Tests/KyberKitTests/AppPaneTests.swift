@@ -54,7 +54,7 @@ struct AppPaneTests {
     }
 
     @Test("the pane is never shorter than Realm's 600-point window minimum, nor over the ceiling")
-    func height() {
+    @MainActor func height() {
         #expect(AppPaneView.resolvedHeight(nil, ceiling: 900) == 860)
         #expect(AppPaneView.resolvedHeight(300, ceiling: 900) == 600)
         #expect(AppPaneView.resolvedHeight(2000, ceiling: 900) == 860)

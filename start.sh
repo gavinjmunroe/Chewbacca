@@ -565,7 +565,7 @@ if [ -n "$CLAUDE_APP" ] && [ -t 0 ] && [ -t 1 ]; then
   # A person at a terminal who has the app: hand them to the app, where they
   # will actually come back, rather than to a prompt in this window.
   say "Opening the Claude app..."
-  open -a "$CLAUDE_APP" >/dev/null 2>&1 || true
+  open -a "$CLAUDE_APP" >/dev/null 2>&1 || true  # opens-window: a person ran this at a terminal
 elif [ -n "$AGENT_CMD" ] && [ -t 0 ] && [ -t 1 ]; then
   say "Starting $AGENT_NAME..."
   sleep 1

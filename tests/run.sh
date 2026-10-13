@@ -115,6 +115,11 @@ export ROUTE_SHADOW_LOG="$TMP/route-shadow.jsonl"
 # under this flag, and the fingerprint below fails the group that changed a
 # generated file anyway, by name.
 export CHEWBACCA_SUITE=1
+# osgraph and home_feed mark every file they write excluded from Time Machine
+# with `tmutil addexclusion`, about 1 s a call on this Mac. hud's home agent
+# test wrote 77 temp files that way (2026-10-13: 78 s of its 86 s alone, and a
+# red at load). No test file belongs in a backup decision anyway.
+export KYBER_OS_GRAPH_NO_TM=1
 generated_fingerprint() {
   { cat "$ROOT/config/settings/toolkit.json" 2>/dev/null
     for f in README.md setup.sh docs/reference/REFERENCE.md; do
@@ -134,7 +139,10 @@ check() {
   else
     FAIL=$((FAIL+1)); FAILURES+=("$CURRENT: $name")
     echo -e "  ${RED}FAIL${NC}  $name"
-    sed 's/^/          /' "$TMP/err" | head -4
+    # Many test files print their FAIL lines to stdout, so an empty stderr
+    # used to leave a red with no reason at all (hud's home agent, 10/13).
+    if [ -s "$TMP/err" ]; then sed 's/^/          /' "$TMP/err" | head -4
+    else grep -iE 'fail|error|assert' "$TMP/out" | head -4 | sed 's/^/          /'; fi
   fi
 }
 
@@ -1289,10 +1297,8 @@ if group "installer"; then
   # dashboard and opens a tab on first run. He concluded the kit was dangerous.
   # That is the right conclusion to draw about software that opens windows
   # unannounced, and it is fatal for a kit whose install line is `curl | bash`.
-  check  "nothing in the install opens a window or a browser" bash -c '
-    hits="$(grep -nE "^[[:space:]]*(open|xdg-open)[[:space:]]|--open\b|webbrowser" \
-      "$1/setup.sh" "$1/start.sh" "$1/bin/bootstrap.sh" 2>/dev/null | grep -v "no-open" || true)"
-    [ -z "$hits" ] || { echo "$hits"; exit 1; }' _ "$ROOT"
+  check  "nothing in the install opens a window or a browser, except for a person at a terminal" \
+    bash "$ROOT/tests/install_no_window.sh" "$ROOT"
 
   check  "Serena's dashboard is disabled before its first run" bash -c '
     cfg="$(mktemp -d)/serena_config.yml"

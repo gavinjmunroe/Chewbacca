@@ -59,7 +59,7 @@ KINDS = (DECISION, RECEIPT)
 # click only he can make.
 CALL = re.compile(r"\b(?:ur|your) calls?\b|\bcalls? only (?:u|you)\b|\bonly (?:u|you) can (?:make|decide)\b"
                   r"|\bur decision\b|\bcaleb decides\b|\bcaleb'?s (?:call|decision)\b"
-                  r"|^\s*(?:[-*]\s*)?BLOCKED:", re.I)
+                  r"|^\s*(?:(?:[-*]|\d+[.)])\s*)?BLOCKED:", re.I)
 # Where the agent's own recommendation starts. A take written later by
 # another agent says so in brackets: "My take (takes-gate lane, 10/13): ...".
 REC = re.compile(r"\b(?:my (?:rec|take|recommendation|pick|vote)|i'?d (?:recommend|go with|say)|rec)"
@@ -67,15 +67,16 @@ REC = re.compile(r"\b(?:my (?:rec|take|recommendation|pick|vote)|i'?d (?:recomme
 # Words about calls that hand none over: a quote ("7 of 11 said "ur call""),
 # code, or the phrase used as a noun ("one feed of only ur calls", "never show
 # as ur calls", "opens with the calls only u can make"). All were 10/13 report
-# lines the feed held as calls.
+# lines the feed held as calls. Plural only: "leaving it as ur call" and "only
+# your call" hand one over (review on e80791e9).
 QUOTED = re.compile(r'"[^"\n]*"|\u201c[^\u201d\n]*\u201d|`[^`\n]*`')
-MENTION = re.compile(r"\b(?:as|of|only|shows?|these|those)\s+(?:ur|your)\s+calls?\b"
+MENTION = re.compile(r"\b(?:as|of|only|shows?|these|those)\s+(?:ur|your)\s+calls\b"
                      r"|\bthe\s+calls?\s+only\s+(?:u|you)\b", re.I)
 # A recap of calls raised elsewhere, takes included ("Ur calls, my take on
 # each: keep the repo PRIVATE... Turn ON text-ur-own-Mac..."; the 10/13 day
 # summary). Read as one call it glued four calls into one merged row.
 RECAP = re.compile(r"\bmy takes? on (?:each|both|all)\b", re.I)
-BLOCKED = re.compile(r"^\s*(?:[-*]\s*)?BLOCKED:\s*", re.I)
+BLOCKED = re.compile(r"^\s*(?:(?:[-*]|\d+[.)])\s*)?BLOCKED:\s*", re.I)
 SHA = re.compile(r"(?<![0-9a-zA-Z/])([0-9a-f]{8,40})(?![0-9a-zA-Z])")
 # Ledger rows that are a decision by their own words. "Decide:" is how the
 # ledger's 10/9 history-wipe and 10/13 Apple ID tasks were written; the rest
@@ -247,16 +248,25 @@ def indent(line: str) -> int:
 
 
 def beside(lines: list[str], i: int) -> str:
-    """What counts as next to line i: a heading's whole section, or an item's
-    own continuation and sub-items (deeper lines, up to a blank line)."""
+    """What counts as next to line i: a heading's section, or an item's own
+    continuation and sub-items (deeper lines, up to a blank line), plus a
+    sibling bullet right under it that is a take ("- My take: ..."). Either
+    stops at the next line that hands over a call of its own, so one call
+    never borrows the take written for the next (review on e80791e9)."""
     out = []
     head = HEADING.match(lines[i])
     for line in lines[i + 1:]:
         h = HEADING.match(line)
+        if hands_a_call(line):
+            break
         if head:
             if h and len(h.group(1)) <= len(head.group(1)):
                 break
-        elif not line.strip() or h or (ITEM_START.match(line) and indent(line) <= indent(lines[i])):
+        elif not line.strip() or h:
+            break
+        elif ITEM_START.match(line) and indent(line) <= indent(lines[i]):
+            if REC.match(plain(line)):
+                out.append(line)
             break
         out.append(line)
     return "\n".join(out)
@@ -308,8 +318,16 @@ def split_call(block: str) -> tuple[str, str]:
     agent said the call is; the recommendation is what it said after "My
     take:" or "My rec:". A BLOCKED line's recommendation is its own step, and
     the step's how-to in brackets when it gave one."""
-    body = plain(HEADING.sub("", block))
-    body = CALL_ASIDE.sub("", re.sub(r"^\d+[.)]\s+", "", body)).strip()
+    body = re.sub(r"^\d+[.)]\s+", "", plain(HEADING.sub("", block)))
+    # "(your call: $49 or $99, my take: $49)": the take inside the aside is
+    # the take, so it is read before the aside goes (review on e80791e9).
+    aside = CALL_ASIDE.search(body)
+    if aside and not BLOCKED.match(block):
+        m = REC.search(aside.group(0))
+        if m:
+            question = CALL_ASIDE.sub("", body).strip() or body
+            return question, aside.group(0)[m.end():].rstrip(") ").strip()
+    body = CALL_ASIDE.sub("", body).strip() or body
     if BLOCKED.match(block):
         step = BLOCKED.sub("", plain(block.strip()))
         m = REC.search(step)
@@ -319,11 +337,14 @@ def split_call(block: str) -> tuple[str, str]:
         # BLOCKED line ("BLOCKED: pricing") doesn't, and is held like any call.
         how = PAREN.search(step)
         return step, f"Do it: {how.group(1)}" if how else ""
+    # The prefix ("Ur calls, no rush:") goes, but never the whole question: "Ur
+    # call on pricing." stays as written rather than emptying to nothing and
+    # dropping out of the feed (review on e80791e9).
     m = REC.search(body)
     if not m:
-        return CALL_PREFIX.sub("", body).strip(), ""
+        return CALL_PREFIX.sub("", body).strip() or body, ""
     question, rec = body[: m.start()].strip(), body[m.end():].strip()
-    return CALL_PREFIX.sub("", question).strip(), rec
+    return CALL_PREFIX.sub("", question).strip() or question, rec
 
 
 def sub_calls(block: str) -> list[str]:
@@ -342,8 +363,6 @@ def decisions_in_report(text: str, source: str, at: float = 0.0) -> list[Draft]:
         for part in sub_calls(block):
             question, rec = split_call(part)
             rec = rec or take_in(near)
-            if not question:
-                continue
             options = ("Do it", "Later") if BLOCKED.match(part) else ("Go with my take", "Not now")
             out.append(Draft(DECISION, key=call_key(source, question, rec), text=question, source=source,
                              at=at, recommendation=rec, options=options if rec else (), sources=(source,)))

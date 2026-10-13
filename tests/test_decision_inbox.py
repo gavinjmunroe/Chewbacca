@@ -190,6 +190,25 @@ def takes_gate(tmp: Path) -> None:
     check("the bare BLOCKED line is held, not given a made-up 'Do it'",
           any("Pro tier" in t and not d.recommendation for t, d in by.items()), list(by))
 
+    # Review on e80791e9: each of these lost or invented a take.
+    def calls(text):
+        return [(d.text, d.recommendation) for d in inbox.decisions_in_report(text, "R.md")]
+    two = calls("Ur call: keep the repo private?\nUr call: turn on the text relay? My take: yes, on.\n")
+    check("a call never borrows the take written for the call under it",
+          two == [("keep the repo private?", ""), ("turn on the text relay?", "yes, on.")], two)
+    short = inbox.decisions_in_report("- Ur call on pricing.\n  - My take: $49\n", "R.md")
+    check("a call whose prefix is all it says keeps its words and is drawn, never dropped",
+          len(short) == 1 and short[0].text and short[0].ready()[0] is not None, short)
+    aside = calls("- Pricing tier (your call: $49 or $99, my take: $49)\n")
+    check("a take inside the '(your call ...)' aside is the take", aside == [("Pricing tier", "$49")], aside)
+    singular = [line for _n, line in inbox.untaken("- Leaving the pricing as ur call, I did not pick.\n"
+                                                   "- Domain name is only your call.\n")]
+    check("'as ur call' and 'only your call' hand a call over and are flagged", len(singular) == 2, singular)
+    sibling = inbox.untaken("- Ur call: keep it private?\n- My take: private, scrubbed copy later.\n")
+    check("a take on the sibling bullet right under the call counts", sibling == [], sibling)
+    numbered = [line for _n, line in inbox.untaken("1. BLOCKED: approve the dialog\n")]
+    check("a numbered BLOCKED line is a call", len(numbered) == 1, numbered)
+
     # A ledger call carries its own take in its next action.
     rows = [{"id": "l1", "source_key": "k1", "title": "Decide whether to introduce Jonah to the assistant",
              "status": "queued", "owner": "caleb", "next_action": "Live since 10/10. My take (takes-gate lane, "

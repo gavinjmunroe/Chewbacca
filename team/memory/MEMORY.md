@@ -331,3 +331,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_git_on_repos_you_did_not_write: git on any repo the kit did not create runs with first_win.SAFE, filters and signatures off, submodules closed; receipts carry the same prefix (10/13)
 - reference_who_pays_for_ai_2026: Menlo 2026 says 55% of US AI users pay (about 1 in 3 US adults); "2%" is their 2025 global estimate. Pew 2026: half never use a chatbot, top reasons no interest, privacy, accuracy (10/13)
 - reference_browser_chewb: the Chewbacca Chrome extension for chatgpt.com and claude.ai, its native host com.chewbacca.browser (reads run, writes need a macOS press), tests and gotchas (10/13)
+- project_outbound_engine_presend: the pre-send gate is chewbacca gtme presend with one receipt per client; gtme config check is the client contract; run zeutara-gtme golden_check.py (0 of 44) before moving gtme code (10/13)

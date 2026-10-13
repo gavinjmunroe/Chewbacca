@@ -16,6 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 import datetime
 import json
 import os
+import re
 from pathlib import Path
 import shlex
 import subprocess
@@ -46,15 +47,28 @@ SAFE = ['git', '-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', '
         '-c', 'core.untrackedCache=false', '-c', 'protocol.allow=never']
 
 
+SAFE_NAME = re.compile(r'filter\.[A-Za-z0-9_.-]+\.(clean|smudge|process)')
+
+
 def filters_off(repo):
-    """-c overrides that empty every filter driver the repo's config names.
-    Reading config runs nothing, so this is safe to ask first."""
-    # NUL-separated: a filter's subsection name may hold spaces.
-    names = git(repo, 'config', '-z', '--name-only', '--get-regexp', r'^filter\..*\.(clean|smudge|process)$') or ''
+    """-c overrides that empty every filter driver git would see here, or None
+    when that can't be done safely: the query failed, or a driver name holds a
+    character that could change how -c parses it. None means skip status.
+    Reading config runs nothing, so asking first is safe."""
+    try:
+        done = subprocess.run([*SAFE, '-C', str(repo), 'config', '-z', '--name-only', '--get-regexp',
+                               r'^filter\..*\.(clean|smudge|process)$'], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if done.returncode == 1:  # no filter drivers at all
+        return []
+    if done.returncode != 0:
+        return None
     off = []
-    for name in sorted({n for n in names.split('\0') if n}):
-        off += ['-c', name + '=']
-        off += ['-c', name.rsplit('.', 1)[0] + '.required=false']
+    for name in sorted({n for n in done.stdout.split('\0') if n}):
+        if not SAFE_NAME.fullmatch(name):
+            return None
+        off += ['-c', name + '=', '-c', name.rsplit('.', 1)[0] + '.required=false']
     return off
 
 
@@ -108,7 +122,8 @@ def inspect(repo, email, since):
     author = ['--author=' + email] if email else []
     log = git(repo, 'log', '--branches', '--no-merges', '--since=' + since, '--format=%H', *author)
     # Submodules carry their own config, so status never descends into them.
-    status = git(repo, 'status', '--porcelain', '--ignore-submodules=all', extra=filters_off(repo)) or ''
+    off = filters_off(repo)
+    status = '' if off is None else git(repo, 'status', '--porcelain', '--ignore-submodules=all', extra=off) or ''
     remotes = (git(repo, 'remote') or '').split()
     # Unpushed means no remote branch holds the change. Matching on author time
     # plus subject, not on hash: a commit landed by cherry-pick or rebase gets a

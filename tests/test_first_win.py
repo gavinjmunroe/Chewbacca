@@ -147,6 +147,15 @@ class WeekTests(unittest.TestCase):
         first_win.week(self.home)
         self.assertFalse(marker.exists())
 
+    def test_an_odd_filter_name_skips_status_instead_of_guessing(self):
+        odd = self.home / 'code/odd'
+        odd.mkdir()
+        git(odd, 'init', '-q')
+        commit(odd, 'a.txt', 'x')
+        git(odd, 'config', 'filter.a=b.clean', 'cat')
+        self.assertIsNone(first_win.filters_off(odd))
+        self.assertEqual(first_win.filters_off(self.solo), [])
+
     def test_empty_machine_says_where_to_point_it(self):
         empty = Path(tempfile.mkdtemp(dir=self.home))
         result = first_win.week(empty)

@@ -905,7 +905,8 @@ function cmdTexts(argv) {
     const open = () => {
       let list = statedb.getDoc(sdb, LIST);
       let next = statedb.getDoc(sdb, NEXT);
-      // First open after the move: take what the JSON files held.
+      // Drafts lived in JSON files before 344b32ba; a store without the doc
+      // has not migrated yet, so it starts from that file instead of empty.
       if (list === undefined) {
         try {
           list = JSON.parse(fs.readFileSync(file, "utf8"));

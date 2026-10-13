@@ -395,16 +395,19 @@ def topm_mean(v, m):
     return sum(sorted(v, reverse=True)[:m]) / m
 
 def feedback(E, dense, b=None, m=None):
-    """Dense scores for the query moved toward its own top m chunks:
-    E @ (q + b * mean(E[top m])), computed from dense = E @ q alone. Unnormalised,
-    because both fusions read only order or min-max, and a positive scale changes
-    neither. Used for ranking only: abstention and shown cosines stay raw."""
+    """Cosines against the query moved toward its own top m chunks:
+    E @ q' with q' = (q + b * mean(E[top m])) / |...|, computed from dense = E @ q
+    alone, since q . mean = mean(dense[top]). Normalised so the result stays a
+    cosine: csls subtracts on that scale, and doc2query compares against it.
+    Used for ranking only: abstention and shown cosines stay raw."""
     b = PRF_B if b is None else b
     m = PRF_M if m is None else m
     if dense is None or E is None or not b or not m or len(dense) == 0:
         return dense
     top = np.argpartition(-dense, min(m, len(dense)) - 1)[:m]
-    return dense + b * (E @ E[top].mean(axis=0))
+    mean = E[top].mean(axis=0)
+    size = math.sqrt(max(1.0 + 2*b*float(dense[top].mean()) + b*b*float(mean @ mean), 1e-12))
+    return (dense + b * (E @ mean)) / size
 
 def _ranks(d):
     """Competition rank: ties share the rank of the first of them. Ranking ties

@@ -97,9 +97,10 @@ def main():
 
     q = np.asarray([1.0, 0.0], dtype="float32")
     top = np.argsort(-dense)[:brain.PRF_M]
-    want = E @ (q + brain.PRF_B * E[top].mean(axis=0))
-    check("feedback() is E @ (q + b * mean of the top m chunks)",
-          np.allclose(brain.feedback(E, dense), want, atol=1e-5))
+    q2 = q + brain.PRF_B * E[top].mean(axis=0)
+    want = E @ (q2 / np.linalg.norm(q2))
+    check("feedback() is the cosine against q + b * mean of the top m chunks, normalised",
+          np.allclose(brain.feedback(E, dense), want, atol=1e-5), (brain.feedback(E, dense), want))
     check("feedback() passes a missing dense through", brain.feedback(E, None) is None)
 
     # Ties share a rank: a file's name never decides between equal scores.

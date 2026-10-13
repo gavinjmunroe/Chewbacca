@@ -397,3 +397,30 @@ the name-ordered ties (fixed after it); the fixed ranker's sealed number is
 the baseline row of the doc2query run below, so the sealed set was not opened
 a second time for this family. `bench/frozen/rrf3_prf.json.sealed-run` holds
 the aggregate.
+
+**doc2query, same night. Tried, not shipped.** `bench/d2q.py` asks
+llama3.2 3B on this Mac (Ollama, loopback only) for five everyday-word
+questions per note; `bench/d2q_build.py` wrote them for all 839 notes in
+3,707 s (4.4 s a note at load 6 to 35, 2 notes got none), and
+`bench/d2q_eval.py` embeds them and passes each file's best question cosine
+to `brain.rank(probes=)`. Against the shipped rrf3 + feedback, dev+dev2+dev3:
+
+| variant                               | dev   | dev2  | dev3  |
+| ------------------------------------- | ----- | ----- | ----- |
+| fourth RRF list, w=0.3                | +2 -0 | +0 -1 | +2 -2 |
+| fourth RRF list, w=0.7                | +2 -0 | +0 -2 | +7 -7 |
+| merged into the best-chunk list       | +0 -1 | +0 -0 | +0 -0 |
+| merged, feedback off (vs feedback off) | +3 -1 | +0 -1 | +4 -5 vs +1 -6 |
+
+The questions recover about what one feedback round does, and the two do
+not stack. No dev win, so no sealed run. An hour of local inference per full
+build for nothing over feedback; the probe knobs stay in `rank()` off.
+
+**Neighbourhood check.** `bench/fusion_grid.py` sets W_DENSE, RRF_K, PRF_B and
+PRF_M over 108 cells and scores `brain.rank()` on all 140 dev questions. The
+best cell nets +1 (+6 -5) over the shipped constants: the shipped config sits
+at a local optimum, and more knob turning on these sets is noise.
+
+`feedback()` now returns true cosines (divided by the moved query's length,
+computable from dense alone). Rankings are identical, checked on all three
+dev sets; it matters only for csls and for any probe compared against it.

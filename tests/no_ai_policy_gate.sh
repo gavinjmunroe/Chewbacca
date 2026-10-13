@@ -14,9 +14,11 @@ cd "$ROOT" || exit 2
 fail=0
 
 # 1. No instruction, tool or template tells an agent to check a course AI policy.
-# docs/plans and team/memory are history; this file names the patterns.
+# docs/plans and team/memory are history; this file names the patterns, and
+# so does tools/claude_md_scrub.py, which removes them from an old CLAUDE.md
+# (it matched its own removal regex and kept this check red since 4afcaa75).
 PATTERN='policy <course> ai|policy [A-Za-z0-9 ]+ ai[^a-z]|course_ai_policy|policies\.ai|unrecorded policy|check the (course )?ai policy|ai policy gate|respect (the )?course.?s ai policy|is treated as a ban|counts as banned'
-hits="$(git grep -n -i -E "$PATTERN" -- . ':!docs/plans' ':!team/memory' ':!tests/no_ai_policy_gate.sh' 2>/dev/null)"
+hits="$(git grep -n -i -E "$PATTERN" -- . ':!docs/plans' ':!team/memory' ':!tests/no_ai_policy_gate.sh' ':!tools/claude_md_scrub.py' 2>/dev/null)"
 if [ -n "$hits" ]; then
   echo "FAIL: AI policy gate is back:"; printf '%s\n' "$hits" | cut -c1-200; fail=1
 fi

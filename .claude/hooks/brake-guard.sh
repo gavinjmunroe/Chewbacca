@@ -5,7 +5,7 @@
 # -Users-rachel project folder, so both gated nothing (replay, 10/13: skip 0
 # of 800). The rm check below acts only on these spellings, so the gate is
 # sound: -rf covers -rf and -Rf (words match lowercased), -fr covers -fR.
-# gate: -rf -fr --recursive push
+# gate: -rf -fr -vrf -rvf -fvr -vfr --recursive push
 [ -z "${HOOKD_INNER:-}" ] && [ -x "$HOME/.local/bin/hookd" ] && exec "$HOME/.local/bin/hookd" gate "$0" "$@"
 # shellcheck source=/dev/null
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" 2>/dev/null || true
@@ -18,14 +18,15 @@ type hook_init >/dev/null 2>&1 && hook_init brake-guard.sh 5
 # brake as a check, for any user, without touching their permissions.
 #
 # Refuses, judged per simple command by its own words (so `echo "rm -rf ~"`
-# or a grep for it passes):
+# or a grep for it passes), with a `bash -c` body read as commands too:
 #   1. rm -rf, -fr, -Rf or --recursive --force on ~, ~/, ~/*, $HOME, / or /*
 #   2. git push with a force flag (or a +refspec) that names main or master,
-#      or names no branch at all (it pushes whatever is checked out)
+#      or names no branch, HEAD or @ while main or master is checked out
+#      (a branch it can't read counts as main)
 command -v python3 >/dev/null 2>&1 || exit 0
 INPUT=$(cat)
 REASON=$(printf '%s' "$INPUT" | python3 -I -c '
-import json, os, re, shlex, sys
+import json, os, re, shlex, subprocess, sys
 try:
     data = json.load(sys.stdin)
 except ValueError:
@@ -33,31 +34,64 @@ except ValueError:
 if data.get("tool_name") != "Bash":
     raise SystemExit
 cmd = str((data.get("tool_input") or {}).get("command") or "")
-HOME_WORDS = {"~", "~/", "~/*", "$HOME", "$HOME/", "$HOME/*", "${HOME}", "${HOME}/", "${HOME}/*", "/", "/*"}
-home = os.path.expanduser("~")
-HOME_WORDS |= {home, home + "/", home + "/*"}
+cwd = str(data.get("cwd") or os.getcwd())
+home = os.path.normpath(os.path.expanduser("~"))
+# The flag groups the gate words in the header admit. A group outside them is
+# skipped by hookd before this runs, so judging it here would mean nothing.
+RF_STARTS = ("-rf", "-fr", "-vrf", "-rvf", "-fvr", "-vfr")
+SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}
+WRAPPERS = {"sudo", "command", "nice", "time", "nohup", "env", "exec", "xargs", "builtin"}
+
+def segments(text, depth=0):
+    """Simple commands, with a `bash -c` body read as commands too."""
+    for seg in re.split(r"&&|\|\||;|\n|\||&|\$\(|`|\(|\)|\{|\}", text):
+        w = words(seg.strip())
+        if not w:
+            continue
+        if depth < 3 and os.path.basename(w[0]) in SHELLS and "-c" in w[1:]:
+            i = w.index("-c")
+            if i + 1 < len(w):
+                yield from segments(w[i + 1], depth + 1)
+                continue
+        yield seg.strip(), w
+
 def words(seg):
     try:
         w = shlex.split(seg, posix=True)
     except ValueError:
         w = seg.split()
-    while w and (re.match(r"^[A-Za-z_]\w*=", w[0]) or w[0] in ("sudo", "command", "nice", "time", "nohup")):
+    while w and (re.match(r"^[A-Za-z_]\w*=", w[0]) or os.path.basename(w[0]) in WRAPPERS
+                 or (w[0].startswith("-") and len(w) > 1)):
         w = w[1:]
     return w
+
+def target(a):
+    """The path an rm argument names, with ~ and $HOME read the way a shell would."""
+    a = re.sub(r"^(\$\{HOME\}|\$HOME)(?=/|$)", home, a)
+    a = os.path.expanduser(a)
+    star = a.endswith("/*")
+    base = os.path.normpath(a[:-2] if star else a) if a not in ("/", "/*") else "/"
+    return base
+
 def rm_home(w):
     if not w or os.path.basename(w[0]) != "rm":
         return False
-    flags = "".join(a[1:] for a in w[1:] if a.startswith("-") and not a.startswith("--"))
+    shorts = [a.lower() for a in w[1:] if a.startswith("-") and not a.startswith("--")]
     long = {a for a in w[1:] if a.startswith("--")}
-    # Only the spellings the gate words see (header): a flag group that
-    # starts -rf/-Rf or -fr/-fR, or --recursive with a force. setup.sh denies
-    # `rm -rf ~` for the full install; this covers that and its reorderings.
-    seen = [a.lower() for a in w[1:] if a.startswith("-")]
-    rec = any(a.startswith("-rf") or a.startswith("-fr") for a in seen if not a.startswith("--")) \
-        or ("--recursive" in long and ("--force" in long or "f" in flags))
-    force = rec
-    # shlex already expanded nothing: a quoted "$HOME" arrives as $HOME.
-    return rec and force and any(a in HOME_WORDS for a in w[1:] if not a.startswith("-"))
+    rf = any(g.startswith(RF_STARTS) for g in shorts) or (
+        "--recursive" in long and ("--force" in long or any("f" in g for g in shorts)))
+    return rf and any(target(a) in (home, "/") for a in w[1:] if not a.startswith("-"))
+
+def current_branch():
+    try:
+        out = subprocess.run(["git", "-C", cwd, "symbolic-ref", "--short", "-q", "HEAD"],
+                             capture_output=True, text=True, timeout=3)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return out.stdout.strip() or None
+
+MAIN = re.compile(r"(^|[:+/])(main|master)$")
+
 def force_main(w):
     if len(w) < 2 or os.path.basename(w[0]) != "git":
         return False
@@ -69,21 +103,26 @@ def force_main(w):
     rest = w[i + 1:]
     opts = [a for a in rest if a.startswith("-")]
     args = [a for a in rest if not a.startswith("-")]
-    forced = any(a in ("-f", "--force") or a.startswith("--force") or (re.match(r"^-[a-z]+$", a) and "f" in a) for a in opts) \
+    forced = any(a == "-f" or a.startswith("--force") or (re.match(r"^-[a-z]+$", a) and "f" in a) for a in opts) \
         or any(a.startswith("+") for a in args[1:])
     if not forced:
         return False
-    refs = args[1:]
-    if not refs:
+    refs = [r.lstrip("+") for r in args[1:]]
+    if any(MAIN.search(r) for r in refs):
         return True
-    return any(re.search(r"(^|[:+/])(main|master)$", r) for r in refs)
-for seg in re.split(r"&&|\|\||;|\n|\|", cmd):
-    w = words(seg.strip())
+    # No branch named, or HEAD / @: it pushes what is checked out. Unknown
+    # counts as main, so a failed lookup refuses rather than lets through.
+    if not refs or any(r.split(":")[0] in ("HEAD", "@") and (":" not in r or not r.split(":")[1]) for r in refs):
+        branch = current_branch()
+        return branch is None or branch in ("main", "master")
+    return False
+
+for seg, w in segments(cmd):
     if rm_home(w):
-        print("brake-guard: refusing `" + seg.strip()[:80] + "`. It deletes your home folder or the whole disk, and there is no undo.")
+        print("brake-guard: refusing `" + seg[:80] + "`. It deletes your home folder or the whole disk, and there is no undo.")
         break
     if force_main(w):
-        print("brake-guard: refusing `" + seg.strip()[:80] + "`. A force push to main rewrites history everyone else has pulled. Push a branch, or push without --force.")
+        print("brake-guard: refusing `" + seg[:80] + "`. A force push to main rewrites history everyone else has pulled. Push a branch, or push without --force.")
         break
 ')
 [ -n "$REASON" ] || exit 0

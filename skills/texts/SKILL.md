@@ -237,6 +237,22 @@ session transcripts and the brain for a prior chat that never existed. The whole
 context was three messages from that morning in the family thread: his elective
 question, Dad's "Ask Andrew Laffoon", and Dad's like on his reply.
 
+**Read the thread before giving any read on a person.** "Do you think she likes
+me", "is he mad at me", "how should I play this" are questions about a thread
+that is already on disk. Run `people texts <name>` (or `mac messages history
+<handle>`) first and answer from it, quoting what they actually said. On
+2026-10-13 Caleb asked whether Andrea liked him and got a confident guess built
+from his one-line summary ("most likely she's curious abt tech"). Her thread had
+95 texts: she had called it "dinner" herself, found his site on her own, and
+texted mostly after 10pm. His words: "I thought we had auto ingestion on???",
+then "You lied to me". A read given without the thread is a guess wearing a
+verdict, and he can't tell the difference.
+
+**Never probe for the tool before using it.** Do not run `which`, `--help` or a
+capability check before reading texts: `people texts` and `mac messages` are
+installed. Run the read. Same day, after a `which texts mac` call shown on
+screen: "Chewb should never have to check for anything it can do...."
+
 ## Writing down what mattered
 
 This is the half that makes it worth having, and it is the half that gets

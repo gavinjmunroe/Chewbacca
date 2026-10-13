@@ -15,6 +15,7 @@ import {
   existsSync,
   fstatSync,
   openSync,
+  readFileSync,
   readSync,
   readdirSync,
   statSync,
@@ -48,9 +49,36 @@ const textOf = (content) =>
           .join("")
       : "";
 
+/** Whether a user line is a prompt he typed, rather than a tool's result
+ *  coming back to the model (also a "user" line in Claude Code's log). */
+const isPrompt = (d) => {
+  const c = d?.message?.content;
+  if (typeof c === "string") return !INTERRUPTED.test(c.trim());
+  return Array.isArray(c) && c.length > 0 && !c.some((b) => b?.type === "tool_result");
+};
+
+/** When the open turn began: the newest prompt line's time, or null when
+ *  the tail read holds none (a turn longer than the tail). Never the last
+ *  write, which would start the clock at the newest tool call. */
+function promptAt(lines) {
+  for (let i = lines.length - 1; i >= 0; i--) {
+    let d;
+    try {
+      d = JSON.parse(lines[i]);
+    } catch {
+      continue;
+    }
+    if (!d || d.type !== "user" || d.isSidechain || d.isMeta || !isPrompt(d)) continue;
+    const at = Date.parse(d.timestamp ?? "");
+    return Number.isFinite(at) ? at : null;
+  }
+  return null;
+}
+
 /** The turn state from a transcript's last lines (oldest first).
  *  Returns { state: "running" | "done" | "stopped", lastAt } where lastAt is
- *  the newest user or assistant message's time in ms, or null without one. */
+ *  the newest user or assistant message's time in ms, or null without one.
+ *  A running turn also carries `since`, when its prompt was sent, or null. */
 export function turnFrom(lines, { touchedAt = 0, now = Date.now() } = {}) {
   let last = null;
   let lastAt = null;
@@ -86,7 +114,8 @@ export function turnFrom(lines, { touchedAt = 0, now = Date.now() } = {}) {
   }
   if (!open) return { state: "done", lastAt };
   const beat = Math.max(touchedAt, lastAt ?? 0);
-  return { state: now - beat > STALE_MS ? "stopped" : "running", lastAt };
+  if (now - beat > STALE_MS) return { state: "stopped", lastAt };
+  return { state: "running", lastAt, since: promptAt(lines) };
 }
 
 function tail(file, bytes) {
@@ -166,6 +195,49 @@ export function tabTruth(id, find, { now = Date.now() } = {}) {
     return truth;
   } catch (e) {
     return { state: "unreadable", lastAt: null, detail: String(e?.code ?? e?.message ?? e) };
+  }
+}
+
+// Where a live Claude Code session runs, from the `entrypoint` its process
+// writes to ~/.claude/sessions/<pid>.json (seen on this Mac 10/13:
+// "claude-vscode" for the VS Code extension, "sdk-cli" for a headless
+// `claude -p` job; the CLI's is "cli"). Anything else is its own window.
+const HOSTS = Object.freeze({ "claude-vscode": "vscode", cli: "terminal", "sdk-cli": "job", "claude-desktop": "desktop" });
+// The most session files read per ask. One per live Claude Code process;
+// 18 were on this Mac at 10:58pm 10/12 with five tabs and four overnight
+// jobs open. 200 is a guessed ceiling, never measured past that.
+const MAX_LIVE_FILES = 200;
+
+/** Every live Claude Code process's session: Map of session id to where it
+ *  runs. Read only. A file whose pid is gone is left out, so a closed tab
+ *  never reads as running somewhere. */
+export function liveTabs(dir, { alive = pidAlive } = {}) {
+  const out = new Map();
+  let names = [];
+  try {
+    names = readdirSync(dir).filter((n) => /^\d+\.json$/.test(n)).slice(0, MAX_LIVE_FILES);
+  } catch {
+    // Expected: no Claude Code on this Mac, or none running.
+    return out;
+  }
+  for (const name of names) {
+    try {
+      const d = JSON.parse(readFileSync(join(dir, name), "utf8"));
+      if (!ID.test(String(d?.sessionId)) || !Number.isInteger(d?.pid) || !alive(d.pid)) continue;
+      out.set(d.sessionId, { where: HOSTS[d.entrypoint] ?? "window", pid: d.pid });
+    } catch {
+      // Expected: a file mid-write or removed between readdir and read.
+    }
+  }
+  return out;
+}
+
+function pidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return e?.code === "EPERM";
   }
 }
 

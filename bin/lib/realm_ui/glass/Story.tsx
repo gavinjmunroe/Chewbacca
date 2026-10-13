@@ -40,8 +40,10 @@ import {
   FileView,
   Review,
   TestsView,
+  useNow,
   type Session,
 } from "./GlassLayer";
+import type { LinkSnap } from "./link.mjs";
 import {
   beat,
   beatLine,
@@ -55,7 +57,7 @@ import {
   tell,
   SETTLE_HOLD_MS,
 } from "./beats.mjs";
-import { isRunning, match, settle as within } from "./turn.mjs";
+import { Turn as TurnOf, clock, cutByRestart, isRunning, match, settle as within, stopElsewhere } from "./turn.mjs";
 import type { Agent, Fault } from "./turn.mjs";
 
 type Stored = {
@@ -172,10 +174,21 @@ export function Story({
   onTranscript,
   onNew,
   settledOutsideAt = 0,
+  outside = null,
+  link = null,
+  shown = true,
 }: {
   session: Session;
   onTranscript: (reply: boolean) => void;
   onNew: () => void;
+  /** A turn running outside realm's engine, in its Claude Code tab: when its
+   *  prompt went in and which app runs it (tab_truth.mjs), or null. */
+  outside?: { since: number | null; where: string | null } | null;
+  /** The page's line to the engine (link.mjs): a reconnect re-reads the
+   *  turn, and the engine's boot time tells a turn its restart cut off. */
+  link?: Pick<LinkSnap, "gen" | "bootAt"> | null;
+  /** On the glass now: the clock only ticks while someone can see it. */
+  shown?: boolean;
   /** When the tab's own transcript says its turn ended (an imported Claude
    *  Code tab realm stopped following), or 0. Newer than realm's last word on
    *  the turn, it outranks realm's copy (turn.mjs tileTurn, the same rule). */
@@ -200,15 +213,23 @@ export function Story({
   // buffer and are replayed after it, so none is lost to the history's
   // answer (a permission_request lost there would leave the agent waiting
   // with no Allow on the glass).
+  // The session it was last read for: a re-read of the same one (Retry, or
+  // a reconnect) keeps the story on screen until the fresh read lands, so a
+  // realm-ui handover never blanks it.
+  const readFor = useRef("");
+  const gen = link?.gen ?? 0;
   useEffect(() => {
     let alive = true;
     let ready = false;
     const buffer: Stored[] = [];
-    setStory(emptyStory());
-    setLoaded(false);
-    setReviewEmpty(false);
-    lastSeq.current = 0;
-    settleSeen.current = 0;
+    if (readFor.current !== session.id) {
+      readFor.current = session.id;
+      setStory(emptyStory());
+      setLoaded(false);
+      setReviewEmpty(false);
+      lastSeq.current = 0;
+      settleSeen.current = 0;
+    }
     const noteLive = (stored: Stored) => {
       if (stored.event.type === "user_message") {
         setReviewEmpty(false);
@@ -222,6 +243,7 @@ export function Story({
       if (!alive) return;
       let s = fromHistory(list);
       lastSeq.current = list.at(-1)?.seq ?? 0;
+      settleSeen.current = 0;
       for (const stored of buffer.sort((a, b) => a.seq - b.seq)) {
         if (stored.seq <= lastSeq.current) continue;
         lastSeq.current = stored.seq;
@@ -257,9 +279,19 @@ export function Story({
       alive = false;
       off();
     };
-  }, [session.id, attempt]);
+  }, [session.id, attempt, gen]);
 
-  const st = story as unknown as StoryShape;
+  // The turn as it stands under the engine answering now: one its restart
+  // cut off is told as that, never "Starting on it" forever (turn.mjs
+  // cutByRestart). Every read below goes through this.
+  const bootAt = link?.bootAt ?? 0;
+  const told0 = story as unknown as StoryShape;
+  const cut = bootAt ? cutByRestart(told0.agent, bootAt, session.agentKind) : told0.agent;
+  const shownStory = useMemo(
+    () => (cut === told0.agent ? story : { ...(story as object), agent: cut }),
+    [story, cut, told0.agent],
+  );
+  const st = shownStory as unknown as StoryShape;
   // A turn is named by its checkpoint and the tree it left; a diff without
   // a checkpoint can't be told from the next one, so its Keep is never kept.
   const turn = st.agent.turn;
@@ -280,7 +312,7 @@ export function Story({
   const settledFor = !settledAt
     ? Infinity
     : Date.now() - (settleSeen.current || settledAt);
-  const told = beat(story, { kept: settledKept, settledFor }) as string;
+  const told = beat(shownStory, { kept: settledKept, settledFor }) as string;
   // Realm's copy of an imported tab can stop mid-turn; the tab itself
   // finished. Told as Done, never "Starting on it" for a 5h-old tab (10/12).
   const b =
@@ -296,11 +328,22 @@ export function Story({
 
   const meta = AGENT_META[session.agentKind as keyof typeof AGENT_META];
   const who = meta?.label ?? "";
-  const line = useMemo(() => headline(story, b, { who }), [story, b, who]);
-  const beats = beatLine(b, story);
-  const proved = proof(story);
-  const call = decision(story, { kept: settledKept, who }) as Call;
-  const fig = figure(story, b);
+  const line = useMemo(() => headline(shownStory, b, { who }), [shownStory, b, who]);
+  const beats = beatLine(b, shownStory);
+  const proved = proof(shownStory);
+  const call = decision(shownStory, { kept: settledKept, who }) as Call;
+  const fig = figure(shownStory, b);
+  // How long it has been at it. Realm's own turn counts from its ask; a tab
+  // running in its own app counts from the prompt its transcript holds;
+  // anything else has no clock, never a guessed one.
+  const running = Boolean(turn && isRunning(turn)) && b !== "done";
+  const clockTurn = st.agent.ran
+    ? turn
+    : outside?.since
+      ? TurnOf.asked("", outside.since)
+      : null;
+  const now = useNow(shown && Boolean(clockTurn && isRunning(clockTurn)) && running);
+  const ticking = clockTurn ? clock(clockTurn, now) : null;
 
   // Allow is pressable only while the whole request is on screen: none of it
   // below a fold or past the figure's edge.
@@ -330,6 +373,7 @@ export function Story({
         return setKeptHere(keptKey);
       }
       if (id === "answer") return onTranscript(false);
+      if (id === "reply") return onTranscript(true);
       if (id === "new") return onNew();
       // Only the request still on the glass is answered: one that was
       // answered or settled meanwhile is gone from the story already.
@@ -453,6 +497,11 @@ export function Story({
             {proved.text}
           </p>
         )}
+        {ticking && (
+          <p className="story-clock" data-clock={ticking.tone}>
+            {ticking.text}
+          </p>
+        )}
       </div>
 
       {(loadFault || call) && (
@@ -559,6 +608,14 @@ export function Story({
           <button type="button" className="glass-button" data-tone="bad" onClick={stop}>
             Stop
           </button>
+        )}
+        {!stoppable && outside && (
+          // Realm's Stop reaches only turns its engine runs; this one runs in
+          // its tab's own app. One line on where to stop it instead of a
+          // button that can't (steal list 11, 10/12 "still rough").
+          <span className="story-elsewhere" role="note">
+            {stopElsewhere(outside.where)}
+          </span>
         )}
         <button
           type="button"

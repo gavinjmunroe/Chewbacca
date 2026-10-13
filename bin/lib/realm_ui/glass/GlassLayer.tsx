@@ -52,9 +52,14 @@ import { Spinner } from "../src/components/Spinner";
 import { Story } from "./Story";
 import { NO_PICK, SEED_EVENTS, barButtons, escapeOn, followHis, followRow, opening, tileKey, tilesReady, toSeed } from "./nav.mjs";
 import { editRange, excerpt, lostFocus, reviewDecided, voiceIntent } from "./model.mjs";
+import { GRACE_MS, REDIAL_MS, entryOf, staleBuild, watchLink } from "./link.mjs";
+import type { LinkSnap } from "./link.mjs";
 import {
   atRest,
+  clock,
+  cutByRestart,
   emptyAgent,
+  isRunning,
   pace,
   fault,
   focusView,
@@ -97,6 +102,10 @@ type Truth = {
   state: "running" | "done" | "stopped" | "unreadable";
   lastAt: number | null;
   detail?: string;
+  // A running tab: when its prompt went in, and which app runs it
+  // (tab_truth.mjs liveTabs).
+  since?: number | null;
+  where?: string | null;
 };
 // Turn, Agent, Fault and friends are turn.mjs's, typed in turn.d.mts, so a
 // match() with a phase missing is a compile error here.
@@ -273,6 +282,49 @@ function useShown(): { shown: boolean; opens: number } {
   return { shown, opens };
 }
 
+/** The time, ticking once a second while `live`: the clocks on a running
+ *  turn ("Working for 42s"). Off, nothing ticks, so a glass at rest renders
+ *  nothing on its own (hud/CLAUDE.md: nothing moves at rest). */
+export function useNow(live: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!live) return;
+    setNow(Date.now());
+    const t = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, [live]);
+  return now;
+}
+
+/** The page's line to the engine (link.mjs): steady, a handover the glass
+ *  rides out, or down. `gen` moves on every reconnect, `bootAt` is when the
+ *  engine now answering booted. One watcher for the page. */
+function useLink(): LinkSnap {
+  const [snap, setSnap] = useState<LinkSnap>({
+    phase: "steady",
+    gen: 0,
+    downAt: 0,
+    bootId: "",
+    bootAt: 0,
+    restarts: 0,
+  });
+  useEffect(() => {
+    const w = watchLink({
+      client: rpc(),
+      info: () => rpc().call("daemon.info", {}),
+      onChange: setSnap,
+    });
+    setSnap(w.snapshot());
+    return w.stop;
+  }, []);
+  // His "Connection lost" banner stays hidden for a drop the glass rides
+  // out (glass.css, data-link="handover"); past GRACE_MS it shows.
+  useEffect(() => {
+    document.documentElement.setAttribute("data-link", snap.phase);
+  }, [snap.phase]);
+  return snap;
+}
+
 /** What the renderer it was built from offers a host (install.tsx). Caleb's
  *  fork of Realm (github.com/calebnewtonusc/realm, branch chewbacca) has
  *  each; Carlton's own checkout has none, and the layer works around that. */
@@ -291,6 +343,7 @@ export function GlassLayer({
   host?: Host;
 }) {
   const { shown, opens } = useShown();
+  const link = useLink();
   const [mode, setMode] = useState<Mode>("tiles");
   const [focus, setFocus] = useState<string | null>(null);
   // Nothing is picked until he picks: Return and the talk key reach only a
@@ -401,6 +454,7 @@ export function GlassLayer({
     });
     const offEvent = rpc().on("session.event", (ev) => {
       const stored = ev as unknown as Stored;
+      rereading.current.get(stored.sessionId)?.push(stored);
       setAgents((prev) => {
         const was = prev[stored.sessionId] ?? (emptyAgent());
         const now = step(was, stored);
@@ -437,6 +491,48 @@ export function GlassLayer({
     host.setQuiet?.(mode !== "work");
   }, [mode, host]);
 
+  // Every reconnect (link.gen): the list again, and every agent whose turn
+  // was still going read again from its log, since the events of the gap
+  // never came. A read swaps in whole once it answers, with the live events
+  // that landed meanwhile stepped on top, so no tile blanks while it reads.
+  // Before 10/13 nothing re-read: a turn that settled in the gap read
+  // Working until the page reloaded.
+  const rereading = useRef(new Map<string, Stored[]>());
+  const agentsRef = useRef(agents);
+  agentsRef.current = agents;
+  const sessionsNow = useRef(sessions);
+  sessionsNow.current = sessions;
+  useEffect(() => {
+    if (!booted || link.gen === 0) return;
+    load();
+    for (const [id, a] of Object.entries(agentsRef.current)) {
+      if (!a.turn || !isRunning(a.turn) || rereading.current.has(id)) continue;
+      const s = sessionsNow.current[id];
+      if (!s) continue;
+      rereading.current.set(id, []);
+      void settle(
+        rpc().call("sessions.events", {
+          id,
+          afterSeq: Math.max(0, (s.lastEventSeq ?? 0) - SEED_EVENTS),
+          limit: SEED_EVENTS * 4,
+        }),
+        "engine-down",
+        ENGINE_ANSWER_MS,
+      ).then((r) => {
+        const live = rereading.current.get(id) ?? [];
+        rereading.current.delete(id);
+        if (!r.ok) return;
+        const read = r.value as Stored[];
+        const last = read.at(-1)?.seq ?? 0;
+        let fresh = emptyAgent();
+        for (const ev of read) fresh = step(fresh, ev);
+        for (const ev of live) if (ev.seq > last) fresh = step(fresh, ev);
+        // A read that starts mid-turn holds no ask: keep what we had.
+        if (fresh.turn) setAgents((prev) => ({ ...prev, [id]: fresh }));
+      });
+    }
+  }, [booted, link.gen, load]);
+
   // Realm's own sessions say only "ended" or "idle" in the list; their last
   // events say whether the turn died, and why. Read once per event seq.
   const seeded = useRef(new Set<string>());
@@ -468,7 +564,10 @@ export function GlassLayer({
         for (const ev of r.value as Stored[]) a = step(a, ev);
         if (a.turn)
           // Never over anything a live event already stepped.
-          setAgents((prev) => (prev[s.id] ? prev : { ...prev, [s.id]: a }));
+          // A live delta can leave an entry with no turn yet (seq -1 events
+          // step nothing); that is not a turn to keep. Before 10/13 such an
+          // entry blocked the seed, and a working fake turn's tile had no ask.
+          setAgents((prev) => (prev[s.id]?.turn ? prev : { ...prev, [s.id]: a }));
       });
     }
   }, [booted, sessions, agents]);
@@ -485,14 +584,28 @@ export function GlassLayer({
         .join(","),
     [sessions],
   );
+  // Each agent as it stands under the engine answering now: a turn the
+  // engine's restart cut off reads as that, never Working or Done
+  // (turn.mjs cutByRestart).
+  const shownAgents = useMemo(() => {
+    if (!link.bootAt) return agents;
+    let out: Record<string, Agent> | null = null;
+    for (const [id, a] of Object.entries(agents)) {
+      const cut = cutByRestart(a, link.bootAt, sessions[id]?.agentKind ?? "");
+      if (cut !== a) (out ??= { ...agents })[id] = cut;
+    }
+    return out ?? agents;
+  }, [agents, sessions, link.bootAt]);
   // Whether any tile is working or waiting on him decides how often to ask
   // (TRUTH_BEAT_MS, else TRUTH_REST_MS). Computed from the last answer.
   const resting = useMemo(
     () =>
-      restingView(Object.values(sessions), agents, truths, truthAsked, Date.now(), everyone ? Infinity : undefined),
-    [sessions, agents, truths, truthAsked, everyone],
+      restingView(Object.values(sessions), shownAgents, truths, truthAsked, Date.now(), everyone ? Infinity : undefined),
+    [sessions, shownAgents, truths, truthAsked, everyone],
   );
   const busy = !atRest(resting);
+  // The tiles' clocks tick only while one is working or waiting, on screen.
+  const now = useNow(shown && mode === "tiles" && busy);
   // Read through refs so a tile changing tone never restarts the ask: on
   // 2026-10-11, with seventeen agents taking turns, depending on it directly
   // made 679 asks a minute (headless WebKit, scratch engine).
@@ -933,11 +1046,19 @@ export function GlassLayer({
     return () => window.removeEventListener("keydown", onKey, true);
   }, [mode, tiles, picked, grow, pick]);
 
-  // Voice from the HUD talk key, through realm-ui's /glass/events.
+  // Voice from the HUD talk key, through realm-ui's /glass/events. The same
+  // line says which build the server serves. A drop (realm-ui handing over
+  // to new code) redials at once and is said only past GRACE_MS: before
+  // 10/13 every land put "The talk key lost its line" on the glass for at
+  // least the 2 s wait before the next try.
+  const [servedEntry, setServedEntry] = useState("");
   useEffect(() => {
     if (!booted) return;
     let stop = false;
     let ctrl: AbortController | null = null;
+    let quiet = 0;
+    let lastErr = "";
+    let tries = 0;
     const listen = async () => {
       while (!stop) {
         ctrl = new AbortController();
@@ -947,6 +1068,9 @@ export function GlassLayer({
           });
           const reader = res.body?.getReader();
           if (!res.ok || !reader) throw new Error(`HTTP ${res.status}`);
+          window.clearTimeout(quiet);
+          quiet = 0;
+          tries = 0;
           setVoiceFault(null);
           const dec = new TextDecoder();
           let buf = "";
@@ -959,7 +1083,9 @@ export function GlassLayer({
               const line = buf.slice(0, nl);
               buf = buf.slice(nl + 1);
               try {
-                const msg = JSON.parse(line) as { type: string; text?: string };
+                const msg = JSON.parse(line) as { type: string; text?: string; entry?: string };
+                if ((msg.type === "hello" || msg.type === "build") && typeof msg.entry === "string")
+                  setServedEntry(msg.entry);
                 if (msg.type === "voice" && msg.text)
                   window.dispatchEvent(
                     new CustomEvent("realm-glass-voice", { detail: msg.text }),
@@ -970,22 +1096,49 @@ export function GlassLayer({
             }
           }
         } catch (e) {
-          // The server restarted, or this page is going away. Said on the
-          // glass until the next connect clears it.
-          if (!stop)
-            setVoiceFault(
-              fault("voice-dropped", String((e as Error)?.message ?? e)),
-            );
+          lastErr = String((e as Error)?.message ?? e);
         }
-        if (!stop) await new Promise((r) => setTimeout(r, 2000));
+        if (stop) break;
+        // The stream ended or failed: the server restarted, or this page is
+        // going away. Said on the glass only if it isn't back within
+        // GRACE_MS, and until the next connect clears it.
+        if (!quiet)
+          quiet = window.setTimeout(() => {
+            if (!stop) setVoiceFault(fault("voice-dropped", lastErr || "the stream ended"));
+          }, GRACE_MS);
+        await new Promise((r) => setTimeout(r, tries++ === 0 ? REDIAL_MS : 2000));
       }
     };
     void listen();
     return () => {
       stop = true;
+      window.clearTimeout(quiet);
       ctrl?.abort();
     };
   }, [booted]);
+
+  // A page running an older build than the server now serves reloads itself
+  // the moment it is off the glass, so the next "show my agents" opens on
+  // the new code with nothing to load. Before 10/13 the server minted a new
+  // token on every start and Kyber reloaded the page on the next open
+  // instead: 1.6 to 1.8 s of blank glass after every land (AppPane.swift).
+  // Once per served build, so a server that keeps naming an entry the page
+  // can't load never reloads it in a loop.
+  const myEntry = useMemo(
+    () => entryOf(Array.from(document.querySelectorAll('script[type="module"]'), (el) => el.getAttribute("src"))),
+    [],
+  );
+  useEffect(() => {
+    if (shown || !staleBuild(myEntry, servedEntry)) return;
+    const key = `realm-glass-reloaded-for:${servedEntry}`;
+    try {
+      if (sessionStorage.getItem(key)) return;
+      sessionStorage.setItem(key, "1");
+    } catch {
+      // Expected: a page with storage blocked. Reload once anyway.
+    }
+    window.location.reload();
+  }, [shown, myEntry, servedEntry]);
 
   useEffect(() => {
     const onVoice = (e: Event) => {
@@ -1175,6 +1328,7 @@ export function GlassLayer({
           onNew={startNew}
           everyone={everyone}
           onEveryone={setEveryone}
+          now={now}
         />
       )}
       {mode === "story" && focused && (
@@ -1188,11 +1342,18 @@ export function GlassLayer({
             const tr = pid ? truths[pid] : null;
             return tr && (tr.state === "done" || tr.state === "stopped") ? (tr.lastAt ?? 0) : 0;
           })()}
+          outside={(() => {
+            const pid = focused.providerSessionId;
+            const tr = pid ? truths[pid] : null;
+            return tr?.state === "running" ? { since: tr.since ?? null, where: tr.where ?? null } : null;
+          })()}
+          link={link}
+          shown={shown}
         />
       )}
       </div>
       {mode === "work" && focused && (
-        <Stage session={focused} agent={agents[focused.id]} onSeed={seed} />
+        <Stage session={focused} agent={shownAgents[focused.id]} onSeed={seed} />
       )}
       {light && <Light light={light} />}
     </div>,
@@ -1380,8 +1541,10 @@ function TileField(props: {
   onNew: () => void;
   everyone: boolean;
   onEveryone: (all: boolean) => void;
+  now: number;
 }) {
   const {
+    now,
     everyone,
     onEveryone,
     leaving,
@@ -1461,9 +1624,18 @@ function TileField(props: {
                     )}
                     {tile.word}
                   </span>
-                  <span className="glass-tile-age">
-                    {age(tile.turn.at || s?.updatedAt)}
-                  </span>
+                  {(() => {
+                    // A working or waiting tile counts up from its start
+                    // (turn.mjs clock); anything else says how long ago.
+                    const c = tile.tone === "running" || tile.tone === "needs" ? clock(tile.turn, now) : null;
+                    return c?.short ? (
+                      <span className="glass-tile-age" data-clock={c.tone} title={c.text}>
+                        {c.short}
+                      </span>
+                    ) : (
+                      <span className="glass-tile-age">{age(tile.turn.at || s?.updatedAt)}</span>
+                    );
+                  })()}
                   {i < 9 && (
                     <kbd className="glass-key glass-tile-key" aria-hidden="true">
                       {i + 1}

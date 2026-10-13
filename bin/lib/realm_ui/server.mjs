@@ -36,6 +36,8 @@ import {
   statSync,
   existsSync,
   unlinkSync,
+  watchFile,
+  unwatchFile,
 } from "node:fs";
 import { join, resolve, extname, sep, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -247,6 +249,41 @@ function handleLaunch(req, res, { path, token, origin, launch }) {
   return true;
 }
 
+/** The pipe token the last server on this port minted, when its 0600 state
+ *  file is still there: the next generation serves with the same one, so
+ *  the page Kyber keeps redials straight in. Before 10/13 every start minted
+ *  a new token, Kyber's AppPaneHost saw it change and loaded the page again
+ *  on the next "show my agents" (1.6 to 1.8 s blank, AppPane.swift), and a
+ *  page shown during a land redialed with the old one and was refused until
+ *  it reloaded. A file anyone else could read, or for another port, mints a
+ *  new one; `realm-ui stop` removes the file, so stopping rotates it. */
+export function keptToken(state, port, { uid = process.getuid?.() } = {}) {
+  if (!state) return null;
+  try {
+    const st = statSync(state);
+    if ((st.mode & 0o077) !== 0 || (uid !== undefined && st.uid !== uid)) return null;
+    const saved = JSON.parse(readFileSync(state, "utf8"));
+    if (saved.port !== port || typeof saved.token !== "string") return null;
+    return /^[A-Za-z0-9_-]{32,}$/.test(saved.token) ? saved.token : null;
+  } catch {
+    // Expected: no server has run here yet.
+    return null;
+  }
+}
+
+/** The hashed entry script a built index.html loads, which names the build:
+ *  vite gives every build of different code a different name. */
+export function entryOfIndex(html) {
+  const m = /<script[^>]*type="module"[^>]*src="[^"]*\/assets\/(index-[\w-]+\.js)"/.exec(String(html ?? ""));
+  return m ? m[1] : "";
+}
+
+// How often the server looks for a new build of the page: `realm-ui build`
+// rewrites index.html under a running server. A stat every 2 s is a guess;
+// a page learns of a rebuild at most this late, and only reloads once it is
+// off the glass anyway.
+const BUILD_POLL_MS = 2_000;
+
 function refuse(socket, status, why) {
   try {
     socket.end(
@@ -262,7 +299,11 @@ export function start({
   realmHome,
   state,
   port = 0,
-  token = randomBytes(24).toString("base64url"),
+  token,
+  // A listening socket handed over by chewbacca-daemon (listen_exec.py,
+  // CHEWBACCA_LISTEN_FD): the new copy serves beside the old one on the
+  // same port, so a land never leaves the port dark.
+  listenFd,
   // Where the stage may read files and put hunks back: $HOME unless a test
   // or a scratch engine names another root.
   filesRoot,
@@ -274,8 +315,28 @@ export function start({
     bridge = "";
   // The glass layer's routes (glass_routes.mjs): voice, focus, the stage's
   // file view and a hunk put back. Same token as the pipe.
+  // Settled before the first request can arrive. A fixed port (the daemon
+  // always passes --port) keeps the last generation's token.
+  token ??= (port ? keptToken(state, port) : null) ?? randomBytes(24).toString("base64url");
   const glass = glassState();
   const launch = launchCodes();
+  const index = join(root, "index.html");
+  const readEntry = () => {
+    try {
+      return entryOfIndex(readFileSync(index, "utf8"));
+    } catch {
+      return "";
+    }
+  };
+  glass.entry = readEntry();
+  // A rebuild under this server: every page listening hears the new entry,
+  // and reloads itself once it is off the glass (GlassLayer.tsx).
+  watchFile(index, { interval: BUILD_POLL_MS, persistent: false }, () => {
+    const entry = readEntry();
+    if (!entry || entry === glass.entry) return;
+    glass.entry = entry;
+    for (const send of glass.listeners) send({ type: "build", entry });
+  });
 
   const server = createServer((req, res) => {
     if (req.headers.host !== hostHeader) {
@@ -387,9 +448,10 @@ export function start({
     page.on("close", () => engine.destroy());
   });
 
+  server.on("close", () => unwatchFile(index));
   return new Promise((ready, fail) => {
     server.once("error", fail);
-    server.listen(port, HOST, () => {
+    const onListen = () => {
       const bound = server.address().port;
       origin = `http://${HOST}:${bound}`;
       hostHeader = `${HOST}:${bound}`;
@@ -413,7 +475,9 @@ export function start({
         renameSync(tmp, state);
       }
       ready({ server, port: bound, url: `${origin}/`, token });
-    });
+    };
+    if (Number.isInteger(listenFd) && listenFd > 2) server.listen({ fd: listenFd }, onListen);
+    else server.listen(port, HOST, onListen);
   });
 }
 
@@ -422,6 +486,8 @@ if (
   resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
   const args = parseArgs(process.argv.slice(2));
+  const fd = Number(process.env.CHEWBACCA_LISTEN_FD);
+  if (Number.isInteger(fd) && fd > 2) args.listenFd = fd;
   if (!args.dist || !args.realmHome) {
     console.error(
       "usage: server.mjs --dist <dir> --realm-home <dir> [--state <file>] [--port N]",

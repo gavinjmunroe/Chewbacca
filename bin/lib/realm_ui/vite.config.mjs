@@ -94,7 +94,12 @@ export default defineConfig({
   },
   build: {
     outDir: "../../../../dist",
-    emptyOutDir: true,
+    // Kept, not emptied: the page Kyber keeps loaded across a rebuild still
+    // runs the last build until it reloads itself off the glass, and its lazy
+    // chunks (CodeEditor, IconPickerEmoji, KaTeX fonts: 125 assets on 10/12)
+    // must still be there when it asks. realm_ui.build prunes all but the
+    // last two builds' files.
+    emptyOutDir: false,
     // electron-vite targets the Chromium Electron ships; noVNC (the machine
     // pane) uses top-level await, which Vite's default browser target refuses.
     // WKWebView on macOS 15 is Safari 18, which has had it since Safari 15.

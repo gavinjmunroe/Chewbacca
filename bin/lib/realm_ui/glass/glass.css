@@ -39,6 +39,13 @@
 :root[data-glass] .conn-banner {
   translate: 0 calc(var(--glass-bar-h) + 6px);
 }
+/* A drop the glass rides out (link.mjs: realm-ui handing over to new code,
+ * redialed in REDIAL_MS) keeps the last frame: his "Connection lost" banner
+ * stays hidden for GRACE_MS, then shows if the line isn't back. Hidden, not
+ * removed, so nothing of his layout moves. */
+:root[data-glass][data-link="handover"] .conn-banner {
+  visibility: hidden;
+}
 :root[data-glass] .app {
   border-radius: var(--radius-window, 16px);
   overflow: clip;
@@ -212,6 +219,9 @@
   margin-left: auto;
   color: var(--ink-3);
   font-variant-numeric: tabular-nums;
+}
+.glass-tile-age[data-clock="needs"] {
+  color: var(--orange);
 }
 .glass-tile-title {
   font-size: var(--text-base, 14px);
@@ -661,6 +671,18 @@
 .story-proof[data-tone="warn"] {
   color: var(--orange);
 }
+/* How long it has been at it. Numbers that tick sit on tabular figures so
+ * the line doesn't shiver every second. */
+.story-clock {
+  margin: 0;
+  font-size: var(--text-sm, 12px);
+  line-height: var(--text-sm--line-height, 16px);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.story-clock[data-clock="needs"] {
+  color: var(--orange);
+}
 
 /* Your call: the one decision, at the edge of his orange when it is a
  * request, his hairline when it is the settled diff. Never a fill. */
@@ -886,6 +908,15 @@
 .story-doors {
   gap: 8px;
   margin-right: 0;
+  align-items: center;
+}
+/* Where to stop a turn realm's engine doesn't run: one line in the doors,
+ * where Stop would sit. */
+.story-elsewhere {
+  font-size: var(--text-sm, 12px);
+  line-height: var(--text-sm--line-height, 16px);
+  color: var(--ink-2);
+  margin-right: 4px;
 }
 
 /* No figure for the beat: one column, so the telling doesn't huddle in the

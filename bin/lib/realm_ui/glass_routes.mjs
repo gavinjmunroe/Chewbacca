@@ -21,7 +21,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, normalize, sep } from "node:path";
 import { timingSafeEqual } from "node:crypto";
-import { idsFrom, tabTruth, transcriptFinder } from "./tab_truth.mjs";
+import { idsFrom, liveTabs, tabTruth, transcriptFinder } from "./tab_truth.mjs";
 import { checkFolder, listFolders } from "./folders.mjs";
 
 // A file the stage will read. The stage shows a window of lines around a
@@ -145,7 +145,7 @@ export function rejectHunk(
 
 /** The page's voice channel and focus, held in memory for this server's life. */
 export function glassState() {
-  return { focus: null, listeners: new Set(), find: null };
+  return { focus: null, listeners: new Set(), find: null, entry: "" };
 }
 
 function readBody(req) {
@@ -229,7 +229,9 @@ export function handleGlass(
       "Cache-Control": "no-store",
       "X-Accel-Buffering": "no",
     });
-    res.write(`${JSON.stringify({ type: "hello" })}\n`);
+    // The build this server serves, so a page running older code knows to
+    // reload once it is off the glass (link.mjs staleBuild).
+    res.write(`${JSON.stringify({ type: "hello", entry: state.entry || "" })}\n`);
     const send = (msg) => res.write(`${JSON.stringify(msg)}\n`);
     state.listeners.add(send);
     req.on("close", () => state.listeners.delete(send));
@@ -250,8 +252,13 @@ export function handleGlass(
     state.find ??= transcriptFinder(join(home, ".claude", "projects"));
     const at = now();
     const tabs = {};
-    for (const id of idsFrom(url.searchParams.get("ids")))
-      tabs[id] = tabTruth(id, state.find, { now: at });
+    const live = liveTabs(join(home, ".claude", "sessions"));
+    for (const id of idsFrom(url.searchParams.get("ids"))) {
+      const truth = tabTruth(id, state.find, { now: at });
+      // Where a running tab runs, so the story can say where to stop it:
+      // realm's Stop can't reach a turn in another app's process.
+      tabs[id] = truth && truth.state === "running" ? { ...truth, where: live.get(id)?.where ?? null } : truth;
+    }
     json(res, 200, { tabs });
     return true;
   }

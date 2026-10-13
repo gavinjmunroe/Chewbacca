@@ -126,6 +126,15 @@ export const FAULTS = Object.freeze({
     fix: "It reconnects by itself. Say it again in a few seconds.",
     retry: false,
   }),
+  // Realm's engine restarted under a running turn: its boot settles every
+  // live turn with a synthetic idle (markStaleOnBoot), so nothing after that
+  // ever moves it. Before 10/13 the glass held "Starting on it" forever, or
+  // called the cut-off turn Done.
+  "engine-restarted": Object.freeze({
+    what: "Realm's engine restarted mid-turn, so this turn stopped.",
+    fix: "Press Reply to ask it again.",
+    retry: false,
+  }),
 });
 
 /** A named failure. `detail` is what the system itself said, kept short;
@@ -212,8 +221,10 @@ const base = (p) =>
 /** The constructors, one per phase. Each refuses the data its phase can't be
  *  drawn without, so the invalid turn never exists to be drawn. */
 export const Turn = Object.freeze({
-  asked: (ask, at = 0) =>
-    Object.freeze({ phase: "asked", ask: words(ask), at }),
+  // `since` is when the turn began: the ask's own time. Only asked sets it;
+  // every later phase inherits it (carry), so a turn has one start time.
+  asked: (ask, at = 0, since = at) =>
+    Object.freeze({ phase: "asked", ask: words(ask), at, since: since || null }),
   // `command` is the shell command it is running, or null for a plain read.
   reading: (ask, what, at = 0, command = null) => {
     need(words(what), "reading: needs what it is reading");
@@ -401,6 +412,16 @@ export function emptyAgent() {
     // the fake agent, 2026-10-11), and that idle is not the turn settling.
     started: false,
     refused: null,
+    // Whether this turn wrote its usage line. Claude, Codex and the fake
+    // agent each write one as a turn completes (realm adapters, usage
+    // events), and realm's boot settles a cut-off turn without one.
+    usage: false,
+    // Whether realm's own engine ran this turn: it saw realm's `init` or a
+    // `status`. Realm's importer never writes either (apps/server/src/
+    // import: user_message, assistant_text, thinking, tool_call,
+    // tool_result, error, usage), so a Claude Code tab's copied transcript,
+    // which never settles in realm's log, is never read as cut off.
+    ran: false,
   });
 }
 
@@ -466,9 +487,19 @@ const READ_TOOLS = new Set([
   "WebSearch",
 ]);
 
+/** `next` with the start time of the turn it grew from. The one owner of a
+ *  turn's start: Turn.asked sets it, and every phase built from another goes
+ *  through here, so "working for 42s" counts from the ask whatever beat the
+ *  turn is on. */
+export const carry = (from, next) =>
+  from && from.since != null && next.since == null
+    ? Object.freeze({ ...next, since: from.since })
+    : next;
+
 /** Move to `next` if NEXT allows it; otherwise keep the turn and say so. */
-function go(agent, next, extra = {}) {
+function go(agent, built, extra = {}) {
   const from = agent.turn;
+  const next = carry(from, built);
   if (!NEXT[from.phase].includes(next.phase))
     return Object.freeze({
       ...agent,
@@ -511,8 +542,10 @@ export function step(agent, stored) {
       earlier: agent.earlier + over,
     });
   }
+  if (!agent.turn) return agent;
+  if (ev.type === "usage" && !agent.usage) agent = Object.freeze({ ...agent, usage: true });
+  if ((ev.type === "init" || ev.type === "status") && !agent.ran) agent = Object.freeze({ ...agent, ran: true });
   const turn = agent.turn;
-  if (!turn) return agent;
   if (!agent.started && STARTS.has(ev.type) && (ev.type !== "status" || p.status === "running" || p.status === "waiting_permission"))
     agent = Object.freeze({ ...agent, started: true });
 
@@ -593,11 +626,11 @@ export function step(agent, stored) {
           ...agent,
           inflight,
           refused: null,
-          turn: Turn.changing(
+          turn: carry(turn, Turn.changing(
             turn.ask,
             { ...turn.file, done: true, error },
             turn.at,
-          ),
+          )),
         });
       const output = String(p.content ?? "");
       if (turn.phase === "reading" && turn.command?.id === id)
@@ -605,12 +638,12 @@ export function step(agent, stored) {
           ...agent,
           inflight,
           refused: null,
-          turn: Turn.reading(turn.ask, turn.what, turn.at, {
+          turn: carry(turn, Turn.reading(turn.ask, turn.what, turn.at, {
             ...turn.command,
             done: true,
             error,
             tail: lastLines(output, TAIL_LINES),
-          }),
+          })),
         });
       if (turn.phase === "proved" && turn.tests.id === id) {
         const tests = {
@@ -629,7 +662,7 @@ export function step(agent, stored) {
           inflight,
           refused: null,
           lastTests: tests,
-          turn: Turn.proved(turn.ask, tests, turn.at),
+          turn: carry(turn, Turn.proved(turn.ask, tests, turn.at)),
         });
       }
       return Object.freeze({ ...agent, inflight, refused: null });
@@ -713,6 +746,88 @@ export function step(agent, stored) {
   }
 }
 
+// Agent kinds whose adapter writes a usage line as every completed turn
+// ends: Claude (map-sdk-message.ts, the result), Codex (map-codex.ts) and the
+// fake agent that stands in for them (fake-adapter.ts). Measured 10/13 on a
+// scratch engine: three finished fake turns each had usage right before their
+// idle, and a turn cut by SIGTERM had none. Gemini and the rest aren't listed,
+// so a turn of theirs that reads Done stays Done.
+export const USAGE_KINDS = Object.freeze(["claude", "codex"]);
+
+/** The turn as it stands under an engine that booted at `bootAt`. Realm's
+ *  boot settles every live turn of the engine before it (markStaleOnBoot:
+ *  a synthetic idle, and a deny for an open request), so a turn its engine
+ *  ran, begun before this boot, that still reads running can only have been
+ *  cut off; and one of a kind that always writes usage, settled with none,
+ *  was settled by the boot, not by finishing. Either is the engine-restarted
+ *  fault, kept at its own start time. A turn realm's engine didn't run (an
+ *  imported tab's copy) or that began after the boot is untouched.
+ *  Probe, 10/13 scratch engine, fake agent, SIGTERM mid-turn: the log after
+ *  boot read user_message, init, idle, running, idle, which step() calls
+ *  Done, and an asked turn with no running read "Starting on it" forever. */
+export function cutByRestart(agent, bootAt, kind = "") {
+  const t = agent?.turn;
+  if (!t || !agent.ran || !(bootAt > 0)) return agent;
+  const since = t.since ?? t.at;
+  if (!(since > 0) || since >= bootAt) return agent;
+  const settledByBoot =
+    t.phase === "done" && !t.stopped && !agent.usage && USAGE_KINDS.includes(kind);
+  if (!isRunning(t) && !settledByBoot) return agent;
+  return Object.freeze({
+    ...agent,
+    inflight: Object.freeze({}),
+    turn: carry(t, Turn.failed(t.ask, fault("engine-restarted"), t.phase === "done" ? t.at : bootAt)),
+  });
+}
+
+// ---------------------------------------------------------------- the clock
+
+/** A duration as a glance: 42s, 3m 05s, 1h 02m. */
+export function duration(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ${String(s % 60).padStart(2, "0")}s`;
+  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
+}
+
+/** The live line under a turn: how long it has been going, or how long it
+ *  waited on him, or how long it took. null when the start isn't known: a
+ *  guessed start would be a clock that lies. Caleb's ask, 10/12: a live
+ *  "working for 42s" on a running turn (Claude.app and Cursor each tick one
+ *  beside the running status). */
+export function clock(turn, now = Date.now()) {
+  if (!turn) return null;
+  const since = turn.since;
+  const working = () =>
+    since ? { tone: "running", text: `Working for ${duration(now - since)}`, short: duration(now - since) } : null;
+  return match(turn, {
+    asked: working,
+    reading: working,
+    changing: working,
+    proved: working,
+    // Waiting counts from when it began to wait, the number he can act on.
+    "needs-you": (t) =>
+      t.at ? { tone: "needs", text: `Waiting on you for ${duration(now - t.at)}`, short: duration(now - t.at) } : null,
+    done: (t) => (since && t.at > since ? { tone: "done", text: `Took ${duration(t.at - since)}`, short: null } : null),
+    failed: () => null,
+  });
+}
+
+/** Why Stop isn't offered for a turn running outside realm's engine, in
+ *  one line: realm's interrupt reaches only turns its engine runs, and a
+ *  Claude Code tab's turn runs in that tab's own process (tab_truth.mjs
+ *  liveTabs says which app). Pressing keys into another app's window from
+ *  the glass would take his focus, which nothing on the glass may do. */
+export const STOP_ELSEWHERE = Object.freeze({
+  vscode: "This one runs in VS Code, so stop it there.",
+  terminal: "This one runs in a terminal, so stop it there.",
+  job: "This one runs as a background job, so Stop can't reach it.",
+  desktop: "This one runs in the Claude app, so stop it there.",
+  window: "This one runs in its own window, so stop it there.",
+});
+export const stopElsewhere = (where) => STOP_ELSEWHERE[where] ?? STOP_ELSEWHERE.window;
+
 /** Attach a review to a settled turn. A review with no hunk left (all kept,
  *  committed or put back) is null, and the turn is plain done. */
 export function withReview(agent, review) {
@@ -720,11 +835,11 @@ export function withReview(agent, review) {
   if (!t || t.phase !== "done") return agent;
   return Object.freeze({
     ...agent,
-    turn: Turn.done(
+    turn: carry(t, Turn.done(
       t.ask,
       { said: t.said, tests: t.tests, stopped: t.stopped, review },
       t.at,
-    ),
+    )),
   });
 }
 
@@ -733,7 +848,9 @@ export function withReview(agent, review) {
  *  be read is a fault, never Done. */
 export function turnFromTruth(truth, title = "") {
   const at = truth?.lastAt ?? 0;
-  if (truth?.state === "running") return Turn.asked(title, at);
+  // `since` is the tab's own last prompt (tab_truth.mjs), or unknown: never
+  // the last write, which would count from the newest tool call.
+  if (truth?.state === "running") return Turn.asked(title, at, truth.since ?? null);
   if (truth?.state === "stopped") return Turn.failed(title, fault("stalled"), at);
   if (truth?.state === "done") return Turn.done(title, {}, at);
   if (truth?.state === "unreadable") return Turn.failed(title, fault("tab-unreadable", truth.detail), at);
@@ -765,7 +882,13 @@ export function tileTurn(session, agent, truth, truthAsked) {
   if (agent?.turn) return agent.turn;
   const title = session?.title ?? "";
   const s = session?.status;
-  if (s === "waiting_permission") return Turn.needsYou(title, WAITING, Turn.asked(title));
+  // The row moved to waiting when the request came: its time is how long
+  // it has waited on him.
+  if (s === "waiting_permission")
+    return Turn.needsYou(title, WAITING, Turn.asked(title, 0, null), session.updatedAt ?? 0);
+  // Realm's row moves to running as the turn starts, so its time is the
+  // start. Only realm's engine ever sets a row running: an imported tab's
+  // row stays idle (tab_truth.mjs).
   if (s === "running") return Turn.asked(title, session.updatedAt ?? 0);
   if (s === "error") return Turn.failed(title, fault("agent-error"));
   if (session?.providerSessionId) {

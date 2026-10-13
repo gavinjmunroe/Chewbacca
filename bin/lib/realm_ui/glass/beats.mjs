@@ -561,6 +561,7 @@ export function headline(story, b = beat(story), { who = "" } = {}) {
   // longer supported ..." The raw words are the call's small print.
   if (b === "failed") {
     if (failedFault(story)?.name === "signed-out") return `${who || "This agent"} can't sign in`;
+    if (failedFault(story)?.name === "engine-restarted") return "Realm's engine restarted mid-turn";
     // A short first sentence is its own name ("Usage limit reached.");
     // anything longer is small print.
     const first = firstSentence(story.failure);
@@ -610,6 +611,14 @@ export function headline(story, b = beat(story), { who = "" } = {}) {
 export function decision(story, { kept = false, who = "" } = {}) {
   const f = failedFault(story);
   if (f && !story.permission) {
+    // Nothing more will come of the turn, and nothing in the transcript
+    // explains it: realm's log just stops. The press is a new ask.
+    if (f.name === "engine-restarted")
+      return {
+        kind: "failed",
+        line: "Nothing more will happen on this turn.",
+        verbs: [{ id: "reply", text: "Ask again", key: "\u21b5" }],
+      };
     if (f.name === "signed-out")
       // Claude's own login dying can't be answered with "use Claude": his
       // transcript's install card has Sign in.
@@ -719,7 +728,13 @@ export function beatLine(b, story = null) {
     const at = BEATS.indexOf(where);
     return [
       ...BEATS.slice(0, at).map((id) => ({ id, word: BEAT_WORDS[id], state: "read" })),
-      { id: "failed", word: FAILED_WORDS[where], state: "failed" },
+      // A turn the restart cut off ran until it was cut: "Failed before it
+      // started" sat under a turn that had worked 26 s (10/13 frames).
+      {
+        id: "failed",
+        word: failedFault(story ?? {})?.name === "engine-restarted" ? "Cut off by the restart" : FAILED_WORDS[where],
+        state: "failed",
+      },
     ];
   }
   const at = BEATS.indexOf(b);

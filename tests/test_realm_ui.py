@@ -493,6 +493,31 @@ check("the bridge takes the token off the window", "delete window.__realmUiToken
 check("Escape stays with the page in a dialog, editor or terminal",
       all(s in bridge_src for s in ('[role="dialog"]', ".cm-editor", ".xterm")))
 
+# ── a land never leaves the port dark (10/13) ───────────────────────────────
+
+rec = realm_ui.service_record() if hasattr(realm_ui, "service_record") else {}
+check("realm-ui swaps overlap on the daemon's shared port, health-checked",
+      rec.get("swap") == "overlap" and rec.get("listen") == realm_ui.port() and rec.get("health") == {"http": "/"}, rec)
+
+# A rebuild keeps the build before it, so a kept page still finds its chunks.
+assets = TMP / "assets-prune"
+assets.mkdir(parents=True, exist_ok=True)
+for n in ("index-OLD.js", "Lazy-OLD.js", "index-ANCIENT.js"):
+    (assets / n).write_text("x")
+os.utime(assets / "index-ANCIENT.js", (1, 1))
+os.utime(assets / "index-OLD.js", (1000, 1000))
+os.utime(assets / "Lazy-OLD.js", (1000, 1000))
+(assets / ".builds.json").write_text(json.dumps({"current": ["index-OLD.js", "Lazy-OLD.js"]}))
+import time as _t
+started = _t.time()
+(assets / "index-NEW.js").write_text("y")
+gone = realm_ui.prune_assets(assets, started) if hasattr(realm_ui, "prune_assets") else None
+left = sorted(p.name for p in assets.iterdir() if not p.name.startswith("."))
+check("a rebuild keeps this build and the last one, and drops older", gone == ["index-ANCIENT.js"]
+      and left == ["Lazy-OLD.js", "index-NEW.js", "index-OLD.js"], (gone, left))
+vite = (ROOT / "bin" / "lib" / "realm_ui" / "vite.config.mjs").read_text()
+check("vite keeps dist between builds", "emptyOutDir: false" in vite)
+
 shutil.rmtree(TMP, ignore_errors=True)
 print(f"\n{'all passed' if not failed else f'{failed} failed'}")
 sys.exit(1 if failed else 0)

@@ -22,7 +22,8 @@ export type FaultName =
   | "stalled"
   | "agent-error"
   | "signed-out"
-  | "voice-dropped";
+  | "voice-dropped"
+  | "engine-restarted";
 
 export type Fault = {
   readonly name: FaultName;
@@ -63,11 +64,11 @@ export type TestsBeat = {
 export type Review = { root: string; files: { path: string; hunks: unknown[] }[] };
 
 export type Turn =
-  | { readonly phase: "asked"; ask: string; at: number }
-  | { readonly phase: "reading"; ask: string; what: string; command: CommandBeat | null; at: number }
-  | { readonly phase: "changing"; ask: string; file: FileBeat; at: number }
-  | { readonly phase: "proved"; ask: string; tests: TestsBeat; at: number }
-  | { readonly phase: "needs-you"; ask: string; question: string; resume: Turn; at: number }
+  | { readonly phase: "asked"; ask: string; at: number; since?: number | null }
+  | { readonly phase: "reading"; ask: string; what: string; command: CommandBeat | null; at: number; since?: number | null }
+  | { readonly phase: "changing"; ask: string; file: FileBeat; at: number; since?: number | null }
+  | { readonly phase: "proved"; ask: string; tests: TestsBeat; at: number; since?: number | null }
+  | { readonly phase: "needs-you"; ask: string; question: string; resume: Turn; at: number; since?: number | null }
   | {
       readonly phase: "done";
       ask: string;
@@ -76,6 +77,7 @@ export type Turn =
       review: Review | null;
       stopped: boolean;
       at: number;
+      since?: number | null;
     }
   | { readonly phase: "failed"; ask: string; fault: Fault; at: number };
 
@@ -98,6 +100,8 @@ export type Agent = {
   readonly trailEarlier: number;
   readonly started: boolean;
   readonly refused: string | null;
+  readonly usage: boolean;
+  readonly ran: boolean;
 };
 
 export type Tile = {
@@ -118,6 +122,8 @@ type Truth = {
   state: "running" | "done" | "stopped" | "unreadable";
   lastAt: number | null;
   detail?: string;
+  since?: number | null;
+  where?: string | null;
 };
 type SessionLike = {
   id: string;
@@ -173,8 +179,16 @@ export function focusView(agent: Agent | undefined): {
   trailEarlier: number;
 };
 export function stageObject(turn: Turn | null): "command" | "file" | "tests" | "fault" | null;
+export type Clock = { tone: "running" | "needs" | "done"; text: string; short: string | null };
+export function carry(from: Turn | null, next: Turn): Turn;
+export const USAGE_KINDS: readonly string[];
+export function cutByRestart(agent: Agent, bootAt: number, kind?: string): Agent;
+export function duration(ms: number): string;
+export function clock(turn: Turn | null, now?: number): Clock | null;
+export const STOP_ELSEWHERE: Readonly<Record<string, string>>;
+export function stopElsewhere(where: string | null | undefined): string;
 export const Turn: {
-  asked(ask: string, at?: number): Turn;
+  asked(ask: string, at?: number, since?: number | null): Turn;
   reading(ask: string, what: string, at?: number, command?: CommandBeat | null): Turn;
   changing(ask: string, file: FileBeat, at?: number): Turn;
   proved(ask: string, tests: TestsBeat, at?: number): Turn;

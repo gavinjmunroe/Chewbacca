@@ -200,6 +200,7 @@ def build(force: bool = False, log=print) -> dict:
     done = subprocess.run([node(), str(b / "node_modules" / "vite" / "bin" / "vite.js"), "build", "--logLevel", "warn"], cwd=b)
     if done.returncode != 0 or not (dist_dir() / "index.html").exists():
         raise RuntimeError(f"vite build failed ({done.returncode})")
+    prune_assets(dist_dir() / "assets", started)
     record = {"stamp": stamp, "realmCommit": commit, "source": str(repo), "built": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
               "seconds": round(time.time() - started, 1)}
     record_path.write_text(json.dumps(record) + "\n")
@@ -208,6 +209,39 @@ def build(force: bool = False, log=print) -> dict:
 
 
 LAYER = HERE / "glass"
+# The asset list of the build before this one, beside the assets.
+ASSETS_RECORD = ".builds.json"
+
+
+def prune_assets(assets: Path, started: float) -> list:
+    """Keep this build's files and the last one's; remove the rest.
+
+    vite no longer empties dist (vite.config.mjs): a page still running the
+    last build fetches its lazy chunks from there until it reloads. A file
+    this build wrote has an mtime at or after `started` (rollup writes every
+    chunk on every build). Returns the names removed."""
+    try:
+        names = [p.name for p in assets.iterdir() if p.is_file() and p.name != ASSETS_RECORD]
+    except OSError:
+        return []
+    record = assets / ASSETS_RECORD
+    try:
+        last = set(json.loads(record.read_text()).get("current", []))
+    except (OSError, ValueError, AttributeError):
+        last = set()
+    # A second of slack: some filesystems keep mtimes to the second.
+    current = sorted(n for n in names if (assets / n).stat().st_mtime >= started - 1)
+    keep = set(current) | last
+    removed = []
+    for n in names:
+        if n not in keep:
+            try:
+                (assets / n).unlink()
+                removed.append(n)
+            except OSError:
+                pass
+    record.write_text(json.dumps({"current": current, "previous": sorted(last)}) + "\n")
+    return removed
 
 
 def layer_texts() -> list:
@@ -292,6 +326,39 @@ def _daemon_owns_it() -> bool:
         return False
 
 
+def service_record() -> dict:
+    """The service chewbacca-daemon runs. Swapped overlap on a kit move: the
+    new copy binds the same port beside the old one (listen_exec.py hands it
+    the socket) and the old one stops once / answers, so the port is never
+    dark. Stop-start, its old mode, left it dark 0.2 to 3.9 s on every land
+    on 10/12 (final-report.md), and with a fresh pipe token each time."""
+    return {"name": SERVICE, "argv": service_argv(), "keepalive": True, "swap": "overlap",
+            "listen": port(), "health": {"http": "/"}}
+
+
+def _register(force: bool = False) -> bool:
+    """Write the service record when it differs from the one on disk. True
+    when the daemon has it. Read before written, so every open of the glass
+    doesn't rewrite a file the daemon reads."""
+    try:
+        import daemon_register  # noqa: PLC0415  only when registering
+    except ImportError:
+        return False
+    want = service_record()
+    path = daemon_register.DAEMON_DIR / "services" / f"{SERVICE}.json"
+    try:
+        if not force and json.loads(path.read_text()) == want:
+            return True
+    except (OSError, ValueError):
+        pass
+    try:
+        daemon_register.register(SERVICE, want["argv"], keepalive=True, ensure_daemon=False,
+                                 swap=want["swap"], listen=want["listen"], health_http=want["health"]["http"])
+        return True
+    except (ValueError, OSError):
+        return False
+
+
 def start(register: bool = True, spawn=subprocess.Popen, daemon_owns=None) -> dict:
     """Make sure the server is up and return its state.
 
@@ -305,20 +372,17 @@ def start(register: bool = True, spawn=subprocess.Popen, daemon_owns=None) -> di
     spawn the server itself."""
     live = running()
     if live:
+        # A server started under the old record still gets the new one, so
+        # the daemon's next swap of it is an overlap.
+        if register:
+            _register()
         return live
     if not built():
         raise RuntimeError("Realm's interface is not built; run realm-ui build")
     if not node():
         raise RuntimeError("node is not on PATH")
     ui_home().mkdir(parents=True, exist_ok=True)
-    registered = False
-    if register:
-        try:
-            import daemon_register  # noqa: PLC0415  only when registering
-            daemon_register.register(SERVICE, service_argv(), keepalive=True, ensure_daemon=False)
-            registered = True
-        except (ImportError, ValueError, OSError):
-            pass
+    registered = _register() if register else False
     log_path = ui_home() / "server.log"
     owned = registered and (daemon_owns() if daemon_owns else _daemon_owns_it())
     if not owned:

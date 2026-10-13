@@ -9,6 +9,7 @@
 // or a press outside resolves null, which is what his code does when the
 // system dialog is cancelled.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import "./pick.css";
 
 type Folder = { path: string; name: string };
 type Ask = { resolve: (path: string | null) => void };

@@ -84,7 +84,7 @@ def _fake_realm(at: Path, marker: str) -> Path:
     return at
 
 
-_saved = {k: os.environ.get(k) for k in ("REALM_UI_SOURCE", "CHEWBACCA_REALM_DIR", "HOME", "CHEWBACCA_NODE",
+_saved = {k: os.environ.get(k) for k in ("REALM_UI_SOURCE", "REALM_UI_MODE", "CHEWBACCA_REALM_DIR", "HOME", "CHEWBACCA_NODE",
                                          "CHEWBACCA_NPM", "CHEWBACCA_REALM_UI_HOME")}
 try:
     src_tmp = TMP / "sources"
@@ -107,7 +107,9 @@ try:
     fake_npm.write_text("#!/bin/sh\nmkdir -p node_modules/vite/bin && : > node_modules/vite/bin/vite.js\n")
     fake_node = bin_dir / "node"
     # Stands in for `node vite.js build`: the "bundle" is the main.tsx it was handed.
-    fake_node.write_text("#!/bin/sh\nmkdir -p dist && cp apps/desktop/src/renderer/src/main.tsx dist/index.html\n")
+    # And it records which entry the build asked vite for (REALM_UI_MODE).
+    fake_node.write_text("#!/bin/sh\nmkdir -p dist && cp apps/desktop/src/renderer/src/main.tsx dist/index.html"
+                         " && echo \"mode=$REALM_UI_MODE\" >> dist/index.html\n")
     for f in (fake_npm, fake_node):
         f.chmod(0o755)
     os.environ.update(CHEWBACCA_NODE=str(fake_node), CHEWBACCA_NPM=str(fake_npm),
@@ -131,6 +133,64 @@ try:
     rec = realm_ui.build(log=quiet)
     check("unset again, the next build is his again",
           "his" in (realm_ui.dist_dir() / "index.html").read_text() and rec.get("source") == str(vendor), rec)
+
+    # ── which entry: his app as he ships it, or our layer over it ──────────
+    # Caleb, 10/13 8:19am, of the tiles-and-story layer: "so far from a better
+    # version of carlton's ide". Stock is the default; the layer is opt-in.
+    built = lambda: (realm_ui.dist_dir() / "index.html").read_text()  # noqa: E731
+    check("the default entry is stock, his app as he ships it", rec.get("mode") == "stock" and "mode=stock" in built(), (rec, built()))
+    copied = realm_ui.build_dir() / "apps" / "desktop" / "src" / "renderer"
+    check("both entries are copied beside his src/", (copied / "stock" / "main.tsx").exists() and (copied / "glass" / "main.tsx").exists())
+    rec = realm_ui.build(log=quiet, mode_pick="glass")
+    check("--mode glass rebuilds into the layer, no --force needed", rec.get("mode") == "glass" and "mode=glass" in built(), rec)
+    check("the mode is remembered", realm_ui.settings().get("mode") == "glass", realm_ui.settings())
+    rec = realm_ui.build(log=quiet)
+    check("a later plain build stays on the remembered mode", rec.get("mode") == "glass" and "mode=glass" in built(), rec)
+    os.environ["REALM_UI_MODE"] = "stock"
+    rec = realm_ui.build(log=quiet)
+    check("REALM_UI_MODE changes one build", rec.get("mode") == "stock", rec)
+    check("and is never remembered", realm_ui.settings().get("mode") == "glass", realm_ui.settings())
+    os.environ.pop("REALM_UI_MODE")
+    rec = realm_ui.build(log=quiet, mode_pick="stock", source=str(fork))
+    check("--source is remembered, so a plain rebuild stays on the fork",
+          realm_ui.build(log=quiet).get("source") == str(fork.resolve()) and "fork" in built(), realm_ui.settings())
+    check("status names the mode", realm_ui.status().get("mode") == "stock", realm_ui.status())
+    try:
+        realm_ui.build(log=quiet, mode_pick="tiles")
+        check("an unknown mode is refused", False)
+    except RuntimeError:
+        check("an unknown mode is refused", realm_ui.settings().get("mode") == "stock", realm_ui.settings())
+    try:
+        realm_ui.build(log=quiet, source=str(src_tmp / "nowhere"))
+        check("a source that isn't a realm checkout is refused", False)
+    except RuntimeError:
+        check("a source that isn't a realm checkout is refused", realm_ui.settings().get("source") == str(fork.resolve()))
+    check("a remembered source beats the engine's checkout", realm_ui.realm_dir() == fork.resolve(), realm_ui.realm_dir())
+    rec = realm_ui.build(log=quiet, source="default")
+    check("--source default forgets it and goes back to the engine's checkout",
+          "source" not in realm_ui.settings() and rec.get("source") == str(vendor) and "his" in built(), (realm_ui.settings(), rec))
+    # A build that fails leaves the remembered picks as they were.
+    broken = bin_dir / "node-broken"
+    broken.write_text("#!/bin/sh\nexit 3\n")
+    broken.chmod(0o755)
+    os.environ["CHEWBACCA_NODE"] = str(broken)
+    try:
+        realm_ui.build(log=quiet, mode_pick="glass", force=True)
+        check("a failed --mode glass build raises", False)
+    except RuntimeError:
+        check("a failed --mode glass build isn't remembered", realm_ui.settings().get("mode") == "stock", realm_ui.settings())
+    os.environ["CHEWBACCA_NODE"] = str(fake_node)
+    # The CLI parses what a person types.
+    cli = [sys.executable, str(ROOT / "bin" / "realm-ui"), "build"]
+    run = lambda *a: subprocess.run(cli + list(a), capture_output=True, text=True, env=dict(os.environ), timeout=60)  # noqa: E731
+    got = run("--mode=glass")
+    check("the CLI takes --mode=glass", got.returncode == 0 and realm_ui.settings().get("mode") == "glass" and "mode=glass" in built(), got.stderr)
+    got = run("--mode", "stock", "--force")
+    check("the CLI takes --mode stock --force", got.returncode == 0 and realm_ui.settings().get("mode") == "stock", got.stderr)
+    got = run("--mode", "--force")
+    check("a flag where the mode goes is refused", got.returncode == 2 and realm_ui.settings().get("mode") == "stock", got.stderr)
+    got = run("--modes", "glass")
+    check("an unknown option is refused", got.returncode == 2, got.stderr)
 finally:
     for k, v in _saved.items():
         if v is None:

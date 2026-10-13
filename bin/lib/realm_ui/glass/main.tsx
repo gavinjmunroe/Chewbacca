@@ -5,3 +5,5 @@
 import "./install";
 import "../src/main";
 import "./glass.css";
+
+(window as unknown as { __realmUiMode?: string }).__realmUiMode = "glass";

@@ -12,10 +12,18 @@ on 127.0.0.1 next to the realm engine Kyber already runs:
     serve    server.mjs: the bundle, bridge.js as window.realm, and a WebSocket
              pipe to the engine holding realm's own origin and token locks
 
-The realm checkout is never edited; the copy is what gets built. Our glass
-layer (glass/: agent tiles, the grow morph, the stage that follows the agent,
-voice) is copied beside his src/ and becomes the bundle's entry, importing his
-main.tsx unchanged (vite.config.mjs, glass/main.tsx). The HUD
+The realm checkout is never edited; the copy is what gets built. Two modes
+pick the bundle's entry, each importing his main.tsx unchanged
+(vite.config.mjs):
+
+    stock    the default since 10/13: stock/main.tsx, his app as he ships it,
+             plus only what a web view needs to stand in for Electron (the
+             folder chooser and the file describer). Caleb, 10/13 8:19am, of
+             the layer below: "so far from a better version of carlton's ide"
+    glass    opt-in: glass/main.tsx, our agent tiles, story and bar over his app
+
+`realm-ui build --mode` and `--source` are remembered in settings.json, so a
+later plain rebuild (the night chain's) stays on the same mode and checkout. The HUD
 draws the page with AppPane.swift, and bin/lib/surfaces/realm_app.py opens it.
 Stock /usr/bin/python3 is 3.9 on this Mac, so no `X | None` at runtime here.
 """
@@ -64,18 +72,62 @@ EXTRA_DEPS = {"zod": "^3.24.0", "ulid": "^2.3.0", "@hugeicons/react": "^1.0.0",
               "@hugeicons/core-free-icons": "^1.2.1"}
 
 
-def realm_dir() -> Path:
-    """Where the renderer is copied from. REALM_UI_SOURCE picks another
-    checkout of his app for the interface alone, such as Caleb's fork at
-    ~/code/realm-fork (github.com/calebnewtonusc/realm, branch chewbacca); the
-    engine keeps running from CHEWBACCA_REALM_DIR either way (bin/realm-engine).
-    Unset, it is the engine's checkout, ~/code/vendor/realm."""
-    picked = os.environ.get("REALM_UI_SOURCE") or os.environ.get("CHEWBACCA_REALM_DIR")
-    return Path(picked or Path.home() / "code" / "vendor" / "realm").expanduser()
+MODES = ("stock", "glass")
 
 
 def ui_home() -> Path:
     return Path(os.environ.get("CHEWBACCA_REALM_UI_HOME") or Path.home() / ".chewbacca" / "realm-ui").expanduser()
+
+
+def settings_file() -> Path:
+    return ui_home() / "settings.json"
+
+
+def settings() -> dict:
+    """What `realm-ui build --mode/--source` last chose. Empty when never set."""
+    try:
+        got = json.loads(settings_file().read_text())
+    except (OSError, ValueError):
+        return {}
+    return got if isinstance(got, dict) else {}
+
+
+def save_settings(**changes: str) -> dict:
+    """Remember what was picked. A value of "default" forgets that key, so
+    `--source default` goes back to the engine's checkout."""
+    current = settings()
+    for k, v in changes.items():
+        if v == "default":
+            current.pop(k, None)
+        elif v:
+            current[k] = v
+    settings_file().parent.mkdir(parents=True, exist_ok=True)
+    settings_file().write_text(json.dumps(current, indent=1, sort_keys=True) + "\n")
+    return current
+
+
+def mode() -> str:
+    """Which entry the bundle is built from: REALM_UI_MODE for one build,
+    else the remembered one, else stock (his app as he ships it)."""
+    # "bare" (his entry, nothing of ours but the bridge) is for the side-by-side
+    # check only, so it is taken from the environment and never remembered.
+    if os.environ.get("REALM_UI_MODE") == "bare":
+        return "bare"
+    for picked in (os.environ.get("REALM_UI_MODE", ""), str(settings().get("mode", ""))):
+        if picked in MODES:
+            return picked
+    return "stock"
+
+
+def realm_dir() -> Path:
+    """Where the renderer is copied from. REALM_UI_SOURCE for one build, else
+    the checkout `--source` remembered (Caleb's fork, ~/code/realm-fork,
+    github.com/calebnewtonusc/realm branch chewbacca; it beats the engine's
+    checkout until `--source default` forgets it), else the engine's
+    checkout: CHEWBACCA_REALM_DIR, unset ~/code/vendor/realm."""
+    picked = (os.environ.get("REALM_UI_SOURCE") or str(settings().get("source", ""))
+              or os.environ.get("CHEWBACCA_REALM_DIR"))
+    return Path(picked or Path.home() / "code" / "vendor" / "realm").expanduser()
 
 
 def build_dir() -> Path:
@@ -135,11 +187,39 @@ def _copy(src: Path, dst: Path) -> None:
                     ignore=shutil.ignore_patterns("node_modules", "*.test.ts", "*.test.tsx", "dist", "out"))
 
 
-def build(force: bool = False, log=print) -> dict:
+def build(force: bool = False, log=print, mode_pick: str = "", source: str = "") -> dict:
     """Copy Carlton's renderer and build it. Returns the build record.
 
-    Skips the work when the realm commit and this kit's build files are the
-    ones the last build used, unless force is set."""
+    mode_pick and source, when given, are remembered for every later build.
+    Skips the work when the realm commit, the mode and this kit's build files
+    are the ones the last build used, unless force is set."""
+    if mode_pick and mode_pick not in MODES + ("default",):
+        raise RuntimeError(f"realm-ui: mode is one of {', '.join(MODES)}, not {mode_pick!r}")
+    if source and source != "default" and not (Path(source).expanduser() / "apps" / "desktop" / "src" / "renderer").is_dir():
+        raise RuntimeError(f"realm-ui: {source} is not a realm checkout")
+    picks = {"mode": mode_pick,
+             "source": source if source in ("", "default") else str(Path(source).expanduser().resolve())}
+    # This build uses the picks; they're remembered only once it has worked,
+    # so a failed `--mode glass` doesn't leave every later rebuild trying it.
+    before = settings()
+    if mode_pick or source:
+        save_settings(**picks)
+    try:
+        return _build(force, log)
+    except BaseException:
+        if before:
+            settings_file().write_text(json.dumps(before, indent=1, sort_keys=True) + "\n")
+        elif settings_file().exists():
+            settings_file().unlink()
+        raise
+
+
+def _build(force: bool, log) -> dict:
+    entry = mode()
+    if entry == "bare" and ui_home() == Path.home() / ".chewbacca" / "realm-ui":
+        # The bare reference has no folder chooser; built into the live home
+        # it would replace the bundle the glass serves.
+        raise RuntimeError("realm-ui: REALM_UI_MODE=bare builds only into a scratch CHEWBACCA_REALM_UI_HOME")
     repo = realm_dir()
     renderer = repo / "apps" / "desktop" / "src" / "renderer"
     if not renderer.is_dir():
@@ -152,14 +232,14 @@ def build(force: bool = False, log=print) -> dict:
     config = (HERE / "vite.config.mjs").read_text()
     # The source path is in the stamp, so switching checkouts rebuilds even
     # when the fork's branch and his main sit on the same commit.
-    stamp = fingerprint(str(repo), commit, json.dumps(pkg, sort_keys=True), config, *layer_texts())
+    stamp = fingerprint(str(repo), commit, entry, json.dumps(pkg, sort_keys=True), config, *layer_texts())
     record_path = build_dir() / "build.json"
     try:
         record = json.loads(record_path.read_text())
     except (OSError, ValueError):
         record = {}
     if not force and record.get("stamp") == stamp and (dist_dir() / "index.html").exists():
-        log(f"realm-ui: already built from {repo} at {commit[:8]}")
+        log(f"realm-ui: already built ({entry}) from {repo} at {commit[:8]}")
         return record
 
     b = build_dir()
@@ -174,9 +254,12 @@ def build(force: bool = False, log=print) -> dict:
     for pkg_name in ("contracts", "ui"):
         _copy(repo / "packages" / pkg_name, b / "packages" / pkg_name)
     shutil.copy2(HERE / "vite.config.mjs", b / "vite.config.mjs")
-    # Our layer sits beside his src/, never inside it: glass/main.tsx is the
-    # entry and imports his main.tsx as written (vite.config.mjs).
+    # Ours sits beside his src/, never inside it: stock/main.tsx or
+    # glass/main.tsx is the entry and imports his main.tsx as written
+    # (vite.config.mjs). Both are copied; the stock entry borrows the folder
+    # chooser and file describer from glass/.
     _copy(LAYER, b / "apps" / "desktop" / "src" / "renderer" / "glass")
+    _copy(STOCK, b / "apps" / "desktop" / "src" / "renderer" / "stock")
 
     pkg_text = json.dumps(pkg, indent=1) + "\n"
     pkg_path = b / "package.json"
@@ -197,18 +280,20 @@ def build(force: bool = False, log=print) -> dict:
 
     log("realm-ui: vite build")
     started = time.time()
-    done = subprocess.run([node(), str(b / "node_modules" / "vite" / "bin" / "vite.js"), "build", "--logLevel", "warn"], cwd=b)
+    done = subprocess.run([node(), str(b / "node_modules" / "vite" / "bin" / "vite.js"), "build", "--logLevel", "warn"], cwd=b,
+                          env=dict(os.environ, REALM_UI_MODE=entry))
     if done.returncode != 0 or not (dist_dir() / "index.html").exists():
         raise RuntimeError(f"vite build failed ({done.returncode})")
     prune_assets(dist_dir() / "assets", started)
-    record = {"stamp": stamp, "realmCommit": commit, "source": str(repo), "built": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+    record = {"stamp": stamp, "realmCommit": commit, "source": str(repo), "mode": entry, "built": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
               "seconds": round(time.time() - started, 1)}
     record_path.write_text(json.dumps(record) + "\n")
-    log(f"realm-ui: built {repo} at {commit[:8]} in {record['seconds']}s")
+    log(f"realm-ui: built ({entry}) {repo} at {commit[:8]} in {record['seconds']}s")
     return record
 
 
 LAYER = HERE / "glass"
+STOCK = HERE / "stock"
 # The asset list of the build before this one, beside the assets.
 ASSETS_RECORD = ".builds.json"
 
@@ -248,8 +333,8 @@ def prune_assets(assets: Path, started: float) -> list:
 
 
 def layer_texts() -> list:
-    """Every file of our glass layer, so a change to it rebuilds the bundle."""
-    return [f"{p.relative_to(LAYER)}\n{p.read_text()}" for p in sorted(LAYER.rglob("*")) if p.is_file()]
+    """Every file of both entries, so a change to either rebuilds the bundle."""
+    return [f"{p.relative_to(HERE)}\n{p.read_text()}" for d in (LAYER, STOCK) for p in sorted(d.rglob("*")) if p.is_file()]
 
 
 def built() -> bool:
@@ -426,7 +511,9 @@ def status() -> dict:
         record = json.loads((build_dir() / "build.json").read_text())
     except (OSError, ValueError):
         record = {}
+    # A record from before 10/13 has no mode: every build then was the glass layer.
     return {"built": built(), "realmCommit": record.get("realmCommit", ""), "source": record.get("source", ""),
+            "mode": record.get("mode", "glass" if record else ""),
             "running": bool(live),
             "url": (live or {}).get("url", ""), "pid": (live or {}).get("pid")}
 

@@ -551,6 +551,18 @@ These live in peripheral vision on a screen somebody is not looking at. Staring
 at a bright tile judges the wrong thing. Open `states.html`, turn the blur up,
 then look at something else and say out loud which tile just changed.
 
+## Agents on the glass are Carlton's app as he ships it (10/13)
+
+Caleb, 10/13 8:19am: "The ide on glass is pointless btw it is so far from a
+better version of carlton's ide." Our tiles, story and bar layer had made his
+app worse than his own app. "Show my agents" now draws Realm exactly as
+Carlton ships it (`realm-ui build`, default `--mode stock`, from the fork on
+his latest main), with only the bridges a web view needs and Escape to close.
+The sections below describe the old layer, which is still in the tree as
+`realm-ui build --mode glass`. Anything better gets built inside the fork
+(~/code/realm-fork, branch chewbacca) and measured against his stock build,
+the same task frame for frame, before anyone calls it better.
+
 ## Agent work on the glass: what we took from Zed, Cursor and Warp
 
 Researched 2026-10-11 before the Realm IDE layer (bin/lib/realm_ui/glass)

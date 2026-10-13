@@ -192,3 +192,28 @@ test("the bridge answers his Settings page in his own shapes", async () => {
 test("the bridge leaves his window chrome on (frameless off)", () => {
   assert.equal(page(null).realm.frameless, false);
 });
+
+test("v2.1.0's Add folder and vault unlock answer on the glass instead of throwing", async () => {
+  const w = page(null);
+  // Arrays come from the vm's realm, so they're compared as JSON.
+  // His live-api calls these unguarded (state/live-api.ts at 445437d2).
+  assert.equal(typeof w.realm.pickFolders, "function");
+  assert.equal(typeof w.realm.credentials.unlockPolicy, "function");
+  assert.equal(typeof w.realm.credentials.setUnlockPolicy, "function");
+  assert.deepEqual(JSON.parse(JSON.stringify(await w.realm.pickFolders())), [], "no chooser mounted: nothing picked");
+  let asked = 0;
+  w.__realmGlassPickFolder = () => { asked += 1; return Promise.resolve("/Users/x/code/repo"); };
+  w.__realmGlassDescribe = (paths) => Promise.resolve(paths.map((p) => ({ path: p, name: "repo", size: 0, mime: "inode/directory" })));
+  assert.deepEqual(JSON.parse(JSON.stringify(await w.realm.pickFolders())), [{ path: "/Users/x/code/repo", name: "repo", size: 0, mime: "inode/directory" }]);
+  w.__realmGlassPickFolder = () => Promise.resolve(null);
+  assert.deepEqual(JSON.parse(JSON.stringify(await w.realm.pickFolders())), [], "a cancelled chooser attaches nothing");
+  assert.equal(asked, 1);
+});
+
+test("his browser pane's More menu gets his empty menu shape, never null", async () => {
+  const w = page(null);
+  const menu = JSON.parse(JSON.stringify(await w.realm.browser.menuState("b1")));
+  // BrowserPane.tsx spreads it; a null threw on every press of More (10/13).
+  assert.deepEqual(menu, { zoom: 1, canZoomIn: false, canZoomOut: false, back: [], forward: [], blocked: [], saved: [], shareTargets: [] });
+  assert.equal(typeof w.realm.browser.create, "function");
+});

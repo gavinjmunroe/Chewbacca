@@ -42,11 +42,17 @@ const textScale = () => ({
 // script ran. Here a classic script served by server.mjs does it, ahead of the
 // module entry, so the bundle sees the same global on its first line.
 //
-// And our glass layer (bin/lib/realm_ui/glass) goes in by entry, never by
-// editing his files: index.html's module entry is pointed at glass/main.tsx,
-// which imports our layer, then his own src/main.tsx unchanged, then our
-// stylesheet. A renderer whose index.html no longer names /src/main.tsx
-// fails the build here instead of shipping without the layer.
+// The entry, never an edit to his files: index.html's module entry is
+// pointed at one of ours, which imports his own src/main.tsx unchanged.
+// REALM_UI_MODE (set by realm_ui.build) picks which:
+//   stock (default)  stock/main.tsx: his app as he ships it, plus the
+//                    folder chooser and file describer a web view needs
+//   glass (opt-in)   glass/main.tsx: our tiles, story and bar layer over it
+//   bare (checks)    his /src/main.tsx itself, only the bridge added: the
+//                    reference the stock build is compared against
+// A renderer whose index.html no longer names /src/main.tsx fails the build
+// here instead of shipping without our entry.
+const MODE = ["glass", "bare"].includes(process.env.REALM_UI_MODE) ? process.env.REALM_UI_MODE : "stock";
 const glassEntry = () => ({
   name: "chewbacca:glass-entry",
   // Before Vite resolves the module entry, so the bundle is built from ours.
@@ -54,9 +60,9 @@ const glassEntry = () => ({
     order: "pre",
     handler(html) {
       if (!html.includes('src="/src/main.tsx"')) {
-        throw new Error("realm-ui: index.html no longer loads /src/main.tsx; the glass layer has no entry to wrap");
+        throw new Error("realm-ui: index.html no longer loads /src/main.tsx; there is no entry to wrap");
       }
-      return html.replace('src="/src/main.tsx"', 'src="/glass/main.tsx"');
+      return MODE === "bare" ? html : html.replace('src="/src/main.tsx"', `src="/${MODE}/main.tsx"`);
     },
   },
 });

@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """Realm's own desktop interface on the glass: build it, serve it, check it.
 
-    realm-ui build [--force]    copy Carlton's renderer out of the realm checkout and vite build it
-                                (REALM_UI_SOURCE=<checkout> builds from another one, e.g. ~/code/realm-fork)
+    realm-ui build [--force] [--mode stock|glass] [--source <checkout>]
+                                copy Carlton's renderer out of the realm checkout and vite build it.
+                                stock (default): his app as he ships it. glass: our tiles and story
+                                layer over it. --mode and --source stick for every later build once
+                                one works (settings.json); `--source default` goes back to the engine's
+                                checkout. REALM_UI_MODE / REALM_UI_SOURCE change one build only
     realm-ui start              serve it on 127.0.0.1 (registers with chewbacca-daemon), print the url
     realm-ui serve              the server in the foreground (what the daemon runs)
     realm-ui stop               stop it and take it off the daemon
@@ -43,7 +47,25 @@ def main(argv: list) -> int:
     cmd, rest = argv[0], argv[1:]
     try:
         if cmd == "build":
-            realm_ui.build(force="--force" in rest)
+            picks, force, i = {}, False, 0
+            while i < len(rest):
+                arg = rest[i]
+                name, eq, value = arg.partition("=")
+                if arg == "--force":
+                    force = True
+                elif name in ("--mode", "--source"):
+                    if not eq:
+                        i += 1
+                        value = rest[i] if i < len(rest) else ""
+                    if not value or value.startswith("--"):
+                        print(f"realm-ui: {name} needs a value", file=sys.stderr)
+                        return 2
+                    picks[name[2:]] = value
+                else:
+                    print(f"realm-ui: unknown build option {arg}", file=sys.stderr)
+                    return 2
+                i += 1
+            realm_ui.build(force=force, mode_pick=picks.get("mode", ""), source=picks.get("source", ""))
             return 0
         if cmd == "start":
             print(realm_ui.start()["url"])
@@ -59,7 +81,7 @@ def main(argv: list) -> int:
                 print(json.dumps(info))
             else:
                 print(f"built {'yes' if info['built'] else 'no'}"
-                      + (f" (realm {info['realmCommit'][:8]}" + (f" from {info['source']}" if info.get("source") else "") + ")"
+                      + (f" ({info.get('mode') or 'glass'}, realm {info['realmCommit'][:8]}" + (f" from {info['source']}" if info.get("source") else "") + ")"
                          if info["realmCommit"] else "")
                       + (f", running at {info['url']}" if info["running"] else ", not running"))
             return 0 if info["running"] else 3

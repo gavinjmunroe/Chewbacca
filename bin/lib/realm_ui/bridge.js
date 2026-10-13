@@ -36,7 +36,7 @@
   // object with every member present, because browser-client.ts spreads
   // `...window.realm.browser` and a spread copies own keys only. The member
   // names are the preload's own (apps/desktop/src/preload/index.ts at
-  // 59afd9e4). Every one answers "not here": a subscription hands back a
+  // 59afd9e4, and v2.1.0's additions). Every one answers "not here": a subscription hands back a
   // no-op unsubscribe, a list is empty, anything else is null.
   const absent = (members) =>
     Object.fromEntries(members.map((key) => [key,
@@ -129,6 +129,16 @@
       const pick = window.__realmGlassPickFolder;
       return typeof pick === "function" ? pick() : Promise.resolve(null);
     },
+    // v2.1.0's "Add folder" in the prompter (preload pickFolders, a native
+    // multi-select in Electron): the same glass chooser as pickFolder, one
+    // folder at a time, described as an attachment the way his main does.
+    // His live-api calls it unguarded, so without it the press threw.
+    pickFolders: () => {
+      const pick = window.__realmGlassPickFolder;
+      return typeof pick === "function"
+        ? pick().then((path) => (path ? describe([path]) : []))
+        : Promise.resolve([]);
+    },
     // His composer's attach: Kyber's open panel, then described here.
     pickFiles: () =>
       native
@@ -182,9 +192,15 @@
               .then((shown) => shown === true, () => false)
           : Promise.resolve(false),
     },
-    credentials: absent(["list", "status", "add", "remove", "share", "setPresenceTtl"]),
+    credentials: absent(["list", "status", "add", "remove", "share", "setPresenceTtl", "unlockPolicy", "setUnlockPolicy"]),
     passkeys: absent(["list", "remove", "share"]),
-    browser: absent(["create", "destroy", "retain", "navigate", "nav", "search", "historyMenu", "setAllowlist", "setBounds", "onState", "pickElement", "cancelPick", "annotate", "cancelAnnotate", "setAccent", "blockedDownloads", "saveDownload", "dismissDownload", "onDownloadBlocked", "onPasskey", "menuState", "goToIndex", "find", "stopFind", "onFound", "onFindRequest", "zoom", "print", "setDevice", "screenshot", "clearData", "shareSignIn"]),
+    browser: {
+      ...absent(["create", "destroy", "retain", "navigate", "nav", "search", "historyMenu", "setAllowlist", "setBounds", "onState", "pickElement", "cancelPick", "annotate", "cancelAnnotate", "setAccent", "blockedDownloads", "saveDownload", "dismissDownload", "onDownloadBlocked", "onPasskey", "goToIndex", "find", "stopFind", "onFound", "onFindRequest", "zoom", "print", "setDevice", "screenshot", "clearData", "shareSignIn"]),
+      // His pane's ⋯ menu spreads this as it opens (BrowserPane.tsx), so a
+      // null threw on every press of More (headless, 10/13). His shape, empty:
+      // no page, so no zoom to change, no trail, no downloads, no one to share with.
+      menuState: () => Promise.resolve({ zoom: 1, canZoomIn: false, canZoomOut: false, back: [], forward: [], blocked: [], saved: [], shareTargets: [] }),
+    },
   };
 
   // Escape on the glass. In Realm's window Escape only ever closes something

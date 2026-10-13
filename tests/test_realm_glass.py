@@ -44,7 +44,7 @@ def realm_status(repo: Path) -> str:
 class LayerFiles(unittest.TestCase):
     def test_layer_is_ours_and_credits_him(self):
         names = sorted(p.name for p in LAYER.iterdir())
-        self.assertEqual(names, ["FolderPick.tsx", "GlassLayer.tsx", "Story.tsx", "attach.ts", "beats.mjs", "glass.css", "install.tsx", "link.d.mts", "link.mjs", "main.tsx", "model.mjs", "nav.d.mts", "nav.mjs", "regions.mjs", "turn.d.mts", "turn.mjs"])
+        self.assertEqual(names, ["FolderPick.tsx", "GlassLayer.tsx", "Story.tsx", "attach.ts", "beats.mjs", "glass.css", "install.tsx", "link.d.mts", "link.mjs", "main.tsx", "model.mjs", "nav.d.mts", "nav.mjs", "pick.css", "regions.mjs", "turn.d.mts", "turn.mjs"])
         for p in LAYER.iterdir():
             self.assertIn("Carlton Aikins", p.read_text(), p.name)
 
@@ -55,12 +55,13 @@ class LayerFiles(unittest.TestCase):
 
     def test_a_layer_change_rebuilds(self):
         texts = realm_ui.layer_texts()
-        self.assertEqual(len(texts), 16)
-        self.assertTrue(any(t.startswith("GlassLayer.tsx\n") for t in texts))
+        self.assertEqual(len(texts), 18)
+        self.assertTrue(any(t.startswith("glass/GlassLayer.tsx\n") for t in texts))
+        self.assertTrue(any(t.startswith("stock/main.tsx\n") for t in texts))
 
     def test_vite_points_the_entry_at_ours_and_refuses_a_missing_seam(self):
         cfg = (ROOT / "bin" / "lib" / "realm_ui" / "vite.config.mjs").read_text()
-        self.assertIn('src="/glass/main.tsx"', cfg)
+        self.assertIn('src="/${MODE}/main.tsx"', cfg)
         self.assertIn('order: "pre"', cfg)
         self.assertIn("no longer loads /src/main.tsx", cfg)
 
@@ -145,20 +146,32 @@ class TheFork(unittest.TestCase):
 
     src = FORK / "apps" / "desktop" / "src" / "renderer" / "src"
 
-    def test_the_slot_and_host_quiet_are_there(self):
+    def test_the_slot_is_there(self):
         ext = (self.src / "extensions.ts").read_text()
         self.assertIn("Carlton Aikins", ext)
-        for name in ("export function registerExtension(", "export function setHostQuiet(", "export function useHostQuiet("):
-            self.assertIn(name, ext)
-        app = (self.src / "App.tsx").read_text()
-        self.assertIn("<Extensions />", app)
-        self.assertIn("lowPower || !windowActive || hostQuiet", app)
-        self.assertIn("data-frameless={frameless || undefined}", app)
+        self.assertIn("export function registerExtension(", ext)
+        self.assertIn("<Extensions />", (self.src / "App.tsx").read_text())
 
-    def test_frameless_puts_his_window_chrome_away(self):
-        css = (self.src / "styles.css").read_text()
-        self.assertIn(".app[data-frameless] > .window-trail", css)
-        self.assertIn("frameless?: boolean;", (self.src / "env.d.ts").read_text())
+    def test_frameless_and_host_quiet_are_gone(self):
+        # Dropped on v2.1.0 (10/13): the glass keeps his window chrome and
+        # shows his app as he ships it, and his own idle quiet covers a
+        # window nobody is looking at.
+        app = (self.src / "App.tsx").read_text()
+        self.assertNotIn("frameless", app)
+        self.assertNotIn("hostQuiet", app)
+        self.assertNotIn("data-frameless", (self.src / "styles.css").read_text())
+        self.assertNotIn("setHostQuiet", (self.src / "extensions.ts").read_text())
+
+    def test_the_fork_is_his_main_plus_two_seams(self):
+        out = subprocess.run(["git", "-C", str(FORK), "diff", "--name-only", "upstream/main...chewbacca"],
+                             capture_output=True, text=True, timeout=60)
+        if out.returncode != 0:
+            self.skipTest("no upstream remote in this checkout")
+        self.assertEqual(sorted(out.stdout.split()), [
+            "apps/desktop/src/renderer/src/App.tsx",
+            "apps/desktop/src/renderer/src/extensions.ts",
+            "apps/desktop/src/renderer/src/panes/session/Composer.tsx",
+        ])
 
     def test_each_composer_names_its_session(self):
         composer = (self.src / "panes" / "session" / "Composer.tsx").read_text()
@@ -167,7 +180,86 @@ class TheFork(unittest.TestCase):
     def test_the_layer_only_names_seams_the_fork_has(self):
         layer = (LAYER / "GlassLayer.tsx").read_text()
         self.assertIn('.composer-input[data-session-id=', layer)
+        # Optional: the fork no longer has host quiet, so the layer must not need it.
         self.assertIn("host.setQuiet?.(", layer)
+
+
+STOCK = ROOT / "bin" / "lib" / "realm_ui" / "stock"
+
+
+class StockIsTheDefault(unittest.TestCase):
+    """The glass shows Carlton's app as he ships it. Caleb, 10/13 8:19am, of
+    the tiles, story and bar layer: "so far from a better version of
+    carlton's ide". Only what a web view needs to stand in for Electron is
+    added, and the HUD's own close."""
+
+    def test_the_default_mode_is_stock(self):
+        saved = {k: os.environ.pop(k, None) for k in ("REALM_UI_MODE", "CHEWBACCA_REALM_UI_HOME")}
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                os.environ["CHEWBACCA_REALM_UI_HOME"] = tmp
+                self.assertEqual(realm_ui.mode(), "stock")
+        finally:
+            for k, v in saved.items():
+                os.environ.pop(k, None) if v is None else os.environ.__setitem__(k, v)
+        cfg = (ROOT / "bin" / "lib" / "realm_ui" / "vite.config.mjs").read_text()
+        self.assertIn(': "stock";', cfg, "vite falls back to the stock entry")
+
+    def test_the_stock_entry_is_his_main_and_nothing_drawn_over_it(self):
+        main = (STOCK / "main.tsx").read_text()
+        self.assertIn("Carlton Aikins", main)
+        self.assertIn('import "../src/main";', main)
+        for layer in ("GlassLayer", "Story", "install", "glass.css", "nav", "beats", "turn", "model"):
+            self.assertNotRegex(main, rf'from "\.\./glass/{layer}["./]|import "\.\./glass/{layer}', layer)
+
+    def test_it_keeps_what_a_web_view_needs(self):
+        main = (STOCK / "main.tsx").read_text()
+        self.assertIn('import "../glass/attach";', main, "files from Kyber's open panel and drops")
+        self.assertIn("createElement(FolderPick)", main, "his Choose folder")
+        self.assertIn('import "./pick.css";', (LAYER / "FolderPick.tsx").read_text(), "the chooser brings its own look")
+        self.assertNotIn("glass-pick", (LAYER / "glass.css").read_text())
+        bridge = (ROOT / "bin" / "lib" / "realm_ui" / "bridge.js").read_text()
+        for need in ("pickFiles:", "pathForFile: dropped", "notify:", 'glass.postMessage("dismiss")', "frameless: false"):
+            self.assertIn(need, bridge, need)
+
+    @unittest.skipUnless(os.environ.get("REALM_GLASS_BUILD") == "1" and (FORK / "apps").is_dir(),
+                         "set REALM_GLASS_BUILD=1 for the full build of the fork (about two minutes)")
+    def test_a_stock_build_of_the_fork_has_none_of_the_layer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "ui"
+            env = dict(os.environ, CHEWBACCA_REALM_UI_HOME=str(home), REALM_UI_SOURCE=str(FORK))
+            env.pop("REALM_UI_MODE", None)
+            done = subprocess.run([sys.executable, str(ROOT / "bin" / "realm-ui"), "build", "--force"], env=env,
+                                  capture_output=True, text=True, timeout=1200)
+            self.assertEqual(done.returncode, 0, done.stdout[-2000:] + done.stderr[-2000:])
+            assets = home / "build" / "dist" / "assets"
+            bundle = "".join(p.read_text(errors="ignore") for p in assets.glob("*.js"))
+            self.assertIn('__realmUiMode="stock"', bundle.replace(" ", ""))
+            for layer in ("glass-tile", "story-headline", "__realmGlassInstalled"):
+                self.assertNotIn(layer, bundle, layer)
+            css = "".join(p.read_text(errors="ignore") for p in assets.glob("*.css"))
+            self.assertNotIn("data-glass", css)
+            self.assertIn("glass-pick", css)
+
+
+class GlassIsOptIn(unittest.TestCase):
+    """The old layer stays in the tree, one flag away: realm-ui build --mode glass."""
+
+    def test_the_cli_offers_mode_glass(self):
+        # The parsing itself runs for real in tests/test_realm_ui.py.
+        done = subprocess.run([sys.executable, str(ROOT / "bin" / "realm-ui"), "--help"], capture_output=True, text=True, timeout=30)
+        self.assertIn("[--mode stock|glass]", done.stdout)
+
+    def test_glass_mode_picks_the_layer_entry(self):
+        saved = os.environ.get("REALM_UI_MODE")
+        os.environ["REALM_UI_MODE"] = "glass"
+        try:
+            self.assertEqual(realm_ui.mode(), "glass")
+        finally:
+            os.environ.pop("REALM_UI_MODE") if saved is None else os.environ.__setitem__("REALM_UI_MODE", saved)
+        main = (LAYER / "main.tsx").read_text()
+        self.assertIn('import "./install"', main)
+        self.assertIn('__realmUiMode = "glass"', main)
 
 
 class Voice(unittest.TestCase):

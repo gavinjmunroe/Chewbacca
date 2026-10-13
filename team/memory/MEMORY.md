@@ -92,7 +92,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 
 - project_team_memory: Where shared Amber, Chewbacca and Firm Foundation memory lives and what stays private
 
-- feedback_hud_agents_build_on_realm: HUD agent work builds on Carlton's Realm inside the HUD, any LLM or account; since 10/11 the glass shows Realm's own built renderer (realm-ui, App), card is the fallback
+- feedback_hud_agents_build_on_realm: HUD agent work builds on Carlton's Realm, any LLM or account; since 10/13 the glass shows his app as he ships it (realm-ui stock, from the fork on his v2.1.0), our tiles layer is opt-in, and "better" is measured against his stock app first
 
 - feedback_caleb_standing_answers_hud_2026_10_10: HUD relaunch anytime, always the latest agent engine, seamless failover, Anarlog records on its own; never ask again (10/10)
 - feedback_recording_off_until_reviews_pass: an agent's HUD rebuild turned meeting auto-recording on with 3 security findings open (10/10); recording ships off until findings close w passing tests

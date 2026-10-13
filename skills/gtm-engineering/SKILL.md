@@ -130,15 +130,20 @@ first cold email cost deliverability. So:
 
 - Email 1 stays plain text. Its last line offers the video ("Want a 60 second
   video of what we'd change on yours?"), and a yes already counts as a reply.
-- The video they get is about them. The first seconds show their own thing
-  (for churches, their homepage scrolled on a phone, from the audit numbers),
-  and the base cut goes after that.
+- One video for every recipient by default. Caleb, 10/12, on a per-church
+  opening cut from the audit: "nah we're not gonna custom make that no need
+  to overengineer". Offer personalization once as an option, never as the plan.
 - Email 2 links a thumbnail for anyone who didn't answer email 1.
-- Split the first 40 sends between the video offer and the plain email. If the
-  video half doesn't reply more, drop the video.
+- Suggest a split test once. If the founders say everyone gets the video
+  (Caleb, 10/12: "All of them get it"), that's the plan; compare against the
+  plain-email reply rate from before instead of arguing for the split.
+- An attachment can't carry a phone video (Gmail caps at 25 MB and swaps in a
+  Drive link). Say that once with the number, then let them pick the link.
 - Before scripting, ask the founders the questions that decide it: the one
   ask, real proof, whether to name their school, tone per segment, and
-  whether sends wait on the video. The Firm Foundation list is in their
+  whether sends wait on the video. Never ask what they can't know (Caleb,
+  10/12, on where a pastor watches: "How am I supposed to know?"); answer
+  those from research or leave them out. The Firm Foundation list is in their
   Downloads, "Firm Foundation video questions.md".
 - `gtme batch` and `gtme today` read the ledger's own lines.json. Pass
   `--lines` only to override it (10/12: 252 leads held because nobody passed it).

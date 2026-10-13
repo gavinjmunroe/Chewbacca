@@ -52,12 +52,13 @@ if [ -z "$ONLY" ] && [ -z "${CHEWBACCA_SUITE_SERIAL:-}" ]; then
   bash "$ROOT/bin/lib/suite-gate.sh" "$ROOT" || exit 2
   OUTDIR="$(mktemp -d)"; trap 'rm -rf "$OUTDIR"' EXIT
   STARTED=$SECONDS
-  # Longest first, measured 2026-10-03 (pytest ~300 s, hud ~170, reasoning
+  # Printed first so a run that's killed or still going is never an empty log.
+  echo "$(printf '%s\n' "$GROUPS_HERE" | grep -c .) groups, ${CHEWBACCA_SUITE_JOBS:-3} at a time, each killed after ${CHEWBACCA_SUITE_GROUP_DEADLINE:-1200}s. Group logs: $OUTDIR"
+  # Longest first, measured 2026-10-03 (hud ~170, reasoning
   # backends 203, tools 183, doctor 123, installer 87, the rest under 15).
   # In file order these started last and the run waited on them alone. A
   # group missing from this list still runs, just in file order after these.
-  SLOW="pytest
-hud
+  SLOW="hud
 reasoning backends
 tools
 doctor
@@ -69,13 +70,10 @@ installer"
     # Not -I: BSD xargs caps a substituted command at 255 bytes and then
     # runs nothing, which is how the first version of this reported every
     # group failed in 0 s. The group arrives as the last argument instead.
-    xargs -0 -n 1 -P "${CHEWBACCA_SUITE_JOBS:-3}" bash -c '
-      log="$1/$(printf %s "$2" | tr -c "A-Za-z0-9" _)"
-      t=$SECONDS; bash "$0" "$2" >"$log.log" 2>&1; rc=$?
-      echo "$rc" >"$log.rc"
-      if [ "$rc" -eq 0 ]; then mark="ok  "; else mark="FAIL"; fi
-      printf "  %s  %-22s %3ss\n" "$mark" "$2" "$((SECONDS - t))"' \
-      "${BASH_SOURCE[0]}" "$OUTDIR"
+    # Each group runs under a deadline (bin/lib/suite-group.sh), so a group
+    # that hangs ends the run as HUNG with what was stuck, never runs forever.
+    xargs -0 -n 1 -P "${CHEWBACCA_SUITE_JOBS:-3}" \
+      bash "$ROOT/bin/lib/suite-group.sh" "${BASH_SOURCE[0]}" "$OUTDIR"
   passed=0; failed=0; skipped=0; bad=0
   while IFS= read -r g; do
     log="$OUTDIR/$(printf %s "$g" | tr -c 'A-Za-z0-9' _)"
@@ -1038,6 +1036,8 @@ if group "installer"; then
 
   check  "the full suite refuses its own repeat run on an unchanged tree" \
     bash "$ROOT/tests/suite_gate.sh"
+  check  "a hung suite group dies at its deadline as HUNG, and pytest gets only pytest files" \
+    bash "$ROOT/tests/suite_group_deadline.sh"
 
   check  "repo-overlap-guard warns once when another session shares the checkout" \
     bash "$ROOT/tests/repo_overlap_guard.sh"
@@ -1990,9 +1990,6 @@ if group "hud"; then
   expect "the skill teaches the wire format" "Kyber Lines" cat "$ROOT/skills/hud/SKILL.md"
 fi
 
-# Its own group because it reruns every Python test file in one process, about
-# five minutes, and inside hud it made hud the 470 s long pole of a parallel
-# run on 2026-10-03. Alone it runs beside the other groups.
 if group "weft"; then
   # The Build view: a weft program drawn on the HUD as it is built and run.
   # Pure functions against a real Tangle build and a real approved run, so it
@@ -2004,6 +2001,8 @@ if group "weft"; then
   check "weft-mcp parses" node --check "$ROOT/bin/weft-mcp"
 fi
 
+# Its own group: inside hud it made hud the 470 s long pole of a parallel run
+# on 2026-10-03, back when it ran every Python test file.
 if group "pytest"; then
   # The same file has a pytest-only path (the fixtures at its top) that no
   # runner ever exercised: none of the python3 interpreters on the dev Macs,
@@ -2011,12 +2010,22 @@ if group "pytest"; then
   # dies before collecting anything. uv fetches pytest into a throwaway env.
   # CI's macos-latest ships neither, so it skips there and the script-mode
   # check above is what CI proves.
-  if python3 -c 'import pytest' 2>/dev/null; then
-    check "the suite collects under pytest" python3 -m pytest "$ROOT/tests" -q
+  #
+  # Only the files that import pytest. Given the whole tests/ folder, pytest
+  # imports every script-mode test file, which runs it, so this one serial
+  # process reran all 254 files the other groups already run. Once python3.14
+  # here had pytest installed that took past 3.5 h at load 170 and printed
+  # nothing (job 1013-094230-c180, 2026-10-13).
+  PYTEST_FILES=()
+  while IFS= read -r f; do PYTEST_FILES+=("$f"); done < <(bash "$ROOT/tests/pytest_files.sh" "$ROOT/tests")
+  if [ "${#PYTEST_FILES[@]}" -eq 0 ]; then
+    skip "the pytest-only cases pass under pytest" "no test file imports pytest"
+  elif python3 -c 'import pytest' 2>/dev/null; then
+    check "the pytest-only cases pass under pytest" python3 -m pytest "${PYTEST_FILES[@]}" -q
   elif command -v uv >/dev/null 2>&1; then
-    check "the suite collects under pytest" uv run --no-project --with pytest python -m pytest "$ROOT/tests" -q
+    check "the pytest-only cases pass under pytest" uv run --no-project --with pytest python -m pytest "${PYTEST_FILES[@]}" -q
   else
-    skip "the suite collects under pytest" "no pytest and no uv"
+    skip "the pytest-only cases pass under pytest" "no pytest and no uv"
   fi
   check "no Python file uses an undefined name" bash "$ROOT/tests/undefined_names.sh"
 fi

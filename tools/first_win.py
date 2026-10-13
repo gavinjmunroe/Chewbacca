@@ -122,6 +122,9 @@ def inspect(repo, email, since):
     common = git(repo, 'rev-parse', '--path-format=absolute', '--git-common-dir')
     if common is None:
         return None
+    # The identity git would commit with here: a repo's own user.email or an
+    # includeIf work identity beats the global one passed in.
+    email = (git(repo, 'config', 'user.email') or email or '').strip()
     author = ['--author=' + email] if email else []
     log = git(repo, 'log', '--branches', '--no-merges', '--since=' + since, '--format=%H', *author)
     # Submodules carry their own config, so status never descends into them.
@@ -134,7 +137,7 @@ def inspect(repo, email, since):
     # repo) that were all on origin under other hashes. Not by subject either:
     # an amended commit keeps its subject and author time but not its content.
     local = patch_ids(repo, '--branches', '--not', '--remotes', '--since=' + since, *author)
-    history_ok = local is not None
+    history_ok = local is not None and log is not None
     local = local or {}
     unpushed = set(local)
     if local and remotes:
@@ -152,7 +155,7 @@ def inspect(repo, email, since):
     # status leaves submodules closed (their config could run commands), so
     # edits inside one go unseen: say so rather than call the repo clean.
     submodules = (repo / '.gitmodules').is_file()
-    return {'path': str(repo), 'common': common_key, 'submodules': submodules,
+    return {'path': str(repo), 'common': common_key, 'submodules': submodules, 'email': email,
             'commits': set((log or '').split()), 'dirty': len(status.splitlines()) if status else 0,
             'unchecked': status is None or not history_ok or submodules, 'status_skipped': status is None,
             'history_failed': not history_ok,
@@ -227,7 +230,10 @@ def week(home=None, extra=(), days=7):
     for row in rows:
         if row['remote'] and row['unpushed']:
             unpushed.setdefault(row['common'], set()).update(row['unpushed'])
-    ahead = [{'path': next(r['path'] for r in rows if r['common'] == c), 'ahead': len(h)}
+    first = {}
+    for row in rows:
+        first.setdefault(row['common'], row)
+    ahead = [{'path': first[c]['path'], 'email': first[c]['email'], 'ahead': len(h)}
              for c, h in unpushed.items()]
     dirty_repos = {r['common'] for r in dirty}
     head = None
@@ -270,7 +276,7 @@ def receipt(result, folder):
     lines = ['# Receipt: your week in one line', '', result['line'], '',
              f'Made {datetime.datetime.now():%Y-%m-%d %H:%M} in {result["seconds"]} s, read only, '
              f'from {plural(len(result["repos"]), "git repo")}. '
-             f'Commits are yours by git email ({result["email"] or "no global user.email, so everyone"}), '
+             f'Commits are yours by the email each repo commits with (global: {result["email"] or "none, so a repo with no email of its own counts everyone"}), '
              f'last {result["days"]} days, local branches, merges left out.', '',
              'Check any number yourself:', '']
     # The same safe prefix the scan used: a receipt command must never run a
@@ -278,11 +284,12 @@ def receipt(result, folder):
     def cmd(repo, *args, extra=()):
         return shlex.join([*SAFE, *extra, '-C', str(repo), *args])
     since = f'--since={result["days"]}.days.ago'
-    author = ['--author=' + result['email']] if result['email'] else []
+    def author(row):
+        return ['--author=' + row['email']] if row['email'] else []
     for common, count in sorted(result['active'].items(), key=lambda kv: -kv[1]):
-        repo = next(r['path'] for r in result['repos'] if r['common'] == common)
+        row = next(r for r in result['repos'] if r['common'] == common)
         lines.append(f'- {result["names"][common]}: {count} commits. '
-                     f'`{cmd(repo, "log", "--branches", "--no-merges", since, *author, "--oneline")} | wc -l`')
+                     f'`{cmd(row["path"], "log", "--branches", "--no-merges", since, *author(row), "--oneline")} | wc -l`')
     for r in result['dirty']:
         lines.append(f'- {Path(r["path"]).name}: {plural(r["dirty"], "uncommitted file")}. '
                      f'`{cmd(r["path"], *status_args(), extra=r["filters_off"])}`')
@@ -294,7 +301,7 @@ def receipt(result, folder):
         lines.append(f'- {Path(r["path"]).name}: not fully checked: {why}.')
     for r in result['ahead']:
         lines.append(f'- {Path(r["path"]).name}: {plural(r["ahead"], "commit")} not on any remote. '
-                     f'`{cmd(r["path"], "log", "--branches", "--not", "--remotes", "--no-merges", since, *author, "--oneline")}` '
+                     f'`{cmd(r["path"], "log", "--branches", "--not", "--remotes", "--no-merges", since, *author(r), "--oneline")}` '
                      'lists candidates; one whose change is on a remote under another hash (same `git patch-id`) counts as pushed.')
     for r in result['local_only']:
         lines.append(f'- {Path(r["path"]).name}: no remote. `{cmd(r["path"], "remote", "-v")}` prints nothing')

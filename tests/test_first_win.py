@@ -245,6 +245,26 @@ class WeekTests(unittest.TestCase):
         self.assertTrue(row['unchecked'])
         self.assertTrue(row['submodules'])
 
+    def test_a_repo_identity_beats_the_global_one(self):
+        work = self.home / 'code/work'
+        work.mkdir()
+        git(work, 'init', '-q')
+        git(work, 'config', 'user.email', 'me@work.example')
+        git(work, 'remote', 'add', 'origin', str(self.home / 'remote.git'))
+        commit(work, 'w.txt', 'work commit')
+        row = first_win.inspect(work, EMAIL, '7.days.ago')
+        self.assertEqual(len(row['commits']), 1)
+        self.assertEqual(len(row['unpushed']), 1)
+
+    def test_a_failed_activity_log_marks_the_repo_unchecked(self):
+        real = first_win.git
+        def failing(repo, *args, **kw):
+            if args[:2] == ('log', '--branches') and '--format=%H' in args and '--not' not in args:
+                return None
+            return real(repo, *args, **kw)
+        with patch.object(first_win, 'git', side_effect=failing):
+            self.assertTrue(first_win.inspect(self.app, EMAIL, '7.days.ago')['unchecked'])
+
     def test_empty_machine_says_where_to_point_it(self):
         empty = Path(tempfile.mkdtemp(dir=self.home))
         result = first_win.week(empty)

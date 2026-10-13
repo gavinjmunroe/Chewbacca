@@ -390,7 +390,9 @@ def export(name, destination):
     text = (ROOT / 'config/instructions/agent-neutral.md').read_text()
     text += '\n## Runtime integration\n\n' + '\n'.join('- ' + note for note in spec['notes']) + '\n'
     destination.mkdir(parents=True, exist_ok=True)
-    target = destination / spec['instruction_file']
+    # Cursor, Gemini and VS Code have no instruction file of their own; an
+    # export for them is the portable AGENTS.md.
+    target = destination / (spec['instruction_file'] or 'AGENTS.md')
     context.merge_block(target, BEGIN + '\n' + text + END, BEGIN, END)
     if name == 'perplexity-computer':
         package_skills(destination / 'skills')

@@ -460,6 +460,12 @@ class RuntimeTests(unittest.TestCase):
         link.symlink_to(ROOT / 'bin/chewbacca-mcp')
         self.assertEqual(host_mcp.chewbacca_server()['args'], [str(link)])
 
+    def test_export_works_for_hosts_without_an_instruction_file(self):
+        for name in ('vscode', 'cursor', 'gemini'):
+            out = Path(runtime.export(name, self.home / ('export-' + name)))
+            self.assertEqual(out.name, 'AGENTS.md')
+            self.assertIn(runtime.BEGIN, out.read_text())
+
     def test_backup_holds_the_file_from_before_chewbacca_ever_touched_it(self):
         settings = runtime.claude_home() / 'settings.json'
         settings.parent.mkdir(parents=True)

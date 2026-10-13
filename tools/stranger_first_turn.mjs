@@ -99,7 +99,13 @@ try {
   const repo = process.env.STRANGER_REPO;
   // Typed the way a person types a path in his chooser: from ~.
   const home = process.env.STRANGER_HOME || "";
-  await page.keyboard.type(home && repo.startsWith(home) ? "~" + repo.slice(home.length) : repo);
+  // Into the chooser's own field: with Realm's welcome sheet behind the new
+  // space dialog, focus stayed on the page and keystrokes went nowhere
+  // (10/13 rerun, failed-choose-folder.png).
+  await page
+    .locator(".glass-pick input")
+    .first()
+    .fill(home && repo.startsWith(home) ? "~" + repo.slice(home.length) : repo);
   await page.keyboard.press("Enter");
   await page.waitForSelector(".glass-pick", {
     state: "detached",
@@ -129,7 +135,7 @@ try {
             (l) =>
               l.length > 12 &&
               !seen.has(l) &&
-              !ask.includes(l) &&
+              !ask.startsWith(l.replace(/(…|\.\.\.)$/, "")) &&
               !l.includes(ask),
           );
       },
@@ -147,7 +153,7 @@ try {
     out.first_new_line = (await page.evaluate(() => document.body.innerText))
       .split("\n")
       .map((l) => l.trim())
-      .find((l) => l.length > 12 && !seen.has(l) && !ask.includes(l) && !l.includes(ask))
+      .find((l) => l.length > 12 && !seen.has(l) && !ask.startsWith(l.replace(/(…|\.\.\.)$/, "")) && !l.includes(ask))
       ?.slice(0, 160);
     if (process.env.STRANGER_SHOTS) {
       await page.waitForTimeout(1500);

@@ -327,13 +327,16 @@ def main(argv: List[str]) -> int:
             result["surprises"].append("no page address to load")
 
         r = run.sh("doctor", ["/bin/bash", "doctor.sh"], cwd=kit, timeout=300, expect_ok=False)
-        m = re.search(r"(\d+) passed, (\d+) warnings?, (\d+) failures?", r["out"])
-        majors = len(re.findall(r"FAIL\[major\]", r["out"]))
-        result["doctor"] = {"exit": r["exit"], "passed": int(m.group(1)) if m else None,
-                            "failures": int(m.group(3)) if m else None, "major": majors,
-                            "fix_lines": sorted({x.strip() for x in re.findall(r"\| fix: (.+)", r["out"])})[:12]}
-        run.steps[-1]["errors"] = [] if r["exit"] == 0 else [f"doctor exit {r['exit']}"
-                                                              + (f", {m.group(3)} failures ({majors} major)" if m else "")]
+        clean = re.sub(r"\x1b\[[0-9;]*m", "", r["out"])
+        fails = re.search(r"(\d+) things? needs? fixing", clean)
+        passed = re.search(r"(\d+) checks passed", clean)
+        skipped = re.search(r"so (\d+) findings about", clean)
+        wrong = [x.strip()[2:] for x in clean.split("What is wrong:", 1)[-1].splitlines()
+                 if x.strip().startswith("- [")] if "What is wrong:" in clean else []
+        result["doctor"] = {"exit": r["exit"], "passed": int(passed.group(1)) if passed else None,
+                            "failures": int(fails.group(1)) if fails else 0,
+                            "skipped": int(skipped.group(1)) if skipped else 0, "what_is_wrong": wrong[:25]}
+        run.steps[-1]["errors"] = [] if r["exit"] == 0 else [f"doctor exit {r['exit']}: " + "; ".join(wrong[:6])]
     finally:
         for argv in (["python3", "bin/realm-ui", "stop"], ["python3", "bin/realm-engine", "stop"]):
             if kit.is_dir():

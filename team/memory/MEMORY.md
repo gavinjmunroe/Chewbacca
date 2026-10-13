@@ -326,3 +326,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - reference_slack_delete_own_posts: slackcli cannot delete; chat.delete w its keychain xoxc + URL-encoded xoxd cookie, dry-run list + backup first (10/12)
 - feedback_background_writers_say_so: no unprivileged way to know which process wrote a file, so background work marks its run (heavy/net jobs from cwd, `--writes`, `write_log.py background`); 14,691 shadow rows on 10/12 were a job and a mirror credited to open calls
 - feedback_hook_git_dir_makes_checkout_bare: "must be run in a work tree" in the shared checkout = a test a git hook ran inherited GIT_DIR and set core.bare; set it false, pre-push scrubs git env since 1d45d276 (10/13)
+- feedback_rehearse_with_the_hosts_timing: rehearse with the host's real timing and environment; Kyber told a cold agents page "shown" before it could hear (stuck on Reading your agents) and a scratch-HOME setup replaced the real launchd job (10/13)

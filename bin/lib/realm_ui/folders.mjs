@@ -122,7 +122,7 @@ function recentTranscripts(projects) {
 const SKIP_GROUP = new Set(["archive", "corpora", "refs", "vendor", "node_modules"]);
 
 /** Git checkouts in ~/code and one level into its group folders
- *  (~/code/work/silo), most recently touched first. */
+ *  (~/code/<group>/<repo>), most recently touched first. */
 function codeCheckouts(code) {
   const found = [];
   const scan = (dir, depth) => {

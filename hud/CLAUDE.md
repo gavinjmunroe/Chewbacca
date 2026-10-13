@@ -320,7 +320,7 @@ reference only). The renderer enforces these; a sender should know them.
     content is faded during the move (rule 11).
 16. **Lemma's numbers, for reference.** The spring and tokens read from
     uselemma.ai's chunks on 2026-10-11, the press, lift and crossfade from
-    the replica's measurements of their live site (`~/code/work/lemma-replica`,
+    the replica's measurements of their live site (`apps/lemma-replica`,
     docs/spec/states.md and docs/waves/W3-panels.md): one follow spring of stiffness 170, damping 40 (damping
     ratio about 1.5, no overshoot); UI tokens 80, 150 and 200 ms on
     `cubic-bezier(0.4, 0, 0.2, 1)`; a press scales to 0.96; a card lifts

@@ -5,7 +5,6 @@ stands in for the real one, so nothing is downloaded or analyzed."""
 import importlib.util
 import json
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -20,6 +19,8 @@ def load(home: Path):
     for k in ("REA_KIT_CACHE", "REA_KIT_CLAUDE_JSON", "REA_KIT_CODEX_TOML", "REA_KIT_NPX_CACHE",
               "GHIDRA_INSTALL_DIR", "REA_KIT_BIN"):
         os.environ.pop(k, None)
+    # Never the real Claude Code CLI: it would rewrite a real ~/.claude.json.
+    os.environ["REA_KIT_CLAUDE"] = ""
     os.environ["REA_KIT_CACHE"] = str(home / "cache")
     spec = importlib.util.spec_from_file_location("rea_kit", str(ROOT / "tools" / "rea_kit.py"))
     mod = importlib.util.module_from_spec(spec)
@@ -64,25 +65,24 @@ def main() -> int:
         assert s["registered_pins"] == ["6.4.0"], s
         assert not s["ghidra_wired_claude"] and not s["ghidra_wired_codex"], s
 
-        # 3. wire edits Codex's toml once, after the rea block, and never twice.
-        rk.status = lambda: dict(s, ghidra="/g", java21="/j", claude_mcp=False)
+        # 3. wire points Codex's rea table at the proxy, once, in place.
         res = rk.wire(apply=True)
         assert res["ok"] and res["wired"] == ["codex"], res
         text = toml.read_text()
-        assert text.count("[mcp_servers.rea.env]") == 1, text
-        assert text.index("[mcp_servers.rea.env]") < text.index("[mcp_servers.other]"), text
-        assert 'GHIDRA_INSTALL_DIR = "/g"' in text, text
+        assert text.count("[mcp_servers.rea]") == 1 and "rea_kit.py" in text, text
+        assert text.index("[mcp_servers.rea]") < text.index("[mcp_servers.other]"), text
         rk = load(home)
-        assert rk.status()["ghidra_wired_codex"], rk.codex_block()
+        assert rk.status()["proxied_codex"], rk.codex_block()
+        assert rk.wire(apply=True)["message"].startswith("already wired"), rk.wire(apply=True)
 
         # 4. The slice Ghidra reads: Apple ships arm64e only for system tools,
         # and a universal binary is refused outright.
         assert rk.pick_arch(["x86_64", "x86_64h", "arm64e"], "arm64") == "arm64e"
         assert rk.pick_arch(["x86_64", "arm64"], "arm64") == "arm64"
         assert rk.pick_arch(["x86_64", "arm64"], "x86_64") == "x86_64"
-        if shutil.which("lipo") and len(rk.archs(Path("/usr/bin/true"))) > 1:
+        if len(rk.archs(Path("/usr/bin/true"))) > 1:
             thin = rk.thin(Path("/usr/bin/true"))
-            assert len(rk.archs(thin)) == 1, rk.archs(thin)
+            assert rk.archs(thin) == [], rk.archs(thin)
 
         # 5. The deadline kills the whole group, grandchild included (upstream
         # #2290: the CLI and its worker outlived a failed run).

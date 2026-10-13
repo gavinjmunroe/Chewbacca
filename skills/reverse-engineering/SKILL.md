@@ -32,9 +32,12 @@ plus its callers and constants; a browser click to its request and script.
   (upstream issue #2290). What it did see: 100 IPC operations, 99 of them
   with computed channel names, so literal pairing found nothing.
 - MCP `binary_session` returned 227,158 characters, over the client limit.
-- Native: Ghidra 12.1.4 and JDK 21 are installed. The CLI needs the env and a
-  thinned binary, which `chewbacca rea native` supplies; the MCP needs
-  `chewbacca rea wire --apply`. Hopper and IDA are not installed.
+- Native through the MCP: through the bare npx server, `open_binary` on
+  universal /usr/bin/uuidgen said ok and every read after it failed with
+  Ghidra's `architecture_unsupported`. Through `chewbacca rea mcp` the same
+  call read the thinned slice in 8.5 s, and `open_binary` on
+  /Applications/Cardhop.app mapped 20,985 functions and 26,193 strings in
+  266 s (2026-10-13). Hopper and IDA are not installed.
 
 ## How to run it
 
@@ -54,9 +57,17 @@ is installed or not.
   host slice and runs the Ghidra overview with its env set. Ghidra refuses
   every universal binary, which is every app on a Mac; thinned, Cardhop's
   8.6 MB binary mapped 20,979 functions in 4 min 13 s.
-- `chewbacca rea wire --apply`: adds GHIDRA_INSTALL_DIR and JAVA_HOME to the
-  rea MCP entries so `open_binary` works. Hand the MCP the thinned path that
-  `native` prints.
+- `chewbacca rea install`: a pinned local copy of rea-agents under
+  ~/.chewbacca/rea/pkg, then `wire`. The MCP answers initialize in 0.9 to
+  1.1 s from it, against 1.3 to 1.7 s through npx with a warm cache and 4.0 s
+  cold, and it boots with no registry.
+- `chewbacca rea wire --apply`: points the rea MCP entries in Claude Code and
+  Codex at `chewbacca rea mcp`, the proxy in front of REA. It finds Ghidra and
+  JDK 21 at launch, hands `open_binary` the host's slice of a universal binary
+  or of an `.app` bundle's executable, and kills REA's whole process tree,
+  Ghidra's JVM included, when a call passes 900 s, a cancelled call passes
+  30 s, or the agent goes away. So over the MCP, open the app or binary
+  itself; there is no thinned path to copy across.
 
 Then:
 

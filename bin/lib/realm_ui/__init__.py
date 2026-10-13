@@ -45,8 +45,10 @@ SERVICE = "realm-ui"
 # Caleb's Mac (lsof showed nothing on it); not reserved by anything.
 DEFAULT_PORT = 47317
 # How long start waits for server.mjs to write its state file. It wrote it in
-# under 0.2 s on 2026-10-11 with load near 20; 10 s is a guessed ceiling.
-READY_TIMEOUT_S = 10.0
+# under 0.2 s on 2026-10-11 with load near 20, but on 10/13 the stranger rig's
+# first start, right after a cold page build at load 25 to 35, missed a 10 s
+# wait while its log said ready; 30 s covers that, guessed from that one miss.
+READY_TIMEOUT_S = 30.0
 # Renderer devDependencies that only Electron, packaging or the tests use.
 # Dropping them keeps the install to what the bundle imports (344 packages,
 # 20 s on 2026-10-11) and away from Electron's 200 MB download.
@@ -388,7 +390,10 @@ def ensure_built(run=subprocess.run, build_fn=None) -> None:
     takes a stranger from a checkout to the page. Both builds skip themselves
     when already current. On 10/12 the stranger run spent 23 s on the engine
     and 55 s on the page, the first time only."""
-    engine = run(["/usr/bin/env", "python3", str(ROOT / "bin" / "realm-engine"), "build"], timeout=1800)
+    try:
+        engine = run(["/usr/bin/env", "python3", str(ROOT / "bin" / "realm-engine"), "build"], timeout=1800)
+    except (OSError, subprocess.TimeoutExpired) as err:
+        raise RuntimeError(f"the realm engine build did not finish: {err}") from None
     if engine.returncode != 0:
         raise RuntimeError("the realm engine did not build; see the lines above")
     if not built():

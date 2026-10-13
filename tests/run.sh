@@ -1864,6 +1864,7 @@ if group "hud"; then
   check  "open takes a new terminal, Chrome or Sheets and refuses a task" python3 "$ROOT/tests/test_opener.py"
   check  "agenda reads today or the week aloud and refuses a task" python3 "$ROOT/tests/test_agenda.py"
   check  "a text to yourself starting with Kyber is a command, nothing else is" python3 "$ROOT/tests/test_text_command.py"
+  check  "a texted everyday job answers with no model, quotes others and never obeys them, sends nothing" python3 "$ROOT/tests/test_text_jobs.py"
   check  "a replayed sentence takes the path the voice would take" python3 "$ROOT/tests/test_fast_path.py"
   # CHW-193. Fake gh on PATH and a fake display: nothing reaches GitHub,
   # nothing real is cloned, and the ask, the press and the X run no model.

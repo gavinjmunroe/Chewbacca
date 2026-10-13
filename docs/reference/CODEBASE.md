@@ -503,7 +503,7 @@ events, which is a common first confusion.
 | Option-Space | Typed command bar |
 | Option-Command-Space | Hide or show the HUD |
 | Option-Command drag | Point at a screen region ("this") |
-| A self-text starting "Kyber" | `TextTrigger.swift` watches the Messages database and runs `bin/text-command`, which answers by text. Anything that would send, pay or delete comes back as a draft. |
+| A self-text starting "Kyber" | `TextTrigger.swift` watches the Messages database and runs `bin/text-command`, which answers by text. "What did Mom say", "remind me to...", "what's due" and "text Mom ..." answer with no model (`bin/lib/text_jobs.py`); a text to someone else is only ever a draft. |
 
 Guide mode (`bin/hud-guide`) finds a control in the front window's
 accessibility tree and draws a ring around it; Kyber reports when the person

@@ -922,8 +922,18 @@ A text to your own number that starts with "Kyber" is answered as a text.
 Kyber opens `~/Library/Messages/chat.db-wal` for kernel events, not a timer,
 and on a write runs `bin/text-command`, which reads the new rows in the self
 thread and exits. Only a command reaches a model, and nothing reached this way
-sends, posts, pays or deletes. Handles live in `~/.chewbacca/text-command.json`.
+sends, posts, pays or deletes. Handles live in `~/.chewbacca/text-command.json`,
+which `text-command --setup` fills from the addresses the Mac sends from.
 It needs Full Disk Access for Kyber.
+
+Four everyday jobs answer with no model, in `bin/lib/text_jobs.py`: "what did
+Mom say" quotes her last three texts (Mom is whoever the owner's own card names
+as Mother), "remind me to X tomorrow at 3" adds one reminder, "what's due"
+reads the class ledger, and "text Mom I'm late" queues a draft pinned to her
+thread that sends only from the Mac. No model reads another person's text, so
+an order hidden in one has nothing to talk to. `text-command --ask "words"`
+prints the reply to one text without sending, and CHEWBACCA_NO_SEND=1 sends
+replies to `~/.chewbacca/text-command.outbox.jsonl` and adds nothing.
 
 ## Finding out when you got it wrong
 

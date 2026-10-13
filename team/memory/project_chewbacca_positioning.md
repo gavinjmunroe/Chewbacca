@@ -42,4 +42,6 @@ in his LavaLab application. **The distinction that still holds:** saying Chewbac
 local version of Amber is fine; saying it exists as Amber's top-of-funnel growth play is strategy and
 stays private. Do not re-raise this.
 
+**Narrowed 2026-10-13.** Caleb asked for Chewbacca by text: a person texts their own Mac's Messages and it answers. That one is Chewbacca's, since it runs on their Mac with their data. A hosted number anyone can text stays Amber's. See [[project_text_front_door]].
+
 Related: [[project_chewbacca]], a private note

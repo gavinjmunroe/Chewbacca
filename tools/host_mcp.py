@@ -30,7 +30,12 @@ def _json_host(path, servers, translate, key='mcpServers'):
     # Write through a dotfiles symlink: replacing the link left undo restoring
     # its target while the new config stayed live (review, 10/13).
     path = path.resolve() if path.is_symlink() else path
-    data = json.loads(path.read_text()) if path.is_file() and path.read_text().strip() else {}
+    try:
+        data = json.loads(path.read_text()) if path.is_file() and path.read_text().strip() else {}
+    except ValueError:
+        # VS Code's mcp.json allows comments and trailing commas, which strict
+        # JSON rejects. Leave the file alone rather than abort the whole setup.
+        return []
     existing = data.setdefault(key, {})
     added = []
     for name, config in servers.items():
@@ -95,7 +100,13 @@ def chewbacca_server():
     `chewbacca-mcp --register`, so on a stranger's Mac Cursor, Gemini and VS
     Code got no tools at all. None when Node is missing: the server is Node."""
     import shutil
-    script = Path(__file__).resolve().parents[1] / 'bin/chewbacca-mcp'
+    # The stable link setup makes, like chewbacca-mcp --register prefers. A
+    # path inside a kit snapshot is pruned by a later update, and a host keeps
+    # a dead entry forever because its name is already taken.
+    linked = Path.home() / '.local/bin/chewbacca-mcp'
+    script = linked if linked.exists() else Path(__file__).resolve().parents[1] / 'bin/chewbacca-mcp'
+    if '/kit/snapshots/' in str(script.resolve() if script is not linked else script):
+        return None
     node = next((p for p in ('/opt/homebrew/bin/node', '/usr/local/bin/node') if Path(p).exists()),
                 None) or shutil.which('node')
     if not node or not script.is_file():

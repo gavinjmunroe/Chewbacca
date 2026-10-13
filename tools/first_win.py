@@ -149,9 +149,13 @@ def inspect(repo, email, since):
         common_key = f'{common_id.st_dev}:{common_id.st_ino}'
     except OSError:
         common_key = common.strip()
-    return {'path': str(repo), 'common': common_key,
+    # status leaves submodules closed (their config could run commands), so
+    # edits inside one go unseen: say so rather than call the repo clean.
+    submodules = (repo / '.gitmodules').is_file()
+    return {'path': str(repo), 'common': common_key, 'submodules': submodules,
             'commits': set((log or '').split()), 'dirty': len(status.splitlines()) if status else 0,
-            'unchecked': status is None or not history_ok, 'status_skipped': status is None,
+            'unchecked': status is None or not history_ok or submodules, 'status_skipped': status is None,
+            'history_failed': not history_ok,
             'filters_off': off or [],
             'unpushed': unpushed, 'remote': bool(remotes)}
 
@@ -244,7 +248,7 @@ def week(home=None, extra=(), days=7):
     if head and risk:
         line = f'Your week: {head}. Only on {machine}: ' + ', '.join(risk) + '.'
     elif head and not unchecked:
-        line = f'Your week: {head}. Everything is committed and pushed.'
+        line = f'Your week: {head}. No uncommitted changes, and this week\'s commits are all on a remote.'
     elif head:
         line = f'Your week: {head}.'
     else:
@@ -284,7 +288,9 @@ def receipt(result, folder):
                      f'`{cmd(r["path"], *status_args(), extra=r["filters_off"])}`')
     for r in result['unchecked']:
         why = ('its filter config could not be switched off safely, so git status was not run there'
-               if r['status_skipped'] else 'git could not read its history, so unpushed commits were not counted')
+               if r['status_skipped'] else
+               'git could not read its history, so unpushed commits were not counted' if r['history_failed'] else
+               'it has submodules, which were not opened, so edits inside them are not counted')
         lines.append(f'- {Path(r["path"]).name}: not fully checked: {why}.')
     for r in result['ahead']:
         lines.append(f'- {Path(r["path"]).name}: {plural(r["ahead"], "commit")} not on any remote. '

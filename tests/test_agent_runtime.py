@@ -441,6 +441,25 @@ class RuntimeTests(unittest.TestCase):
         self.assertTrue((user / 'mcp.json').is_symlink())
         self.assertEqual(dotfiles.read_text(), '{"servers": {}}\n')
 
+    def test_vscode_mcp_with_comments_is_left_alone_and_setup_finishes(self):
+        user = runtime.vscode_user_dir()
+        user.mkdir(parents=True)
+        jsonc = '{\n  // mine\n  "servers": {"mine": {"type": "stdio", "command": "x"},},\n}\n'
+        (user / 'mcp.json').write_text(jsonc)
+        result = runtime.setup('vscode')
+        self.assertEqual(result['runtimes'][0]['mcp_added'], [])
+        self.assertEqual((user / 'mcp.json').read_text(), jsonc)
+        self.assertTrue((runtime.shared_home() / 'runtime-installs/vscode.json').is_file())
+
+    def test_mcp_entry_prefers_the_stable_link_over_a_snapshot_path(self):
+        import host_mcp
+        if not host_mcp.chewbacca_server():
+            self.skipTest('no node')
+        link = self.home / '.local/bin/chewbacca-mcp'
+        link.parent.mkdir(parents=True)
+        link.symlink_to(ROOT / 'bin/chewbacca-mcp')
+        self.assertEqual(host_mcp.chewbacca_server()['args'], [str(link)])
+
     def test_backup_holds_the_file_from_before_chewbacca_ever_touched_it(self):
         settings = runtime.claude_home() / 'settings.json'
         settings.parent.mkdir(parents=True)

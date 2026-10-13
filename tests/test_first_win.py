@@ -177,7 +177,7 @@ class WeekTests(unittest.TestCase):
         commit(clean, 'a.txt', 'x')
         git(clean, 'config', 'filter.a=b.clean', 'cat')
         line = first_win.week(clean.parents[1])['line']
-        self.assertNotIn('Everything is committed', line)
+        self.assertNotIn('No uncommitted changes', line)
         self.assertIn('1 repo not fully checked', line)
 
     def test_receipt_status_command_is_as_safe_as_the_scan(self):
@@ -238,6 +238,12 @@ class WeekTests(unittest.TestCase):
             row = first_win.inspect(self.app, EMAIL, '7.days.ago')
         self.assertTrue(row['unchecked'])
         self.assertFalse(row['status_skipped'])
+
+    def test_a_repo_with_submodules_is_never_called_clean(self):
+        (self.app / '.gitmodules').write_text('[submodule "lib"]\n\tpath = lib\n\turl = ../lib\n')
+        row = first_win.inspect(self.app, EMAIL, '7.days.ago')
+        self.assertTrue(row['unchecked'])
+        self.assertTrue(row['submodules'])
 
     def test_empty_machine_says_where_to_point_it(self):
         empty = Path(tempfile.mkdtemp(dir=self.home))

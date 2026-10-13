@@ -55,9 +55,50 @@ class GateTests(unittest.TestCase):
         gate.check(fake(47.7), now=NOW)
         self.assertEqual(gate.mode(now=NOW + 60), "whole")
 
-    def test_at_the_floor_turns_recall_on(self):
+    def test_at_the_floor_turns_recall_on_only_from_a_legacy_pass(self):
+        # A stamp written before the margin had no mode; its pass meant recall.
+        legacy = {"r5": 55.4, "n": 65, "floor": 55.4, "pass": True, "checked_at": NOW}
+        self.assertEqual(gate.decide(legacy, None, NOW + 60), "recall")
+
+    def test_turning_recall_on_takes_the_margin(self):
+        # 2026-10-13 01:15: 36 of 65 (55.4%) passed by zero questions.
         gate.check(fake(55.4), now=NOW)
-        self.assertEqual(gate.mode(now=NOW + 60), "recall")
+        self.assertEqual(gate.mode(now=NOW + 60), "whole")
+        gate.check(fake(58.5), now=NOW + 100)  # 38 of 65: floor + 2
+        self.assertEqual(gate.mode(now=NOW + 160), "whole")
+        gate.check(fake(60.0), now=NOW + 200)  # 39 of 65: floor + 3
+        self.assertEqual(gate.mode(now=NOW + 260), "recall")
+
+    def test_once_on_the_floor_keeps_it_and_below_turns_it_off(self):
+        gate.check(fake(60.0), now=NOW)
+        gate.check(fake(55.4), now=NOW + 100)
+        self.assertEqual(gate.mode(now=NOW + 160), "recall")
+        gate.check(fake(53.8), now=NOW + 200)  # 35 of 65, under the floor
+        self.assertEqual(gate.mode(now=NOW + 260), "whole")
+
+    def test_a_reading_hovering_at_the_floor_flips_at_most_once(self):
+        # 36, 35, 36, 35 ... of 65, one daily check each. Without the margin
+        # this flipped every day; the invariant still forces whole under 36.
+        day = 24 * 3600
+        gate._write_json(gate.stamp_path(), {"r5": 55.4, "n": 65, "floor": 55.4, "pass": True,
+                                             "checked_at": NOW})
+        modes = []
+        for i, r5 in enumerate((53.8, 55.4, 53.8, 55.4, 55.4, 53.8, 55.4)):
+            gate.check(fake(r5), now=NOW + (i + 1) * day)
+            modes.append(gate.mode(now=NOW + (i + 1) * day + 60))
+        flips = sum(a != b for a, b in zip(["recall"] + modes, modes))
+        self.assertEqual(modes[0], "whole")
+        self.assertLessEqual(flips, 1, modes)
+
+    def test_a_check_that_starts_late_does_not_lapse_the_mode(self):
+        gate.check(fake(60.0), now=NOW)
+        # The next 06:30 check fires a minute late and takes a few to run.
+        self.assertEqual(gate.mode(now=NOW + 24 * 3600 + 300), "recall")
+        # A stale stamp lapses to whole, but its mode still counts as the
+        # previous one, so a floor reading after a day off keeps recall.
+        self.assertEqual(gate.mode(now=NOW + 3 * 24 * 3600), "whole")
+        gate.check(fake(55.4), now=NOW + 3 * 24 * 3600)
+        self.assertEqual(gate.mode(now=NOW + 3 * 24 * 3600 + 60), "recall")
 
     def test_no_stamp_stale_stamp_or_pin_load_whole(self):
         self.assertEqual(gate.mode(now=NOW), "whole")
@@ -72,7 +113,7 @@ class GateTests(unittest.TestCase):
                              capture_output=True, text=True, env=os.environ.copy())
         self.assertEqual(out.stdout.strip(), "whole")
         stamp = gate.check(fake(50.0), now=NOW)
-        self.assertEqual(set(stamp), {"r5", "n", "floor", "pass", "checked_at", "index", "index_built_at"})
+        self.assertEqual(set(stamp), {"r5", "n", "floor", "pass", "mode", "checked_at", "index", "index_built_at"})
 
     def test_a_shrunken_sealed_set_or_a_nan_stamp_loads_whole(self):
         # Review 10/12: 3 resolvable questions with 2 hits read as 66.7% and passed.

@@ -7,6 +7,8 @@ session 378e4bfd), and brain-recall already brings matching notes in by
 meaning on every prompt. Step 14 of docs/plans/reengineer-flat-plan.md stops
 loading them whole, but only while recall is as good as when that trade was
 judged: the sealed set in ~/second-brain/.bench/brain-retrieval decides.
+Turning recall on takes the floor plus ENTER_MARGIN_Q questions; keeping it on
+takes the floor, so a reading that sits on the line can't flip the mode daily.
 
   recall_gate.py check     run the shipped retriever on the sealed set, write the stamp
   recall_gate.py mode      print recall or whole, from the stamp and the pin
@@ -47,8 +49,22 @@ FLOOR = 55.4
 
 # A stamp older than this decides nothing. The live index grew 105 files in
 # two days (10/10 to 10/12) and lost 7.7 points of recall@5 doing it, so a
-# day-old reading is the most that can stand for today's index.
-MAX_AGE_S = 24 * 3600
+# day-old reading is the most that can stand for today's index. The 2 hours
+# on top are for the daily 06:30 check itself: at exactly 24 h the old stamp
+# lapsed the moment the next check started, before it had written a new one.
+# The 2 is guessed, never measured.
+MAX_AGE_S = 26 * 3600
+
+# Turning recall on takes this many sealed questions above the floor; keeping
+# it on takes only the floor. On 2026-10-13 at 01:15 the gate passed at 36 of
+# 65, the floor exactly, so one question either way flipped the mode daily.
+# The 3 is the drift seen on unchanged retriever code as the index grows: the
+# frozen 839-file index to the live 857-file one moved it 1 question (56.9% to
+# 55.4%, d1 report 10/13), and 729 to 834 files moved it 5 (55.4% to 47.7%,
+# 10/10 to 10/12), about one question per 20 files, at roughly 50 new files a
+# day. A day's drift is about 2.5 questions; 3 rounds it up. Never tuned on
+# the sealed set: only the aggregate numbers above were read.
+ENTER_MARGIN_Q = 3
 
 # The floor was set on 65 sealed questions. bench.prepare drops any question
 # whose gold note no longer resolves (a rename, a move to ARCHIVE), so a stamp
@@ -108,11 +124,27 @@ def _write_json(path, data):
     tmp.replace(path)
 
 
+def enter_at(n):
+    """recall@5 a check needs to turn recall on from whole: the floor plus
+    ENTER_MARGIN_Q questions, less half the 0.1 the stamp rounds r5 to."""
+    return FLOOR + 100.0 * ENTER_MARGIN_Q / n - 0.05
+
+
+def _stamp_mode(stamp):
+    """The mode a stamp recorded, whatever its age. A stamp from before the
+    margin has no mode field, and its pass meant recall."""
+    if not isinstance(stamp, dict):
+        return "whole"
+    if "mode" in stamp:
+        return "recall" if stamp.get("mode") == "recall" else "whole"
+    return "recall" if stamp.get("pass") is True else "whole"
+
+
 def decide(stamp, pin=None, now=None):
     """recall only for a fresh, passing stamp with no pin forcing whole."""
     if (pin or "").strip() == "whole":
         return "whole"
-    if not isinstance(stamp, dict) or stamp.get("pass") is not True:
+    if not isinstance(stamp, dict) or stamp.get("pass") is not True or _stamp_mode(stamp) != "recall":
         return "whole"
     r5, n, at = stamp.get("r5"), stamp.get("n"), stamp.get("checked_at")
     if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
@@ -148,8 +180,13 @@ def measure():
 
 
 def check(measure_fn=measure, now=None):
+    """Measure, then decide with hysteresis: staying in recall needs the floor,
+    getting into it needs the floor plus ENTER_MARGIN_Q questions."""
+    prev = _stamp_mode(_read_json(stamp_path()))
     r5, n, extra = measure_fn()
-    stamp = {"r5": r5, "n": n, "floor": FLOOR, "pass": r5 >= FLOOR and n >= MIN_N,
+    ok = r5 >= FLOOR and n >= MIN_N
+    want = "recall" if ok and (prev == "recall" or r5 >= enter_at(n)) else "whole"
+    stamp = {"r5": r5, "n": n, "floor": FLOOR, "pass": ok, "mode": want,
              "checked_at": now if now is not None else time.time(), **extra}
     _write_json(stamp_path(), stamp)
     return stamp
@@ -253,8 +290,13 @@ def main(argv=None):
     a = ap.parse_args(argv)
     if a.cmd == "check":
         s = check()
-        print(f"sealed recall@5 {s['r5']}% (n={s['n']}), floor {FLOOR}%: "
-              + ("pass, the indexes may stop loading" if s["pass"] else "below the floor, indexes load whole"))
+        if s["mode"] == "recall":
+            verdict = "recall, the indexes may stop loading"
+        elif s["pass"]:
+            verdict = f"at the floor but under the {enter_at(s['n']) + 0.05:.1f}% it takes to turn recall on, indexes load whole"
+        else:
+            verdict = "below the floor, indexes load whole"
+        print(f"sealed recall@5 {s['r5']}% (n={s['n']}), floor {FLOOR}%: {verdict}")
         return 0
     if a.cmd == "mode":
         print(mode())

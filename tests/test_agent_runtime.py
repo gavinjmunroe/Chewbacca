@@ -424,6 +424,23 @@ class RuntimeTests(unittest.TestCase):
         self.assertTrue(link.is_symlink())
         self.assertEqual(dotfiles.read_text(), 'mine\n')
 
+    def test_vscode_mcp_symlink_survives_setup_and_undo(self):
+        import host_mcp
+        if not host_mcp.chewbacca_server():
+            self.skipTest('no node, so nothing is written to mcp.json')
+        dotfiles = self.home / 'dotfiles/mcp.json'
+        dotfiles.parent.mkdir()
+        dotfiles.write_text('{"servers": {}}\n')
+        user = runtime.vscode_user_dir()
+        user.mkdir(parents=True)
+        (user / 'mcp.json').symlink_to(dotfiles)
+        runtime.setup('vscode')
+        self.assertTrue((user / 'mcp.json').is_symlink())
+        self.assertIn('chewbacca', dotfiles.read_text())
+        runtime.remove('vscode')
+        self.assertTrue((user / 'mcp.json').is_symlink())
+        self.assertEqual(dotfiles.read_text(), '{"servers": {}}\n')
+
     def test_backup_holds_the_file_from_before_chewbacca_ever_touched_it(self):
         settings = runtime.claude_home() / 'settings.json'
         settings.parent.mkdir(parents=True)

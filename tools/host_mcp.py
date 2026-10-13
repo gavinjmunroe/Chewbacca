@@ -27,6 +27,9 @@ def _write_private(path, text):
 
 
 def _json_host(path, servers, translate, key='mcpServers'):
+    # Write through a dotfiles symlink: replacing the link left undo restoring
+    # its target while the new config stayed live (review, 10/13).
+    path = path.resolve() if path.is_symlink() else path
     data = json.loads(path.read_text()) if path.is_file() and path.read_text().strip() else {}
     existing = data.setdefault(key, {})
     added = []

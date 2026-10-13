@@ -178,7 +178,7 @@ class WeekTests(unittest.TestCase):
         git(clean, 'config', 'filter.a=b.clean', 'cat')
         line = first_win.week(clean.parents[1])['line']
         self.assertNotIn('Everything is committed', line)
-        self.assertIn('1 repo not checked for uncommitted changes', line)
+        self.assertIn('1 repo not fully checked', line)
 
     def test_receipt_status_command_is_as_safe_as_the_scan(self):
         evil = self.home / 'code/evil'
@@ -220,6 +220,24 @@ class WeekTests(unittest.TestCase):
         result = first_win.week(self.home)
         first_win.receipt(result, self.home / '.chewbacca/receipts')
         self.assertFalse(marker.exists())
+
+    def test_a_latin1_diff_does_not_crash_the_scan(self):
+        (self.app / 'old.txt').write_bytes(b'caf\xe9\n')
+        git(self.app, 'add', 'old.txt')
+        git(self.app, 'commit', '-q', '-m', 'latin-1 file')
+        row = first_win.inspect(self.app, EMAIL, '7.days.ago')
+        self.assertEqual(len(row['unpushed']), 2)
+
+    def test_untracked_files_count_even_when_the_repo_hides_them(self):
+        (self.app / 'new.py').write_text('x = 1\n')
+        git(self.app, 'config', 'status.showUntrackedFiles', 'no')
+        self.assertEqual(first_win.inspect(self.app, EMAIL, '7.days.ago')['dirty'], 1)
+
+    def test_a_failed_history_read_is_not_an_all_clear(self):
+        with patch.object(first_win, 'patch_ids', return_value=None):
+            row = first_win.inspect(self.app, EMAIL, '7.days.ago')
+        self.assertTrue(row['unchecked'])
+        self.assertFalse(row['status_skipped'])
 
     def test_empty_machine_says_where_to_point_it(self):
         empty = Path(tempfile.mkdtemp(dir=self.home))

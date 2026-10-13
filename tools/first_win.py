@@ -77,7 +77,7 @@ def filters_off(repo):
 
 def git(repo, *args, timeout=10, extra=()):
     try:
-        done = subprocess.run([*SAFE, *extra, '-C', str(repo), *args], capture_output=True, text=True,
+        done = subprocess.run([*SAFE, *extra, '-C', str(repo), *args], capture_output=True, text=True, errors='replace',
                               timeout=timeout, env=dict(os.environ, GIT_OPTIONAL_LOCKS='0', LC_ALL='C'))
     except (OSError, subprocess.TimeoutExpired):
         return None
@@ -134,10 +134,16 @@ def inspect(repo, email, since):
     # repo) that were all on origin under other hashes. Not by subject either:
     # an amended commit keeps its subject and author time but not its content.
     local = patch_ids(repo, '--branches', '--not', '--remotes', '--since=' + since, *author)
+    history_ok = local is not None
+    local = local or {}
     unpushed = set(local)
     if local and remotes:
-        landed = set(patch_ids(repo, '--remotes', '--since=' + since).values())
-        unpushed = {h for h, pid in local.items() if pid is None or pid not in landed}
+        remote = patch_ids(repo, '--remotes', '--since=' + since)
+        if remote is None:
+            history_ok = False
+        else:
+            landed = set(remote.values())
+            unpushed = {h for h, pid in local.items() if pid is None or pid not in landed}
     try:
         common_id = os.stat(common.strip())
         common_key = f'{common_id.st_dev}:{common_id.st_ino}'
@@ -145,35 +151,46 @@ def inspect(repo, email, since):
         common_key = common.strip()
     return {'path': str(repo), 'common': common_key,
             'commits': set((log or '').split()), 'dirty': len(status.splitlines()) if status else 0,
-            'unchecked': status is None, 'filters_off': off or [],
+            'unchecked': status is None or not history_ok, 'status_skipped': status is None,
+            'filters_off': off or [],
             'unpushed': unpushed, 'remote': bool(remotes)}
 
 
 def status_args():
-    return ('status', '--porcelain', '--ignore-submodules=all')
+    # Untracked files named explicitly: a repo's status.showUntrackedFiles=no
+    # would otherwise hide a new file and the line would call the tree clean.
+    return ('status', '--porcelain', '--ignore-submodules=all', '--untracked-files=normal')
 
 
 LOG_ARGS = ('log', '-p', '--no-merges', '--no-ext-diff', '--no-textconv', '--no-color', '--format=commit %H')
 
 
 def patch_ids(repo, *revs):
-    """{commit: patch id} for the commits revs select; None for a commit with
-    no diff (an empty commit has no patch id to match on)."""
-    hashes = (git(repo, 'log', '--no-merges', '--format=%H', *revs) or '').split()
+    """{commit: patch id} for the commits revs select (None for an empty commit,
+    which has no patch id), or None when git could not answer. Bytes all the
+    way: a diff of a Latin-1 file is not UTF-8, and decoding it crashed the scan."""
+    listed = git(repo, 'log', '--no-merges', '--format=%H', *revs)
+    if listed is None:
+        return None
+    hashes = listed.split()
     if not hashes:
         return {}
-    patches = git(repo, *LOG_ARGS, *revs, timeout=30)
     ids = dict.fromkeys(hashes)
-    if patches:
-        try:
-            done = subprocess.run([*SAFE, '-C', str(repo), 'patch-id', '--stable'], input=patches,
-                                  capture_output=True, text=True, timeout=30)
-            for line in done.stdout.splitlines():
-                pid, _, commit = line.partition(' ')
-                if commit in ids:
-                    ids[commit] = pid
-        except (OSError, subprocess.TimeoutExpired):
-            pass
+    try:
+        patches = subprocess.run([*SAFE, '-C', str(repo), *LOG_ARGS, *revs], capture_output=True, timeout=30,
+                                 env=dict(os.environ, GIT_OPTIONAL_LOCKS='0', LC_ALL='C'))
+        if patches.returncode != 0:
+            return None
+        done = subprocess.run([*SAFE, '-C', str(repo), 'patch-id', '--stable'], input=patches.stdout,
+                              capture_output=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if done.returncode != 0:
+        return None
+    for line in done.stdout.decode('ascii', 'replace').splitlines():
+        pid, _, commit = line.partition(' ')
+        if commit in ids:
+            ids[commit] = pid
     return ids
 
 
@@ -235,7 +252,7 @@ def week(home=None, extra=(), days=7):
                 'folders. Point it at one: chewbacca week --path <folder>')
     if unchecked:
         # A skipped or failed status is not a clean tree; never let it read as one.
-        line += f' {plural(len(unchecked), "repo")} not checked for uncommitted changes (see the receipt).'
+        line += f' {plural(len(unchecked), "repo")} not fully checked (see the receipt).'
     return {'line': line, 'email': email, 'days': days, 'repos': rows, 'active': active,
             'names': names, 'dirty': dirty, 'unchecked': list(unchecked.values()), 'ahead': ahead, 'local_only': list(local_only.values()),
             'seconds': round(time.monotonic() - started, 2)}
@@ -266,8 +283,9 @@ def receipt(result, folder):
         lines.append(f'- {Path(r["path"]).name}: {plural(r["dirty"], "uncommitted file")}. '
                      f'`{cmd(r["path"], *status_args(), extra=r["filters_off"])}`')
     for r in result['unchecked']:
-        lines.append(f'- {Path(r["path"]).name}: not checked for uncommitted changes. Its filter config '
-                     'could not be switched off safely, so git status was not run there.')
+        why = ('its filter config could not be switched off safely, so git status was not run there'
+               if r['status_skipped'] else 'git could not read its history, so unpushed commits were not counted')
+        lines.append(f'- {Path(r["path"]).name}: not fully checked: {why}.')
     for r in result['ahead']:
         lines.append(f'- {Path(r["path"]).name}: {plural(r["ahead"], "commit")} not on any remote. '
                      f'`{cmd(r["path"], "log", "--branches", "--not", "--remotes", "--no-merges", since, *author, "--oneline")}` '

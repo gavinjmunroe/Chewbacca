@@ -137,6 +137,44 @@ class ConfigTest(unittest.TestCase):
         self.assertIsNone(entry)
         self.assertIn("belongs to no client", why)
 
+    # -- no client defaults in the engine (2026-10-13: grade, ready and
+    # add-leads each fell back to one client's workspace)
+
+    def test_grade_needing_a_workspace_refuses_without_one(self):
+        env = dict(self.env, GTME_CLIENTS=str(self.cfg))
+        r = subprocess.run([sys.executable, str(ROOT / "tools" / "gtme_grade.py"), "--verify", "--campaign", "cam_t1",
+                            "--action", "launch"], capture_output=True, text=True, env=env, timeout=60)
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("no Clay workspace chosen", r.stderr)
+
+    def test_grade_takes_the_named_clients_workspace(self):
+        import argparse
+        import gtme_grade
+        os.environ["GTME_CLIENTS"] = str(self.cfg)
+        try:
+            a = argparse.Namespace(client="Northwind Test Co", ws=None)
+            self.assertEqual(gtme_grade.resolve_ws(a), "")
+            self.assertEqual(a.ws, "9001")
+            b = argparse.Namespace(client="Harbor Church Test", ws=None)
+            self.assertIn("names no Clay workspace", gtme_grade.resolve_ws(b))
+            self.assertIsNone(b.ws)
+        finally:
+            os.environ.pop("GTME_CLIENTS", None)
+
+    def test_ready_for_a_client_with_no_workspace_refuses(self):
+        drafts = write(self.tmp / "drafts.json", [])
+        inbox = write(self.tmp / "inbox.json", [])
+        slack = write(self.tmp / "slack.json", {})
+        (self.tmp / "fx").mkdir()
+        env = dict(self.env, GTME_CLIENTS=str(self.cfg), CHEWBACCA_GTM_CLIENTS=str(self.cfg),
+                   GTME_READY_CAMPAIGN_DIR=str(self.tmp / "fx"), CLAY_WORKSPACE_ID="9002",
+                   GTME_GRADE_KEY_FILE=str(self.tmp / "key"))
+        r = subprocess.run([sys.executable, str(ROOT / "tools" / "gtme_ready.py"), "--client", "Harbor Church Test",
+                            "--drafts", str(drafts), "--inbox", str(inbox), "--slack", str(slack)],
+                           capture_output=True, text=True, env=env, timeout=120)
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIn("names no Clay workspace", r.stderr)
+
     # -- one home for rulings
 
     def test_rule_goes_to_the_rulings_path_and_not_clients_json(self):

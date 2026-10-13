@@ -1009,7 +1009,13 @@ function gradeGate(op, request, args) {
     if (argv[1] !== "audiences" || argv[2] !== "update" || !argv[3]) return "cannot read the audience from this request";
     audience = argv[3];
     cid = args.campaign;
-    ws = process.env.CLAY_WORKSPACE_ID || "1372623";
+    // add-leads takes no ws=, so its grade is looked up in the workspace every
+    // other op resolves: $CLAY_WORKSPACE_ID, else the one workspace the GTM
+    // config names. Until 2026-10-13 this fell back to one client's workspace,
+    // so a second client's add-leads was checked against the first's grades.
+    const resolved = resolveWorkspace();
+    if (resolved.error) return resolved.error;
+    ws = resolved.ws;
     if (!cid) return "add-leads changes a live campaign's segment; name it with campaign=cam_... so its grade can be checked";
     action = "add-leads";
   } else if (isStart(op, args)) {

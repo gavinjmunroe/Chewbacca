@@ -421,7 +421,13 @@ def main(argv=None):
     if not isinstance(entries, list) or not all(isinstance(e, dict) for e in entries):
         print(f"chewbacca gtme ready: {drafts} is not a JSON list of campaign objects", file=sys.stderr)
         return 2
-    ws = (cfg.get("workspaces") or [os.environ.get("CLAY_WORKSPACE_ID", "1372623")])[0]
+    # The client's one workspace, never a built-in id: until 2026-10-13 a client
+    # with none was graded in Zeutara's Clay workspace.
+    import gtme_config
+    ws, why = gtme_config.workspace_of(cfg)
+    if not ws:
+        print(f"chewbacca gtme ready: {why}", file=sys.stderr)
+        return 2
     rows = run_campaigns(entries, str(Path(drafts).resolve().parent), ready, cfg["name"], ws)
     checks = [check_presend(), check_owed(cfg["name"], a.inbox, a.slack)]
     if not entries:

@@ -90,9 +90,9 @@ class Env:
             json.dump({"id": cid, "status": status, "leadBaseSegmentId": segment,
                        "sequence": [{"body": "hello"}], "settings": {"senderAccountIds": ["s1"]}}, fh)
 
-    def grade(self, cid, action, status="draft", segment="audseg_one"):
+    def grade(self, cid, action, status="draft", segment="audseg_one", ws=WS):
         self.campaign(cid, status, segment)
-        spec = {"ws": WS, "cid": cid, "action": action, "inputs": [self.inputs],
+        spec = {"ws": ws, "cid": cid, "action": action, "inputs": [self.inputs],
                 "state": os.path.join(self.grade_fx, f"{cid}.json")}
         subprocess.run([sys.executable, "-c", MAKE, TOOLS, json.dumps(spec)], env=self.env, check=True, timeout=30)
 
@@ -243,6 +243,28 @@ e.presend()
 e.grade("cam_alpha", "launch")
 code, out = e.clay(*ADD, "campaign=cam_alpha", answer="add-leads")
 check("a launch grade does not unlock add-leads", refused(code, out, "no gtme-grade pass for add-leads"), out)
+
+# add-leads takes no ws=, and until 2026-10-13 its grade was looked up in one
+# client's workspace whenever CLAY_WORKSPACE_ID was unset. Now the workspace
+# comes from the GTM config's one workspace, or the request refuses.
+e = Env()
+e.presend()
+e.grade("cam_alpha", "add-leads")
+e.env.pop("CLAY_WORKSPACE_ID")
+open(os.path.join(e.clay_fx, "cli", "add-leads.json"), "w").write(json.dumps({"exit": 0, "stdout": "{}", "stderr": ""}))
+code, out = e.clay(*ADD, "campaign=cam_alpha", answer="add-leads")
+check("add-leads with no workspace set and no client config refuses, with no built-in workspace",
+      refused(code, out, "no Clay workspace chosen"), out)
+cfg = os.path.join(e.home, "clients.json")
+with open(cfg, "w") as fh:
+    json.dump({"clients": [{"name": "Second Test Client", "workspaces": ["4000004"]}]}, fh)
+e.env["GTM_CONFIG"] = cfg
+code, out = e.clay(*ADD, "campaign=cam_alpha", answer="add-leads")
+check("a grade in another workspace does not cover add-leads for the configured client's workspace",
+      refused(code, out, "in workspace 4000004"), out)
+e.grade("cam_alpha", "add-leads", ws="4000004")
+code, out = e.clay(*ADD, "campaign=cam_alpha", answer="add-leads")
+check("add-leads checks the grade in the one workspace the client config names", sends(code, out), out)
 
 # 3. The shell allowlist.
 

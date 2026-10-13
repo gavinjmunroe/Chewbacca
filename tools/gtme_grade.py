@@ -1505,6 +1505,34 @@ def verify_request(ws, cid, action, audience=None):
     return verify(ws, cid, action)
 
 
+def sibling(name):
+    """A module beside this file. chewbacca clay runs the verifier with -I,
+    which leaves the script's own folder off sys.path; the folder this file
+    sits in is no less trusted than the file."""
+    import importlib
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    return importlib.import_module(name)
+
+
+def resolve_ws(args):
+    """Set args.ws from --client's one workspace, else $CLAY_WORKSPACE_ID; ''
+    or why not. There is no built-in id: until 2026-10-13 this defaulted to one
+    client's workspace, so any grade run without --ws read that client's Clay."""
+    gtme_config = sibling("gtme_config")
+    if args.client:
+        entry = load_client(args.client)
+        if entry is None:
+            return f"no client named {args.client} in the GTM config"
+        ws, why = gtme_config.workspace_of(entry)
+    else:
+        ws, why = gtme_config.workspace(None)
+    if ws:
+        args.ws = ws
+    return why
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="gtme-grade", description=__doc__.split("\n")[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -1512,7 +1540,7 @@ def main(argv=None):
     src.add_argument("--campaign", help="Clay campaign id, read through chewbacca clay")
     src.add_argument("--campaign-json", help="a saved `chewbacca clay campaign` answer")
     src.add_argument("--copy", help="local copy file: steps split by ---, Subject:/Delay:/Variant: headers")
-    ap.add_argument("--ws", default=os.environ.get("CLAY_WORKSPACE_ID", "1372623"))
+    ap.add_argument("--ws", help="Clay workspace id (else --client's one workspace, else $CLAY_WORKSPACE_ID)")
     ap.add_argument("--analytics-json", help="a saved `chewbacca clay campaign-analytics` answer")
     ap.add_argument("--settings", help="campaign settings JSON in Clay's shape, for --copy")
     ap.add_argument("--name", help="receipt key for --copy (a Clay id is used when given)")
@@ -1551,6 +1579,11 @@ def main(argv=None):
                          "current inputs and the live campaign; exit 0 or 2 (the guard hook uses this)")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
+    if args.ws is None and (args.verify or args.campaign or args.action):
+        why = resolve_ws(args)
+        if why:
+            print(f"gtme-grade: {why}", file=sys.stderr)
+            return 2
     if args.verify:
         if not (args.campaign and args.action):
             print("gtme-grade --verify: needs --campaign and --action", file=sys.stderr)

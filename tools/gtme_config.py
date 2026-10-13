@@ -106,15 +106,20 @@ def workspace(name: str | None, doc: dict | None = None, env: dict | None = None
         c = client(name, doc)
         if c is None:
             return None, f"no client named {name} in {config_path()}"
-        ws = [str(w) for w in c.get("workspaces") or []]
-        if len(ws) == 1:
-            return ws[0], ""
-        if len(ws) > 1:
-            return None, f"{c['name']} names {len(ws)} Clay workspaces ({', '.join(ws)}); pass the one you mean"
-        return None, f"{c['name']} names no Clay workspace in {config_path()}"
+        return workspace_of(c)
     if env.get("CLAY_WORKSPACE_ID"):
         return str(env["CLAY_WORKSPACE_ID"]), ""
     return None, "no Clay workspace chosen: name the client (--client) or the workspace, or set CLAY_WORKSPACE_ID"
+
+
+def workspace_of(entry: dict) -> tuple[str | None, str]:
+    """(the entry's one workspace, '') or (None, why): none and several refuse."""
+    ws = [str(w) for w in entry.get("workspaces") or []]
+    if len(ws) == 1:
+        return ws[0], ""
+    if len(ws) > 1:
+        return None, f"{entry.get('name')} names {len(ws)} Clay workspaces ({', '.join(ws)}); pass the one you mean"
+    return None, f"{entry.get('name')} names no Clay workspace in {config_path()}"
 
 
 def client_for_workspace(ws: str, doc: dict | None = None) -> tuple[dict | None, str]:

@@ -136,7 +136,9 @@ class Case:
             if k not in self.drop:
                 argv += [k, str(v)]
         argv += self.extra
+        # The test's own workspace, named: the grader has no built-in one (2026-10-13).
         env = dict(os.environ, HOME=str(self.home), GTME_CLIENTS=str(d / "clients.json"),
+                   CLAY_WORKSPACE_ID="1372623",
                    GTME_GRADE_KEY_FILE=str(self.home / "keys" / "gtme-grade.key"),
                    GTME_GRADE_INPUT_ROOTS=os.path.realpath(str(d)))
         self.env = env

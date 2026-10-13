@@ -15,6 +15,11 @@ printf '{"files": [], "links": []}\n' > "$T/.chewbacca/runtime-installs/claude-c
 P="/usr/bin:/bin:/usr/sbin:/sbin"
 env -i HOME="$T" PATH="$P" bash "$ROOT/doctor.sh" --json > "$T/runtime.json" 2>/dev/null || true
 env -i HOME="$T" PATH="$P" TERM=dumb bash "$ROOT/doctor.sh" > "$T/runtime.txt" 2>&1 || true
+# A full install from before 9/4 (no profile file) that later ran agent setup:
+# its copied hooks say it's a full install.
+mkdir -p "$T/.claude/hooks" && printf '#!/bin/bash\n' > "$T/.claude/hooks/lib.sh"
+env -i HOME="$T" PATH="$P" bash "$ROOT/doctor.sh" --json > "$T/old.json" 2>/dev/null || true
+rm -rf "$T/.claude/hooks"
 echo developer > "$T/.claude/.chewbacca-profile"
 env -i HOME="$T" PATH="$P" bash "$ROOT/doctor.sh" --json > "$T/full.json" 2>/dev/null || true
 python3 - "$T" "$ROOT" <<'PY'
@@ -39,6 +44,9 @@ check("the verdict says so, and names the full install", "runtime install" in te
       text[-600:])
 check("every command it prints exists on this Mac", "Or try: chewbacca" not in text
       and root + "/bin/chewbacca doctor" in text, text[-300:])
+old = json.load(open(t + "/old.json"))
+check("a full install from before the profile file is not mistaken for a runtime one", old["profile"] == "developer",
+      old["profile"])
 check("the full install is still judged in full", full["profile"] == "developer"
       and any(c["status"] == "fail" and c["section"] in skip_sections for c in full["checks"]))
 sys.exit(1 if bad else 0)

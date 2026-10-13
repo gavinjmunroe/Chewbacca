@@ -123,8 +123,12 @@ PROFILE="$(cat "$CLAUDE_DIR/.chewbacca-profile" 2>/dev/null || echo developer)"
 # writes shared context, skills and hooks and says it installs nothing else.
 # Judged as the full install it read as broken: exit 2 with 20 to 22
 # failures in the 10/12 and 10/13 stranger runs, every one for a part it
-# never installs. The full installer writes .chewbacca-profile; this doesn't.
-if [ ! -f "$CLAUDE_DIR/.chewbacca-profile" ] && ls "$HOME/.chewbacca/runtime-installs/"*.json >/dev/null 2>&1; then
+# never installs. The full installer writes .chewbacca-profile (since 9/4)
+# and copies its hooks into ~/.claude/hooks (always); a runtime install does
+# neither, so a full install from before 9/4 that later ran `agent setup`
+# still has its hooks and is still judged in full (review, 10/13).
+if [ ! -f "$CLAUDE_DIR/.chewbacca-profile" ] && ! ls "$CLAUDE_DIR/hooks/"*.sh >/dev/null 2>&1 \
+   && ls "$HOME/.chewbacca/runtime-installs/"*.json >/dev/null 2>&1; then
   PROFILE=runtime
 fi
 # The sections a runtime install never writes. Their findings are recorded

@@ -626,5 +626,87 @@ class AgentSendsByDefault(unittest.TestCase):
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
+class UnwatchedCodeTests(unittest.TestCase):
+    """A send code from a process nobody is watching goes to the fake sink,
+    never the HUD or a notification. 2026-10-13 1:52pm: a USC food test drew
+    a real "usc-order to Bowls" code on Caleb's live screen."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.sink = os.path.join(self.tmp, "codes.jsonl")
+        self.env = mock.patch.dict(os.environ, {"CHEWBACCA_SEND_CODE_SINK": self.sink})
+        self.env.start()
+        # SHOW=off would hide the code and prove nothing about where it goes.
+        os.environ.pop("CHEWBACCA_SEND_CODE_SHOW", None)
+        self.calls = []
+        # sa.subprocess is the subprocess module, so this patch is global;
+        # the MCP test below needs the real one to start node.
+        self.real_run = subprocess.run
+        self.run = mock.patch.object(sa.subprocess, "run",
+                                     side_effect=lambda *a, **k: self.calls.append(a[0]) or
+                                     subprocess.CompletedProcess(a[0], 0, "", ""))
+        self.run.start()
+
+    def tearDown(self):
+        self.run.stop()
+        self.env.stop()
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def drew_on_screen(self):
+        return [c for c in self.calls if c and (str(c[0]).endswith("/hud") or c[0] == "/usr/bin/osascript")]
+
+    def test_a_test_process_never_draws_a_code(self):
+        # Today's case exactly: a test file run directly, no suite markers.
+        for name in ("CHEWBACCA_NO_SEND", "CHEWBACCA_SUITE", "PYTEST_CURRENT_TEST", "CHEWBACCA_JOB"):
+            os.environ.pop(name, None)
+        self.assertTrue(sa.show_code("424242", "usc-order to Bowls: 1 bowl"))
+        self.assertEqual(self.drew_on_screen(), [])
+        rows = [json.loads(line) for line in Path(self.sink).read_text().splitlines()]
+        self.assertEqual(rows[-1]["code"], "424242")
+
+    def test_each_marker_alone_means_unwatched(self):
+        live = {"env": {}, "argv": ["/k/bin/people"], "modules": {}, "chain": [(9, "/bin/zsh"), (8, "claude")]}
+        self.assertIsNone(sa.unwatched(**live))
+        for name in ("CHEWBACCA_NO_SEND", "CHEWBACCA_SUITE", "PYTEST_CURRENT_TEST", "NODE_TEST_CONTEXT",
+                     "CHEWBACCA_JOB"):
+            self.assertIsNotNone(sa.unwatched(**dict(live, env={name: "1"})), name)
+        self.assertIsNotNone(sa.unwatched(**dict(live, argv=["tests/test_usc_food.py"])))
+        self.assertIsNotNone(sa.unwatched(**dict(live, modules={"unittest": None})))
+        for parent in ("python3 /k/bin/chewbacca-jobs _run 1013-x", "bash tests/run.sh hud",
+                       "python3 -m pytest tests -q"):
+            self.assertIsNotNone(sa.unwatched(**dict(live, chain=[(9, "python3 x"), (8, parent)])), parent)
+
+    def test_a_watched_process_still_draws_on_the_hud(self):
+        with mock.patch.object(sa, "unwatched", return_value=None):
+            self.assertTrue(sa.show_code("424242", "imessage to Mom: hi"))
+        self.assertEqual(len(self.drew_on_screen()), 1)
+        self.assertFalse(Path(self.sink).exists())
+
+    def test_the_mcp_server_never_draws_a_code_from_a_job_or_test(self):
+        # kit_confirm's own code display (bin/lib/mcp-writes.js), against a
+        # stub hud that leaves a mark when it's asked to draw.
+        stub = Path(self.tmp, "bin")
+        stub.mkdir()
+        mark = Path(self.tmp, "drew")
+        (stub / "hud").write_text("#!/bin/sh\ncat > %s\n" % mark)
+        (stub / "hud").chmod(0o755)
+        js = ("const w=require(%s);console.log(w.showCode(%s,'135790','usc-order to Bowls'))"
+              % (json.dumps(str(ROOT / "bin/lib/mcp-writes.js")), json.dumps(str(stub))))
+        clean = {k: v for k, v in os.environ.items()
+                 if k not in ("CHEWBACCA_NO_SEND", "CHEWBACCA_SUITE", "PYTEST_CURRENT_TEST", "NODE_TEST_CONTEXT",
+                              "CHEWBACCA_JOB", "CHEWBACCA_MCP_APPROVAL_OUT")}
+        for name in ("CHEWBACCA_NO_SEND", "CHEWBACCA_SUITE", "NODE_TEST_CONTEXT", "CHEWBACCA_JOB"):
+            r = self.real_run(["node", "-e", js], env=dict(clean, **{name: "1"}), capture_output=True, text=True)
+            self.assertEqual(r.stdout.strip(), "true", name + r.stderr[-300:])
+            self.assertFalse(mark.exists(), "%s: the code was drawn on the HUD" % name)
+        self.assertIn("135790", Path(self.sink).read_text())
+        r = self.real_run(["node", "-e", js], env=clean, capture_output=True, text=True)
+        self.assertTrue(mark.exists(), "a watched MCP server stopped drawing codes: " + r.stderr[-300:])
+
+    def test_the_job_queue_marks_what_it_runs(self):
+        src = (ROOT / "bin" / "chewbacca-jobs").read_text()
+        self.assertIn("CHEWBACCA_JOB=job_id", src)
+
+
 if __name__ == "__main__":
     unittest.main()

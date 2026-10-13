@@ -84,11 +84,34 @@ const MAX_CODE_TRIES = 3;
 // true when some surface took it. CHEWBACCA_MCP_APPROVAL_OUT is the tests'
 // stand-in for the screen; the server's environment is set by whoever
 // configured the client, never by the agent talking to it.
+//
+// A process nobody is watching (a no-send run, the suite, node --test,
+// pytest, a job-queue job) writes the code to the fake sink instead, the
+// same rule and file as tools/send_approval.py unwatched(). 2026-10-13
+// 1:52pm: a test drew a real order code on Caleb's live HUD.
+const UNWATCHED_ENV = ["CHEWBACCA_NO_SEND", "CHEWBACCA_SUITE", "PYTEST_CURRENT_TEST", "NODE_TEST_CONTEXT", "CHEWBACCA_JOB"];
+function unwatched(env = process.env) {
+  return UNWATCHED_ENV.find((name) => env[name]) || null;
+}
+function codeSink(env = process.env) {
+  const uid = typeof process.getuid === "function" ? process.getuid() : 0;
+  return env.CHEWBACCA_SEND_CODE_SINK || path.join(require("node:os").tmpdir(), `chewbacca-send-codes-${uid}.jsonl`);
+}
 function showCode(bin, code, what) {
   const out = process.env.CHEWBACCA_MCP_APPROVAL_OUT;
   if (out) {
     try {
       fs.writeFileSync(out, `${code}\n`, { mode: 0o600 });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  const why = unwatched();
+  if (why) {
+    try {
+      const row = { at: Date.now() / 1000, code, what: String(what || "").slice(0, 140), why };
+      fs.appendFileSync(codeSink(), JSON.stringify(row) + "\n", { mode: 0o600 });
       return true;
     } catch {
       return false;
@@ -980,4 +1003,4 @@ function createWrites({ bin, registryFile, choicesFor }) {
   return { entries, write, confirm, undo };
 }
 
-module.exports = { createWrites, STATE };
+module.exports = { createWrites, STATE, showCode, unwatched };

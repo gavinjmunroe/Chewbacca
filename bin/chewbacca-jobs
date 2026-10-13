@@ -406,7 +406,11 @@ def _run(job_id):
         with open(DIR / job_id / "out.log", "ab") as log:
             # The submitter's session, never whichever tab's tick started
             # this supervisor: its environment belongs to that tab.
-            env = dict(os.environ, CHEWBACCA_AGENT_SESSION=j.get("session") or "")
+            env = dict(os.environ, CHEWBACCA_AGENT_SESSION=j.get("session") or "",
+                       # Marks everything the job runs as queued work, so a
+                       # send code it asks for goes to a file, never the
+                       # screen (tools/send_approval.py show_code).
+                       CHEWBACCA_JOB=job_id)
             code = subprocess.call(["nice", "-n", str(NICE[j["class"]])] + j["cmd"],
                                    stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=env)
     finally:

@@ -54,6 +54,7 @@ import re
 import secrets
 import subprocess
 import sys
+import tempfile
 import time
 
 # The same life as kit_confirm's drafts (bin/lib/mcp-writes.js). Guessed,
@@ -354,12 +355,71 @@ def _what(channel, to, text, subject):
     return "%s to %s: %s%s" % (channel, to, ("[%s] " % subject) if subject else "", line)
 
 
+# Markers of a process nobody is watching: no-send runs, the suite
+# (tests/run.sh sets CHEWBACCA_SUITE), pytest, node --test, and anything the
+# job queue runs (bin/chewbacca-jobs sets CHEWBACCA_JOB).
+UNWATCHED_ENV = ("CHEWBACCA_NO_SEND", "CHEWBACCA_SUITE", "PYTEST_CURRENT_TEST", "NODE_TEST_CONTEXT",
+                 "CHEWBACCA_JOB")
+UNWATCHED_ANCESTOR = re.compile(r"chewbacca-jobs|tests/run\.sh|(^|/|\s)pytest(\s|$)|-m pytest|-m unittest")
+
+
+def unwatched(env=None, argv=None, modules=None, chain=None):
+    """Why a send code from this process must go to the fake sink and never
+    the person's screen, or None when it may be shown.
+
+    2026-10-13 1:52pm: a test in the USC food lane ran `python3
+    tests/test_usc_food.py` directly, take("usc-order", "Bowls", ...) reached
+    this function, and a real six-digit code for an order drew on Caleb's
+    live HUD while he was working. The test had mocked show_code in one
+    place and not another. So the rule lives here, where every code is
+    drawn, and no test has to remember it."""
+    env = os.environ if env is None else env
+    for name in UNWATCHED_ENV:
+        if env.get(name):
+            return name
+    argv = sys.argv if argv is None else argv
+    script = os.path.basename(argv[0]) if argv else ""
+    if re.match(r"test_.*\.py$|.*_test\.py$", script):
+        return "a test file (%s)" % script
+    modules = sys.modules if modules is None else modules
+    for name in ("unittest", "pytest"):
+        if name in modules:
+            return "%s is loaded" % name
+    chain = ancestry() if chain is None else chain
+    for item in chain or []:
+        if UNWATCHED_ANCESTOR.search(str(item[1])):
+            return "run by %s" % str(item[1])[:80]
+    return None
+
+
+def code_sink():
+    return os.environ.get("CHEWBACCA_SEND_CODE_SINK") or os.path.join(
+        tempfile.gettempdir(), "chewbacca-send-codes-%d.jsonl" % os.getuid())
+
+
+def _to_sink(code, what, why):
+    """The fake screen: one JSON line per code, readable only by this user.
+    A test that plays the person reads its code from here."""
+    try:
+        fd = os.open(code_sink(), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        with os.fdopen(fd, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"at": time.time(), "code": code, "what": what[:140], "why": why}) + "\n")
+        return True
+    except OSError:
+        return False
+
+
 def show_code(code, what):
     """Put the code in front of the person and nowhere else. True when some
     surface took it. CHEWBACCA_SEND_CODE_SHOW=off shows nothing (the tests);
-    it can only hide a code, never reveal one."""
+    it can only hide a code, never reveal one. A process nobody is watching
+    (unwatched()) writes it to the fake sink instead of the HUD or a
+    notification."""
     if os.environ.get("CHEWBACCA_SEND_CODE_SHOW") == "off":
         return False
+    why = unwatched()
+    if why:
+        return _to_sink(code, what, why)
     q = json.dumps
     lines = [
         "@ send-code at=top w=440 life=%d" % RESHOW_AFTER,

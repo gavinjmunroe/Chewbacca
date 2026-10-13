@@ -454,3 +454,14 @@ the interval. The production path (`brain.rank(dense2=, E2=)`, the index's
 `npy2`) reproduces the bench to the query on all three dev sets. With the
 model not pulled or `BRAIN_MODEL2` empty, brain is nomic only
 (`tests/test_brain_ensemble.py`).
+
+**Live, 2026-10-13 01:15.** The live index (857 files, 4,031 chunks) got its
+second vectors in 4.5 minutes once the brain-index service ran the kit's
+brain.py (it had been running the shared checkout's; see team memory
+feedback_services_run_from_the_kit). `tools/recall_gate.py check`: **55.4%,
+n=65, pass, at exactly the floor** (36 of 65). The daily 06:30 check decides
+again tomorrow, and anything under the floor puts the indexes back whole.
+Headless first turn (`claude -p`, cwd ~): whole 120,963 tokens, recall
+110,197 (-10,766, the team index; `-p` never loaded memory/MEMORY.md in
+either mode, so its 6,772 tokens are not in that number). `brain ask` p50
+208 ms before, 233 ms after, 16 asks each at load 3 to 5.

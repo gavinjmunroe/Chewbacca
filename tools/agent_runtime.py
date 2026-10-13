@@ -227,8 +227,14 @@ def vscode_user_dir():
 
 
 def vscode_instructions():
-    # Copilot chat reads *.instructions.md from here in every workspace.
+    # Copilot's Agent Host reads *.instructions.md from here in every workspace.
     return Path.home() / '.copilot/instructions/chewbacca.instructions.md'
+
+
+def vscode_profile_instructions():
+    # The Local agent reads user instructions from the VS Code profile instead
+    # (its prompts folder), so the file goes in both (review, 10/13).
+    return vscode_user_dir() / 'prompts/chewbacca.instructions.md'
 
 
 def install_vscode(brain, spec, team=False):
@@ -238,13 +244,13 @@ def install_vscode(brain, spec, team=False):
     text = ('---\nname: Chewbacca\ndescription: Shared Chewbacca context, skills and guidance\n'
             'applyTo: "**"\n---\n\n' + context.startup_block(Path(context.__file__).resolve(), brain)
             + '\n\n' + instruction_block(spec, team) + '\n')
-    path = vscode_instructions()
-    # Write through a dotfiles symlink, as merge_block does: replacing the link
-    # with a file left undo restoring the link's target and the new file behind.
-    path = path.resolve() if path.is_symlink() else path
-    path.parent.mkdir(parents=True, exist_ok=True)
-    context.atomic_write(path, text)
-    return path
+    for path in (vscode_instructions(), vscode_profile_instructions()):
+        # Write through a dotfiles symlink, as merge_block does: replacing the
+        # link left undo restoring its target and the new file behind.
+        path = path.resolve() if path.is_symlink() else path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        context.atomic_write(path, text)
+    return vscode_instructions()
 
 
 BACKUP_SUFFIX = '.chewbacca.backup'
@@ -274,7 +280,7 @@ def backup_once(path):
 
 def native_paths(key):
     if key == 'vscode':
-        return [vscode_instructions(), vscode_user_dir() / 'mcp.json']
+        return [vscode_instructions(), vscode_profile_instructions(), vscode_user_dir() / 'mcp.json']
     if key == 'cursor':
         return [Path.home() / '.cursor/hooks.json', Path.home() / '.cursor/mcp.json']
     if key == 'gemini':

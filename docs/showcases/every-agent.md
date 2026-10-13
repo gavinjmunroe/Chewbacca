@@ -12,7 +12,7 @@ Setup finds every coding agent on the machine and installs into each one:
 | Codex | instructions, skills, hooks | `~/.codex/AGENTS.md`, `~/.codex/hooks.json`, `~/.agents/skills` |
 | Cursor | hooks, skills, the Chewbacca MCP server | `~/.cursor/hooks.json`, `~/.cursor/mcp.json`, `~/.agents/skills` |
 | Gemini CLI | hooks, skills, the Chewbacca MCP server | `~/.gemini/settings.json`, `~/.agents/skills` |
-| VS Code | instructions, skills, the Chewbacca MCP server | `~/.copilot/instructions/chewbacca.instructions.md`, `Code/User/mcp.json`, `~/.agents/skills` |
+| VS Code | instructions, skills, the Chewbacca MCP server | `~/.copilot/instructions/` and `Code/User/prompts/` (`chewbacca.instructions.md`), `Code/User/mcp.json`, `~/.agents/skills` |
 
 Before it changes a file you already had, it copies it to
 `<file>.chewbacca.backup` beside it. That copy is made once and never replaced,

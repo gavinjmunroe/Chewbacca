@@ -405,9 +405,11 @@ class RuntimeTests(unittest.TestCase):
         backup = mcp.with_name('mcp.json' + runtime.BACKUP_SUFFIX)
         self.assertEqual(backup.read_bytes(), original)
         self.assertEqual(result['runtimes'][0]['backups'], [])  # the rerun kept the first backup
+        self.assertEqual(runtime.vscode_profile_instructions().read_text(), instructions)
         runtime.remove('vscode')
         self.assertEqual(mcp.read_bytes(), original)
         self.assertFalse(runtime.vscode_instructions().exists())
+        self.assertFalse(runtime.vscode_profile_instructions().exists())
 
     def test_vscode_instructions_symlink_survives_setup_and_undo(self):
         dotfiles = self.home / 'dotfiles/chewbacca.instructions.md'

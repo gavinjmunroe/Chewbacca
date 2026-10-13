@@ -121,11 +121,18 @@ def find_repos(home, extra=()):
 def inspect(repo, email, since):
     common = git(repo, 'rev-parse', '--path-format=absolute', '--git-common-dir')
     if common is None:
-        return None
+        # Found but unreadable (a broken config, a half-deleted .git): it may
+        # hold work, so it stays in the summary as not checked, never dropped.
+        return {'path': str(repo), 'common': str(repo), 'submodules': False, 'email': email,
+                'commits': set(), 'dirty': 0, 'unchecked': True, 'status_skipped': False,
+                'history_failed': False, 'unreadable': True, 'filters_off': [],
+                'unpushed': set(), 'remote': True}
     # The identity git would commit with here: a repo's own user.email or an
     # includeIf work identity beats the global one passed in.
     email = (git(repo, 'config', 'user.email') or email or '').strip()
-    author = ['--author=' + email] if email else []
+    # -F with the angle brackets: an exact email, not a regex that
+    # dev@example.com would also find inside otherdev@example.com.
+    author = ['-F', f'--author=<{email}>'] if email else []
     log = git(repo, 'log', '--branches', '--no-merges', '--since=' + since, '--format=%H', *author)
     # Submodules carry their own config, so status never descends into them.
     off = filters_off(repo)
@@ -158,7 +165,7 @@ def inspect(repo, email, since):
     return {'path': str(repo), 'common': common_key, 'submodules': submodules, 'email': email,
             'commits': set((log or '').split()), 'dirty': len(status.splitlines()) if status else 0,
             'unchecked': status is None or not history_ok or submodules, 'status_skipped': status is None,
-            'history_failed': not history_ok,
+            'history_failed': not history_ok, 'unreadable': False,
             'filters_off': off or [],
             'unpushed': unpushed, 'remote': bool(remotes)}
 
@@ -285,7 +292,7 @@ def receipt(result, folder):
         return shlex.join([*SAFE, *extra, '-C', str(repo), *args])
     since = f'--since={result["days"]}.days.ago'
     def author(row):
-        return ['--author=' + row['email']] if row['email'] else []
+        return ['-F', f'--author=<{row["email"]}>'] if row['email'] else []
     for common, count in sorted(result['active'].items(), key=lambda kv: -kv[1]):
         row = next(r for r in result['repos'] if r['common'] == common)
         lines.append(f'- {result["names"][common]}: {count} commits. '
@@ -294,7 +301,8 @@ def receipt(result, folder):
         lines.append(f'- {Path(r["path"]).name}: {plural(r["dirty"], "uncommitted file")}. '
                      f'`{cmd(r["path"], *status_args(), extra=r["filters_off"])}`')
     for r in result['unchecked']:
-        why = ('its filter config could not be switched off safely, so git status was not run there'
+        why = ('git could not read it at all' if r['unreadable'] else
+               'its filter config could not be switched off safely, so git status was not run there'
                if r['status_skipped'] else
                'git could not read its history, so unpushed commits were not counted' if r['history_failed'] else
                'it has submodules, which were not opened, so edits inside them are not counted')

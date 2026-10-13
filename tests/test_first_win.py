@@ -265,6 +265,20 @@ class WeekTests(unittest.TestCase):
         with patch.object(first_win, 'git', side_effect=failing):
             self.assertTrue(first_win.inspect(self.app, EMAIL, '7.days.ago')['unchecked'])
 
+    def test_author_is_an_exact_email_not_a_pattern(self):
+        subprocess.run(['git', '-C', str(self.solo), '-c', 'user.email=other' + EMAIL,
+                        'commit', '-q', '--allow-empty', '-m', 'not mine'], check=True)
+        self.assertEqual(len(first_win.inspect(self.solo, EMAIL, '7.days.ago')['commits']), 2)
+
+    def test_an_unreadable_repo_is_flagged_not_dropped(self):
+        broken = self.home / 'code/broken'
+        broken.mkdir()
+        git(broken, 'init', '-q')
+        (broken / '.git/config').write_text('[core\nthis is not config\n')
+        result = first_win.week(self.home)
+        self.assertIn('broken', [Path(r['path']).name for r in result['unchecked']])
+        self.assertIn('not fully checked', result['line'])
+
     def test_empty_machine_says_where_to_point_it(self):
         empty = Path(tempfile.mkdtemp(dir=self.home))
         result = first_win.week(empty)

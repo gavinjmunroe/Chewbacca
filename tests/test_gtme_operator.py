@@ -349,6 +349,71 @@ class GraphCommands(unittest.TestCase):
         r = run(self.env, "brief")
         self.assertRegex(r.stdout, r"Go deeper \(library/learning/clay-navigation/WALKTHROUGHS.md\): W-\d+ ")
 
+    # ── one scoreboard (move 5, 2026-10-13) ──
+
+    def tag_ten_positive_in_clay(self):
+        """Clay's categories say 10 positive; the graph's reads say 1 person."""
+        db = sqlite3.connect(self.tmp / "graph.sqlite")
+        row = db.execute("SELECT props FROM nodes WHERE id = 'campaign:clay:cam_floor'").fetchone()
+        props = dict(json.loads(row[0]), reply_categories=[{"name": "Interested", "sentiment": "positive",
+                                                            "leads": 10}])
+        db.execute("UPDATE nodes SET props = ? WHERE id = 'campaign:clay:cam_floor'", (json.dumps(props),))
+        db.commit()
+        db.close()
+
+    def test_positives_are_one_number_in_every_table(self):
+        self.tag_ten_positive_in_clay()
+        rep = run(self.env, "report", "--client", "Northwind Test Co", "--no-pdf", "--out", str(self.tmp / "o"))
+        self.assertEqual(rep.returncode, 0, rep.stderr)
+        week = [x for x in rep.stdout.splitlines() if x.startswith("| People who replied positive")][0]
+        self.assertTrue(week.rstrip().endswith("| 1 |"), week)
+        total = [x for x in rep.stdout.splitlines() if x.startswith("| Total |")][0]
+        self.assertEqual(total.split("|")[6].strip(), "1", total)
+        self.assertIn("1 people replied positive", rep.stdout)
+        nums = json.loads(run(self.env, "report", "--client", "Northwind Test Co", "--json").stdout)
+        self.assertEqual(nums["positive"]["n"], 1)
+        self.assertEqual(nums["totals"]["positive"], 1)
+
+    def test_stale_numbers_are_flagged_and_get_no_pdf(self):
+        env = dict(self.env, GTME_NOW="2026-03-21T17:00:00+00:00")   # 32 hours after the sync
+        rep = run(env, "report", "--client", "Northwind Test Co", "--out", str(self.tmp / "o"))
+        self.assertEqual(rep.returncode, 3, rep.stdout + rep.stderr)
+        self.assertIn("STALE: Clay's numbers here are 32 hours old", rep.stdout)
+        self.assertIn("PDF: not made", rep.stdout)
+        self.assertFalse(list((self.tmp / "o").glob("*.pdf")))
+        ok = run(env, "report", "--client", "Northwind Test Co", "--out", str(self.tmp / "o"), "--stale-ok")
+        self.assertEqual(ok.returncode, 0, ok.stderr)
+        self.assertEqual(json.loads(run(env, "report", "--client", "Northwind Test Co", "--json").stdout)["stale"],
+                         True)
+        fresh = run(self.env, "report", "--client", "Northwind Test Co", "--no-pdf", "--out", str(self.tmp / "o"))
+        self.assertNotIn("STALE", fresh.stdout)
+
+    def test_calendar_meetings_and_mail_bookings_are_two_rows_never_summed(self):
+        db = sqlite3.connect(self.tmp / "graph.sqlite")
+        db.execute("INSERT INTO nodes VALUES (?,?,?,?,0,'gtm-calendar')", (
+            "meeting:1", "Meeting", "Call", json.dumps({"start": "2026-03-19T17:00:00Z"})))
+        db.execute("INSERT INTO edges VALUES (?,?,?,?,'gtm-calendar')",
+                   ("meeting:1", "BOOKED_FROM", "campaign:clay:cam_floor", "{}"))
+        db.execute("INSERT INTO edges VALUES (?,?,?,?,'gtm-calendar')",
+                   ("meeting:1", "MEETING_WITH", "person:lead@acme.example", "{}"))
+        for n, who in enumerate(("lead@acme.example", "q@beta.example")):
+            db.execute("INSERT INTO nodes VALUES (?,?,?,?,0,'gtm-inbox:9001')", (
+                f"signal:{n}", "Signal", "Booking", json.dumps({
+                    "kind": "booking_signal", "client_id": "client:northwind", "email": who,
+                    "status": "confirmed", "credited": True, "message_time": "2026-03-19T12:00:00Z"})))
+        db.commit()
+        db.close()
+        rep = run(self.env, "report", "--client", "Northwind Test Co", "--week", "--no-pdf",
+                  "--out", str(self.tmp / "o"))
+        self.assertEqual(rep.returncode, 0, rep.stderr)
+        self.assertIn("| Meetings on a calendar | 1", rep.stdout)
+        self.assertIn("| Bookings confirmed in reply mail | 2", rep.stdout)
+        self.assertNotIn("| Meetings booked |", rep.stdout)
+        self.assertNotIn("| 3 |", [x for x in rep.stdout.splitlines() if "eeting" in x or "ooking" in x][0])
+        self.assertIn("never added together", rep.stdout)
+        nums = json.loads(run(self.env, "report", "--client", "Northwind Test Co", "--json").stdout)
+        self.assertEqual((nums["meetings"]["calendar"], nums["meetings"]["bookings_confirmed_in_mail"]), (1, 2))
+
     def test_report_week_counts_and_markdown(self):
         out = self.tmp / "dl"
         r = run(self.env, "report", "--client", "Northwind Test Co", "--week", "--out", str(out), "--no-pdf")
@@ -587,14 +652,17 @@ class Scorecard(unittest.TestCase):
                  analytics_campaign("b", "Acme | Ivy | Pre-seed | Midweek", 50, 0, 3, 2, 0, 1),
                  analytics_campaign("c", "Acme | Ivy | Pre-seed | Old", 999, 0, 99, 99, 9, 9, status="paused"),
                  analytics_campaign("d", "Acme | Qube | Seed | Wave 1", 80, 20, 4, 4, 2, 18, funnel_bounces=11)]
-        card = g.scorecard(camps)
+        # Positives come from the reply reads (positives()), never Clay's category
+        # counts: Ivy's campaigns carry 1 Clay "positive" and it is not counted.
+        card = g.scorecard(camps, {"Ivy": 2, "Qube": 1})
         self.assertEqual(card["Ivy"], {"first_emails": 150, "follow_ups": 40, "replies": 9, "human_replies": 7,
-                                       "tagged_positive": 1, "bounces": 3})
+                                       "positive": 2, "bounces": 3})
+        self.assertEqual(g.scorecard(camps)["Ivy"]["positive"], 0)
         # Bounces from the stats totals (18), never the funnel's bouncedCount (11).
         self.assertEqual(card["Qube"]["bounces"], 18)
         text = "\n".join(g.scorecard_lines(card))
         self.assertIn("| Total | 230 | 60 | 13 | 11 | 3 | 21 |", text)
-        self.assertIn("tagged, read the text", text)
+        self.assertIn("strongest read", text)
         self.assertNotIn("nterested", text.replace("Not Interested", ""))
 
     def test_real_asks_come_from_the_reply_text(self):

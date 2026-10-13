@@ -1152,7 +1152,12 @@ def campaign_view(c: dict) -> dict:
 # summary said 59 replies and nothing could say how many were people or yeses.
 # Bounces come from Clay's stats totals, not the funnel's per-step
 # bouncedCount: for one client's week 1 the funnel said 11 and the totals 18.
-SCORE_COLS = ("first_emails", "follow_ups", "replies", "human_replies", "tagged_positive", "bounces")
+SCORE_COLS = ("first_emails", "follow_ups", "replies", "human_replies", "positive", "bounces")
+# One source for "positive" everywhere in the report: each person's strongest
+# reply verdict in the graph (a person, then a rule or the model, then Clay's
+# category last). Until 2026-10-13 the by-company table summed Clay's category
+# counts while the week table read the graph, and one client's report said 4 in
+# one table and 10 in the next.
 
 
 def company_of(campaign: dict) -> str:
@@ -1173,13 +1178,12 @@ def score_row(c: dict) -> dict:
         first, total = int(a.get("sent") or 0), int(a.get("sent") or 0)
     return {"first_emails": first, "follow_ups": total - first, "replies": int(a.get("replies") or 0),
             "human_replies": int(a.get("repliesExcludingOoo") or 0),
-            "tagged_positive": sum(int(x.get("leads") or 0) for x in c.get("reply_categories") or []
-                                   if isinstance(x, dict) and str(x.get("sentiment") or "").lower() == "positive"),
-            "bounces": int(a.get("bounces") or 0)}
+            "positive": 0, "bounces": int(a.get("bounces") or 0)}
 
 
-def scorecard(campaigns: list[dict]) -> dict[str, dict]:
-    """Company -> the six columns, summed over its running campaigns."""
+def scorecard(campaigns: list[dict], positive_by_company: dict | None = None) -> dict[str, dict]:
+    """Company -> the six columns, summed over its running campaigns. The
+    positive column is positives()["by_company"], never Clay's category count."""
     out: dict[str, dict] = {}
     for c in campaigns:
         if c.get("status") != "active":
@@ -1188,7 +1192,72 @@ def scorecard(campaigns: list[dict]) -> dict[str, dict]:
         slot = out.setdefault(company_of(c), dict.fromkeys(SCORE_COLS, 0))
         for k in SCORE_COLS:
             slot[k] += row[k]
+    for company, n in (positive_by_company or {}).items():
+        out.setdefault(company, dict.fromkeys(SCORE_COLS, 0))["positive"] = n
     return dict(sorted(out.items()))
+
+
+def tag_only(by) -> bool:
+    """A verdict that is Clay's category and nothing stronger."""
+    return str(by or "").strip().lower() in ("clay", "") or str(by).lower().startswith("clay")
+
+
+def positives(q, db, cams: list[dict], start: date | None = None, end: date | None = None) -> dict:
+    """People whose strongest reply verdict is positive, each counted once, under
+    the company of their first positive reply, so the by-company column adds up
+    to the total. {n, read, tag_only, by_company}. With start and end, only
+    replies dated inside them."""
+    by_id = {x["id"]: x for x in cams}
+    reps = sorted(q.replies_in(db, list(by_id)), key=lambda r: r.get("time") or "")
+    v = q.verdicts(db, [r["id"] for r in reps])
+    first: dict[str, tuple[str, str]] = {}
+    for r in reps:
+        verdict = v.get(r["id"]) or {}
+        if not r.get("person") or verdict.get("class") != "positive":
+            continue
+        day = (r.get("time") or "")[:10]
+        if start and not (day and start.isoformat() <= day <= end.isoformat()):
+            continue
+        first.setdefault(r["person"], (company_of(by_id.get(r["campaign"]) or {}), verdict.get("by")))
+    by_company: dict[str, int] = {}
+    for company, _ in first.values():
+        by_company[company] = by_company.get(company, 0) + 1
+    tags = sum(1 for _, by in first.values() if tag_only(by))
+    return {"n": len(first), "read": len(first) - tags, "tag_only": tags, "by_company": by_company}
+
+
+# Older than this, Clay's numbers don't go to a client as this week's. The
+# 2026-10-13 report for the first client printed data 32 hours old as current, with 16
+# campaigns "started" that START-HERE said were still drafts.
+STALE_HOURS = 24
+
+
+def staleness(as_of) -> dict:
+    """{stale, hours}: hours since Clay's analytics were read, None when never."""
+    t = parse_time(as_of) if as_of else None
+    if t is None:
+        return {"stale": True, "hours": None}
+    hours = (utc_now() - t).total_seconds() / 3600
+    return {"stale": hours > STALE_HOURS, "hours": round(hours, 1)}
+
+
+def bookings_confirmed(db, client_id: str, start: date | None = None, end: date | None = None) -> int:
+    """Distinct leads with a confirmed booking in their mail credited to this
+    client (gtm_ingest's booking_signal), optionally by the message's date. Its
+    own row on the report, never added to calendar meetings: one call can be
+    in both."""
+    seen = set()
+    for r in db.execute("SELECT props FROM nodes WHERE type = 'Signal' "
+                        "AND json_extract(props, '$.kind') = 'booking_signal' "
+                        "AND json_extract(props, '$.client_id') = ?", (client_id,)):
+        p = json.loads(r["props"] or "{}")
+        if not p.get("credited") or p.get("status") != "confirmed" or not p.get("email"):
+            continue
+        day = str(p.get("message_time") or "")[:10]
+        if start and not (day and start.isoformat() <= day <= end.isoformat()):
+            continue
+        seen.add(p["email"])
+    return len(seen)
 
 
 # Where a reply's own words stop and the quoted thread starts, in a snippet
@@ -1329,16 +1398,20 @@ def client_state(q, db, c: dict) -> dict:
                                        -(parse_time(r.get("time")) or utc_now()).timestamp()))
     ws = detail["workspaces"]
     sync = detail["sync"]
+    pos = positives(q, db, cams)
     return {
         "name": c["name"], "id": c["id"], "workspaces": ws, "funnel": f, "campaigns": views,
         "sent": sent, "replies": replies, "bounces": bounces, "as_of": clay.get("as_of"),
-        "positive": (f.get("people_positive") or {}).get("n", 0),
+        "positive": pos["n"], "positive_read": pos["read"], "positive_tag_only": pos["tag_only"],
         "meetings": (f.get("meetings") or {}).get("n", 0),
+        "meetings_calendar": (f.get("meetings") or {}).get("calendar", 0),
+        "bookings_confirmed": bookings_confirmed(db, c["id"]),
+        "fresh": staleness(clay.get("as_of")),
         "unanswered": unanswered, "bounce_notices": len(bounced),
         "unsubscribe_asks": [r.get("email") for r in unsubscribes if r.get("email")], "credits": credit_view(ws), "sync": sync,
         "drop": history_alarm(c["name"], sent, replies, clay.get("as_of")),
         "rulings": rulings_for(c["name"]),
-        "scorecard": scorecard(cams),
+        "scorecard": scorecard(cams, pos["by_company"]),
         "asks": real_asks(every, lead_names(db, [x["id"] for x in cams])),
         "memory": {"overdue": gtm_memory(c["name"], "overdue"),
                    "by_table": gtm_memory(c["name"], "credits", "--by", "table")},
@@ -1791,7 +1864,8 @@ def week_numbers(client: str, start: date, end: date) -> dict:
         cams = q.campaigns_of(db, c["id"])
         ids = [x["id"] for x in cams]
         if not ids:
-            return {"sends": 0, "first": 0, "follow_ups": 0, "replies": 0, "positive": 0, "meetings": 0, "launched": []}
+            return {"sends": 0, "first": 0, "follow_ups": 0, "replies": 0, "positive": 0, "meetings": 0,
+                    "bookings": 0, "launched": []}
         marks = ",".join("?" * len(ids))
         sends = first = 0
         for r in db.execute(f"SELECT props FROM edges WHERE verb = 'ENROLLED' AND src IN ({marks})", ids):
@@ -1802,9 +1876,8 @@ def week_numbers(client: str, start: date, end: date) -> dict:
                     sends += 1
                     first += n == 0
         reps = q.replies_in(db, ids)
-        v = q.verdicts(db, [r["id"] for r in reps])
         inside = [r for r in reps if r.get("time") and start.isoformat() <= r["time"][:10] <= end.isoformat()]
-        positive = {r["person"] for r in inside if (v.get(r["id"]) or {}).get("class") == "positive"}
+        positive = positives(q, db, cams, start, end)["n"]
         meetings = 0
         for r in db.execute(f"SELECT DISTINCT n.props FROM edges e JOIN nodes n ON n.id = e.src "
                             f"WHERE e.verb = 'BOOKED_FROM' AND e.dst IN ({marks})", ids):
@@ -1815,13 +1888,14 @@ def week_numbers(client: str, start: date, end: date) -> dict:
                     and (x.get("created_at") or "")[:10] <= end.isoformat()]
         return {"sends": sends, "first": first, "follow_ups": sends - first,
                 "replies": len({r["person"] for r in inside if r["person"]}),
-                "positive": len(positive), "meetings": meetings, "launched": launched}
+                "positive": positive, "meetings": meetings,
+                "bookings": bookings_confirmed(db, c["id"], start, end), "launched": launched}
     finally:
         db.close()
 
 
 SCORE_HEADS = ("First emails", "Follow ups (step 2+)", "Replies", "Human replies (no out-of-office)",
-               "Tagged positive (tagged, read the text)", "Bounces")
+               "Positive (people, strongest read)", "Bounces")
 
 
 def scorecard_lines(card: dict) -> list[str]:
@@ -1837,8 +1911,8 @@ def scorecard_lines(card: dict) -> list[str]:
             total[k] += row[k]
         out.append(f"| {md(name)} | " + " | ".join(str(row[k]) for k in SCORE_COLS) + " |")
     out.append("| Total | " + " | ".join(str(total[k]) for k in SCORE_COLS) + " |")
-    out += ["", "Tagged positive is Clay's tag on a reply, not a read of it; the asks below come from the "
-            "reply text itself.", ""]
+    out += ["", "Positive counts each person once, by the strongest read of their reply: a person, then the "
+            "model, then Clay's tag. The asks below come from the reply text itself.", ""]
     return out
 
 
@@ -1876,8 +1950,10 @@ def update_text(s: dict) -> list[str]:
         out.append(f"{t['first_emails']} first emails plus {t['follow_ups']} follow ups went out across "
                    f"{len(card)} {'company' if len(card) == 1 else 'companies'}, and {t['human_replies']} replies "
                    f"came from people ({t['replies']} counting out-of-office notes).")
-        out.append(f"Clay tagged {t['tagged_positive']} of those replies positive; each one gets read before it "
-                   f"counts. {t['bounces']} bounced ({pct(t['bounces'], sent)}).")
+        tags = s.get("positive_tag_only") or 0
+        out.append(f"{t['positive']} people replied positive"
+                   + (f" ({tags} of them on Clay's tag alone, read before they count)" if tags else "")
+                   + f". {t['bounces']} bounced ({pct(t['bounces'], sent)}).")
     else:
         out.append(f"{s['sent']} emails went out (first emails and follow ups together: the per-step split has "
                    f"not synced yet), and {s['replies']} replies came back not counting out-of-office notes.")
@@ -1911,19 +1987,28 @@ def render_report(s: dict, this: dict, last: dict, start: date, end: date, actio
         d = this.get(k, 0) - last.get(k, 0)
         return f" ({'+' if d >= 0 else ''}{d} vs last week)"
 
-    lines = [f"# {md(s['name'])}: outbound week of {start:%b %d} to {end:%b %d, %Y}", "",
+    lines: list[str] = [f"# {md(s['name'])}: outbound week of {start:%b %d} to {end:%b %d, %Y}", "",
              f"Prepared {utc_now():%Y-%m-%d}. Campaign numbers from Clay analytics as of {s['as_of'] or 'never'}; "
-             "weekly counts from per-lead send dates, reply times and calendar events in the local graph.", "",
-             "## Summary", ""] + [md(x, 1000) for x in update_text(s)] + ["",
+             "weekly counts from per-lead send dates, reply times and calendar events in the local graph.", ""]
+    fresh = s.get("fresh") or staleness(s.get("as_of"))
+    if fresh["stale"]:
+        age_text = f"{fresh['hours']:.0f} hours old" if fresh["hours"] is not None else "never synced"
+        lines += [f"STALE: Clay's numbers here are {age_text} (over {STALE_HOURS}). Run `chewbacca gtm sync` "
+                  "before this goes to the client.", ""]
+    lines += ["## Summary", ""] + [md(x, 1000) for x in update_text(s)] + ["",
              "## This week", "",
              "| | This week | All time |", "|---|---:|---:|",
              f"| First emails | {this.get('first', 0)}{delta('first')} | {all_first} |",
              f"| Follow ups | {this.get('follow_ups', 0)}{delta('follow_ups')} | {all_follow} |",
              f"| People who replied (any reply, out-of-office included) | {this.get('replies', 0)}{delta('replies')} | "
              f"{(s['funnel'].get('people_replied') or {}).get('n', 0)} |",
-             f"| Replies tagged positive (tagged, read the text) | {this.get('positive', 0)}{delta('positive')} | "
+             f"| People who replied positive (strongest read) | {this.get('positive', 0)}{delta('positive')} | "
              f"{s['positive']} |",
-             f"| Meetings booked | {this.get('meetings', 0)}{delta('meetings')} | {s['meetings']} |", "",
+             f"| Meetings on a calendar | {this.get('meetings', 0)}{delta('meetings')} | "
+             f"{s.get('meetings_calendar', s['meetings'])} |",
+             f"| Bookings confirmed in reply mail | {this.get('bookings', 0)}{delta('bookings')} | "
+             f"{s.get('bookings_confirmed', 0)} |", "",
+             "The two meeting rows can be the same call, so they are never added together.", "",
              f"All-time reply rate {pct(s['replies'], s['sent'])} (benchmark: at least 1%, target 2-4%). "
              f"Bounce rate {pct(s['bounces'], s['sent'])} (keep under 2%).", ""]
     lines += scorecard_lines(s.get("scorecard") or {}) + asks_lines(s.get("asks") or [])
@@ -2089,6 +2174,19 @@ def cmd_report(a, t: Teacher) -> int:
     start = end - timedelta(days=6) if a.week else date(2000, 1, 1)
     this = week_numbers(s["name"], start, end)
     last = week_numbers(s["name"], start - timedelta(days=7), start - timedelta(days=1)) if a.week else {}
+    fresh = s.get("fresh") or staleness(s.get("as_of"))
+    if getattr(a, "json", False):
+        card = s.get("scorecard") or {}
+        print(json.dumps({
+            "client": s["name"], "as_of": s.get("as_of"), "stale": fresh["stale"], "hours_old": fresh["hours"],
+            "by_company": card, "totals": card_totals(card) if card else {},
+            "positive": {"n": s["positive"], "read": s.get("positive_read", 0),
+                         "tag_only": s.get("positive_tag_only", 0)},
+            "meetings": {"calendar": s.get("meetings_calendar", 0),
+                         "bookings_confirmed_in_mail": s.get("bookings_confirmed", 0),
+                         "note": "two rows, never added: one call can be in both"},
+            "this_week" if a.week else "in_range": this}, indent=1, default=str))
+        return 3 if fresh["stale"] and not a.stale_ok else 0
     actions = actions_for(s)
     report = render_report(s, this, last, start, end, actions,
                            read_json(client_dir(s["name"]) / "plan.json", None))
@@ -2099,7 +2197,8 @@ def cmd_report(a, t: Teacher) -> int:
     md_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     md_path.write_text(report)
     pdf = out_dir / f"{base}.pdf"
-    how = "" if a.no_pdf else to_pdf(report, f"{safe(s['name'], 120)} outbound report", pdf)
+    held = fresh["stale"] and not a.stale_ok
+    how = "" if a.no_pdf or held else to_pdf(report, f"{safe(s['name'], 120)} outbound report", pdf)
     print(safe(report, 100000))
     t.say("Update text for the client, ready to paste:")
     for line in update_text(s):
@@ -2108,7 +2207,13 @@ def cmd_report(a, t: Teacher) -> int:
         if x.get("held_by"):
             t.say(f"Left out of the report: {x['do']}.")
     t.say(f"Markdown: {md_path}")
-    t.say(f"PDF: {pdf} (made with {how})" if how else "PDF: not made (no Chrome and no cupsfilter)")
+    if held:
+        age_text = f"{fresh['hours']:.0f} hours old" if fresh["hours"] is not None else "never synced"
+        t.say(f"PDF: not made. Clay's numbers are {age_text}, over the {STALE_HOURS} hour limit for a client "
+              "report. Run `chewbacca gtm sync`, or pass --stale-ok to make it anyway.")
+        return 3
+    if not a.no_pdf:
+        t.say(f"PDF: {pdf} (made with {how})" if how else "PDF: not made (no Chrome and no cupsfilter)")
     return 0
 
 
@@ -2321,6 +2426,9 @@ def main(argv=None) -> int:
     p.add_argument("--week", action="store_true")
     p.add_argument("--out", help="PDF folder (default ~/Downloads)")
     p.add_argument("--no-pdf", action="store_true")
+    p.add_argument("--json", action="store_true", help="the numbers only: by company, positives, meetings, age")
+    p.add_argument("--stale-ok", action="store_true",
+                   help=f"make the PDF even when Clay's numbers are over {STALE_HOURS} hours old")
     p = sub.add_parser("rule", help="save a standing ruling from the client (always or never do X)")
     p.add_argument("--client", required=True)
     p.add_argument("rule", nargs="+", help="the ruling, in plain words")

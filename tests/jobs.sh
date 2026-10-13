@@ -15,7 +15,9 @@ status() { python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['statu
 check() { if [ "$2" = "$3" ]; then echo "  ok    $1"; else echo "  FAIL  $1: wanted $3 got $2"; fail=$((fail+1)); fi; }
 settle() { for _ in $(seq 1 50); do [ "$(status "$1")" = "$2" ] && return; sleep 0.1; done; }
 
-export JOBS_LOAD=1 JOBS_MEMFREE=60 JOBS_CORES=14
+FIX="$ROOT/tests/fixtures/machine"
+# The reference Mac (10P + 4E, 24 GB), someone at it, on power.
+export JOBS_LOAD=1 JOBS_MEMFREE=60 MACHINE_PROFILE="$FIX/reference-14core.json"
 id=$("$J" submit --title echo -- sh -c 'echo hello' | cut -d' ' -f1)
 settle "$id" done
 check "a light job runs and finishes" "$(status "$id")" done
@@ -163,4 +165,27 @@ for _ in $(seq 1 50); do grep -q end "$bw" 2>/dev/null && break; sleep 0.1; done
 check "a killed job still ends its run" "$(cut -f1 "$bw" | tr '\n' ' ')" "begin end "
 check "and its own TERM trap still runs" "$(cat "$repo/raw/creators/trapped" 2>/dev/null)" cleaned
 rm -rf "$repo"
+
+# The budget is a share of the Mac it runs on (bin/lib/machine_profile.py).
+# Before 2026-10-13 the queue used os.cpu_count(), so an 8-core laptop was
+# given the room of 8 whole cores and a Mac nobody had touched for hours
+# still held heavy work at the present-day limit.
+python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); json.dump(dict(r, idle_s=3600), open(sys.argv[2], "w")); json.dump(dict(r, idle_s=3600, on_battery=True), open(sys.argv[3], "w"))' \
+  "$FIX/reference-14core.json" "$JOBS_DIR/away.json" "$JOBS_DIR/away-battery.json"
+for d in "$JOBS_DIR"/*/; do p=$(python3 -c "import json,sys;j=json.load(open(sys.argv[1]+'job.json'));print(j.get('pid') or '' if j['status'] in ('running','paused') else '')" "$d" 2>/dev/null); [ -n "$p" ] && kill -CONT -"$p" 2>/dev/null; [ -n "$p" ] && kill -TERM -"$p" 2>/dev/null; done
+"$J" tick >/dev/null
+lap=$(MACHINE_PROFILE="$FIX/laptop-8core.json" JOBS_LOAD=12 "$J" submit --heavy -- sleep 30 | cut -d' ' -f1)
+check "8-core laptop: heavy waits at load 12" "$(status "$lap")" queued
+"$J" kill "$lap" >/dev/null
+aw=$(MACHINE_PROFILE="$JOBS_DIR/away.json" JOBS_LOAD=25 "$J" submit --heavy -- sleep 30 | cut -d' ' -f1)
+settle "$aw" running
+check "nobody at the Mac: heavy starts at load 25" "$(status "$aw")" running
+MACHINE_PROFILE="$JOBS_DIR/away.json" JOBS_LOAD=40 "$J" tick >/dev/null
+check "nobody at the Mac: keeps running at load 40" "$(status "$aw")" running
+JOBS_LOAD=40 "$J" tick >/dev/null
+check "someone comes back at load 40: it pauses" "$(status "$aw")" paused
+"$J" kill "$aw" >/dev/null
+ab=$(MACHINE_PROFILE="$JOBS_DIR/away-battery.json" JOBS_LOAD=15 "$J" submit --heavy -- sleep 30 | cut -d' ' -f1)
+check "on battery, away or not: heavy waits at load 15" "$(status "$ab")" queued
+"$J" kill "$ab" >/dev/null
 exit "$fail"

@@ -71,7 +71,8 @@ class Drafts(Scratch):
 
 class Jobs(Scratch):
     def jobs(self, *args, **env):
-        e = dict(self.env, JOBS_DIR=str(self.dir / "jobs"), JOBS_LOAD="1", JOBS_MEMFREE="60", JOBS_CORES="14")
+        e = dict(self.env, JOBS_DIR=str(self.dir / "jobs"), JOBS_LOAD="1", JOBS_MEMFREE="60",
+                 MACHINE_PROFILE=str(ROOT / "tests" / "fixtures" / "machine" / "reference-14core.json"))
         e.update(env)
         return subprocess.run([sys.executable, str(ROOT / "bin" / "chewbacca-jobs")] + list(args),
                               env=e, capture_output=True, text=True, timeout=120)
@@ -134,17 +135,19 @@ class Jobs(Scratch):
         self.assertEqual(self.status(second), "running")
 
 
-    def test_a_kill_does_not_wait_behind_a_slow_memory_read(self):
-        # memory_pressure can take 10 s on a swamped Mac. The tick reads it
-        # before taking the lock, so a kill lands at once (review, 10/12).
+    def test_a_kill_does_not_wait_behind_a_slow_machine_read(self):
+        # The profile's ioreg read can take seconds on a swamped Mac. The tick
+        # reads it before taking the lock, so a kill lands at once (review,
+        # 10/12). The live read, not MACHINE_PROFILE, so the slow ioreg runs.
         job = self.jobs("submit", "--heavy", "--", "sleep", "30", JOBS_LOAD="40").stdout.split()[0]
         fake = self.dir / "fakebin"
         fake.mkdir()
-        (fake / "memory_pressure").write_text("#!/bin/sh\nsleep 3\necho 'free percentage: 60%'\n")
-        (fake / "memory_pressure").chmod(0o755)
-        env = dict(self.env, JOBS_DIR=str(self.dir / "jobs"), JOBS_LOAD="1", JOBS_CORES="14",
+        (fake / "ioreg").write_text("#!/bin/sh\nsleep 2.5\necho '\"HIDIdleTime\" = 0'\n")
+        (fake / "ioreg").chmod(0o755)
+        env = dict(self.env, JOBS_DIR=str(self.dir / "jobs"), JOBS_LOAD="1",
                    PATH="%s:%s" % (fake, os.environ["PATH"]))
         env.pop("JOBS_MEMFREE", None)
+        env.pop("MACHINE_PROFILE", None)
         slow = subprocess.Popen([sys.executable, str(ROOT / "bin" / "chewbacca-jobs"), "tick"], env=env,
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         time.sleep(1)

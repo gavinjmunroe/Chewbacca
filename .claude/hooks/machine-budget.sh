@@ -27,38 +27,43 @@ type hook_init >/dev/null 2>&1 && hook_init machine-budget.sh 5
 # Priority is handled by bin/agent-nice, run from tab-rescue.sh, which keeps every
 # agent process and its children at nice 10 so Caleb's apps win the CPU.
 #
-# Thresholds, measured on this Mac (14 cores, 24 GB). Usable at load 14 to 17
-# with 48% free while a dozen tabs idled (chewbacca-jobs' notes); "slow af" at
-# 19 with 15% free; unusable at 80+ with 74 MB free. So warm starts at load =
-# cores or under 20% free, hot at twice cores or under 10% free.
+# The limits are not here. bin/lib/machine_profile.py owns every load and
+# memory limit in the kit, as a share of the Mac it runs on: weighted cores,
+# percent of RAM free, cut on battery, raised once nobody has touched the Mac
+# for 10 minutes. On this hook's own reference Mac (10P + 4E, 24 GB), present
+# and on power, it still gives warm at load 14 and hot at 28. Before 10/13 the
+# hook told an idle Mac at 2 a.m. "Caleb is using it" at load 28.
 #
 # ~/.chewbacca/load-authorized (touched in the last 10 minutes, the same file
-# load-guard reads) lets a fan-out through when Caleb said it's worth it.
+# load-guard reads) lets a fan-out through when the person said it's worth it.
 
 set -uo pipefail
 type hook_unbuffer >/dev/null 2>&1 && hook_unbuffer  # stderr goes straight to the host from here on
+HERE="$(cd "$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")" && pwd)"
+MB_LIB=""
+for cand in "$HERE/../../bin/lib" "$HOME/.chewbacca/kit/current/bin/lib"; do
+  [ -f "$cand/machine_profile.py" ] && { MB_LIB="$cand"; break; }
+done
+[ -n "$MB_LIB" ] || exit 0
+export MB_LIB
 exec /usr/bin/env python3 -I -c '
-import json, os, re, subprocess, sys, time
+import json, os, sys, time
+sys.path.insert(0, os.environ["MB_LIB"])
+import machine_profile
 
 try:
     payload = json.load(sys.stdin)
 except ValueError:
     sys.exit(0)
 
-def num(env, fallback):
+def env(name):
     try:
-        return float(os.environ[env])
+        return float(os.environ[name])
     except (KeyError, ValueError):
-        return fallback()
+        return None
 
-def mem_free():
-    out = subprocess.run(["sysctl", "-n", "kern.memorystatus_level"],
-                         capture_output=True, text=True, timeout=3).stdout.strip()
-    return float(out) if out.isdigit() else 100.0
-
-cores = num("MB_CORES", lambda: float(os.cpu_count() or 8))
-load = num("MB_LOAD", lambda: os.getloadavg()[0])
-free = num("MB_MEMFREE", mem_free)
+prof = machine_profile.read(load=env("MB_LOAD"), mem_free=env("MB_MEMFREE"))
+budget = machine_profile.budget(prof)
 
 # A file naming a level forces it, so a live session can prove the rewrite
 # lands without waiting for the Mac to get busy.
@@ -66,13 +71,8 @@ try:
     forced = open(os.path.expanduser("~/.chewbacca/machine-budget-force")).read().strip()
 except OSError:
     forced = ""
-if forced in ("warm", "hot"):
-    level = forced
-elif load >= 2 * cores or free < 10:
-    level = "hot"
-elif load >= cores or free < 20:
-    level = "warm"
-else:
+level = forced if forced in ("warm", "hot") else budget["level"]
+if level == "calm":
     sys.exit(0)
 
 auth = os.path.expanduser("~/.chewbacca/load-authorized")
@@ -81,7 +81,9 @@ try:
 except OSError:
     authorized = False
 
-state = "load %.0f on %d cores, %d%% memory free" % (load, cores, free)
+state = "load %.0f on %d+%d cores, %d%% memory free" % (prof["load"], prof["p_cores"], prof["e_cores"], prof["mem_free"])
+away = budget["mode"] == "away"
+who = ("nobody has touched it for %d min" % (prof["idle_s"] // 60)) if away else "someone is using it"
 event = payload.get("hook_event_name", "")
 tool = payload.get("tool_name", "")
 
@@ -94,10 +96,10 @@ def deny(reason):
           "permissionDecision": "deny", "permissionDecisionReason": reason}})
 
 if event == "UserPromptSubmit":
-    msg = ("The Mac is %s (%s). Caleb is using it. Do this turn in this context: "
+    msg = ("The Mac is %s (%s; %s). Do this turn in this context: "
            "no Workflow fan-outs%s, builds and test runs one at a time, and anything "
-           "long goes through `chewbacca jobs submit`. If he says it is slow, say "
-           "what is using it before digging." % (level.upper(), state,
+           "long goes through `chewbacca jobs submit`. If they say it is slow, say "
+           "what is using it before digging." % (level.upper(), state, who,
            ", no subagents" if level == "hot" else ""))
     emit({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": msg}})
 
@@ -106,10 +108,10 @@ if event != "PreToolUse" or authorized:
 
 if tool == "Workflow" or (tool in ("Agent", "Task") and level == "hot"):
     what = "a workflow fan-out" if tool == "Workflow" else "another subagent"
-    deny("machine-budget: the Mac is %s (%s) and Caleb is using it, so %s would make it "
+    deny("machine-budget: the Mac is %s (%s; %s), so %s would make it "
          "worse. Do the work in this context, or queue it with `chewbacca jobs submit`. "
-         "If he says it is worth the machine: touch ~/.chewbacca/load-authorized "
-         "(10 minutes)." % (level, state, what))
+         "If they say it is worth the machine: touch ~/.chewbacca/load-authorized "
+         "(10 minutes)." % (level, state, who, what))
 
 sys.exit(0)
 '

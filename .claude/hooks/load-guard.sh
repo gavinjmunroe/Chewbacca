@@ -146,9 +146,29 @@ fi
 # two cases that refuse). On a quiet machine this python costs 0.1 s of CPU
 # per call for nothing (0.107 to 0.216 s measured 2026-10-12, load 8).
 parse_running=""
-busy="${LOAD_GUARD_LOAD:-$(uptime | grep -oE 'load averages?: *[0-9.]+' | grep -oE '[0-9.]+$')}"
-busy="${busy%%.*}"
-if [ -x "$bp" ] && { [ "${busy:-0}" -ge 8 ] 2>/dev/null || printf '%s' "$raw_cmd" | grep -qE 'xargs|parallel|&'; } &&
+# The load, and the load where heavy work run straight from a tab is refused,
+# both from bin/lib/machine_profile.py: a share of this Mac's weighted cores,
+# cut on battery, raised when nobody has touched it for 10 minutes. On the
+# reference Mac (10P + 4E), present and on power, the limit is 8, the fixed
+# number this hook carried from 2026-09-22 to 2026-10-13. An 8-core laptop
+# gets 4; nobody at the keyboard gets 18 here. No profile, no load refusal:
+# the width refusal below still stands.
+LG_HERE="$(cd "$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")" && pwd)"
+busy_limit=""; live_load=""
+for cand in "$LG_HERE/../../bin/lib" "$HOME/.chewbacca/kit/current/bin/lib"; do
+  if [ -f "$cand/machine_profile.py" ]; then
+    read -r busy_limit live_load <<EOF
+$(/usr/bin/python3 -I "$cand/machine_profile.py" --get busy_load load 2>/dev/null)
+EOF
+    break
+  fi
+done
+load="${LOAD_GUARD_LOAD:-${live_load:-0}}"
+over_limit=0
+if [ -n "$busy_limit" ] && awk -v l="$load" -v m="$busy_limit" 'BEGIN { exit !(l + 0 >= m + 0) }'; then
+  over_limit=1
+fi
+if [ -x "$bp" ] && { [ "$over_limit" = 1 ] || printf '%s' "$raw_cmd" | grep -qE 'xargs|parallel|&'; } &&
    facts="$(printf '%s' "$raw_cmd" | "$bp" 2>/dev/null)" && [ -n "$facts" ]; then
   parse_running=$(LG_FACTS="$facts" python3 -I - <<'PY'
 import json, os, re
@@ -237,24 +257,15 @@ if printf '%s' "$cmd" | grep -qE '(for |while ).*(do|;).*&[[:space:]]*(done|$)';
   width=99
 fi
 
-# Current machine state. One decimal figure, the 1-minute load average.
-#
-# LOAD_GUARD_LOAD overrides it, for tests only. Without a seam here the test
-# for "a single heavy job passes" depends on what the machine happens to be
-# doing, and it flipped from pass to fail between two runs an hour apart with
-# no code change. A test that reports the weather is not a test.
-load="${LOAD_GUARD_LOAD:-}"
-if [ -z "$load" ]; then
-  load=$(uptime | grep -oE 'load averages?: *[0-9.]+' | grep -oE '[0-9.]+$')
-fi
-[ -n "$load" ] || load=0
-load_int=${load%%.*}
-[ -n "$load_int" ] || load_int=0
-
+# $load and $over_limit were read above. LOAD_GUARD_LOAD overrides the load,
+# for tests only: without a seam the test for "a single heavy job passes"
+# depended on what the machine happened to be doing, and flipped from pass to
+# fail between two runs an hour apart with no code change. MACHINE_PROFILE
+# fakes the rest of the Mac the same way.
 block=""
 if [ "$width" -ge 3 ]; then
   block="width"
-elif [ "$load_int" -ge 8 ]; then
+elif [ "$over_limit" = 1 ]; then
   block="load"
 fi
 [ -n "$block" ] || exit 0
@@ -305,7 +316,7 @@ cores=$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 8)
       echo "  Detected: parallel width $width on $cores cores, running local inference or transcode."
     fi
   else
-    echo "  Detected: heavy local work while the 1-minute load average is already $load."
+    echo "  Detected: heavy local work while the 1-minute load average is already $load (this Mac's limit right now: $busy_limit)."
   fi
   echo
   echo "On 2026-09-22 six parallel Whisper jobs took his load average to 50 and he"

@@ -1349,11 +1349,15 @@ if group "installer"; then
     [ "$sigs" -gt 0 ] || { echo "process grep drifted"; exit 1; }
     [ "$guards" -ge "$sigs" ] || { echo "$sigs processes, $guards guards"; exit 1; }' _ "$ROOT"
 
-  check  "the portable profile installs skills" bash -c '
+  check  "the portable profile installs skills and the machine-budget gate" bash -c '
     sandbox="$(mktemp -d)"
     HOME="$sandbox" bash "$1/setup.sh" --profile portable --name CI >/dev/null 2>&1
     n=$(ls "$sandbox/.claude/skills" 2>/dev/null | wc -l)
-    [ "$n" -gt 20 ] || { echo "only $n skills installed"; exit 1; }' _ "$ROOT"
+    [ "$n" -gt 20 ] || { echo "only $n skills installed"; exit 1; }
+    # The same install, read back: machine-budget refuses fan-outs only if its
+    # PreToolUse half lands. A later reset wiped it until 2026-10-13.
+    python3 -c "import json,sys; s=json.load(open(sys.argv[1])); sys.exit(0 if any(\"machine-budget\" in h.get(\"command\",\"\") for e in s[\"hooks\"].get(\"PreToolUse\",[]) for h in e.get(\"hooks\",[])) else 1)" \
+      "$sandbox/.claude/settings.json" || { echo "machine-budget is not a PreToolUse hook after install"; exit 1; }' _ "$ROOT"
 fi
 
 # ── Windows installer ─────────────────────────────────────────────────────────
@@ -1449,6 +1453,7 @@ if group "hooks"; then
   check "thinking-dash-guard queues em dashes in this turn's thinking and never refuses" bash "$ROOT/tests/thinking_dash_guard.sh"
   check "tab-rescue flags tabs dead on a usage limit once, sim-reap stops orphaned simulators" bash "$ROOT/tests/tab_rescue.sh"
   check "machine-budget refuses fan-outs on a busy Mac, agent-nice keeps agents at nice 10" bash "$ROOT/tests/machine_budget.sh"
+  check "every load and memory limit is a share of the Mac it runs on, from one profile" bash "$ROOT/tests/machine_profile.sh"
   check  "lib.sh parses" bash -n "$ROOT/.claude/hooks/lib.sh"
   check "hook modules import on the stock macOS Python" bash "$ROOT/tests/stock_python_imports.sh"
   check "welcome: six tappable questions personalize the brain" bash "$ROOT/tests/welcome.sh"

@@ -1822,13 +1822,12 @@ _register("UserPromptSubmit", hooks_dir + "/disk-guard.sh", timeout=5)
 # shuts down simulators booted with nothing using them.
 _register("UserPromptSubmit", hooks_dir + "/tab-rescue.sh", timeout=5)
 # Nine tabs, their subagents and a forgotten simulator took the Mac to load 37
-# with 15% memory free on 2026-10-10 ("My slow af rn"). Over load = cores it
-# refuses workflows, over twice cores subagents too. bin/agent-nice (run by
-# tab-rescue.sh) keeps agents at nice 10 so his apps win the CPU.
+# with 15% memory free on 2026-10-10 ("My slow af rn"). When the Mac is warm it
+# refuses workflows, when hot subagents too, with limits that are a share of
+# the Mac (bin/lib/machine_profile.py). bin/agent-nice (run by tab-rescue.sh)
+# keeps agents at nice 10 so the person's apps win the CPU. Its PreToolUse
+# half is registered below the PreToolUse reset, which wiped it until 10/13.
 _register("UserPromptSubmit", hooks_dir + "/machine-budget.sh", timeout=5)
-_register("PreToolUse", hooks_dir + "/machine-budget.sh", timeout=5,
-          matcher="Agent|Task|Workflow",
-          status="Checking the Mac has room...")
 _register("UserPromptSubmit", hooks_dir + "/client-rulings.sh", timeout=5)
 # Caleb's "do it yourself" in chat approves Clay writes for 12 hours, in place
 # of typing at a terminal agent shells don't have (2026-10-10).
@@ -1851,6 +1850,12 @@ h["PreToolUse"] = [{"matcher": "Write", "hooks": [{
     "command": hooks_dir + "/env-guard.sh",
     "statusMessage": "Checking file safety...",
 }]}]
+
+# Every _register("PreToolUse", ...) goes below the reset above, or the reset
+# throws it away (tests/hooks_registered.sh refuses one that doesn't).
+_register("PreToolUse", hooks_dir + "/machine-budget.sh", timeout=5,
+          matcher="Agent|Task|Workflow",
+          status="Checking the Mac has room...")
 
 # Layer 6. A browser hands you an addressable model of its own contents, and
 # reading it as an image throws that away. On 2026-09-21 a form the user had

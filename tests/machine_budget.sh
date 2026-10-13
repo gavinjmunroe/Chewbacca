@@ -4,7 +4,10 @@
 set -uo pipefail
 H="$(cd "$(dirname "$0")/.." && pwd)/.claude/hooks/machine-budget.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-export HOME="$T" MB_CORES=14 MB_MEMFREE=50
+FIX="$(cd "$(dirname "$0")" && pwd)/fixtures/machine"
+# The reference Mac (10P + 4E, 24 GB), someone at it, on power. Its limits
+# come from bin/lib/machine_profile.py, never from this file or the hook.
+export HOME="$T" MACHINE_PROFILE="$FIX/reference-14core.json" MB_MEMFREE=50
 fail=0
 ok() { if eval "$2"; then echo "  ok    $1"; else echo "  FAIL  $1"; fail=$((fail+1)); fi; }
 run() { printf '%s' "$2" | MB_LOAD="$1" bash "$H"; }
@@ -19,7 +22,7 @@ ok "calm: workflows allowed" '[ -z "$(run 5 "$FLOW")" ]'
 ok "warm: subagents still allowed" '[ -z "$(run 16 "$AGENT")" ]'
 ok "warm: workflows refused" 'run 16 "$FLOW" | grep -q "\"deny\""'
 ok "warm: deny is one JSON document" 'run 16 "$FLOW" | python3 -c "import json,sys; json.load(sys.stdin)"'
-ok "warm: the prompt hears about it" 'run 16 "$PROMPT" | grep -q "WARM (load 16 on 14 cores"'
+ok "warm: the prompt hears about it" 'run 16 "$PROMPT" | grep -q "WARM (load 16 on 10+4 cores"'
 ok "warm: low memory alone counts" 'printf %s "$FLOW" | MB_LOAD=3 MB_MEMFREE=15 bash "$H" | grep -q "\"deny\""'
 ok "hot: subagents refused" 'run 30 "$AGENT" | grep -q "\"deny\""'
 ok "hot: critical memory counts" 'printf %s "$AGENT" | MB_LOAD=3 MB_MEMFREE=8 bash "$H" | grep -q "\"deny\""'
@@ -31,6 +34,23 @@ rm "$T/.chewbacca/load-authorized"
 echo warm > "$T/.chewbacca/machine-budget-force"
 ok "force file sets the level" 'run 1 "$FLOW" | grep -q "\"deny\""'
 rm "$T/.chewbacca/machine-budget-force"
+
+# Machine-shaped: the same load means different things on different Macs.
+python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); json.dump(dict(r, idle_s=3600), open(sys.argv[2], "w")); json.dump(dict(r, on_battery=True), open(sys.argv[3], "w"))' \
+  "$FIX/reference-14core.json" "$T/away.json" "$T/battery.json"
+lap() { printf '%s' "$2" | MACHINE_PROFILE="$FIX/laptop-8core.json" MB_LOAD="$1" bash "$H"; }
+away() { printf '%s' "$2" | MACHINE_PROFILE="$T/away.json" MB_LOAD="$1" bash "$H"; }
+batt() { printf '%s' "$2" | MACHINE_PROFILE="$T/battery.json" MB_LOAD="$1" bash "$H"; }
+ok "8-core laptop: warm at load 8" 'lap 8 "$FLOW" | grep -q "\"deny\""'
+ok "8-core laptop: hot at load 15" 'lap 15 "$AGENT" | grep -q "\"deny\""'
+ok "8-core laptop: calm at load 5" '[ -z "$(lap 5 "$FLOW")" ]'
+ok "nobody at the Mac: load 16 is calm" '[ -z "$(away 16 "$FLOW")" ]'
+ok "nobody at the Mac: subagents still allowed at 40" '[ -z "$(away 40 "$AGENT")" ]'
+ok "nobody at the Mac: hot at 60" 'away 60 "$AGENT" | grep -q "\"deny\""'
+ok "nobody at the Mac: the prompt says so, not that someone is using it" \
+   'away 40 "$PROMPT" | grep -q "nobody has touched it for 60 min" && ! away 40 "$PROMPT" | grep -q "someone is using it"'
+ok "on battery: warm at load 10" 'batt 10 "$FLOW" | grep -q "\"deny\""'
+ok "no person's name in what it says" '! run 30 "$PROMPT" | grep -q Caleb && ! run 30 "$AGENT" | grep -q Caleb'
 
 out=$(printf 'not json' | MB_LOAD=30 bash "$H"); rc=$?
 ok "bad input is ignored" '[ "$rc" = 0 ] && [ -z "$out" ]'

@@ -103,8 +103,9 @@ going. `scope-guard` refuses a reply that cuts without one (2026-10-09: 36 of
 When he says pause, stop, save or consolidate, the next thing he sees is a
 reply saying where the work stands: what landed, what's mid-flight, what's
 queued. Landing and saving run in the background after that reply, never
-before it. Skip the full suite when `uptime` load is over 50; the focused test
-plus pre-push is enough to land. On 2026-10-10 a full suite at load 109 and a
+before it. Skip the full suite when the load is over this Mac's suite limit
+(`chewbacca machine --get suite_load`: 50 on a 14-core Mac with someone at
+it, 25 on an 8-core laptop); the focused test plus pre-push is enough to land. On 2026-10-10 a full suite at load 109 and a
 land queued behind other tabs left 8 minutes of silence after "Pause save learn
 remember", and he wrote "What is taking so long?" then "Bro???".
 

@@ -156,7 +156,7 @@ v1 said "5% positive over 500 sends beats 11x". It doesn't.
 - **Reply rate.** At p = 5% and n = 500, the Wilson 95% interval is about 3.4% to 7.3%. That overlaps the independent 11x range of 3.8% to 5.1%, so 500 sends can't show a win. Separating 5% from 3.8% (one-sided, 80% power) takes about 1,720 sends (at 5% over 1,700 the lower bound is 4.06%). Zeutara's standing ruling is max volume, so the volume exists. The test is at least 1,700 sends, the positive rate's lower CI bound above 3.8%, hard bounces under 2%, and every send traced to a named signal.
 - **Needs-you precision.** Today's 41 of 55 has a 95% interval of 62% to 84%, 22 points wide. Reaching the 90% target takes a fresh sealed set of at least 150 labelled rows, which gives about ±5 points. Build that set only after the rule is frozen.
 - **Done-claim gate.** 500 hand-labelled real turns, with catch rate and false-positive rate both reported with CIs. groundtruth's bar is 0 false positives on its own 1,272 turns.
-- **Latency.** Report medians over at least 30 runs on the same Mac, with load under 20 (`uptime`), never one stopwatch run. Load 95 made the HUD look broken on 10/10.
+- **Latency.** Report medians over at least 30 runs on the same Mac, with the Mac calm (`chewbacca machine --get level` says calm), never one stopwatch run. Load 95 made the HUD look broken on 10/10.
 - **Comparing two versions of our own.** Use a paired test on the same items (McNemar), never two separate runs side by side.
 
 ---

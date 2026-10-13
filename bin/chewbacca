@@ -225,6 +225,12 @@ launch)
   shift
   exec python3 "$ROOT/bin/chewbacca-launch" "$@"
   ;;
+machine)
+  # What this Mac can take right now: cores by kind, memory, power, whether
+  # anyone is at it, and every load limit the kit uses. See bin/lib/machine_profile.py.
+  shift
+  exec python3 -I "$ROOT/bin/lib/machine_profile.py" "$@"
+  ;;
 jobs)
   # The machine queue. See bin/chewbacca-jobs.
   shift

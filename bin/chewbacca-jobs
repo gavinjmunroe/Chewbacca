@@ -24,18 +24,23 @@ running after their tabs died. Guards that refuse heavy commands and a reaper
 that kills orphans clean up after that design. This replaces it: tabs submit
 work here, and this runner decides when the Mac has room.
 
-THE BUDGET.
+THE BUDGET. Every number comes from bin/lib/machine_profile.py, a share of
+the Mac this runs on (weighted cores, percent of RAM free, cut on battery,
+raised once nobody has touched the Mac for 10 minutes). `chewbacca machine`
+prints this Mac's. The figures below are the reference Mac's (10P + 4E, 24
+GB), present and on power, which is where they were measured.
   heavy  local inference, transcription, renders: one at a time, admitted only
-         while the 1-minute load is under 130% of cores and at least 20% of
-         memory is free, run at nice 19. A running heavy job is PAUSED
-         (SIGSTOP) when load passes 250% of cores or free memory drops under
-         10%, and resumed when there's room again. Measured on this Mac
-         (14 cores): the 2026-10-10 lag was load 80+ with about 74 MB free,
-         and 177 while every tab restarted; with a dozen idle agent tabs the
-         Mac was usable at load 14 to 17 with 48% free. The first thresholds
-         (60% and 90%, so 8.4 and 12.6) sat under that idle floor, so nothing
-         heavy was ever admitted: a 2-minute Swift build waited 50 minutes
-         behind a transcription job paused at load 14.7.
+         while the 1-minute load is under 18.2 and at least 20% of memory is
+         free, run at nice 19. A running heavy job is PAUSED (SIGSTOP) when
+         load passes 35 or free memory drops under 10%, and resumed when
+         there's room again. Measured on that Mac: the 2026-10-10 lag was
+         load 80+ with about 74 MB free, and 177 while every tab restarted;
+         with a dozen idle agent tabs it was usable at load 14 to 17 with 48%
+         free. The first thresholds (8.4 and 12.6) sat under that idle
+         floor, so nothing heavy was ever admitted: a 2-minute Swift build
+         waited 50 minutes behind a transcription job paused at load 14.7.
+         Away, it admits to load 30 and pauses at 54 there, so overnight work
+         uses the machine nobody is on.
   build  compiles and test runs that finish in minutes: one at a time, same
          room check as heavy, nice 10, and a running heavy job is held
          paused until the build ends, so a build never waits hours behind a
@@ -67,10 +72,10 @@ import time
 import uuid
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent / "lib"))
+import machine_profile  # noqa: E402
 import statedb  # noqa: E402
 
 DIR = pathlib.Path(os.environ.get("JOBS_DIR", pathlib.Path.home() / ".chewbacca" / "jobs"))
-CORES = int(os.environ.get("JOBS_CORES") or os.cpu_count() or 8)
 MAX_NET = 4
 # A heavy job's turn before a waiting heavy job that has run less goes next.
 # Guessed, never measured: long enough that a 10-minute encode finishes in one
@@ -82,29 +87,27 @@ NICE = {"heavy": 19, "build": 10, "net": 10, "light": 0}
 
 # ------------------------------------------------------------ machine state
 
-def load1():
-    if os.environ.get("JOBS_LOAD"):
-        return float(os.environ["JOBS_LOAD"])
-    return os.getloadavg()[0]
-
-
-def mem_free_pct():
-    if os.environ.get("JOBS_MEMFREE"):
-        return float(os.environ["JOBS_MEMFREE"])
+def _env(name):
     try:
-        out = subprocess.run(["memory_pressure"], capture_output=True, text=True, timeout=10).stdout
-        m = re.search(r"free percentage:\s*(\d+)%", out)
-        return float(m.group(1)) if m else 50.0
-    except (OSError, subprocess.TimeoutExpired):
-        return 50.0
+        return float(os.environ[name])
+    except (KeyError, ValueError):
+        return None
+
+
+def machine(load=None, mem=None):
+    """The profile and its budget. JOBS_LOAD and JOBS_MEMFREE are the tests'
+    seam for the live figures; MACHINE_PROFILE fakes the whole Mac."""
+    prof = machine_profile.read(load=_env("JOBS_LOAD") if load is None else load,
+                                mem_free=_env("JOBS_MEMFREE") if mem is None else mem)
+    return prof, machine_profile.budget(prof)
 
 
 def room_for_heavy(load=None, mem=None):
-    return (load1() if load is None else load) < 1.3 * CORES and (mem_free_pct() if mem is None else mem) >= 20
+    return machine(load, mem)[1]["room"]
 
 
 def must_pause(load=None, mem=None):
-    return (load1() if load is None else load) > 2.5 * CORES or (mem_free_pct() if mem is None else mem) < 10
+    return machine(load, mem)[1]["pause"]
 
 
 # ------------------------------------------------------------------ store
@@ -334,17 +337,18 @@ def tick(quiet=False):
     # keeps a kill or a finishing job from landing between the tick's read
     # and its writes.
     #
-    # The machine is read before the transaction: memory_pressure can take up
-    # to its 10 s timeout, and a finishing job or a kill waiting on the lock
-    # behind three of those could run out its whole wait (review, 10/12).
-    load, mem = load1(), mem_free_pct()
-    machine = {"room": room_for_heavy(load, mem), "pause": must_pause(load, mem)}
+    # The machine is read before the transaction: the profile's ioreg and
+    # pmset reads can each take up to their 3 s timeout, and a finishing job
+    # or a kill waiting on the lock behind three of those could run out its
+    # whole wait (review, 10/12).
+    b = machine()[1]
+    machine_now = {"room": b["room"], "pause": b["pause"]}
     started = []
     with open(DIR / ".tick.lock", "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         try:
             with write():
-                _tick(machine, started)
+                _tick(machine_now, started)
         except BaseException:
             # The rows went back to queued, so the supervisors this tick
             # started must not live on, or the next tick runs them again.
@@ -472,7 +476,8 @@ def list_jobs(argv):
         rows = [j for j in rows if j["status"] in ("queued", "running", "paused") or (j.get("ended") or 0) > cutoff]
     for j in rows:
         print(f"{j['id']}  {j['status']:<8} {j['class']:<5}  {j['title']}")
-    print(f"{len(rows)} job(s). load {load1():.1f} on {CORES} cores, {mem_free_pct():.0f}% memory free")
+    prof, b = machine()
+    print(f"{len(rows)} job(s). {machine_profile.describe(prof, b)}")
 
 
 def log(argv):

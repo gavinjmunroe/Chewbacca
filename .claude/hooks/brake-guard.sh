@@ -32,6 +32,10 @@ type hook_init >/dev/null 2>&1 && hook_init brake-guard.sh 5
 #      --git-dir, a checkout or switch in the command), a computed or
 #      $variable branch, a glob, a bare :, --all, --mirror or --branches
 #      counts as main. --force-if-includes alone is not a force.
+# A backstop for accidents, not a sandbox: a determined spelling can still
+# get past a text reader (team lesson feedback_denylist_gate_is_a_backstop:
+# a word-list gate never converges). Four reviews on 10/13 closed every
+# spelling they found; the next one goes in tests/test_brake_guard.py.
 command -v python3 >/dev/null 2>&1 || exit 0
 INPUT=$(cat)
 REASON=$(printf '%s' "$INPUT" | python3 -I -c '
@@ -46,6 +50,10 @@ cmd = str((data.get("tool_input") or {}).get("command") or "")
 start_dir = str(data.get("cwd") or os.getcwd())
 home = os.path.normpath(os.path.expanduser("~"))
 SUBST = "__subst__"
+# A cd inside ( ), a pipeline or a substitution runs in a subshell and moves
+# nothing after it; once flattened that cannot be told apart, so any cd in a
+# command shaped like that leaves the folder unknown (fail closed).
+CD_UNSURE = bool(re.search(r"[()|`]|\$\(", cmd))
 # The flag groups the gate words in the header admit. A group outside them is
 # skipped by hookd before this runs, so judging it here would mean nothing.
 RF_STARTS = ("-rf", "-fr", "-vrf", "-rvf", "-fvr", "-vfr")
@@ -55,7 +63,7 @@ WRAP_VALUE_OPTS = {
     "sudo": {"-u", "-g", "-C", "-h", "-p", "-r", "-t", "-U", "-D"},
     "nice": {"-n"},
     "timeout": {"-s", "-k"},
-    "env": {"-u", "-C", "-S"},
+    "env": {"-u", "-C"},
     "exec": {"-a"},
     "xargs": {"-n", "-I", "-L", "-P", "-d", "-s", "-E", "-a"},
     "command": set(), "builtin": set(), "nohup": set(), "time": set(), "nocorrect": set(), "noglob": set(),
@@ -160,6 +168,13 @@ def words(seg):
         w = w[1:]
         while w and (w[0].startswith("-") or re.match(r"^[A-Za-z_]\w*=", w[0])):
             opt = w[0]
+            if head == "env" and opt in ("-S", "--split-string") and len(w) > 1:
+                # env -S runs its value split into words: the command itself.
+                try:
+                    w = shlex.split(w[1], posix=True) + w[2:]
+                except ValueError:
+                    w = w[1].split() + w[2:]
+                break
             w = w[2:] if opt in takes else w[1:]
         if head == "timeout" and w:
             w = w[1:]
@@ -179,8 +194,11 @@ def resolve(a, here):
     a = expand(a)
     if SUBST in a or "$" in a or "`" in a:
         return None
-    if a in ("*", ".*") or a.endswith("/*"):
-        a = a[:-1] if a.endswith("/*") else "."
+    # A last part made only of wildcards (*, .*, .??*, [!.]*) empties the
+    # folder above it; one with a name in it (*.log) does not.
+    parent, _, last = a.rpartition("/")
+    if last and re.fullmatch(r"[*?.\[\]!]+", last) and any(ch in last for ch in "*?["):
+        a = (parent or "/") if "/" in a else "."
     if os.path.isabs(a):
         return os.path.normpath(a)
     if here is None:
@@ -250,7 +268,7 @@ def force_main(w, here):
     rest = w[i + 1:]
     opts = [a for a in rest if a.startswith("-")]
     args = [a for a in rest if not a.startswith("-")]
-    forced = any(a == "--force" or a.startswith("--force-with-lease")
+    forced = any((a.startswith("--force") and a != "--force-if-includes")
                  or (re.match(r"^-[a-zA-Z]+$", a) and "f" in a) for a in opts) \
         or any(a.startswith("+") for a in args[1:])
     if not forced:
@@ -292,18 +310,25 @@ def judge(text, here, depth=0):
             continue
         if head in SHELLS and depth < 4:
             flag = next((k for k, a in enumerate(w[1:], 1) if re.match(r"^-[a-zA-Z]*c[a-zA-Z]*$", a)), None)
-            if flag is not None and flag + 1 < len(w):
-                hit = judge(w[flag + 1], here, depth + 1)
-                if hit:
-                    return hit
-                continue
+            if flag is not None:
+                k = flag + 1
+                while k < len(w) and (w[k].startswith(("-", "+"))):
+                    k += 2 if w[k] in ("-o", "+o", "-O", "+O") else 1
+                if k < len(w):
+                    hit = judge(w[k], here, depth + 1)
+                    if hit:
+                        return hit
+                    continue
         if head in ("cd", "pushd", "popd"):
-            if head == "popd" or (len(w) > 1 and w[1] == "-"):
+            targets = w[1:]
+            while targets and targets[0] in ("-P", "-L", "-e", "-@", "--"):
+                targets = targets[1:]
+            if CD_UNSURE or head == "popd" or (targets and targets[0].startswith("-")):
                 here = None
-            elif len(w) == 1:
+            elif not targets:
                 here = home
             else:
-                t = expand(w[1])
+                t = expand(targets[0])
                 here = None if (SUBST in t or "$" in t or here is None and not os.path.isabs(t)) \
                     else os.path.normpath(os.path.join(here or "/", t))
             continue

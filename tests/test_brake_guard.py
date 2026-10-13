@@ -56,6 +56,9 @@ for cmd in ["rm -rf ~", "rm -rf ~/", "rm -rf ~/*", "rm -fr $HOME", "rm -Rf /", "
             'bash -lc "rm -rf ~"', 'bash -c "echo hi; rm -rf ~"', "sudo -u me rm -rf ~", "nice -n 5 rm -rf ~",
             "timeout 9 rm -rf ~", "eval rm -rf ~", 'echo "$(rm -rf ~)"', "{ rm -rf ~; }",
             'git push --force origin "$(git branch --show-current)"', "git push -f origin $BR",
+            # The review of f83ffe76: cd options, a -c body after options, env -S, wildcard-only globs.
+            "cd -P ~ && rm -rf .", 'bash -c -e "rm -rf ~"', 'env -S "rm -rf ~"', "rm -rf ~/.??*", "rm -rf /?*",
+            "git push --force-with-leas origin main", "(cd /tmp) && rm -rf .",
             "git push -f origin 'refs/heads/*:refs/heads/*'", "git push -f origin :", "GIT_DIR=x git push -f",
             "git --git-dir=x push -f origin HEAD"]:
     code, err = run(cmd)
@@ -66,7 +69,7 @@ for cmd in ["git push -f", "git push -f origin HEAD", f"git -C {ON_FEAT} push -f
     check(f"lets through on a feature branch: {cmd}", code == 0, (code, err))
 for cmd in ['echo "a && rm -rf ~ && b"', f"cd {ON_FEAT} && git push --force-with-lease",
             "git push --force-if-includes origin main", 'rm -rf "$(mktemp -d)"', "rm -rf .", "rm -rf *",
-            "find . -name x -exec rm -rf {} +", "cd ~/code && rm -rf old-thing",
+            "find . -name x -exec rm -rf {} +", "cd ~/code && rm -rf old-thing", "rm -rf ~/*.log",
             "rm -rf ./build", "rm -rf ~/code/tmp", "rm -rf node_modules", 'echo "rm -rf ~"',
             "grep -n 'rm -rf ~' notes.md", "git push origin main", "git push --force origin feat/x",
             "git push -f origin my-branch", "git commit -m 'never git push -f main'"]:

@@ -20,9 +20,10 @@ What it does, in a scratch HOME (mktemp -d) with no brain and no ~/.chewbacca:
                sample repo and asks it one thing, timing the first answer
   doctor       bash doctor.sh, exit code and what it says to fix
 
-Every child runs under sandbox-exec with writes allowed only in the scratch
-HOME and temp, and launchctl and open refused, so the host's daemon, its
-LaunchAgents and its screen are out of reach. The rig's own differences from a
+Every child runs under sandbox-exec: no writes to the real HOME or to the
+host's Homebrew and /usr/local (where node and its global packages live), no
+launchctl and no open, so the host's install, its daemon, its LaunchAgents
+and its screen are out of reach. Writes elsewhere (temp folders) are allowed. The rig's own differences from a
 stranger's Mac, and nothing else, are listed under `rig` in the result: the
 fake agent (no model account in a scratch HOME) and a page port off the
 host's own server.
@@ -77,6 +78,8 @@ def sandbox_profile(scratch: Path) -> str:
         "(version 1)",
         "(allow default)",
         f'(deny file-write* (subpath "{REAL_HOME.resolve()}"))',
+        '(deny file-write* (subpath "/opt/homebrew"))',
+        '(deny file-write* (subpath "/usr/local"))',
         f'(allow file-write* (subpath "{scratch.resolve()}"))',
         f'(allow file-write* (subpath "{tmp}"))',
         '(deny process-exec (literal "/bin/launchctl"))',
@@ -235,13 +238,15 @@ def main(argv: List[str]) -> int:
                    expect_ok=False)
         code = r["out"].strip()[-3:]
         if code != "200":
-            r_row = run.steps[-1]
-            r_row["errors"] = [f"the README install answers {code}: the repo is private"]
+            # 404 from GitHub is a private (or missing) repo; 000 is no network.
+            why = "the repo is private" if code == "404" else "no network?"
+            run.steps[-1]["errors"] = [f"the README install answers {code}: {why}"]
 
         r = run.sh("clone", ["/usr/bin/git", "clone", "--quiet", PUBLIC_KIT, str(kit)], expect_ok=False,
                    extra_env={"GIT_TERMINAL_PROMPT": "0"})
         if r["exit"] != 0:
-            run.steps[-1]["errors"] = ["the public clone fails: the repo is private"]
+            run.steps[-1]["errors"] = ["the public clone fails: " + ("the repo is private" if code == "404"
+                                                                     else r["out"].strip()[-120:])]
             shutil.rmtree(kit, ignore_errors=True)
             r = run.sh("clone-local", ["/usr/bin/git", "clone", "--quiet", "--no-local", "--branch", args.ref,
                                        args.kit, str(kit)])
@@ -313,13 +318,18 @@ def main(argv: List[str]) -> int:
                        STRANGER_REPO=str(scratch / "code" / Path(args.sample).name), STRANGER_ASK=ASK,
                        STRANGER_SHOTS=str(scratch.parent))
             started = time.time()
-            done = subprocess.run(["node", str(driver), url], env=env, capture_output=True, text=True, timeout=300)
             try:
-                turn = json.loads(done.stdout.strip().splitlines()[-1])
+                done = subprocess.run(["node", str(driver), url], env=env, capture_output=True, text=True,
+                                      timeout=300)
+                said, code_ = done.stdout, done.returncode
+            except subprocess.TimeoutExpired:
+                said, code_ = "", -1
+            try:
+                turn = json.loads(said.strip().splitlines()[-1])
             except (ValueError, IndexError):
-                turn = {"errors": [(done.stderr or done.stdout or "driver said nothing").strip()[-300:]]}
+                turn = {"errors": ["the WebKit driver hung or said nothing"]}
             run.steps.append({"step": "first-turn", "seconds": round(time.time() - started, 2),
-                              "exit": done.returncode, "prompts": [], "errors": turn.get("errors", []),
+                              "exit": code_, "prompts": [], "errors": turn.get("errors", []),
                               "tail": [], "detail": {k: v for k, v in turn.items() if k != "errors"}})
             if turn.get("answered"):
                 first_answer = time.time()

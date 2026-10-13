@@ -35,11 +35,17 @@ const say = () => console.log(JSON.stringify(out));
 async function pickFakeAgent(home) {
   const d = JSON.parse(readFileSync(`${home}/daemon.json`, "utf8"));
   const ws = new WebSocket(`ws://127.0.0.1:${d.port}`, [`realm.${d.token}`]);
-  await new Promise((ok, fail) => {
-    ws.onopen = ok;
-    ws.onerror = fail;
-  });
-  await new Promise((ok, fail) => {
+  // The engine answers in milliseconds; 15 s is a guessed ceiling so a dead
+  // engine fails the run instead of hanging it (review, 10/13).
+  const deadline = (p) =>
+    Promise.race([p, new Promise((_, fail) => setTimeout(() => fail(new Error("engine did not answer")), 15000))]);
+  await deadline(
+    new Promise((ok, fail) => {
+      ws.onopen = ok;
+      ws.onerror = fail;
+    }),
+  );
+  await deadline(new Promise((ok, fail) => {
     ws.onmessage = (e) => {
       const m = JSON.parse(String(e.data));
       if (m.id === "1")
@@ -52,7 +58,7 @@ async function pickFakeAgent(home) {
         params: { key: "ui.lastAgentKind", value: "fake" },
       }),
     );
-  });
+  }));
   ws.close();
 }
 

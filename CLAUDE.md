@@ -185,11 +185,23 @@ Rules that matter:
 - **`mac-use` moves the real mouse.** Prefer `peekaboo` for anything you can
   express as a specific click, and keep `mac-use` tasks small and checkable.
 - **Never claim you cannot read the user's calendar, contacts, or messages.**
-  `mac` covers Calendar, Reminders, Contacts, Mail, Messages, Notes, and Finder
+  `mac` covers Calendar, Reminders, Contacts, Messages, Notes, and Finder
   with `--json` on everything. Run `mac doctor` first: exit code `2` means the
-  human has to grant consent, so ask rather than retry. Prefer `mac mail draft`
-  over `mac mail send`, and verify a `mac messages send` by reading the thread
-  back, because Messages accepts unregistered handles without an error.
+  human has to grant consent, so ask rather than retry. Verify a `mac messages
+  send` by reading the thread back, because Messages accepts unregistered
+  handles without an error.
+- **Email is Gmail, never Mail.app.** Read, search and draft through the Gmail
+  API: `chewbacca email` lists the connected inboxes and `chewbacca email add
+  <address>` connects another. Never run `mac mail`. Caleb, 2026-10-08: "We
+  shouldn't be using the mail app that thing sucks"; on 2026-10-13 an agent
+  reached for `mac mail` anyway, because this table still said Mail, and he
+  wrote "NEVER USE THE MAC MAIL APP WHEN GMAIL MOGS!"
+- **An email chore is yours, not his.** An invite to accept, a link to click,
+  a code to read, a form an email points at: open the inbox through Gmail and
+  do it. If that inbox isn't connected, start `chewbacca email add` yourself so
+  his only step is the Google sign-in. Caleb, 2026-10-13, after being told to
+  accept two invites in his USC email: "NEVER TELL ME TO DO ANYTHING IN MY
+  EMAIL DO DAT MANUAL SHIT FOR ME".
 - **Reach for `mac` before `peekaboo` when you want data, not a click.** Talking
   to the app beats screenshotting it.
 - If a tool is missing, `./doctor.sh` says which and how to install it. Do not

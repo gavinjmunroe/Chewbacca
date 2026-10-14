@@ -1,0 +1,34 @@
+{
+  "skill": "site-ideas",
+  "cases": [
+    {
+      "prompt": "combine a bunch of uiux skills and non linear thinking skills to come up with website ideas nobody has thought of before",
+      "expect_tools": ["site-ideas"],
+      "why": "the request this skill was built from, 2026-10-14",
+      "reject": [
+        "listing ten concepts from one prompt with no draw and no baseline",
+        "a model choosing the best concept",
+        "claiming an idea has never been done"
+      ]
+    },
+    {
+      "prompt": "every site idea I come up with for this client feels like every other speaker site, give me different directions before we design anything",
+      "expect_tools": ["site-ideas"],
+      "why": "concept divergence before design is the core trigger",
+      "reject": [
+        "jumping to colours, fonts or a mockup",
+        "inventing the client's credentials or reach numbers to make a direction work"
+      ]
+    },
+    {
+      "prompt": "we picked concept C, now make it look good in a few different styles",
+      "expect_tools": ["ux-gen"],
+      "why": "styling a chosen concept is ux-gen's job; site-ideas hands off at the pick"
+    },
+    {
+      "prompt": "build a site for the taco truck down the street from their instagram",
+      "expect_tools": ["site-spec"],
+      "why": "a business site from its own published content is site-spec, not concept divergence"
+    }
+  ]
+}

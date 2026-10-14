@@ -1,0 +1,56 @@
+id	kind	convention	why it is this kind
+A01	arbitrary	The page opens on a hero: big headline, a subline, one button, one image.	Habit. Nothing a visitor needs depends on this order.
+A02	arbitrary	The headline is a slogan about the person or the product.	Habit. A fact, a question or an action can open a page.
+A03	arbitrary	Navigation is a horizontal bar at the top with four to six links.	Habit. Findability matters (see F09); the bar is one way to get it.
+A04	arbitrary	The site is a stack of full-width sections scrolled top to bottom.	Habit inherited from landing-page templates.
+A05	arbitrary	Sections run About, Services, Work, Testimonials, Contact.	Template order, not a reader's order.
+A06	arbitrary	Content sits in one centred column with equal margins.	Habit. Asymmetric grids read fine.
+A07	arbitrary	Repeating items are cards in a three-column grid.	The single most generated layout; a list, a table or a timeline carries the same items.
+A08	arbitrary	Every section has a small eyebrow label above its heading.	Generated-page tell; adds nothing a heading lacks.
+A09	arbitrary	The call to action is a filled pill button that says Book or Get started.	The action must be findable (F01, F09); its shape and wording are free.
+A10	arbitrary	Contact is a name, email and message form at the bottom of the page.	The visitor needs a way to reach out (F07); the form is one way.
+A11	arbitrary	Social proof is a row of logos or quote cards with headshots.	Credibility matters; this format of it is habit.
+A12	arbitrary	The footer holds columns of links, social icons and a copyright line.	Habit.
+A13	arbitrary	Photos are rectangles with rounded corners.	Habit.
+A14	arbitrary	The person appears in one polished portrait near the top.	Habit. Process, hands, crowds or places can introduce a person.
+A15	arbitrary	The site is the same for every visitor on every visit.	Habit. Varying it is fine if every visitor still finds the core path (F08, F09).
+A16	arbitrary	The site looks the same at every hour and season.	Habit.
+A17	arbitrary	The site is either several pages joined by a menu or one long page.	Structure is free as long as URLs and back work (F03).
+A18	arbitrary	Text is one sans-serif family at standard sizes.	Habit.
+A19	arbitrary	Every section fades up as it scrolls into view.	Generated-motion tell; motion should match how often it is seen.
+A20	arbitrary	The background is a flat colour or a soft gradient.	Habit.
+A21	arbitrary	The visitor stays anonymous and is never asked anything until the form.	Habit. Asking first is fine if it is optional and fast.
+A22	arbitrary	The person is described in a bio paragraph.	Habit. Their own words, a record or a map can describe them.
+A23	arbitrary	The site shows finished, polished outcomes and hides the process.	Habit.
+A24	arbitrary	Past work is a grid or list sorted newest first.	Habit. Place, theme or audience can order it.
+A25	arbitrary	A booking is a generic form and the reply comes later by email.	The request must be confirmed (F13); waiting blind is habit.
+A26	arbitrary	The site is a destination. The visitor takes nothing away.	Habit. A file, a date, a card or a text can leave with them.
+A27	arbitrary	Time is absent: no now, no next, no calendar.	Habit.
+A28	arbitrary	Everything is read silently. There is no voice or sound.	Habit, as long as sound never autoplays (F14).
+A29	arbitrary	Everything is visible at once. Nothing is earned or revealed by doing.	Habit, as long as content stays reachable (F15).
+A30	arbitrary	The whole site speaks to one audience in one tone.	Habit. Organizers, listeners and peers want different things.
+A31	arbitrary	Video sits in a player box with a play button.	Habit.
+A32	arbitrary	The path ends at a thank-you message after the form.	Habit. What happens after the ask is free.
+A33	arbitrary	The site's structure mirrors the org chart: one section per role or organization.	Habit. A visitor's question is a different structure.
+A34	arbitrary	Social links send the visitor away to other platforms.	Habit.
+A35	arbitrary	Rates, availability and logistics hide behind Inquire.	Habit, sometimes a business choice; showing them is allowed.
+A36	arbitrary	Scrolling is vertical.	Habit, as long as every input still reaches the content (F15).
+A37	arbitrary	Navigation labels are nouns: About, Work, Contact.	Habit. Verbs or questions name what the visitor wants.
+A38	arbitrary	Everyone enters through the same home page.	Habit. Deep links per purpose are allowed.
+A39	arbitrary	The designer picks one colour theme for all conditions.	Habit.
+A40	arbitrary	Credibility comes from the person describing themselves.	Habit. Others' accounts, records and artifacts can carry it.
+F01	functional	Links look like links and buttons look like buttons.	Brutalist Web Design rule 3, the one generated pages break first (apps/ux-engine/research/04-constraints-and-tells.md).
+F02	functional	Only links and buttons respond to clicks.	Brutalist Web Design rule 2 (research/04).
+F03	functional	The back button works and every view has a shareable URL.	Brutalist Web Design rule 4: breaking it shows contempt for the visitor (research/04).
+F04	functional	Body text meets contrast 4.5:1 and reads on every reasonable screen.	WCAG 2.2 SC 1.4.3; Brutalist rule 1 (research/04).
+F05	functional	Everything works by keyboard and focus is visible.	WCAG 2.2 SC 2.1.1 and 2.4.7.
+F06	functional	Motion reduces under prefers-reduced-motion: keep opacity and colour, drop transforms.	WCAG 2.2 SC 2.3.3; claude-design-kit CLAUDE.md (reduce, not delete).
+F07	functional	Every form field has a visible label and errors say what to fix.	WCAG 2.2 SC 3.3.1 and 3.3.2; no placeholder as a label.
+F08	functional	Within a few seconds a first-time visitor knows whose site it is and what they can do there.	ux-engine CLAUDE.md first-look intent; ux-viewer checks it blind.
+F09	functional	The main action can be reached from anywhere without hunting.	The visitor came to do one thing; ux-gen intent primary_action.
+F10	functional	Content shows without a long wait.	Brutalist Web Design rule 7: performance is a feature (research/04).
+F11	functional	Text is real text: selectable, searchable, translatable.	Screen readers, search and translation all read text, not pixels.
+F12	functional	Touch targets are at least 24 by 24 CSS pixels, 44 for primary actions.	WCAG 2.2 SC 2.5.8 sets 24; 44 is the common platform guideline.
+F13	functional	After an action the visitor sees that it worked: sent, booked, saved.	Nielsen heuristic 1, visibility of system status.
+F14	functional	Nothing plays sound on its own.	WCAG 2.2 SC 1.4.2.
+F15	functional	Every piece of content is reachable by a standard input: scroll, tab, tap.	Brutalist Web Design rule 5, reworded so scroll direction stays free (research/04).

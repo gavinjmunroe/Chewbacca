@@ -47,9 +47,19 @@ sys.path.insert(0, str(ROOT / 'tools'))
 import verdicts  # noqa: E402
 
 DAY_S = 86400
+# A verdict row's stamp is taken before its append, and hooks run at once, so
+# the log is not in stamp order: a row stamped T can land after a fold read up
+# to T. Each fold re-reads this much before its last stamp and drops rows it
+# already holds. Guessed, never measured: a hook's stamp-to-append gap is a few
+# milliseconds, and 2 minutes covers a hook held by its watchdog.
+OVERLAP_MS = 120_000
 # hookd_replay's due() rule: write on a Sunday, or once the newest report is a
 # week old, so a Mac asleep all Sunday still gets its week.
 WEEK_S = 7 * DAY_S
+# Bump when anything that reads a transcript changes: a cached file's counts
+# are reused while its size and mtime hold, and a finished transcript never
+# changes again, so an old parser's counts would be served forever.
+PARSER_VERSION = 2
 UUID = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
 SKILL_READ = re.compile(r'/([\w.-]+)/SKILL\.md\b')
 SLASH = re.compile(r'<command-name>/?([\w:.-]+)</command-name>')
@@ -60,7 +70,8 @@ REFUSAL = re.compile(r'\s*(PreToolUse|PostToolUse|Stop|UserPromptSubmit)(?::(\w+
 SCRIPT = re.compile(r'[\w./~$-]+\.(?:sh|py|js|mjs)\b')
 HOOK_FILE = re.compile(r'hooks/([\w.-]+\.(?:sh|py|js|mjs))\b')
 CODEX_CMD = re.compile(r'cmd:\s*"((?:[^"\\]|\\.)*)"')
-SEGMENT = re.compile(r'\s*(?:&&|\|\||;|\||\n)\s*')
+HEREDOC = re.compile(r'<<-?\s*[\'"]?(\w+)[\'"]?')
+WRAPPER_ARG = re.compile(r'^\d+(\.\d+)?[smhd]?$')
 ENV_WORD = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*=')
 WRAPPERS = {'sudo', 'nice', 'time', 'env', 'exec', 'command', 'nohup', 'caffeinate', 'timeout'}
 # A transcript line worth parsing names a tool call, a slash command or a
@@ -85,6 +96,13 @@ def state_dir():
 
 def day_of(epoch):
     return datetime.datetime.fromtimestamp(epoch).strftime('%Y-%m-%d')
+
+
+def window_floor(now, days):
+    """The first local day in a window of `days` calendar days ending today.
+    Date arithmetic, so a DST change never stretches it to days + 1."""
+    today = datetime.datetime.fromtimestamp(now).date()
+    return (today - datetime.timedelta(days=days - 1)).isoformat()
 
 
 def iso_day(stamp):
@@ -194,13 +212,60 @@ def writes_verdicts(path):
 
 # ---------------------------------------------------------------- transcripts
 
+def drop_heredocs(command):
+    """The command without heredoc bodies: `python3 - <<EOF ... EOF` runs
+    python3, and the body's lines are its input, never commands."""
+    out, lines, i = [], command.split('\n'), 0
+    while i < len(lines):
+        line = lines[i]
+        out.append(line)
+        i += 1
+        for tag in HEREDOC.findall(line):
+            while i < len(lines) and lines[i].strip() != tag:
+                i += 1
+            i += 1
+    return '\n'.join(out)
+
+
+def pieces(command):
+    """The command split on ; | & && || and newlines that sit outside quotes,
+    so `git commit -m "fix; chewbacca land"` stays one piece."""
+    out, cur, quote, i = [], [], '', 0
+    text = drop_heredocs(command or '')
+    while i < len(text):
+        ch = text[i]
+        if quote:
+            if ch == '\\' and quote == '"' and i + 1 < len(text):
+                cur.append(text[i:i + 2])
+                i += 2
+                continue
+            if ch == quote:
+                quote = ''
+            cur.append(ch)
+        elif ch in '\'"':
+            quote = ch
+            cur.append(ch)
+        elif ch in ';|&\n':
+            out.append(''.join(cur))
+            cur = []
+        else:
+            cur.append(ch)
+        i += 1
+    out.append(''.join(cur))
+    return [p for p in out if p.strip()]
+
+
 def first_words(command):
     """The program each piece of a shell line runs, and its first argument."""
     out = []
-    for piece in SEGMENT.split(command or ''):
+    for piece in pieces(command):
         words = piece.strip().lstrip('(').split()
         while words and (ENV_WORD.match(words[0]) or words[0] in WRAPPERS or words[0].startswith('-')):
+            wrapper = words[0] in WRAPPERS
             words = words[1:]
+            # `timeout 30 x`, `nice -n 10 x`: a wrapper's own arguments are not the program.
+            while wrapper and words and (words[0].startswith('-') or WRAPPER_ARG.match(words[0])):
+                words = words[1:]
         if not words:
             continue
         prog = os.path.basename(words[0].strip('"\''))
@@ -339,7 +404,12 @@ def scan_file(path):
                     continue
                 if not isinstance(row, dict):
                     continue
-                (codex_row if codex else claude_row)(counts, row)
+                try:
+                    (codex_row if codex else claude_row)(counts, row)
+                except (AttributeError, TypeError, ValueError):
+                    # One row in a shape this reader has never seen costs
+                    # that row, never the report.
+                    continue
     except OSError:
         pass
     return counts
@@ -375,7 +445,7 @@ def scan_transcripts(days, use_cache=True):
             st = path.stat()
         except OSError:
             continue
-        stamp = '%d:%d' % (st.st_size, int(st.st_mtime))
+        stamp = '%d:%d:%d' % (PARSER_VERSION, st.st_size, int(st.st_mtime))
         hit = cache.get(str(path))
         if hit and hit.get('stamp') == stamp:
             counts = hit.get('counts') or {}
@@ -412,9 +482,19 @@ def rollup_verdicts():
     last = int(state.get('last_ts') or 0)
     days = state.get('days') or {}
     first = state.get('first_ts')
+    tail = set(state.get('tail') or [])
     newest = last
-    for row in verdicts.rows(since_ms=last + 1 if last else 0):
-        if row['ts'] <= last or not real_session(row.get('session') or ''):
+    folded = []
+    floor = last - OVERLAP_MS if last else 0
+    for row in verdicts.rows(since_ms=floor):
+        if row['ts'] < floor:
+            continue
+        key = '\t'.join(str(row.get(c, '')) for c in verdicts.COLUMNS)
+        if key in tail:
+            continue
+        tail.add(key)
+        folded.append((row['ts'], key))
+        if not real_session(row.get('session') or ''):
             continue
         newest = max(newest, row['ts'])
         first = row['ts'] if first is None else min(first, row['ts'])
@@ -436,7 +516,12 @@ def rollup_verdicts():
                         add('routed\t' + skill.strip())
         elif kind == 'send':
             add('send\t%s\t%s' % (name, decision))
-    state = {'last_ts': newest, 'first_ts': first, 'days': days}
+    newest = max([newest] + [ts for ts, _ in folded])
+    keep = newest - OVERLAP_MS
+    # Rows from the overlap window, kept so the next fold re-reads that window
+    # and still counts each row once.
+    tail = sorted(k for k in tail if int(k.split('\t', 1)[0] or 0) >= keep)
+    state = {'last_ts': newest, 'first_ts': first, 'days': days, 'tail': tail}
     try:
         state_dir().mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix('.tmp')
@@ -476,9 +561,10 @@ def jobs(days):
     for job in base.glob('*/job.json'):
         try:
             data = json.loads(job.read_text())
-        except (OSError, ValueError):
+            created = float(data.get('created') or 0)
+        except (OSError, ValueError, TypeError, AttributeError):
             continue
-        if float(data.get('created') or 0) < cutoff:
+        if created < cutoff:
             continue
         total += 1
         kind, name = job_name(data.get('cmd'))
@@ -491,7 +577,7 @@ def jobs(days):
 
 def window_counts(counts, days, now):
     """Sum 'day\\tkind\\tname' counts to kind -> name -> n within the window."""
-    floor = day_of(now - (days - 1) * DAY_S)
+    floor = window_floor(now, days)
     out = {}
     for key, n in counts.items():
         day, kind, name = key.split('\t', 2)
@@ -509,7 +595,7 @@ def build(root, days=30, use_cache=True, now=None):
     raw, files = scan_transcripts(days, use_cache)
     seen = window_counts(raw, days, now)
     state = rollup_verdicts()
-    floor = day_of(now - (days - 1) * DAY_S)
+    floor = window_floor(now, days)
     covered = sorted(d for d in state['days'] if d >= floor)
     ver = {}
     for day in covered:
@@ -530,9 +616,14 @@ def build(root, days=30, use_cache=True, now=None):
     prog_calls, tool_calls = seen.get('prog', {}), seen.get('tool', {})
     verb_rows = [{'name': name, 'calls': verb_calls.get(name, 0), 'jobs': by_job.get('verb', {}).get(name, 0)}
                  for name in sorted(found_verbs)]
+    def by_name(counts, name):
+        # bin/mac_use_cli.py is counted as `mac_use_cli`: shell_line and
+        # job_name drop a script's extension.
+        stem = name.rsplit('.', 1)[0] if name.endswith(('.py', '.sh', '.js')) else name
+        return counts.get(name, 0) + (counts.get(stem, 0) if stem != name else 0)
     bin_rows = [{'name': name,
-                 'calls': prog_calls.get(name, 0) + tool_calls.get(name, 0),
-                 'jobs': by_job.get('prog', {}).get(name, 0) + by_job.get('tool', {}).get(name, 0)}
+                 'calls': by_name(prog_calls, name) + by_name(tool_calls, name),
+                 'jobs': by_name(by_job.get('prog', {}), name) + by_name(by_job.get('tool', {}), name)}
                 for name in sorted(found_bins)]
     slash = seen.get('slash', {})
     slash_rows = [{'name': name, 'calls': slash.get(name, 0)} for name in sorted(found_slash)]

@@ -233,6 +233,65 @@ class Usage(unittest.TestCase):
                                    capture_output=True, text=True, env=env).stdout
         self.assertIn('chewbacca usage', help_text)
 
+    def test_a_row_appended_late_with_an_older_stamp_still_counts_once(self):
+        # Review, 10/13: hooks stamp before they append, so a fold can read up
+        # to T and a row stamped T-1 lands after it. ts > last_ts lost it forever.
+        now = int(time.time() * 1000)
+        line = lambda ts: '\t'.join([str(ts), 'hook', 'launch-guard.sh', 'PreToolUse', 'allow', '5', SESSION, '', '']) + '\n'
+        with open(self.logs / 'verdicts.tsv', 'a') as fh:
+            fh.write(line(now))
+        self.assertEqual(self.row(self.build(), 'hooks', 'launch-guard.sh')['runs'], 1)
+        with open(self.logs / 'verdicts.tsv', 'a') as fh:
+            fh.write(line(now - 1))
+        self.assertEqual(self.row(self.build(), 'hooks', 'launch-guard.sh')['runs'], 2)
+        self.assertEqual(self.row(self.build(), 'hooks', 'launch-guard.sh')['runs'], 2)
+
+    def test_shell_lines_count_what_runs_not_what_is_quoted(self):
+        tool = self.root / 'bin/mac_use_cli.py'
+        tool.write_text('#!/usr/bin/env python3\n')
+        tool.chmod(0o755)
+        jsonl(self.home / '.claude/projects/-x/q.jsonl', [
+            tool_use('Bash', {'command': 'git commit -m "fix; chewbacca land works"'}),
+            tool_use('Bash', {'command': "python3 - <<'EOF'\nchewbacca land x\nEOF\necho done"}),
+            tool_use('Bash', {'command': 'timeout 30 chewbacca gtme next'}),
+            tool_use('Bash', {'command': 'nice -n 10 slop-check a.md'}),
+            tool_use('Bash', {'command': 'python3 bin/mac_use_cli.py go'}),
+        ])
+        report = self.build()
+        self.assertEqual(self.row(report, 'verbs', 'land')['calls'], 0, 'quoted or heredoc text counted as a call')
+        self.assertEqual(self.row(report, 'verbs', 'gtme')['calls'], 1, 'timeout 30 hid the program')
+        self.assertEqual(self.row(report, 'bin', 'slop-check')['calls'], 1, 'nice -n 10 hid the program')
+        self.assertEqual(self.row(report, 'bin', 'mac_use_cli.py')['calls'], 1, 'a tool with an extension read 0')
+
+    def test_a_malformed_row_or_job_never_crashes_the_report(self):
+        jsonl(self.home / '.claude/projects/-x/bad.jsonl', [
+            {'type': 'assistant', 'timestamp': stamp(), 'message': 'x', 'note': '"tool_use"'},
+            tool_use('Bash', 'ls'),
+            tool_use('Bash', {'command': 'chewbacca land a'}),
+        ])
+        job = self.kit / 'jobs/bad'
+        job.mkdir(parents=True)
+        (job / 'job.json').write_text('["not", "a", "dict"]')
+        self.assertEqual(self.row(self.build(), 'verbs', 'land')['calls'], 1)
+
+    def test_a_parser_change_rereads_cached_transcripts(self):
+        self.transcripts()
+        self.build()
+        with mock.patch.object(self.mod, 'PARSER_VERSION', self.mod.PARSER_VERSION + 1), \
+                mock.patch.object(self.mod, 'scan_file', wraps=self.mod.scan_file) as scan:
+            self.build()
+        self.assertTrue(scan.called, 'a new parser served the old parser\'s cached counts')
+
+    def test_the_window_is_calendar_days_across_a_dst_change(self):
+        with mock.patch.dict(os.environ, {'TZ': 'America/Los_Angeles'}):
+            time.tzset()
+            try:
+                # 2026-11-02 00:30 PST: 1 Nov ran 25 hours, so 86,400 s back is still 31 Oct.
+                now = time.mktime((2026, 11, 2, 0, 30, 0, 0, 0, -1))
+                self.assertEqual(self.mod.window_floor(now, 2), '2026-11-01')
+            finally:
+                time.tzset()
+
 
 if __name__ == '__main__':
     unittest.main()

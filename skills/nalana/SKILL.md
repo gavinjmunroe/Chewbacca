@@ -198,3 +198,9 @@ Thirty-six corrections across two nights, most of them the same few mistakes.
   along `(point - camera).normalized()` so nothing behind the opening survives.
   When the same artifact survives two fixes, ask what geometry the camera
   actually sees there before touching shading.
+- **Open the final PNG at full size before saying anything about it.** "How
+  dare you send me smth without lookign at it first on the final png"
+  (2026-10-13). A 600px check hid a tear, ragged edges and a nub that were
+  obvious at 2048. Every hand-off: read the exact file being linked at full
+  size, then at 600px, and list what's still wrong from that look, never from
+  memory of the fix.

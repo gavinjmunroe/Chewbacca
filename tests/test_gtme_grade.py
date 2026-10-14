@@ -567,5 +567,77 @@ gtme_operator.rulings_for = lambda c: (_ for _ in ()).throw(OSError("unreadable"
 check("address waiver: an unreadable ruling file waives nothing", gtme_grade.address_waiver("Zeutara") == "")
 gtme_operator.rulings_for = _real_rulings
 
+# A user can accept the age recommendation for named campaigns without
+# relaxing sender health, caps, the bounce stop or any other launch gate.
+from types import SimpleNamespace
+from unittest.mock import patch
+import copy
+approval = {"id": "accepted-warmup-risk", "status": "active", "who": "Test owner",
+            "source": "explicit launch approval", "where": "/private/decisions.json",
+            "date": G.dt.date.today().isoformat(), "expires": G.dt.date.today().isoformat(),
+            "campaigns": ["cam_test"], "workspace": "1372623", "minimum_age_days": 12,
+            "sender_daily_caps": {"jane@example.test": 20}, "baseline_campaigns": ["cam_prior"]}
+approval_args = SimpleNamespace(client="Test client", action="launch", ws="1372623")
+approval_camp = {"id": "cam_test"}
+attached = [{"email": "jane@example.test"}]
+live_accounts = [{"email": "jane@example.test", "status": "active", "day": 20, "rep": "98%"}]
+baseline = [{"campaignId": "cam_prior", "sent": 1000, "bounces": 13}]
+
+def accepted(r=approval, accounts=live_accounts, stats=baseline, camp=approval_camp,
+             ages=None, args=approval_args):
+    with patch.object(gtme_operator, "rulings_for", return_value=[r]), \
+         patch.object(G, "clay", side_effect=lambda op, **kw: accounts if op == "sender-accounts" else stats):
+        return G.warmup_approval(camp, args, attached, [12] if ages is None else ages)
+
+check("warmup approval: explicit campaign decision at unchanged healthy caps passes", bool(accepted()))
+for label, field, value in [
+    ("expired", "expires", "2000-01-01"), ("retired", "status", "retired"),
+    ("wrong workspace", "workspace", "2"), ("other campaign", "campaigns", ["cam_other"]),
+    ("no source", "source", ""), ("unknown sender", "sender_daily_caps", {}),
+    ("missing baseline campaign", "baseline_campaigns", ["cam_missing"])]:
+    altered = copy.deepcopy(approval)
+    altered[field] = value
+    check(f"warmup approval: {label} refuses", not accepted(r=altered))
+for label, field, value in [("cap increase", "day", 21), ("SMTP error", "smtp", "broken"),
+                           ("unhealthy", "rep", "79%"), ("inactive", "status", "inactive")]:
+    altered = copy.deepcopy(live_accounts)
+    altered[0][field] = value
+    check(f"warmup approval: {label} refuses", not accepted(accounts=altered))
+check("warmup approval: above 3 percent bounces refuses",
+      not accepted(stats=[{"campaignId": "cam_prior", "sent": 1000, "bounces": 31}]))
+check("warmup approval: insufficient live baseline refuses",
+      not accepted(stats=[{"campaignId": "cam_prior", "sent": 100, "bounces": 0}]))
+check("warmup approval: unknown age refuses", not accepted(ages=[]))
+check("warmup approval: younger inbox refuses", not accepted(ages=[11]))
+check("warmup approval: resume is never unlocked",
+      not accepted(args=SimpleNamespace(client="Test client", action="resume", ws="1372623")))
+
+# Exercise signed issuance and verification, not just the initial age check.
+c = Case()
+rc, out = c.run()
+receipt = c.home / ".chewbacca/state/gtme-grade/1372623-cam_test1-launch.json"
+body = json.loads(receipt.read_text())
+key = b"a" * 64
+body.pop("mac")
+body["warmup_approval"] = {"client": "Test client", "senders": attached, "ages": ["12"]}
+body["mac"] = G.sign(body, key)
+receipt.write_text(json.dumps(body))
+raw = json.loads((c.dir / "campaign.json").read_text())
+body["key_id"] = G.key_id(key)
+body.pop("mac")
+body["mac"] = G.sign(body, key)
+receipt.write_text(json.dumps(body))
+with patch.object(G, "STATE", receipt.parent), patch.object(G, "load_key", return_value=key), \
+     patch.object(G, "input_roots", return_value=[str(c.dir)]), \
+     patch.object(G, "fetch_state", return_value=raw), \
+     patch.object(G, "warmup_approval", return_value="accepted") as live_check:
+    check("warmup receipt: verification rechecks the decision and live conditions",
+          not G.verify("1372623", "cam_test1", "launch") and live_check.call_count == 1)
+with patch.object(G, "STATE", receipt.parent), patch.object(G, "load_key", return_value=key), \
+     patch.object(G, "input_roots", return_value=[str(c.dir)]), \
+     patch.object(G, "warmup_approval", return_value=""):
+    check("warmup receipt: expiry or changed caps/bounces refuses before START",
+          "conditions changed" in G.verify("1372623", "cam_test1", "launch"))
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

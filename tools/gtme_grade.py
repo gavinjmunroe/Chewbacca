@@ -782,6 +782,57 @@ def address_waiver(client_name):
     return ""
 
 
+def warmup_approval(camp, args, attached, ages):
+    """A dated, campaign-scoped business decision, checked against live limits.
+
+    An approval changes only the age recommendation. Every other gate still runs.
+    """
+    if not getattr(args, "client", None) or getattr(args, "action", None) != "launch":
+        return ""
+    import gtme_operator
+    today = dt.date.today()
+    for ruling in gtme_operator.rulings_for(args.client):
+        if ruling.get("id") != "accepted-warmup-risk" or ruling.get("status") != "active":
+            continue
+        try:
+            if not all(ruling.get(k) for k in ("who", "source", "where")):
+                continue
+            if not (dt.date.fromisoformat(ruling["date"]) <= today
+                    <= dt.date.fromisoformat(ruling["expires"])):
+                continue
+            if camp.get("id") not in ruling["campaigns"] or str(args.ws) != ruling["workspace"]:
+                continue
+            if len(ages) != len(attached) or min(ages) < ruling["minimum_age_days"]:
+                continue
+            limits = ruling["sender_daily_caps"]
+            addresses = {a.get("email", "").lower() for a in attached}
+            if not addresses or "" in addresses or not addresses <= limits.keys():
+                continue
+            accounts = clay("sender-accounts", ws=args.ws)
+            live = {a["email"].lower(): a for a in accounts}
+            for email in addresses:
+                a = live[email]
+                if (a.get("status") != "active" or a.get("smtp") or a.get("imap")
+                        or not 0 < float(a["day"]) <= float(limits[email])
+                        or float(str(a["rep"]).rstrip("%")) < 80):
+                    raise ValueError("sender conditions changed")
+            # Caleb accepted 12-day inboxes only at existing caps, with a 3%
+            # bounce stop, on 2026-10-14. Read real sends rather than allowing
+            # empty draft analytics to stand in for the established baseline.
+            stats = clay("campaign-stats", ws=args.ws)
+            baseline = [s for s in stats if s["campaignId"] in ruling["baseline_campaigns"]]
+            if {s["campaignId"] for s in baseline} != set(ruling["baseline_campaigns"]):
+                continue
+            sent = sum(s["sent"] for s in baseline)
+            bounced = sum(s["bounces"] for s in baseline)
+            if sent < 200 or bounced / sent > 0.03:
+                continue
+            return f"{ruling['who']}, {ruling['date']}; existing caps checked; {bounced}/{sent} bounced"
+        except (KeyError, TypeError, ValueError, OSError, SystemExit):
+            continue
+    return ""
+
+
 def gate_start(camp, args, senders, analytics, gate, client):
     st = camp["settings"]
     steps = [s for v in camp["variants"] for s in v["steps"]]
@@ -881,8 +932,15 @@ def gate_start(camp, args, senders, analytics, gate, client):
     else:
         young = sum(1 for a in ages if a < WARMUP_DAYS)
         if young:
-            gate.fail(f"{young} inboxes have under {WARMUP_DAYS} days of warmup (youngest "
-                      f"{min(ages):.0f})", "Clay W-070, W-171; Instantly deliverability")
+            approval = warmup_approval(camp, args, attached, ages)
+            if approval:
+                camp["warmup_approval"] = {"client": args.client,
+                                           "senders": [{"email": a["email"]} for a in attached],
+                                           "ages": [str(age) for age in ages]}
+                gate.warn(f"young inbox risk accepted: {approval}", "client launch decision")
+            else:
+                gate.fail(f"{young} inboxes have under {WARMUP_DAYS} days of warmup (youngest "
+                          f"{min(ages):.0f})", "Clay W-070, W-171; Instantly deliverability")
     health = [float(a["health"]) for a in attached if a.get("health") not in (None, "")]
     if health and min(health) < 80:
         gate.fail(f"{sum(1 for h in health if h < 80)} inboxes under health score 80",
@@ -1219,6 +1277,12 @@ def grade(args):
         if p:
             inputs.append(p)
     client = load_client(args.client)
+    if args.client:
+        import gtme_operator
+        # Revoking the decision invalidates the same signed receipt as editing
+        # a send list. An approval is never copied into a forged grade.
+        inputs.extend(r["where"] for r in gtme_operator.rulings_for(args.client)
+                      if r.get("id") == "accepted-warmup-risk" and r.get("where"))
 
     gates = [Gate(1, "list"), Gate(2, "copy"), Gate(3, "recipient read"), Gate(4, "rendered output"),
              Gate(5, "infrastructure and start")]
@@ -1372,11 +1436,12 @@ def write_receipt(ws, cid, action, camp, gates, inputs):
             raise ValueError(f"no receipt: {why}")
     key = load_key(create=True)
     now = int(time.time())
-    body = {"v": 3, "workspace": str(ws), "campaign": cid, "action": action, "key_id": key_id(key),
+    body = {"v": 4, "workspace": str(ws), "campaign": cid, "action": action, "key_id": key_id(key),
             "name": camp.get("name"), "time": now, "expires": now + RECEIPT_TTL_S, "pass": True,
             "gates": [g.n for g in gates if g.passed],
             "inputs": {p: sha(p) for p in paths},
-            "campaign_state": canonical_state(camp.get("raw"))}
+            "campaign_state": canonical_state(camp.get("raw")),
+            "warmup_approval": camp.get("warmup_approval")}
     body["mac"] = sign(body, key)
     STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
     tmp = dest.with_name(f".{dest.name}.{os.getpid()}.tmp")
@@ -1419,7 +1484,8 @@ def verify(ws, cid, action):
     mac = body.pop("mac", None)
     if not isinstance(mac, str) or len(mac) != 64:
         return "grade receipt carries no signature"
-    if set(body) != set(SIGNED):
+    fields = set(SIGNED) | ({"warmup_approval"} if body.get("v") == 4 else set())
+    if set(body) != fields:
         return "grade receipt fields differ from what gtme-grade signs"
     try:
         good = hmac.compare_digest(mac, sign(body, key))
@@ -1450,6 +1516,15 @@ def verify(ws, cid, action):
             return why
         if sha(p) != want:
             return f"{os.path.basename(p)} changed after gtme-grade passed"
+    approval = body.get("warmup_approval")
+    if approval:
+        try:
+            approval_args = argparse.Namespace(client=approval["client"], action=action, ws=ws)
+            if not warmup_approval({"id": cid}, approval_args, approval["senders"],
+                                   [float(age) for age in approval["ages"]]):
+                return "warmup approval expired or its live sender/bounce conditions changed"
+        except (KeyError, TypeError, ValueError, OSError, SystemExit, subprocess.TimeoutExpired):
+            return "warmup approval could not be verified against live conditions"
     try:
         live = canonical_state(fetch_state(ws, cid))
     except Exception as exc:  # any failure to re-read the campaign refuses

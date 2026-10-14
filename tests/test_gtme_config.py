@@ -278,7 +278,7 @@ class ConfigTest(unittest.TestCase):
         try:
             a = argparse.Namespace(client="Northwind Test Co", verify=False, verification=None, senders=None,
                                    review=None, suppress=None, warmup_start=None, icp_titles="ceo",
-                                   icp_fit_column=None, offer=None, signal=None, field_map=None)
+                                   icp_fit_column=None, offer=None, signal=None, field_map=None, leads=None)
             filled = gtme_grade.fill_from_ready(a)
         finally:
             os.environ.pop("GTME_CLIENTS", None)
@@ -288,6 +288,81 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(a.icp_titles, "ceo", "the command line lost to the ready block")
         self.assertEqual(a.field_map, ["audf_x=firm"])
         self.assertEqual(filled, ["verification", "warmup_start", "field_map"])
+
+    # -- review of the first cut, 2026-10-13: each of these let a grade or an
+    # import do something the explicit command line never would
+
+    def _ns(self, **kw):
+        import argparse
+        base = dict(client="Northwind Test Co", verify=False, verification=None, senders=None, review=None,
+                    suppress=None, warmup_start=None, icp_titles=None, icp_fit_column=None, offer=None,
+                    signal=None, field_map=None, leads=None)
+        base.update(kw)
+        return argparse.Namespace(**base)
+
+    def _fill(self, ready, ns):
+        import gtme_grade
+        clay = dict(self.clay, ready=ready)
+        write(self.cfg, {"clients": [clay, self.solo]})
+        os.environ["GTME_CLIENTS"] = str(self.cfg)
+        try:
+            return gtme_grade.fill_from_ready(ns)
+        finally:
+            os.environ.pop("GTME_CLIENTS", None)
+
+    def test_a_relative_ready_file_is_never_read_from_the_shells_folder(self):
+        here = self.tmp / "other-client"
+        here.mkdir()
+        (here / "suppress.csv").write_text("email\n")
+        old = os.getcwd()
+        os.chdir(here)
+        try:
+            ns = self._ns()
+            self._fill({"suppress": "suppress.csv"}, ns)
+        finally:
+            os.chdir(old)
+        self.assertIsNone(ns.suppress, "another client's suppress list in the current folder was graded")
+
+    def test_a_client_wide_offer_never_replaces_the_campaigns_own(self):
+        ns = self._ns()
+        filled = self._fill({"offer": "one pitch for every offer", "signal": "one signal"}, ns)
+        self.assertIsNone(ns.offer)
+        self.assertIsNone(ns.signal)
+        self.assertEqual(filled, [])
+
+    def test_a_field_map_column_the_leads_file_lacks_is_left_out(self):
+        leads = self.tmp / "leads.csv"
+        leads.write_text("email,first_name,firm\n")
+        ns = self._ns(leads=str(leads))
+        self._fill({"field_map": {"audf_x": "firm", "audf_y": "fund_size"}}, ns)
+        self.assertEqual(ns.field_map, ["audf_x=firm"])
+
+    def test_grade_reads_the_same_clients_file_import_writes(self):
+        import gtme_grade
+        other = write(self.tmp / "elsewhere" / "clients.json",
+                      {"clients": [dict(self.clay, principal="From GTM_CONFIG")]})
+        os.environ["GTM_CONFIG"] = str(other)
+        try:
+            self.assertEqual(gtme_grade.load_client("Northwind Test Co")["principal"], "From GTM_CONFIG")
+        finally:
+            os.environ["GTM_CONFIG"] = str(self.cfg)
+
+    def test_two_imports_in_one_second_keep_both_backups(self):
+        a = write(self.tmp / "a.json", {"entry": {"name": "Alpha Test", "workspaces": ["9101"]}})
+        b = write(self.tmp / "b.json", {"entry": {"name": "Beta Test", "workspaces": ["9102"]}})
+        first = self.cfg.read_text()
+        self.gtme("config", "import", str(a))
+        self.gtme("config", "import", str(b))
+        backups = sorted(self.cfg.parent.glob("clients.json.bak-*"))
+        self.assertEqual(len(backups), 2, [p.name for p in backups])
+        self.assertIn(first, [p.read_text() for p in backups], "the original file was lost")
+
+    def test_import_by_another_clients_alias_is_refused(self):
+        out = write(self.tmp / "alias.json", {"entry": {"name": "Northwind", "workspaces": ["9201"]}})
+        r = self.gtme("config", "import", str(out), "--replace")
+        self.assertEqual(r.returncode, 2, r.stdout)
+        self.assertIn("alias", r.stderr)
+        self.assertEqual(json.loads(self.cfg.read_text())["clients"][0]["principal"], "Riley Stone")
 
 
 if __name__ == "__main__":

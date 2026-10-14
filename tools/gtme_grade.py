@@ -1120,7 +1120,10 @@ def sha(path):
 def load_client(name):
     if not name:
         return None
-    path = Path(os.path.expanduser(os.environ.get("GTME_CLIENTS", "~/.chewbacca/gtm/clients.json")))
+    # The file `gtme config` and `gtme ready` read ($GTM_CONFIG, $GTME_CLIENTS,
+    # $CHEWBACCA_GTM_CLIENTS, $GTME_HOME, then ~/.chewbacca/gtm), so an entry
+    # `gtme config import` wrote is the one graded.
+    path = sibling("gtme_config").config_path()
     try:
         doc = json.loads(path.read_text())
     except (OSError, ValueError):
@@ -1549,8 +1552,22 @@ def resolve_ws(args):
 # What a client's `ready` block in clients.json holds, and the flag each one
 # fills when the command line leaves it out. The same block `gtme ready` reads.
 READY_FILES = (("verification", "verification"), ("senders", "senders"), ("review", "review"))
+# offer and signal stay out: they belong to one campaign, and --client already
+# picks the offer from the campaign's name (offer_for); one client-wide value
+# would grade a two-offer client's every campaign against one pitch.
 READY_VALUES = (("warmup_start", "warmup_start"), ("icp_titles", "icp_titles"),
-                ("icp_fit_column", "icp_fit_column"), ("offer", "offer"), ("signal", "signal"))
+                ("icp_fit_column", "icp_fit_column"))
+
+
+def _ready_file(v):
+    """A ready path this command can trust: home or absolute, and on this Mac.
+    A relative name means "beside the drafts file" to `gtme ready`, which this
+    command doesn't know, so resolving it against the shell's folder could
+    pick up another client's suppress list."""
+    if not isinstance(v, str) or not v.startswith(("~", "/")):
+        return None
+    path = os.path.expanduser(v)
+    return path if os.path.isfile(path) else None
 
 
 def fill_from_ready(args):
@@ -1566,13 +1583,13 @@ def fill_from_ready(args):
     ready = entry.get("ready") if isinstance(entry.get("ready"), dict) else {}
     filled = []
     for key, attr in READY_FILES:
-        v = ready.get(key)
-        if getattr(args, attr) is None and isinstance(v, str) and os.path.isfile(os.path.expanduser(v)):
-            setattr(args, attr, os.path.expanduser(v))
+        path = _ready_file(ready.get(key))
+        if getattr(args, attr) is None and path:
+            setattr(args, attr, path)
             filled.append(key)
-    v = ready.get("suppress")
-    if not args.suppress and isinstance(v, str) and os.path.isfile(os.path.expanduser(v)):
-        args.suppress = [os.path.expanduser(v)]
+    path = _ready_file(ready.get("suppress"))
+    if not args.suppress and path:
+        args.suppress = [path]
         filled.append("suppress")
     for key, attr in READY_VALUES:
         v = ready.get(key)
@@ -1581,8 +1598,20 @@ def fill_from_ready(args):
             filled.append(key)
     fm = ready.get("field_map")
     if not args.field_map and isinstance(fm, dict) and fm:
-        args.field_map = [f"{field}={column}" for field, column in fm.items()]
-        filled.append("field_map")
+        # Only columns this leads file has: a map written for another week's
+        # list would otherwise stop the grade on "the leads file lacks".
+        leads, header = getattr(args, "leads", None), set()
+        if leads:
+            try:
+                with open(leads, newline="") as fh:
+                    header = {c.strip().lower() for c in next(csv.reader(fh), [])}
+            except OSError:
+                header = set()
+        pairs = [f"{field}={column}" for field, column in fm.items()
+                 if not leads or str(column).lower() in header]
+        if pairs:
+            args.field_map = pairs
+            filled.append("field_map")
     return filled
 
 

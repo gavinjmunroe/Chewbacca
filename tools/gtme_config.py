@@ -338,8 +338,11 @@ def import_entry(src: str, replace: bool) -> int:
     except (OSError, ValueError) as exc:
         print(f"chewbacca gtme config: {exc}", file=sys.stderr)
         return 2
-    clients = [c for c in doc.get("clients", []) if isinstance(c, dict)]
     have = client(entry["name"], doc)
+    if have is not None and _norm(have.get("name")) != _norm(entry["name"]):
+        print(f"chewbacca gtme config import: {entry['name']} is an alias of {have.get('name')} here; "
+              f"rename one of them first", file=sys.stderr)
+        return 2
     # What `gtme setup` writes when it names a workspace: nothing to lose.
     stub = have is not None and set(have) <= {"name", "workspaces", "aliases"}
     if have is not None and not (replace or stub):
@@ -349,10 +352,15 @@ def import_entry(src: str, replace: bool) -> int:
     if have is not None and not entry.get("workspaces") and have.get("workspaces"):
         entry = dict(entry, workspaces=have["workspaces"])
     if path.exists():
-        backup = path.with_name(f"{path.name}.bak-{int(time.time())}")
+        stamp = int(time.time())
+        backup = path.with_name(f"{path.name}.bak-{stamp}")
+        n = 1
+        while backup.exists():  # two imports in one second keep both originals
+            backup = path.with_name(f"{path.name}.bak-{stamp}-{n}")
+            n += 1
         backup.write_bytes(path.read_bytes())
         print(f"backed up {path} to {backup.name}")
-    clients = [c for c in clients if c is not have] + [entry]
+    clients = [c for c in doc.get("clients", []) if c is not have] + [entry]
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(json.dumps(dict(doc, clients=clients), indent=1) + "\n")

@@ -1546,6 +1546,46 @@ def resolve_ws(args):
     return why
 
 
+# What a client's `ready` block in clients.json holds, and the flag each one
+# fills when the command line leaves it out. The same block `gtme ready` reads.
+READY_FILES = (("verification", "verification"), ("senders", "senders"), ("review", "review"))
+READY_VALUES = (("warmup_start", "warmup_start"), ("icp_titles", "icp_titles"),
+                ("icp_fit_column", "icp_fit_column"), ("offer", "offer"), ("signal", "signal"))
+
+
+def fill_from_ready(args):
+    """Fill flags the command line left out from --client's `ready` block, and
+    name what came from there. 2026-10-13, a client operator rehearsing his
+    first grade: the block held the verification, suppress and sender files,
+    the warmup date, the ICP titles and the field map, and `--client` read none
+    of it, so a draft graded with --client and --leads alone came back NOT
+    CHECKED on four of five gates. A file that isn't on this Mac is left out."""
+    if not args.client or args.verify:
+        return []
+    entry = load_client(args.client) or {}
+    ready = entry.get("ready") if isinstance(entry.get("ready"), dict) else {}
+    filled = []
+    for key, attr in READY_FILES:
+        v = ready.get(key)
+        if getattr(args, attr) is None and isinstance(v, str) and os.path.isfile(os.path.expanduser(v)):
+            setattr(args, attr, os.path.expanduser(v))
+            filled.append(key)
+    v = ready.get("suppress")
+    if not args.suppress and isinstance(v, str) and os.path.isfile(os.path.expanduser(v)):
+        args.suppress = [os.path.expanduser(v)]
+        filled.append("suppress")
+    for key, attr in READY_VALUES:
+        v = ready.get(key)
+        if getattr(args, attr) is None and v:
+            setattr(args, attr, ",".join(v) if isinstance(v, list) else str(v))
+            filled.append(key)
+    fm = ready.get("field_map")
+    if not args.field_map and isinstance(fm, dict) and fm:
+        args.field_map = [f"{field}={column}" for field, column in fm.items()]
+        filled.append("field_map")
+    return filled
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="gtme-grade", description=__doc__.split("\n")[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -1607,6 +1647,10 @@ def main(argv=None):
             return 2
         print(f"gtme-grade: verified {args.action} on {args.campaign} in {args.ws}")
         return 0
+    filled = fill_from_ready(args)
+    if filled:
+        print(f"gtme-grade: from {args.client}'s ready inputs in clients.json: {', '.join(filled)}",
+              file=sys.stderr)
     try:
         camp, gates, passed, inputs = grade(args)
     except (OSError, ValueError) as exc:

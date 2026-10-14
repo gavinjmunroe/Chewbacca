@@ -206,6 +206,89 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(next(c for c in cfg["clients"] if c["name"] == "Harbor Church Test")["rulings"][0]["rule"],
                          "Five a day in week one")
 
+    # -- carrying a client to another Mac (2026-10-13: a client operator's
+    # install, rehearsed from a clean HOME, had the entry pasted by hand and its
+    # ready block still named files in the sender's home)
+
+    def test_export_writes_home_paths_as_tilde_and_import_reads_them_on_another_home(self):
+        ready_dir = self.tmp / "data" / "week"
+        ready_dir.mkdir()
+        (ready_dir / "verdicts.csv").write_text("email,verification\n")
+        clay = dict(self.clay, ready={"verification": str(ready_dir / "verdicts.csv"), "warmup_start": "2026-10-02"})
+        write(self.cfg, {"clients": [clay, self.solo]})
+        out = self.tmp / "northwind.client.json"
+        r = self.gtme("config", "export", "--client", "Northwind", "--out", str(out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        sent = json.loads(out.read_text())["entry"]
+        self.assertEqual(sent["data_dir"], "~/data")
+        self.assertEqual(sent["ready"]["verification"], "~/data/week/verdicts.csv")
+        self.assertNotIn(str(self.tmp), out.read_text())
+        # The operator's Mac: another home, where `gtme setup` already named the workspace.
+        other = self.tmp / "operator"
+        for rel in ("data/week", "repo"):
+            (other / rel).mkdir(parents=True)
+        (other / "data/week/verdicts.csv").write_text("email,verification\n")
+        (other / "repo/DECISIONS.json").write_text(self.decisions.read_text())
+        self.assertTrue(sent["rulings_path"].startswith("~/"), sent["rulings_path"])
+        theirs = write(other / ".chewbacca/gtm/clients.json",
+                       {"clients": [{"name": "Northwind Test Co", "workspaces": ["9001"]}]})
+        env = dict(self.env, HOME=str(other), GTM_CONFIG=str(theirs), GTME_HOME=str(other / ".chewbacca/gtm"))
+        r = self.gtme("config", "import", str(out), env=env)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("backed up", r.stdout)
+        got = json.loads(theirs.read_text())["clients"]
+        self.assertEqual(len(got), 1, "the stub gtme setup wrote was kept beside the import")
+        self.assertEqual(got[0]["principal"], "Riley Stone")
+        r = self.gtme("config", "check", "--client", "Northwind", env=env)
+        self.assertEqual(r.returncode, 0, r.stdout)
+
+    def test_import_never_overwrites_a_real_entry_without_replace(self):
+        out = write(self.tmp / "in.json", {"chewbacca_client": 1, "entry": {"name": "Northwind Test Co",
+                                                                            "workspaces": ["9001"]}})
+        r = self.gtme("config", "import", str(out))
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("--replace", r.stderr)
+        self.assertEqual(json.loads(self.cfg.read_text())["clients"][0]["principal"], "Riley Stone")
+
+    def test_a_path_in_another_persons_home_is_an_error(self):
+        clay = dict(self.clay, ready={"suppress": "/Users/someone-else/code/data/suppress.csv"})
+        write(self.cfg, {"clients": [clay, self.solo]})
+        r = self.gtme("config", "check", "--client", "Northwind")
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("another person's home", r.stdout)
+        self.assertIn("ready.suppress", r.stdout)
+
+    def test_a_missing_ready_file_is_an_error_and_a_relative_one_is_not(self):
+        clay = dict(self.clay, ready={"senders": "~/nowhere/senders.json", "verification": "verdicts.csv"})
+        write(self.cfg, {"clients": [clay, self.solo]})
+        r = self.gtme("config", "check", "--client", "Northwind")
+        self.assertIn("ready.senders: ~/nowhere/senders.json does not exist", r.stdout)
+        self.assertNotIn("ready.verification", r.stdout)
+
+    def test_grade_fills_left_out_inputs_from_the_clients_ready_block(self):
+        import argparse
+        import gtme_grade
+        ver = self.tmp / "verdicts.csv"
+        ver.write_text("email,verification\n")
+        clay = dict(self.clay, ready={"verification": str(ver), "suppress": str(self.tmp / "missing.csv"),
+                                      "warmup_start": "2026-10-02", "icp_titles": "partner,principal",
+                                      "field_map": {"audf_x": "firm"}})
+        write(self.cfg, {"clients": [clay, self.solo]})
+        os.environ["GTME_CLIENTS"] = str(self.cfg)
+        try:
+            a = argparse.Namespace(client="Northwind Test Co", verify=False, verification=None, senders=None,
+                                   review=None, suppress=None, warmup_start=None, icp_titles="ceo",
+                                   icp_fit_column=None, offer=None, signal=None, field_map=None)
+            filled = gtme_grade.fill_from_ready(a)
+        finally:
+            os.environ.pop("GTME_CLIENTS", None)
+        self.assertEqual(a.verification, str(ver))
+        self.assertIsNone(a.suppress, "a ready file that isn't on this Mac was filled in")
+        self.assertEqual(a.warmup_start, "2026-10-02")
+        self.assertEqual(a.icp_titles, "ceo", "the command line lost to the ready block")
+        self.assertEqual(a.field_map, ["audf_x=firm"])
+        self.assertEqual(filled, ["verification", "warmup_start", "field_map"])
+
 
 if __name__ == "__main__":
     unittest.main()

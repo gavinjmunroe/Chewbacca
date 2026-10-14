@@ -17,6 +17,9 @@ the reader. New tasks and compacted sessions load it automatically once trusted.
 The feature does not install Codex, change macOS permissions or publish notes.
 See [event mappings and requirements](CODEX-HOOKS.md).
 
+Running one client's outbound from your own Mac? Start with
+[OPERATOR-START.md](OPERATOR-START.md) instead.
+
 ## Prerequisites
 
 - [Claude Code](https://claude.ai/code) installed

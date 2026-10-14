@@ -12,6 +12,14 @@ that file and the one place its shape is written down.
     chewbacca gtme config check --client Zeutara
     chewbacca gtme config check --all --json
     chewbacca gtme config fields
+    chewbacca gtme config export --client Zeutara --out zeutara.client.json
+    chewbacca gtme config import zeutara.client.json [--replace]
+
+export writes one entry with every path under your home as ~/, so it means the
+same thing on the operator's Mac; import adds it to this Mac's file (a backup
+first) and checks it. 2026-10-13, a client operator's install rehearsed from a
+clean HOME: the entry had to be pasted by hand, and its `ready` block still
+named files in the sender's home that the operator's Mac would never have.
 
 The file is ~/.chewbacca/gtm/clients.json ($GTM_CONFIG, then the older
 $GTME_CLIENTS and $CHEWBACCA_GTM_CLIENTS, win when set). Exit 0 when every
@@ -26,6 +34,7 @@ import json
 import os
 import re
 import sys
+import time
 from pathlib import Path
 
 # One line per field: (kind, paths this field is part of, what it holds).
@@ -209,6 +218,18 @@ def check_entry(entry: dict, doc: dict) -> dict:
             errors.append("offer_facts.raises_debt: should be true or false")
         if key == "report" and v.get("day") and str(v["day"]).lower() not in DAYS:
             errors.append(f"report.day: {v['day']!r} is not a weekday name")
+    ready = entry.get("ready") if isinstance(entry.get("ready"), dict) else {}
+    for key in READY_FILES:
+        v = ready.get(key)
+        # A relative name is found beside the drafts file at run time; only a
+        # home or absolute path can be checked here.
+        if isinstance(v, str) and v.startswith(("~", "/")) and not Path(os.path.expanduser(v)).exists():
+            errors.append(f"ready.{key}: {v} does not exist")
+    for where, v in strings(entry):
+        other = foreign_home(v)
+        if other:
+            errors.append(f"{where}: {v} is in {other}, another person's home; send entries with "
+                          f"`gtme config export`, which writes paths as ~/")
     if entry.get("rulings_path"):
         rp = Path(os.path.expanduser(entry["rulings_path"]))
         try:
@@ -243,6 +264,107 @@ def check_entry(entry: dict, doc: dict) -> dict:
             "missing": missing, "present": [k for k in contract if k in entry]}
 
 
+# The `ready` fields that name a file, as `gtme ready` and gtme-grade read them.
+READY_FILES = ("verification", "suppress", "senders", "leads_file", "review")
+HOME_ROOTS = ("/Users/", "/home/")
+
+
+def strings(v, where=""):
+    """(dotted path, string) for every string anywhere in an entry."""
+    if isinstance(v, str):
+        yield where, v
+    elif isinstance(v, dict):
+        for k, x in v.items():
+            yield from strings(x, f"{where}.{k}" if where else str(k))
+    elif isinstance(v, list):
+        for i, x in enumerate(v):
+            yield from strings(x, f"{where}[{i}]")
+
+
+def foreign_home(v: str, home: str | None = None) -> str:
+    """The home folder `v` points into when it isn't this user's, else ''."""
+    home = (home or os.path.expanduser("~")).rstrip("/")
+    for root in HOME_ROOTS:
+        if v.startswith(root):
+            top = root + v[len(root):].split("/", 1)[0]
+            if top != home and top not in ("/Users/Shared",):
+                return top
+    return ""
+
+
+def portable(entry: dict, home: str | None = None) -> dict:
+    """The entry with every path under `home` written as ~/."""
+    home = (home or os.path.expanduser("~")).rstrip("/")
+
+    def walk(v):
+        if isinstance(v, str):
+            return "~" + v[len(home):] if v == home or v.startswith(home + "/") else v
+        if isinstance(v, dict):
+            return {k: walk(x) for k, x in v.items()}
+        if isinstance(v, list):
+            return [walk(x) for x in v]
+        return v
+    return walk(entry)
+
+
+def export_entry(name: str, out: str | None) -> int:
+    doc = load()
+    c = client(name, doc)
+    if c is None:
+        print(f"chewbacca gtme config: no client named {name} in {config_path()}", file=sys.stderr)
+        return 2
+    text = json.dumps({"chewbacca_client": 1, "entry": portable(c)}, indent=1) + "\n"
+    if out:
+        Path(out).write_text(text)
+        print(f"wrote {out}: {c.get('name')}, paths under your home written as ~/")
+    else:
+        sys.stdout.write(text)
+    return 0
+
+
+def import_entry(src: str, replace: bool) -> int:
+    try:
+        body = json.loads(Path(os.path.expanduser(src)).read_text())
+    except (OSError, ValueError) as exc:
+        print(f"chewbacca gtme config import: {src}: {exc}", file=sys.stderr)
+        return 2
+    entry = body.get("entry") if isinstance(body, dict) and "entry" in body else body
+    if not isinstance(entry, dict) or not isinstance(entry.get("name"), str) or not entry["name"].strip():
+        print(f"chewbacca gtme config import: {src} holds no client entry with a name", file=sys.stderr)
+        return 2
+    path = config_path()
+    try:
+        doc = load(path)
+    except (OSError, ValueError) as exc:
+        print(f"chewbacca gtme config: {exc}", file=sys.stderr)
+        return 2
+    clients = [c for c in doc.get("clients", []) if isinstance(c, dict)]
+    have = client(entry["name"], doc)
+    # What `gtme setup` writes when it names a workspace: nothing to lose.
+    stub = have is not None and set(have) <= {"name", "workspaces", "aliases"}
+    if have is not None and not (replace or stub):
+        print(f"chewbacca gtme config import: {path} already has {have.get('name')}; --replace swaps it "
+              f"(the file is backed up first)", file=sys.stderr)
+        return 2
+    if have is not None and not entry.get("workspaces") and have.get("workspaces"):
+        entry = dict(entry, workspaces=have["workspaces"])
+    if path.exists():
+        backup = path.with_name(f"{path.name}.bak-{int(time.time())}")
+        backup.write_bytes(path.read_bytes())
+        print(f"backed up {path} to {backup.name}")
+    clients = [c for c in clients if c is not have] + [entry]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(dict(doc, clients=clients), indent=1) + "\n")
+    os.replace(tmp, path)
+    doc = load(path)
+    r = check_entry(client(entry["name"], doc), doc)
+    print(f"imported {entry['name']} into {path}: {'OK' if not r['errors'] else 'ERRORS'}")
+    for e in r["errors"]:
+        print(f"  error    {e}")
+    return 1 if r["errors"] else 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="chewbacca gtme config", description=__doc__.splitlines()[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
@@ -253,7 +375,17 @@ def main(argv=None) -> int:
     who.add_argument("--all", action="store_true")
     p.add_argument("--json", action="store_true")
     sub.add_parser("fields", help="every field the contract names, and what it holds")
+    p = sub.add_parser("export", help="one client's entry as a file another Mac can import")
+    p.add_argument("--client", required=True)
+    p.add_argument("--out", help="write here instead of printing")
+    p = sub.add_parser("import", help="add an exported entry to this Mac's clients.json, then check it")
+    p.add_argument("file")
+    p.add_argument("--replace", action="store_true", help="swap out an existing entry of the same name")
     a = ap.parse_args(argv)
+    if a.cmd == "export":
+        return export_entry(a.client, a.out)
+    if a.cmd == "import":
+        return import_entry(a.file, a.replace)
     if a.cmd == "fields":
         for k, (kind, paths, what) in FIELDS.items():
             print(f"  {k:<24}{kind:<13}{'/'.join(paths) or 'optional':<13}{what}")

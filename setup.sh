@@ -3104,6 +3104,14 @@ if command -v brew &>/dev/null; then
   _daemon register recall-gate --at 06:30 --nice 10 -- /usr/bin/python3 "$_svc_root/tools/recall_gate.py" check &&
     log "recall gate checked daily" || warn "could not schedule the recall gate"
 
+  # What got used (reinvent plan, phase 0): once a day the verdict log folds
+  # into ~/.chewbacca/state/usage before lib.sh deletes parts older than eight
+  # days, and on Sundays (or a week after the last one) the 30-day report lands
+  # in ~/.chewbacca/reports/usage/. Without the daily fold, hook runs older than
+  # eight days are gone, and the log only began on 2026-10-12.
+  _daemon register usage --at 05:40 --nice 15 -- /usr/bin/python3 "$_svc_root/tools/usage_report.py" --daily &&
+    log "usage report folded daily, written weekly" || warn "could not schedule the usage report"
+
   # Install the one LaunchAgent last, and fold in any per-job agent an older
   # install left behind, so Login Items ends with a single Chewbacca row.
   "$_mr_node" "$SCRIPT_DIR/bin/chewbacca-daemon" install 2>&1 | while IFS= read -r _line; do log "$_line"; done

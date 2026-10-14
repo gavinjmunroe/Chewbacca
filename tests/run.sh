@@ -1191,6 +1191,8 @@ if group "installer"; then
     /usr/bin/python3 "$ROOT/tests/test_bashparse.py"
   check  "every hook, router and send writes one verdict row, and why --refused reads them" \
     /usr/bin/python3 "$ROOT/tests/test_verdicts.py"
+  check  "chewbacca usage counts every skill, verb, tool, slash command and hook over 30 days" \
+    /usr/bin/python3 "$ROOT/tests/test_usage_report.py"
 
   check  "committed checksums describe the committed tree" \
     python3 "$ROOT/tools/committed_checksums.py"

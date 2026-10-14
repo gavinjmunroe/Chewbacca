@@ -65,6 +65,7 @@ COMMANDS=(
   "commands|list, search, or show a slash command"
   "why|which rule or skill governs a behavior; --refused says what refused and why"
   "log|what the kit has done recently"
+  "usage|what got used in 30 days: every skill, verb, tool, slash command and hook, and what nobody touched"
   "bench|time the things that run on every session"
   "context|measure what the kit costs you before you type"
   "evals|run the skill evals"
@@ -237,6 +238,12 @@ launch)
   # Opens a new named, briefed session in the Claude desktop app. See bin/chewbacca-launch.
   shift
   exec python3 "$ROOT/bin/chewbacca-launch" "$@"
+  ;;
+usage)
+  # Every skill, verb, bin tool, slash command and hook with its 30-day use,
+  # load and refusal counts. See tools/usage_report.py.
+  shift
+  exec python3 "$ROOT/tools/usage_report.py" "$@"
   ;;
 machine)
   # What this Mac can take right now: cores by kind, memory, power, whether

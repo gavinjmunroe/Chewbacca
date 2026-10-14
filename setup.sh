@@ -2015,6 +2015,13 @@ _register("PreToolUse", hooks_dir + "/chatdb-guard.sh", timeout=5,
           matcher="Bash",
           status="Checking this chat.db search reads attributedBody...")
 
+# Mail.app holds only the accounts added to it: on 2026-10-08 its newest
+# message was 9/22, and on 2026-10-13 it was searched for USC invites it never
+# had. Email goes through Gmail (chewbacca email).
+_register("PreToolUse", hooks_dir + "/mail-app-guard.sh", timeout=5,
+          matcher="Bash",
+          status="Checking this email read goes through Gmail...")
+
 _register("PreToolUse", hooks_dir + "/ux-guard.sh", timeout=15,
           matcher="Write|Edit",
           status="Checking this UI is not the generated look...")

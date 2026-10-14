@@ -72,11 +72,13 @@ chewbacca gtme config check --client <Client>     # OK means you're set
 A draft still on your Mac, as a copy file (steps split by `---`):
 
 ```sh
-chewbacca gtme-grade --client <Client> --copy draft.txt --leads leads.csv --review review.json
+chewbacca gtme-grade --client <Client> --copy draft.txt --leads leads.csv --review review.json \
+  --offer "what this campaign sells, in concrete nouns"
 ```
 
 `--client` fills the verification, suppression and sender files, the warmup
-date, the ICP titles and the field map from the client file. `review.json`
+date, the ICP titles and the field map from the client file. The offer is
+per campaign, so a copy file names it with `--offer`. `review.json`
 records that someone read the emails as the recipient would. Every line comes
 back PASS, FAIL or NOT CHECKED with the rule behind it, and NOT CHECKED
 counts as a fail.

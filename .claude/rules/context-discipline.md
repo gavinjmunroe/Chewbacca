@@ -41,6 +41,13 @@ RIGHT: write "ready to submit, awaiting confirmation." Ask "did those go in?"
        in four words next session.
 ```
 
+The reverse fails too: "drafted, not sent" goes stale the moment he sends it
+by hand. Before telling him something is unsent, undone or missed, check the
+place it would have gone (Gmail Sent, the submissions API, the thread). On
+2026-10-14 a note said a BISC Quiz #4 reopen email was "drafted in Gmail, not
+sent", the reply repeated it, and he wrote "Shit bro why didn't we send tha?"
+It had gone out from his USC account on 10/3. One Sent search would have shown it.
+
 ---
 
 ## VERIFY THE EDIT LANDED. YOUR SCRIPT'S SUCCESS MESSAGE IS NOT EVIDENCE.

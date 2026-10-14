@@ -342,3 +342,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_guard_where_it_leaves: a check a tool can make about itself lives in the tool or at the boundary, not in a guard reading every Bash command; suite-gate refused the same 4 real repeats and none of 22 misreads (10/13)
 - feedback_tests_never_reach_the_screen: suite groups die at 1200 s as HUNG, pytest gets only pytest files (was rerunning all 254, 3.5 h), send codes from tests/no-send/jobs never reach the HUD, real dialogs in tests are opt-in (10/13)
 - feedback_chrome_js_open_flashes: chrome-js --real --open flashes Chrome over Caleb (10/13 'DONT FLASH BANG ME'); drive an open tab with --match instead; TikTok Studio time picker needs a real click
+- feedback_outcome_not_action_2026_10_13: Zeutara dead-deck night, six root causes: action checked not outcome, guesses broken by live data, fix not on shared path, lessons lost to louder defaults

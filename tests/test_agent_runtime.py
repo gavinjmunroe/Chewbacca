@@ -344,6 +344,33 @@ class RuntimeTests(unittest.TestCase):
             for name in scripts:
                 self.assertTrue((ROOT / '.claude/hooks' / name).is_file(), name)
 
+    def test_setup_puts_chewbacca_on_the_terminal_path_and_undo_takes_it_back(self):
+        # 2026-10-13, a client operator's install rehearsed in a scratch HOME:
+        # --every-agent wired five agents and `chewbacca gtme setup`, the next
+        # line of the guide, said command not found.
+        link = self.home / '.local/bin/chewbacca'
+        with patch.dict(os.environ, {'PATH': '/usr/bin:/bin'}):
+            result = runtime.setup('claude-code')
+        self.assertTrue(link.is_symlink(), result.get('cli'))
+        self.assertEqual(link.resolve(), (ROOT / 'bin/chewbacca').resolve())
+        runtime.remove('claude-code')
+        self.assertFalse(link.is_symlink() or link.exists())
+
+    def test_setup_never_takes_over_a_chewbacca_already_on_path(self):
+        # On a Mac with the kit runtime, ~/.local/bin/chewbacca points at
+        # origin/main; a setup run from a checkout must leave it alone.
+        bin_dir = self.home / '.local/bin'
+        bin_dir.mkdir(parents=True)
+        mine = self.home / 'kit-runtime-chewbacca'
+        mine.write_text('#!/bin/sh\n')
+        (bin_dir / 'chewbacca').symlink_to(mine)
+        with patch.dict(os.environ, {'PATH': '/usr/bin:/bin'}):
+            result = runtime.setup('claude-code')
+        self.assertIsNone(result['cli'])
+        self.assertEqual((bin_dir / 'chewbacca').resolve(), mine.resolve())
+        runtime.remove('claude-code')
+        self.assertEqual((bin_dir / 'chewbacca').resolve(), mine.resolve())
+
     def test_remove_restores_only_unchanged_owned_files_and_links(self):
         home = context.codex_home()
         home.mkdir()

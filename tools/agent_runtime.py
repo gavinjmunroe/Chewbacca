@@ -577,6 +577,16 @@ def setup(name, brain=None, import_claude_skills=False, person_name=None, team=F
                                    'hooks': str(hook_path), 'skills': projection,
                                    'mcp_added': mcp_added, 'activation': activation,
                                    'backups': backups})
+    linked = link_cli() if planned['runtimes'] else None
+    result['cli'] = str(linked) if linked else None
+    if linked:
+        # Into the first runtime's receipt, so its undo removes the link too.
+        receipt = shared / 'runtime-installs' / (planned['runtimes'][0]['id'] + '.json')
+        data = json.loads(receipt.read_text())
+        data['links'].append({'path': str(linked), 'target': str(linked.resolve())})
+        context.atomic_write(receipt, json.dumps(data) + '\n')
+        on_path = str(linked.parent) in os.environ.get('PATH', '').split(':')
+        result['cli_on_path'] = on_path
     result['missing_dependencies'] = [binary for binary in ('bash', 'jq') if not shutil.which(binary)]
     result['missing_context_sources'] = [name for name in context.source_names(brain) if not (brain / name).is_file()]
     return result
@@ -686,6 +696,24 @@ def terminal_shims(bin_dir=None):
         shim.chmod(0o755)
         written.append(str(shim))
     return written
+
+
+def link_cli(bin_dir=None):
+    """`chewbacca` on the terminal's PATH, linked to this checkout's command.
+
+    2026-10-13, a client operator's install rehearsed in a scratch HOME:
+    `setup.sh --every-agent` wired five agents and put no `chewbacca` anywhere a
+    terminal looks, so the next line of every guide (`chewbacca gtme setup`)
+    said command not found. Never replaces anything already there: on a Mac
+    with the kit runtime, ~/.local/bin/chewbacca points at origin/main and a
+    checkout must not take it over. Returns the link it made, or None."""
+    bin_dir = bin_dir or Path.home() / '.local/bin'
+    link = bin_dir / 'chewbacca'
+    if link.exists() or link.is_symlink() or shutil.which('chewbacca'):
+        return None
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    link.symlink_to(ROOT / 'bin' / 'chewbacca')
+    return link
 
 
 def remember_hosts_at_setup():
@@ -864,6 +892,10 @@ def describe(command, output):
             print('Checks need these missing tools: ' + ', '.join(output['missing_dependencies']))
         if output['missing_context_sources']:
             print('Missing context: ' + ', '.join(output['missing_context_sources']))
+        if output.get('cli'):
+            print('Terminal command: ' + output['cli'] + (
+                '' if output.get('cli_on_path') else
+                ' (~/.local/bin is not on this PATH yet: ' + str(ROOT / 'bin/chewbacca') + ' works meanwhile)'))
         print('Model, account and permission settings preserved. Data imports and session openers are optional.')
         print('Undo everything above: ' + shlex.quote(sys.executable) + ' '
               + shlex.quote(str(ROOT / 'tools/agent_runtime.py')) + ' remove --runtime '

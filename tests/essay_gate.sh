@@ -5,6 +5,8 @@
 H="${ESSAY_GATE_HOOK:-$(cd "$(dirname "$0")/.." && pwd)/.claude/hooks/essay-gate.sh}"
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 pass=0; fail=0
+mkdir -p "$tmp/specs" "$tmp/nospec"; : > "$tmp/specs/SECTION-SPEC.md"
+export ESSAY_SPEC_DIRS="$tmp/specs"
 t() { # name, expected_exit, command
   out=$(printf '{"tool_name":"Bash","tool_input":{"command":%s}}' "$(python3 -c 'import json,sys;print(json.dumps(sys.argv[1]))' "$3")" | bash "$H" 2>&1 >/dev/null)
   rc=$?
@@ -34,6 +36,7 @@ PY
 echo "SHOULD BLOCK (exit 2):"
 t "batch from a file, the 10/11 shape" 2 "gws docs documents batchUpdate --params '{\"documentId\":\"x\"}' --json \"\$(cat $tmp/slop.json)\""
 t "inline json"                         2 "gws docs documents batchUpdate --params '{\"documentId\":\"x\"}' --json '$(cat "$tmp/inline.txt")'"
+ESSAY_SPEC_DIRS="$tmp/nospec" t "section with no spec behind it" 2 "gws docs documents batchUpdate --params '{\"documentId\":\"x\"}' --json \"\$(cat $tmp/human.json)\""
 echo "SHOULD PASS (exit 0):"
 t "hand-written narrative"  0 "gws docs documents batchUpdate --params '{\"documentId\":\"x\"}' --json \"\$(cat $tmp/human.json)\""
 t "a typo fix"              0 "gws docs documents batchUpdate --params '{\"documentId\":\"x\"}' --json \"\$(cat $tmp/typo.json)\""

@@ -193,6 +193,10 @@ When the user says that's what is happening:
 - Ask multiple-choice questions for every decision: thesis, angle, order,
   what to cut, the personal line. Batch them, letters only, so the user
   answers in one line ("1D 2A 3C").
+- Never write the draft in one shot. Follow "Never one-shot creative work" in
+  `.claude/rules/research-the-craft.md`: spec file first, then map verified
+  facts onto the model's paragraph jobs, then draft and gate one paragraph at
+  a time (Caleb, 2026-10-13: "never 1 shot anything creative EVER").
 - Write the draft from their picks and the sources. Save it to ~/Downloads and
   log every prompt in the project's PROMPTS-LOG.md.
 - When they say put it in the shared doc, put it in the doc, edit in place,

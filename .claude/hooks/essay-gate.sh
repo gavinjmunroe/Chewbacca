@@ -65,6 +65,33 @@ PY
 words=$(printf '%s' "$text" | wc -w | tr -d ' ')
 [ "${words:-0}" -ge 150 ] || exit 0
 
+# A section-sized write needs a written spec behind it. On 2026-10-13 the
+# Miyake section was one-shot five times in an hour and each version read
+# worse than Andy's; the one that held up came from MIYAKE-SECTION-SPEC.md,
+# Andy's paragraphs broken into jobs and Miyake's verified facts mapped onto
+# them. Caleb: "never 1 shot anything creative EVER". 300 words is about one
+# double-spaced page, past any typo fix or added citation.
+if [ "${words:-0}" -ge 300 ]; then
+  spec_dirs="${ESSAY_SPEC_DIRS:-$HOME/coursework $HOME/Downloads $HOME/second-brain/coursework ${CLAUDE_PROJECT_DIR:-$PWD}}"
+  found=""
+  for d in $spec_dirs; do
+    [ -d "$d" ] || continue
+    found="$(find "$d" -maxdepth 5 -type f \( -iname '*SPEC*.md' -o -iname '*OUTLINE*.md' \) -mmin -1440 2>/dev/null | head -1)"
+    [ -n "$found" ] && break
+  done
+  if [ -z "$found" ]; then
+    cat >&2 <<MSG
+essay-gate: refusing. This puts $words words of prose into a Google Doc and
+no spec or outline (a *SPEC*.md or *OUTLINE*.md file from the last 24 hours)
+exists behind it. Creative writing is never one-shot: break the model text
+into what each paragraph does, map verified facts onto those jobs, draft one
+paragraph at a time against its counterpart, then gate each paragraph. See
+"Never one-shot creative work" in .claude/rules/research-the-craft.md.
+MSG
+    exit 2
+  fi
+fi
+
 report="$(printf '%s' "$text" | /usr/bin/python3 "$slop" --stdin --essay --issues 2>/dev/null)"
 score="$(printf '%s' "$report" | head -1 | awk '{print $1}')"
 case "$score" in ''|*[!0-9]*) exit 0 ;; esac

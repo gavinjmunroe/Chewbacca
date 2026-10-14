@@ -57,3 +57,32 @@ are both wrong.
 Before producing, answer: **what do the people who do this for a living say
 separates a good one from a bad one?** No answer means the research step was
 skipped.
+
+## Never one-shot creative work
+
+Anything creative, meaning an essay section, a personal statement, a script, a
+post, copy or a design, goes through these steps in order and never as one
+generated draft:
+
+1. **Find the model.** That's the teammate's section, the user's own best
+   writing, or three good examples from the genre. Read the actual text.
+2. **Write the spec to a file** (`<NAME>-SPEC.md` next to the work). Say what
+   each paragraph or section of the model does, list its moves and register,
+   and give it a few numbers (words, sentences, citations per paragraph).
+3. **Map verified material onto those jobs.** Check each fact on a live page
+   first. A fact with no source stays out, and a quote that can't be found
+   anywhere is fake.
+4. **Draft one unit at a time** against its counterpart in the model.
+5. **Gate each unit.** Check what it opens on, what it closes on, its
+   citation count against the model's, and run slop-check. Then read the whole
+   thing next to the model.
+6. **Report the method and the gaps**, then hand it over.
+
+On 2026-10-13 the Miyake section of a team paper was rewritten five times in
+an hour, each version generated whole and each read worse than Andy's
+hand-written Douglas half ("Its nowhere near as good as andy's", "Stop 1
+shotting things, be methodical"). One draft carried a quote that had no source
+anywhere. The version that held up came from `MIYAKE-SECTION-SPEC.md`, built
+from Andy's five paragraph jobs. Caleb: "never 1 shot anything creative EVER".
+`essay-gate` now refuses a Google Doc write of 300+ words when no
+`*SPEC*.md` or `*OUTLINE*.md` file from the last 24 hours exists.

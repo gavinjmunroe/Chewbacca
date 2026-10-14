@@ -1056,13 +1056,13 @@ function gradeGate(op, request, args) {
 // written only for a prompt chat-approval.sh judged typed by a person. The
 // caller's own session's record wins; otherwise the freshest.
 const CHAT_APPROVAL_MS = 2 * 3600 * 1000;
-function chatApproval() {
+function chatApproval(name, request) {
   const dir = FIXTURES
     ? process.env.CHEWBACCA_CLAY_CHAT_APPROVAL_DIR
     : path.join(os.userInfo().homedir, ".chewbacca", "state", "clay-chat-approval");
   if (!dir) return null;
   let names;
-  try { names = fs.readdirSync(dir); } catch { return null; }
+  try { names = fs.readdirSync(dir); } catch { names = []; }
   if (names.includes("STOPPED")) return null;
   const own = process.env.CLAUDE_CODE_SESSION_ID || "";
   let best = null;
@@ -1077,7 +1077,17 @@ function chatApproval() {
     if (sid === own) return rec;
     if (!best || Number(rec.at) > Number(best.at)) best = rec;
   }
-  return best;
+  if (best) return best;
+  // Native Codex consent has different provenance from Claude attendance.
+  // Read the real composer turn, never manufacture a legacy approval file.
+  if (!FIXTURES && name === "campaign-status" && request.body?.status === "START") {
+    const native = spawnSync("python3", ["-I", path.join(ROOT, "tools/codex_launch_consent.py")],
+      { encoding: "utf8", timeout: 5000, maxBuffer: 4096 });
+    if (native.status === 0) {
+      try { return JSON.parse(native.stdout); } catch { return null; }
+    }
+  }
+  return null;
 }
 
 function noteChatApproval(name, rec) {
@@ -1134,13 +1144,13 @@ function personApproves(name, request) {
   if (FIXTURES && process.env.CHEWBACCA_CLAY_TTY_TRANSCRIPT) fs.writeFileSync(process.env.CHEWBACCA_CLAY_TTY_TRANSCRIPT, prompt);
   if (FIXTURES && process.env.CHEWBACCA_CLAY_TTY_ANSWER !== undefined) return process.env.CHEWBACCA_CLAY_TTY_ANSWER === name;
   if (FIXTURES) {
-    const rec = chatApproval();
+    const rec = chatApproval(name, request);
     if (rec) noteChatApproval(name, rec);
     return rec ? true : false;
   }
   let fd;
   try { fd = fs.openSync("/dev/tty", "r+"); } catch {
-    const rec = chatApproval();
+    const rec = chatApproval(name, request);
     if (rec) noteChatApproval(name, rec);
     return rec ? true : null;
   }

@@ -212,6 +212,15 @@ deadline):
   Chewbacca's.
 - Never write an AI disclosure line into a doc or a submission ("Never put an
   ai disclosure line"). The prompt log is the record; disclosing is their call.
+- Never ask the MCQs for a group paper before reading the group chat and every
+  teammate's DM to him from the last three days. On 2026-10-13 (ACAD 324 Mash
+  Up) the picks were built from the doc and old notes and recommended opening
+  on Hiroshima, which Cooper had ruled out in the gc on 10/12 ("ensure that
+  isn't mentioned"). The prototype had also changed in Siddhi's DM. Caleb:
+  "Read the gc and what they texted me directly!!!!!!" `people texts <gc>`
+  cuts other people's lines short, so read the room with
+  `mac messages history <member handle> --limit 80 --json` and label each
+  `sender`: the gc rows come back with the full text.
 - Never hand a team assignment kit over as a file in ~/Downloads only. On
   2026-10-13 (ACAD 185 A13/A14) the game plan sat in Downloads and he had to
   ask "Where's the game plan?", then "When it makes more sense just make a

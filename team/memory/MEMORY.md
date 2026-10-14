@@ -100,6 +100,8 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 
 ## References
 
+- reference_who_pays_for_ai: Menlo 2026 says about 1 in 3 US adults pay for AI (the 2% was 2025 worldwide); Pew says non-users are uninterested, privacy-worried, distrustful, not cost-blocked
+
 - reference_amber_ios_eas_testflight: How to build + submit amber-ios to TestFlight via EAS (ascAppId, ASC API key...
 - reference_amber_mcp: The Amber/Medha MCP server (medha-id /mcp), endpoint, auth, current tools, and...
 - reference_amber_org_restructure_2026_08_31: Where every Amber/Medha/Togari repo lives after the org split and the 2026-09-03...
@@ -314,6 +316,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_gate_words_see_the_whole_payload: hookd gate words match the whole payload; `path` hid in transcript_path, a U+0130 case fold spelled a gated word, and Write turns backslash-u escapes into characters (10/12)
 - feedback_hud_ide_tells_a_story: the HUD agents IDE reads like a story, Lemma-level; each glass region has one job, transcript one press away, never a sequence of lines (10/11)
 - feedback_chain_waits_in_the_queue: chain overnight jobs with jobs submit --after ID, never a wait in a claude -p prompt; two quit doing nothing on 10/11
+- feedback_fold_asks_into_queued_jobs: queued job prompts are read at start, so a new ask that fits gets edited into the queued prompt, a running one gets a --after follow-up; about 4 running (10/13)
 - feedback_morning_done_means_seen_live: a UI job is "done" only once seen on the live surface; otherwise say landed or rehearsed and list what was never pressed ("Ur sure the IDE is done?", 10/12)
 - feedback_agents_send_by_default: agents send texts and emails on their own; the step 12 press gate is opt-in (mode file), never default ("of course it should be able to send", 10/12)
 - feedback_glass_keeps_visible_buttons: the agents glass keeps labeled buttons to all sessions, new and back; subtraction hid Carlton's nav and the first live test had no way out ("the future is intuitive ux!", 10/12)

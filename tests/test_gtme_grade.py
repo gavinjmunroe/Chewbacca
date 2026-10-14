@@ -551,5 +551,21 @@ st = camp["variants"][0]["steps"][0]
 check("Clay doc: spintax renders every option and lead fields become tokens",
       st["renders"] == ["Hi {{first_name}}\n", "Hello {{first_name}}\n"] and st["subject"] == "a b", st)
 
+# test_address_waiver_needs_a_written_ruling. Ryan Korn ruled on 2026-10-14
+# that Zeutara sends without a postal address for now; only that written,
+# active ruling may turn the address failure into a warning.
+import gtme_operator  # noqa: E402
+_real_rulings = gtme_operator.rulings_for
+gtme_operator.rulings_for = lambda c: [{"id": "no-postal-address", "who": "Ryan Korn", "date": "2026-10-14", "status": "active"}] if c == "Zeutara" else []
+check("address waiver: an active ruling names who and when",
+      gtme_grade.address_waiver("Zeutara") == "Ryan Korn, 2026-10-14")
+check("address waiver: another client gets none", gtme_grade.address_waiver("Acme") == "")
+check("address waiver: no client named gets none", gtme_grade.address_waiver(None) == "")
+gtme_operator.rulings_for = lambda c: [{"id": "no-postal-address", "who": "Ryan", "date": "x", "status": "retired"}]
+check("address waiver: a retired ruling waives nothing", gtme_grade.address_waiver("Zeutara") == "")
+gtme_operator.rulings_for = lambda c: (_ for _ in ()).throw(OSError("unreadable"))
+check("address waiver: an unreadable ruling file waives nothing", gtme_grade.address_waiver("Zeutara") == "")
+gtme_operator.rulings_for = _real_rulings
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

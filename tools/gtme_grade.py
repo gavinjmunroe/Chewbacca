@@ -768,6 +768,20 @@ def load_senders(path):
     return [{k.lower(): v for k, v in a.items()} for a in accts]
 
 
+def address_waiver(client_name):
+    """'who, date' of an active no-postal-address ruling for the client, or ''."""
+    if not client_name:
+        return ""
+    try:
+        import gtme_operator
+        for r in gtme_operator.rulings_for(client_name):
+            if r.get("id") == "no-postal-address" and r.get("status", "active") == "active":
+                return f"{r.get('who', '?')}, {r.get('date', '?')}"
+    except Exception:  # an unreadable ruling file never waives anything
+        return ""
+    return ""
+
+
 def gate_start(camp, args, senders, analytics, gate, client):
     st = camp["settings"]
     steps = [s for v in camp["variants"] for s in v["steps"]]
@@ -798,7 +812,16 @@ def gate_start(camp, args, senders, analytics, gate, client):
         if not opt or not every:
             gate.fail("not every email carries an opt-out", GEX_LAUNCH)
         if not all(ADDRESS.search(s["body"]) for s in steps):
-            gate.fail("not every email carries a physical address", GEX_LAUNCH)
+            # The client can decide to send without one; that's their call
+            # under CAN-SPAM, not ours. Ryan Korn ruled it for Zeutara in the
+            # gc on 2026-10-14 ("I think we should go without the mailing
+            # address for now"). Only a written, active `no-postal-address`
+            # ruling turns the failure into a warning that names it.
+            waived = address_waiver(getattr(args, "client", None))
+            if waived:
+                gate.warn(f"no physical address, by the client's ruling: {waived}", GEX_LAUNCH)
+            else:
+                gate.fail("not every email carries a physical address", GEX_LAUNCH)
 
     # The senders: the ones the campaign actually carries, not a file about them.
     if senders is None:

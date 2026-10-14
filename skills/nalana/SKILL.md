@@ -190,3 +190,11 @@ Thirty-six corrections across two nights, most of them the same few mistakes.
   preview. After each change, shrink the full render to 600px (`sips -Z 600`)
   and compare it to the last approved version before reporting. Crops only
   confirm the spot.
+- **Negative space gets cut along the camera's line of sight.** A radial cutter
+  left the flap's inside wall showing through the S arm, and three rounds of
+  material and bevel tweaks never fixed it: "why is the dark red still there
+  after so many attempt to remove it? literally just delete that part"
+  (2026-10-13). For a logo seen from one camera, extrude the cutter's outline
+  along `(point - camera).normalized()` so nothing behind the opening survives.
+  When the same artifact survives two fixes, ask what geometry the camera
+  actually sees there before touching shading.

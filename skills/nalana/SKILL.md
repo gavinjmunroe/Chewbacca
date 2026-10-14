@@ -184,3 +184,9 @@ Thirty-six corrections across two nights, most of them the same few mistakes.
   (theta, z) grid, blur it a little, trim a flat grid to the old boundary loop
   with a planar EXACT boolean, and map it back. A boolean against a thickened
   copy of the old mesh made garbage.
+- **Judge every change at full frame, at his size.** "Always look at the big
+  picture when making things!" (2026-10-13), after a far-cheek redraw looked
+  smooth in its 1:1 crop but bloated the whole side into a wing at his ~600px
+  preview. After each change, shrink the full render to 600px (`sips -Z 600`)
+  and compare it to the last approved version before reporting. Crops only
+  confirm the spot.

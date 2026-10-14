@@ -359,14 +359,22 @@ LATER = js_regex(
 # interest since we have our own" both came out "unclear" on 2026-10-11, and
 # so did "I have to pass" (togari-platform #84 carries the same rules).
 PASS = js_regex(
-    r"(^\s*no\b([,.!]|\s*$)|\bno interest\b|conflict of interest|\b(i|we) (have to|must|need to) pass\b|(doesn'?t|isn'?t|not)\b[^.]{0,20}\bfit\b|retired from (making )?(new )?invest"
+    r"(^\s*no\s*[.!]?\s*$|\bno interest\b|conflict of interest|\b(i|we) (have to|must|need to) pass\b|(doesn'?t|isn'?t|not)\b[^.]{0,20}\bfit\b|retired from (making )?(new )?invest"
     r"|retired from investing|^\s*no thank|no thank you|not (an )?area of (focus|interest)|pass on"
     r"|outside (of )?our (investment\s*)?(scope|focus|thesis|mandate)"
     r"|don'?t do (consumer|b2c|crypto|hardware|pre-?seed|seed|safes)|bow out|is tough for us"
     r"|going to pass|will pass|not for us|not a fit|no(t)? (a )?fit for us|we('ll| will)? pass"
     r"|passing on|not for us|don'?t do safes|do not do safes|we don'?t invest|not investing"
     r"|outside (of )?our (focus|thesis|mandate)|only (consider|back|invest)|not (the )?right time"
-    r"|don'?t think a call makes sense)", "i")
+    r"|don'?t think a call makes sense"
+    # 2026-10-14, four passes read "unclear" and blocked a 14-campaign launch:
+    # "No Teresa Esser 10437 W. Innovation Drive...", "No  Get Outlook for Mac",
+    # "North Coast is no longer making new investments", "We do not invest in
+    # individual deals", "We will never talk to anyone who is using a third-party".
+    # A reply that opens on "No" is a pass unless its first sentence turns it.
+    r"|^\s*no\b(?![^.?!\n]*\b(but|however|send|share|deck|call|chat|interest|happy|love|open|worries|problem|rush)\b)"
+    r"|no longer (making|doing|writing) (new )?(investments|checks|deals)"
+    r"|(we|i) do not invest|will never (talk|work) (to|with) anyone)", "i")
 QUESTION_TOPIC = js_regex(
     r"(revenue|arr\b|traction|valuation|raising|round|terms|cap table|burn|runway|users|customers"
     r"|ltm|ntm|how much|metrics)", "i")

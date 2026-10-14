@@ -99,6 +99,26 @@ class ReplyIntentRealReplies(unittest.TestCase):
             with self.subTest(body):
                 self.assertEqual(reply.reply_intent(body)["kind"], kind)
 
+    def test_passes_that_blocked_the_2026_10_14_launch(self):
+        # Five passes read "unclear" and stood as owed replies in front of a
+        # 14-campaign launch; reworded, signature shapes kept.
+        cases = {
+            "No Pat Example 100 Main Street, Suite 1, Springfield M: (555) 010-0100": "pass",
+            "No  Get Outlook for Mac  From: Jonah Graham Sent: Tuesday": "pass",
+            "Sorry for the non-response. Our fund is no longer making new investments. Good luck.": "pass",
+            "We do not invest in individual deals unless they are our own. Thanks": "pass",
+            "We will never talk to anyone who is using a third-party to help them raise capital.": "pass",
+        }
+        for body, kind in cases.items():
+            with self.subTest(body):
+                self.assertEqual(reply.reply_intent(body)["kind"], kind)
+        # A "No" the first sentence turns around stays open for a person.
+        for body in ("No worries, happy to take a look at the deck",
+                     "No pressure, but could you share more on the round?",
+                     "No, but I'd be open to a call next week"):
+            with self.subTest(body):
+                self.assertNotEqual(reply.reply_intent(body)["kind"], "pass")
+
     def test_moved_on_wrapped_across_lines(self):
         # A Swiss mailbox notice on 2026-10-11 broke "nicht mehr aktiv" over a
         # line and came out "unclear"; reworded.

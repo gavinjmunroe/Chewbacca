@@ -2,7 +2,7 @@
 # hookd skips this guard for a Bash call without the flag it refuses.
 # Proven by tools/hookd_replay.py: 0.060 s of CPU on every Bash call before
 # (2026-10-12).
-# gate: print-to-pdf
+# gate: print-to-pdf api.todoist.com
 [ -z "${HOOKD_INNER:-}" ] && [ -x "$HOME/.local/bin/hookd" ] && exec "$HOME/.local/bin/hookd" gate "$0" "$@"
 # Timing, logging, a watchdog and an output cap. See lib.sh.
 # shellcheck source=/dev/null
@@ -31,4 +31,15 @@ refuse() {
 }
 printf '%s' "$cmd" | grep -qE -- '--print-to-pdf' &&
   refuse "making a PDF by hand. Run: chewbacca pdf <file.md>... [--out <folder>] (about 2 s a file, never waits on Chrome)."
+# 2026-10-13: "save to the todo" landed nine tasks in Todoist, a week after
+# Caleb said "For rn I don't use todoist, chewbacca is my digital life"
+# (2026-10-07). The memory said so; the agent read which apps were configured
+# instead. A person whose ~/.chewbacca/todo-backend says "ledger" gets every
+# Todoist write refused with the command that puts the task where they look.
+backend="$(head -n1 "${CHEWBACCA_HOME:-$HOME/.chewbacca}/todo-backend" 2>/dev/null)"
+if [ "$backend" = "ledger" ] && printf '%s' "$cmd" | grep -q 'api\.todoist\.com' &&
+  printf '%s' "$cmd" | grep -qiE -- '-X *(POST|DELETE)|--data|-d |data=|method=|urlopen'; then
+  printf '%s' "$cmd" | grep -qiE -- '-X *DELETE|method="?DELETE' ||
+    refuse "this person doesn't use Todoist (~/.chewbacca/todo-backend says ledger). Run: work-ledger add --scope ~ --owner <name> --source-key <slug> --title \"<task>\" --next-action \"<link or step>\""
+fi
 exit 0

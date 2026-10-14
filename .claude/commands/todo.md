@@ -6,6 +6,20 @@ argument-hint: "<task description> [due:today|tomorrow|monday] [sprint:1-5] [p1|
 
 # Todo
 
+## Step 0: which todo list does this person use?
+
+Read `~/.chewbacca/todo-backend`. If it says `ledger`, Todoist is not where they
+look, so skip every step below and run instead:
+
+```bash
+work-ledger add --scope ~ --owner <name> --source-key <slug> \
+  --title "<task with its date>" --next-action "<link or first step>"
+```
+
+Then confirm with `work-ledger list --scope ~`. (2026-10-13: nine tasks went to
+Todoist a week after Caleb said "For rn I don't use todoist, chewbacca is my
+digital life". use-the-kit-guard now refuses that write.)
+
 > Todoist's REST v2 answers 410 Gone since 2026; these calls use API v1, where list endpoints return `{"results": [...], "next_cursor": ...}`, so read `.results`.
 
 Add a task to Todoist from natural language. Parse $ARGUMENTS to extract task details.

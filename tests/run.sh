@@ -1015,6 +1015,9 @@ if group "installer"; then
   check  "assumption-guard refuses an invented modulus and permits index wrapping" \
     bash "$ROOT/tests/assumption_guard.sh"
 
+  check  "use-the-kit-guard refuses hand PDFs and Todoist writes for a ledger user" \
+    bash "$ROOT/tests/use_the_kit_guard.sh"
+
   check  "stale-read-guard refuses a silence claim while jobs are outstanding" \
     bash "$ROOT/tests/stale_read_guard.sh"
   check  "destructive-guard refuses git commands that throw away other tabs' work" \

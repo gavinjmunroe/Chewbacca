@@ -70,7 +70,7 @@ d423c5fa971d673240366951986119d0f21d3bed51ff0852653c65bc253a667e  .claude/hooks/
 2b88073f01d36a30f316336fd890c2ef12fe8cb1077d4ea48c7aa0a7d48f5c30  .claude/hooks/thinking-dash-guard.sh
 f892df995c4d12be40168af03d8fa9885b7a8713e5f5243ed3ebf783a83c60e5  .claude/hooks/time-context.sh
 b8b84bdfe46a02e3382e108e757e0e283c15120b2a63954764c244913e8bd5e4  .claude/hooks/untrusted-screen.sh
-eef74e625330892626e8681772d39d45cfd0698e3bc1e8e481d360a16e91f5b7  .claude/hooks/use-the-kit-guard.sh
+acb87a59f6283ca018b65ff71267674edf91fc738c9dbecfef7fea8edf5eed0d  .claude/hooks/use-the-kit-guard.sh
 3369382daf04ba6aaa49e65680d51279f1ac826cfc04a82a5affe41d8443be4b  .claude/hooks/ux-guard.sh
 6687e42c3becfd7e4b67b6eadaeac3c62262366e2ae7d7d3cb9e0dbba4c40aec  .claude/hooks/vercel-guard.sh
 9b34e33178561029acc8e248a128abe6a19330d95f75b7630d97ecc828eb003e  .claude/hooks/vibe-guard.sh

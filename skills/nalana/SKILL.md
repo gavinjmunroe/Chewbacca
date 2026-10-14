@@ -166,3 +166,11 @@ Thirty-six corrections across two nights, most of them the same few mistakes.
 - **Turning the view trades the left T against the S.** "rotate the whole thing
   slightly right the left T has gotten a bit skinny". At 7 degrees the S went
   edge-on to a slit, and 3.5 is the limit. Check both at 64px after any turn.
+- **No holdout on the helmet, anywhere.** "The transparency part is cooking it
+  bro" (2026-10-13). Every see-through trick put white specks and creases where
+  an inner shell showed. All inner shells are cardinal.
+- **Two bands that meet must share one profile.** "Why is this so deformed???"
+  came from the flap's top band and the cheek's top band climbing onto the dome
+  on different curves. Sample the existing band's radius just inside its edge,
+  smooth it, and reuse it. Never sample the Nalana dome directly, because it's
+  lumpy and leaves stair lines.

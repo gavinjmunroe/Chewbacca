@@ -64,7 +64,7 @@ DERIVED = {
     "import": (["config=" + json.dumps(CONFIG)], ("POST", f"{V3}/imports", {"config": CONFIG, "workspaceId": "1000001"})),
     "add-leads": (["audience=seg_ex1", "filter=" + json.dumps(FILTER), "campaign=cam_ex1"],
                   ("CLI", ["clay", "audiences", "update", "seg_ex1", "--filter", json.dumps(FILTER, separators=(",", ":"))], None)),
-    "campaign-status": (["campaign=cam_ex1", "status=PAUSED"], ("PATCH", f"{V3}/clay-sequencer/campaigns/cam_ex1/status", {"status": "PAUSED"})),
+    "campaign-status": (["campaign=cam_ex1", "status=PAUSED"], ("PATCH", f"{V3}/campaigns/cam_ex1", {"status": "paused"})),
     "lead-category": (["lead_map_id=42", "category_id=3"],
                       ("PATCH", f"{V3}/clay-sequencer/master-inbox/lead-category", {"email_lead_map_id": 42, "category_id": 3})),
     "mark-read": (["lead_map_id=42", "read_status=UNREAD"],
@@ -446,6 +446,9 @@ def test_derived_writes_stay_gated():
     # resume) and only with a passing launch grade on that campaign.
     code, out, _ = run({}, {}, "campaign-status", "ws=1372623", "campaign=cam_ex1", "status=START", "--dry-run")
     ok(code == 0 and out["sent"] is False, f"a START dry run shows its request: {out}")
+    ok(out["request"]["url"].endswith("/campaigns/cam_ex1") and out["request"]["body"] == {"status": "active"}, "START uses the v2 updateCampaign contract")
+    code, stopped, _ = run({}, {}, "campaign-status", "ws=1372623", "campaign=cam_ex1", "status=STOPPED", "--dry-run")
+    ok(code == 0 and stopped["request"]["body"] == {"status": "completed"}, "STOPPED maps to v2 completed")
     with tempfile.TemporaryDirectory() as home:
         base = {"CHEWBACCA_CLAY_TTY_ANSWER": "campaign-status", "HOME": home}
         code, out, _ = run({"api-anything/setCampaignStatus.json": SENT}, {}, "campaign-status", "ws=1372623",

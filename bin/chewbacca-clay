@@ -822,6 +822,9 @@ function checkFinal(sop, req, vals) {
 
 function compose(op, args) {
   const a = { ...args };
+  // cam_ drafts use the v2 campaign resource. The legacy sequencer status
+  // endpoint returned "Campaign does not belong to this workspace" on Oct 14.
+  if (op.name === "campaign-status") a.status = { START: "active", PAUSED: "paused", STOPPED: "completed" }[a.status];
   if (op.compose === "table-settings") {
     a.table_settings = { ...a.settings, AUTO_RUN_ON: String(a.on) === "true", ...(a.mode ? { AUTO_RUN_MODE: a.mode } : {}) };
   }
@@ -1080,7 +1083,7 @@ function chatApproval(name, request) {
   if (best) return best;
   // Native Codex consent has different provenance from Claude attendance.
   // Read the real composer turn, never manufacture a legacy approval file.
-  if (!FIXTURES && name === "campaign-status" && request.body?.status === "START") {
+  if (!FIXTURES && name === "campaign-status" && request.body?.status === "active") {
     const nativeEnv = { PATH: "/usr/bin:/bin:/usr/sbin:/sbin", HOME: os.userInfo().homedir,
       CODEX_THREAD_ID: process.env.CODEX_THREAD_ID || "", CODEX_SESSION_ID: process.env.CODEX_SESSION_ID || "" };
     const native = spawnSync("/usr/bin/python3", ["-I", path.join(ROOT, "tools/codex_launch_consent.py")],

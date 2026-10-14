@@ -1287,7 +1287,15 @@ async function runOp(name, kv, flags) {
     const r = await prep.send();
     const tried = [{ surface: s.type, call: surfaceKey(op, s), ok: !!r.ok, ms: Date.now() - t0, ...(r.ok ? {} : { class: r.class, reason: r.reason }) }];
     verdict(r.ok ? "sent" : "failed", r.ok ? "" : `${r.class}: ${r.reason}`);
-    if (!r.ok) out({ ok: false, op: name, class: r.class, reason: r.reason, sha256: shownHash, tried, ui: uiRoute(op, args) }, EXIT.failed);
+    if (!r.ok) {
+      // HTTP status alone hid Clay's launch refusal on 2026-10-14. Keep the
+      // response private and report only its scalar error fields.
+      const providerError = {};
+      for (const key of ["code", "message", "error", "errorCode"]) {
+        if (typeof r.data?.[key] === "string") providerError[key] = r.data[key].slice(0, 500);
+      }
+      out({ ok: false, op: name, class: r.class, reason: r.reason, providerError, sha256: shownHash, tried, ui: uiRoute(op, args) }, EXIT.failed);
+    }
     // A write never read back after a real call reads back now, every time,
     // until a person sets verified:true in registry.json.
     const rb = op.verified === false ? await readback(op, sendArgs) : null;

@@ -253,6 +253,9 @@ def test_write_gate():
     reply = ("reply", "campaign_id=1", 'reply_data={"email_stats_id":"s1","email_body":"x"}')
     code, out, _ = run(fail, {}, *reply, "--allow-writes", env_extra={"CHEWBACCA_CLAY_TTY_ANSWER": "reply"})
     ok(code == 1 and len(out["tried"]) == 1, "a failed write is sent once and never retried on another surface")
+    fail["api-anything/inboxReply.json"]["data"] = {"message": "Forbidden", "code": "ACCESS_DENIED", "details": {"private": "omitted"}}
+    code, out, _ = run(fail, {}, *reply, "--allow-writes")
+    ok(code == 1 and out["providerError"] == {"message": "Forbidden", "code": "ACCESS_DENIED"}, "write failures expose scalar provider errors without the full response")
     # 2026-10-11, Caleb: "clay replies NEVER need human confirmation".
     code, out, _ = run({"api-anything/inboxReply.json": SENT}, {}, *reply, "--allow-writes")
     ok(code == 0 and out["ok"] is True, ("a reply goes out with nobody typing", out))

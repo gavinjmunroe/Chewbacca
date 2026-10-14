@@ -1081,8 +1081,10 @@ function chatApproval(name, request) {
   // Native Codex consent has different provenance from Claude attendance.
   // Read the real composer turn, never manufacture a legacy approval file.
   if (!FIXTURES && name === "campaign-status" && request.body?.status === "START") {
-    const native = spawnSync("python3", ["-I", path.join(ROOT, "tools/codex_launch_consent.py")],
-      { encoding: "utf8", timeout: 5000, maxBuffer: 4096 });
+    const nativeEnv = { PATH: "/usr/bin:/bin:/usr/sbin:/sbin", HOME: os.userInfo().homedir,
+      CODEX_THREAD_ID: process.env.CODEX_THREAD_ID || "", CODEX_SESSION_ID: process.env.CODEX_SESSION_ID || "" };
+    const native = spawnSync("/usr/bin/python3", ["-I", path.join(ROOT, "tools/codex_launch_consent.py")],
+      { env: nativeEnv, encoding: "utf8", timeout: 5000, maxBuffer: 4096 });
     if (native.status === 0) {
       try { return JSON.parse(native.stdout); } catch { return null; }
     }

@@ -6,6 +6,7 @@ cannot authorize a launch through this reader.
 import datetime as dt
 import json
 import os
+import pwd
 from pathlib import Path
 import re
 import stat
@@ -78,7 +79,7 @@ def consent_from_records(header, records, session, now):
 def read_consent(session):
     if not SID.fullmatch(session):
         return None
-    root = Path.home() / ".codex/sessions"
+    root = session_root()
     candidates = list(root.glob(f"*/*/*/rollout-*-{session}.jsonl"))
     if len(candidates) != 1:
         return None
@@ -111,6 +112,11 @@ def read_consent(session):
             except ValueError:
                 return None
     return consent_from_records(header, records, session, time.time())
+
+
+def session_root():
+    """Use the OS account, as the sender does; HOME is caller-controlled."""
+    return Path(pwd.getpwuid(os.getuid()).pw_dir) / ".codex/sessions"
 
 
 if __name__ == "__main__":

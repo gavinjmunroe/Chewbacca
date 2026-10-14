@@ -156,7 +156,12 @@ def contact_card(name: str) -> list[dict]:
 
 
 def places(query: str) -> list[dict]:
-    raw = run(["chewbacca", "api", "call", "google-maps", "searchPlaces", f"query={query}"])
+    # The kit's own command when PATH has none: a runtime-only install puts
+    # no `chewbacca` on PATH (a stranger's install, rehearsed 2026-10-13).
+    cli = shutil.which("chewbacca") or os.path.join(
+        os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "bin", "chewbacca")
+    raw = run([cli,
+               "api", "call", "google-maps", "searchPlaces", f"query={query}"])
     try:
         d = json.loads(raw.splitlines()[0]) if raw.strip() else {}
     except (ValueError, IndexError):

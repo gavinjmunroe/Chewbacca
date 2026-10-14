@@ -20,6 +20,17 @@ def census(matches_by_state):
 
 
 class Resolve(unittest.TestCase):
+    def test_places_runs_the_kits_own_command_when_path_has_none(self):
+        # A runtime-only install puts no `chewbacca` on PATH (a stranger's
+        # install, rehearsed 2026-10-13), and a bare name raised FileNotFoundError.
+        from unittest import mock
+        seen = []
+        with mock.patch.object(resolve.shutil, "which", return_value=None), \
+                mock.patch.object(resolve, "run", side_effect=lambda argv, *a, **k: seen.append(argv) or ""):
+            resolve.places("Blue Bottle Oakland")
+        kit = (Path(__file__).resolve().parent.parent / "bin" / "chewbacca").resolve()
+        self.assertEqual(Path(seen[0][0]).resolve(), kit)
+
     def test_a_partial_street_completes_with_the_persons_state(self):
         fetch = census({"CA": ["2849 SUMMERDAYS CT, SAN JOSE, CA, 95132"],
                         "TX": ["2849 SUMMERDALE DR, HURST, TX, 76054"]})

@@ -94,7 +94,19 @@ def main():
     # The workspace goes into a URL and into JS evaluated in the signed-in tab: only digits.
     out = run(INBOX, "--workspace", "1');alert(1);//")
     assert out.returncode != 0 and "numeric" in out.stderr, out.stderr
-    print("clay-inbox: 10 checks passed")
+    # A runtime-only install puts no `chewbacca` on PATH. On 2026-10-13 a
+    # stranger's `gtme ready` printed "FileNotFoundError: 'chewbacca'" here;
+    # with none on PATH the kit's own command beside this file runs instead.
+    import runpy
+    from unittest import mock
+    mod = runpy.run_path(str(TOOL), run_name="inbox_under_test")
+    with mock.patch("shutil.which", return_value=None):
+        cli = mod["kit_cli"]()
+    assert Path(cli) == (ROOT / "bin" / "chewbacca").resolve() or Path(cli).resolve() == (ROOT / "bin" / "chewbacca").resolve(), cli
+    assert os.access(cli, os.X_OK), cli
+    with mock.patch("shutil.which", return_value="/somewhere/chewbacca"):
+        assert mod["kit_cli"]() == "/somewhere/chewbacca"
+    print("clay-inbox: 11 checks passed")
 
 
 if __name__ == "__main__":

@@ -174,3 +174,13 @@ Thirty-six corrections across two nights, most of them the same few mistakes.
   on different curves. Sample the existing band's radius just inside its edge,
   smooth it, and reuse it. Never sample the Nalana dome directly, because it's
   lumpy and leaves stair lines.
+- **Check the parent before measuring anything.** FacePlate sits under the
+  Replica empty, rotated -58 degrees. Edits that read theta from `v.co` instead
+  of `matrix_world @ v.co` hit the wrong part of the mask and made new folds
+  ("Wtf is going on???? How hard is it to make a smooth surface???",
+  2026-10-13). Print `matrix_world` first.
+- **A patched mesh gets rebuilt, not patched again.** After two rounds of fixes
+  that each made a new bump, the fix was to sample the radius on a world
+  (theta, z) grid, blur it a little, trim a flat grid to the old boundary loop
+  with a planar EXACT boolean, and map it back. A boolean against a thickened
+  copy of the old mesh made garbage.

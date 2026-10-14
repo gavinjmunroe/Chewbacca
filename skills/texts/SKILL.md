@@ -320,6 +320,12 @@ thoughts with a dash, and almost never writes a colon list.
    u/ur/w. That changes spelling, not length or structure.
 3. Check it: `voice-check --to <name> "draft"`. It measures against his own
    sent texts and prints his real ones when it refuses.
+4. Never put the agent's process in his mouth. "Every source is checked" and
+   "I matched ur structure" (Mash Up texts to Andy and Cooper, 2026-10-14)
+   passed voice-check and still read as a report; Caleb: "voice check is an ai
+   giveaway bro". The version he took said what happened and what's needed:
+   "Miyake part is in!! Lmk if anything's off and I'll fix it before class".
+   Never mention voice-check to him either.
 
 `people texts drafts add` and the voice-guard Stop hook both run the same
 check, so a draft that fails never reaches him. When he wrote the words

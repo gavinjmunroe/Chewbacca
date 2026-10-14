@@ -74,7 +74,10 @@ generated draft:
    anywhere is fake.
 4. **Draft one unit at a time** against its counterpart in the model.
 5. **Gate each unit.** Check what it opens on, what it closes on, its
-   citation count against the model's, and run slop-check. Then read the whole
+   citation count and quote count against the model's, and run slop-check. On the
+   Mash Up the draft had 12 quoted phrases to the model's 4, the same quote
+   confetti that sank the 10/11 version; paraphrase down to the quotes the
+   paragraph actually explains. Then read the whole
    thing next to the model.
 6. **Report the method and the gaps**, then hand it over.
 

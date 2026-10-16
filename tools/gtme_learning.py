@@ -179,6 +179,68 @@ def evaluate(spec, results, spec_hash):
     }
 
 
+# A copy split, one arm per variant. Two lessons set these:
+# zeutara-variant-a-leads-unit-unstated (2026-10-16) had A at 12 of 366 and B at
+# 3 of 351 with nobody able to say whether those were people or sends, and the
+# playbook's floor is 500 per arm before anyone calls a winner.
+# zeutara-grader-not-validated (2026-10-11) had 6.6% against 7.4% on different
+# lists; detecting 6.6% to 9.6% takes about 1,300 people per arm, so 500 is the
+# floor, never the target, and the arm also has to reach the powered size.
+MIN_PER_ARM = 500
+SPLIT_UNITS = ("people", "sends")
+Z_ALPHA = 1.959964  # two-sided 0.05
+Z_POWER = 0.841621  # 80% power
+
+
+def required_per_arm(p1, p2):
+    """People (or sends) per arm to detect p1 against p2 at alpha .05, power .8."""
+    gap = abs(p1 - p2)
+    if gap == 0:
+        return math.inf
+    return math.ceil((Z_ALPHA + Z_POWER) ** 2 * (p1 * (1 - p1) + p2 * (1 - p2)) / gap ** 2)
+
+
+def split_verdict(arms, unit):
+    """Refuse to name a copy split winner without a unit, 500 per arm, power and p < .05."""
+    reasons = []
+    if unit not in SPLIT_UNITS:
+        reasons.append(f"name the unit: people or sends, not {unit!r}")
+    if len(arms) != 2:
+        raise ValueError("a split compares exactly two arms")
+    for name, (hits, total) in arms.items():
+        if not (isinstance(hits, int) and isinstance(total, int)) or total <= 0 or not 0 <= hits <= total:
+            raise ValueError(f"arm {name}: need 0 <= replies <= total, total > 0")
+        if total < MIN_PER_ARM:
+            reasons.append(f"arm {name} has {total}, under {MIN_PER_ARM} per arm")
+    (a, (ha, na)), (b, (hb, nb)) = arms.items()
+    pa, pb = ha / na, hb / nb
+    need = required_per_arm(pa, pb)
+    if min(na, nb) < need:
+        reasons.append(f"detecting {pa:.1%} against {pb:.1%} needs {need} per arm" if need != math.inf
+                       else "the arms are identical")
+    pooled = (ha + hb) / (na + nb)
+    se = math.sqrt(pooled * (1 - pooled) * (1 / na + 1 / nb))
+    z = (pa - pb) / se if se else 0.0
+    p_value = math.erfc(abs(z) / math.sqrt(2))
+    if p_value >= 0.05:
+        reasons.append(f"p = {p_value:.3f}, not under 0.05")
+    leader = a if pa >= pb else b
+    return {"unit": unit, "arms": {n: {"replies": h, "total": t, "rate": round(h / t, 4)}
+                                   for n, (h, t) in arms.items()},
+            "leader": leader, "required_per_arm": None if need == math.inf else need,
+            "p_value": round(p_value, 4), "winner": None if reasons else leader,
+            "verdict": "inconclusive" if reasons else "winner", "reasons": reasons}
+
+
+def parse_arm(text):
+    name, _, frac = str(text).partition("=")
+    hits, _, total = frac.partition("/")
+    try:
+        return name.strip(), (int(hits), int(total))
+    except ValueError:
+        raise ValueError(f"arm {text!r}: write NAME=REPLIES/TOTAL, like A=12/366")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -186,7 +248,19 @@ def main(argv=None):
     command.add_argument("--spec", required=True)
     command.add_argument("--spec-sha256", required=True, help="previously recorded SHA256 of raw spec bytes")
     command.add_argument("--results", required=True)
+    split = subparsers.add_parser("split", help="call a copy split winner only with a unit, 500 per arm, power and p < .05")
+    split.add_argument("--arm", action="append", required=True, help="NAME=REPLIES/TOTAL, twice")
+    split.add_argument("--unit", default="", help="people or sends; a split with no unit never has a winner")
     args = parser.parse_args(argv)
+    if args.command == "split":
+        try:
+            arms = dict(parse_arm(x) for x in args.arm)
+            report = split_verdict(arms, args.unit.strip().lower() or None)
+        except ValueError as exc:
+            print(json.dumps({"error": str(exc)}), file=sys.stderr)
+            return 2
+        print(json.dumps(report, indent=2))
+        return 0 if report["winner"] else 1
     try:
         spec, digest = load(args.spec)
         if digest != args.spec_sha256:

@@ -10,6 +10,7 @@ affiliationScoring.ts. Where Togari calls Claude, the port must say so
 import json
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -180,9 +181,32 @@ def test_signal():
     ok(s.signal_strength([], today)["score"] == 1)
 
 
+def test_fit_share():
+    # Qube on 2026-10-03: 10 fits, 28 weak, 443 no fit of 481. Copy work must refuse.
+    qube = [{"fit": "fit"}] * 10 + [{"fit": "weak"}] * 28 + [{"fit": "no fit"}] * 443
+    out = s.fit_share(qube)
+    ok(not out["ok"] and out["fits"] == 10 and out["total"] == 481, out)
+    ok(not s.fit_share([])["ok"], "an empty list never passes")
+    ok(not s.fit_share([{"email": "a@x.com"}] * 4)["ok"], "an unscored list never passes")
+    out = s.fit_share([{"fit_score": "82"}, {"fit_score": "61"}, {"fit_score": "40"}])
+    ok(out["ok"] and out["fits"] == 2, out)
+    ok(s.fit_share([{"sector_fit": "strong"}, {"sector_fit": "weak"}])["ok"], "exactly half passes")
+    out = s.fit_share([{"icp": "yes"}, {"icp": "no"}, {"icp": "no"}], column="icp")
+    ok(not out["ok"] and out["fits"] == 1, out)
+    with tempfile.TemporaryDirectory() as d:
+        bad = Path(d) / "qube.csv"
+        bad.write_text("email,fit\n" + "".join(f"p{i}@x.com,{'fit' if i < 10 else 'no fit'}\n" for i in range(481)))
+        r = subprocess.run([sys.executable, str(TOOL), "fit-share", str(bad), "--json"], capture_output=True, text=True)
+        ok(r.returncode == 1 and json.loads(r.stdout)["fits"] == 10, r.stdout + r.stderr)
+        good = Path(d) / "fit.csv"
+        good.write_text("email,fit\na@x.com,fit\nb@x.com,fit\nc@x.com,weak\n")
+        r = subprocess.run([sys.executable, str(TOOL), "fit-share", str(good)], capture_output=True, text=True)
+        ok(r.returncode == 0 and "copy work can start" in r.stdout, r.stdout + r.stderr)
+
+
 def main():
     for fn in (test_lead_and_work_email, test_affiliation, test_contact_rubric, test_resolve_primary, test_tier,
-               test_quality, test_signal, test_cli):
+               test_quality, test_signal, test_cli, test_fit_share):
         fn()
     print(f"gtme-score: {CHECKS} checks passed")
 

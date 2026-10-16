@@ -226,5 +226,44 @@ class GTMELearningTests(unittest.TestCase):
                 learning.load(path)
 
 
+class CopySplitTests(unittest.TestCase):
+    def test_unstated_unit_refuses(self):
+        report = learning.split_verdict({"A": (200, 1500), "B": (100, 1500)}, None)
+        self.assertIsNone(report["winner"])
+        self.assertIn("name the unit", report["reasons"][0])
+
+    def test_under_500_per_arm_refuses_even_when_significant(self):
+        # Zeutara 2026-10-16: A 12 of 366, B 3 of 351, p about .02, still no winner.
+        report = learning.split_verdict({"A": (12, 366), "B": (3, 351)}, "people")
+        self.assertLess(report["p_value"], .05)
+        self.assertIsNone(report["winner"])
+        self.assertTrue(any("under 500 per arm" in r for r in report["reasons"]))
+
+    def test_underpowered_refuses_above_the_floor(self):
+        # 6.6% against 9.6% needs about 1,300 per arm; 600 each clears 500 and still refuses.
+        report = learning.split_verdict({"A": (40, 600), "B": (58, 600)}, "people")
+        self.assertIsNone(report["winner"])
+        self.assertGreater(report["required_per_arm"], 600)
+        self.assertGreater(learning.required_per_arm(.066, .096), 1200)
+
+    def test_powered_split_names_winner(self):
+        report = learning.split_verdict({"A": (200, 1500), "B": (100, 1500)}, "sends")
+        self.assertEqual(report["winner"], "A")
+        self.assertEqual(report["reasons"], [])
+
+    def test_cli_exit_codes(self):
+        tool = ROOT / "tools/gtme_learning.py"
+        refused = subprocess.run([sys.executable, str(tool), "split", "--arm", "A=12/366", "--arm", "B=3/351"],
+                                 capture_output=True, text=True)
+        self.assertEqual(refused.returncode, 1)
+        self.assertEqual(json.loads(refused.stdout)["verdict"], "inconclusive")
+        called = subprocess.run([sys.executable, str(tool), "split", "--unit", "people",
+                                 "--arm", "A=200/1500", "--arm", "B=100/1500"], capture_output=True, text=True)
+        self.assertEqual(called.returncode, 0, called.stderr)
+        bad = subprocess.run([sys.executable, str(tool), "split", "--arm", "A=12", "--arm", "B=3/351"],
+                             capture_output=True, text=True)
+        self.assertEqual(bad.returncode, 2)
+
+
 if __name__ == "__main__":
     unittest.main()

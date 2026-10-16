@@ -25,7 +25,11 @@
   "result": "Qube: 10 sector fits, 28 weak, 443 no fit of 481 in audience. Vertocol 13 of 355, Ivy 59 of 214. No line of copy can make those emails relevant.",
   "verdict": "observed",
   "next_decision": "Relaunch on FIT ONLY audiences (Qube 11, Vertocol 16, Ivy 35) and rebuild the lists, instead of rewriting copy for the whole list.",
-  "check": "Before writing or rewriting any sequence, score the list's ICP fit and report fits over total. Under half fitting means fix the list first.",
+  "check": "Before writing or rewriting any sequence, score the list's ICP fit and report fits over total. Under half fitting means fix the list first. `gtme-score fit-share leads.csv` exits 1 under half, and an unscored row counts against the share.",
+  "check_ref": [
+    "kit:tools/gtme_score.py::def fit_share",
+    "kit:tests/test_gtme_score.py::def test_fit_share"
+  ],
   "evidence": [
     "~/code/work/zeutara-gtme/findings/2026-10-03-copy-and-fit.md"
   ],

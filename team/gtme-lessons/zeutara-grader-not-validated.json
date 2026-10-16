@@ -25,7 +25,11 @@
   "result": "The founder-story opener scored 30 to 45 of 100 (85 ships), yet got 22 replies from 331 people (6.6%) with one email each, against 7.4% for the comparison. Too close to call, different lists and weeks. On 10-12 a rewrite chasing the rubric to 90 produced contrived lines Sagar wouldn't send.",
   "verdict": "inconclusive",
   "next_decision": "Split test the founder-story opener against a recipient-first opener at equal volume before trusting either the grader or a hunch.",
-  "check": "Never change copy only to raise a grade. A copy change needs a split test sized to detect the lift (about 1,300 people per arm for 6.6% to 9.6%).",
+  "check": "Never change copy only to raise a grade. A copy change needs a split test sized to detect the lift (about 1,300 people per arm for 6.6% to 9.6%). `gtme-learning split` also refuses an arm under the powered size for the observed gap.",
+  "check_ref": [
+    "kit:tools/gtme_learning.py::def required_per_arm",
+    "kit:tests/test_gtme_learning.py::def test_underpowered_refuses_above_the_floor"
+  ],
   "evidence": [
     "~/code/work/zeutara-gtme/findings/2026-10-11-loop-baseline.md",
     "skills/gtm-engineering/references/sagar.md"

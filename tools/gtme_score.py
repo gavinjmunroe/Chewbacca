@@ -10,6 +10,7 @@ and which tier a scored company lands in.
   gtme-score tier company.json         {"fit_score": 82, "has_primary_contact": true,
                                          "company": {...}, "criteria": {"revenue_range": {...}}}
   gtme-score quality contacts.csv      completeness 0 to 100, and who still needs an email or phone
+  gtme-score fit-share leads.csv       fits over total before any copy work; exit 1 under half
 
 Ported from togari-platform at 6ef088b, rule for rule:
   affiliation  src/agents/scoring/affiliationScoring.ts  calculateAffiliation
@@ -496,6 +497,46 @@ def signal_strength(signals: list, today=None) -> dict:
                     "launch, a filing) before writing" if best < SIGNAL_HOLD else "Write it, leading with the top signal"}
 
 
+# Fit share before copy. On 2026-10-03 Zeutara's low replies looked like a copy
+# problem until Jev scored the lists: Qube 10 fits of 481, Vertocol 13 of 355,
+# Ivy 59 of 214 (lesson zeutara-list-fit-before-copy). No rewrite fixes an
+# email to the wrong investor, so under half fitting means fix the list first.
+# An unscored row counts against the share: a list nobody scored has not passed.
+FIT_SHARE_MIN = 0.5
+FIT_COLUMNS = ("fit", "sector_fit", "fit_label", "fit_score")
+FIT_YES = {"fit", "strong", "strong fit", "sector fit", "yes", "true", "1"}
+FIT_NO = {"weak", "weak fit", "no fit", "none", "no", "false", "0", "not a fit"}
+
+
+def fit_share(rows, column=None, min_score=TIER_2):
+    cols = [column] if column else list(FIT_COLUMNS)
+    fits = weak = unscored = 0
+    for r in rows:
+        val = next((r.get(c) for c in cols if str(r.get(c) if r.get(c) is not None else "").strip()), None)
+        label = str(val).strip().lower() if val is not None else ""
+        if not label:
+            unscored += 1
+        elif label in FIT_YES:
+            fits += 1
+        elif label in FIT_NO:
+            weak += 1
+        else:
+            try:
+                if float(label) >= min_score:
+                    fits += 1
+                else:
+                    weak += 1
+            except ValueError:
+                unscored += 1
+    total = len(rows)
+    share = fits / total if total else 0.0
+    ok = total > 0 and share >= FIT_SHARE_MIN
+    return {"fits": fits, "not_fit": weak, "unscored": unscored, "total": total, "share": round(share, 4),
+            "min_share": FIT_SHARE_MIN, "ok": ok,
+            "next": "list fits; copy work can start" if ok else
+                    "fix the list first: under half fit, and no copy makes the wrong investor relevant"}
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="gtme-score", description=__doc__.split("\n\n")[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
@@ -523,9 +564,20 @@ def main(argv=None):
     s = sub.add_parser("signal", help="why-now strength 1 to 10 for one account, HOLD under 6")
     s.add_argument("file", help="JSON list of signals: what, date, scope (company|industry|category|tangential), "
                                 "company_match, source; - reads stdin")
-    for p in (a, l, c, t, q, s):
+    f = sub.add_parser("fit-share", help="fits over total before any copy work; exit 1 under half")
+    f.add_argument("file", help="CSV or JSON of leads with a fit, sector_fit, fit_label or fit_score column; - reads stdin")
+    f.add_argument("--column", help="the fit column, when it has another name")
+    f.add_argument("--min-score", type=float, default=TIER_2, help=f"numeric fit at or above this counts (default {TIER_2})")
+    for p in (a, l, c, t, q, s, f):
         p.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
+
+    if args.cmd == "fit-share":
+        out = fit_share(_rows(args.file), args.column, args.min_score)
+        line = (f"{out['fits']} of {out['total']} fit ({out['share']:.0%}), {out['not_fit']} not, "
+                f"{out['unscored']} unscored\n{out['next']}")
+        print(json.dumps(out) if args.json else line)
+        return 0 if out["ok"] else 1
 
     if args.cmd == "signal":
         text = sys.stdin.read() if args.file == "-" else open(args.file).read()

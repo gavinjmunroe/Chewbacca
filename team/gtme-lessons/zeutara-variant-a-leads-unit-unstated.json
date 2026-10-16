@@ -24,7 +24,11 @@
   "result": "Variant A 12 of 366 against variant B 3 of 351, as written in RECOVERY-STATE without saying whether the denominators are people or sends. Step 3 is weakest at 1.0%. Under 500 per arm, so the playbook says don't know yet.",
   "verdict": "inconclusive",
   "next_decision": "Pin the unit from campaign stats, keep both arms running to 500 per arm, then record the verdict here.",
-  "check": "A split result names its unit (people or sends) and reaches 500 per arm before anyone calls a winner.",
+  "check": "A split result names its unit (people or sends) and reaches 500 per arm before anyone calls a winner. `gtme-learning split --unit people --arm A=12/366 --arm B=3/351` names no winner until both hold.",
+  "check_ref": [
+    "kit:tools/gtme_learning.py::MIN_PER_ARM = 500",
+    "kit:tools/gtme_learning.py::name the unit: people or sends"
+  ],
   "evidence": [
     "~/code/work/zeutara-gtme/RECOVERY-STATE.md"
   ],

@@ -2169,6 +2169,7 @@ if group "reasoning backends"; then
   check "jev-browse stops at a send and reports its claim" python3 "$ROOT/tests/test_jev_browse.py"
   check "table graph orders columns and lints client readiness" python3 "$ROOT/tests/test_table_graph.py"
   check "spend_now scores only dated, Jev-confirmed evidence, with signals and columns from client config" python3 "$ROOT/tests/test_spend_now.py"
+  check "intro ledger is append-only, server-dated and hash-chained" python3 "$ROOT/tests/test_intro_ledger.py"
   check "chewbacca-bridge runs only its fixed tools" python3 "$ROOT/tests/test_chewbacca_bridge.py"
   check "one Login Items row runs every background job" python3 "$ROOT/tests/test_chewbacca_daemon.py"
   check "gateway protocol and execution" python3 "$ROOT/tests/test_chatgpt_gateway.py"

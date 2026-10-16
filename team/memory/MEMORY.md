@@ -352,3 +352,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_outcome_not_action_2026_10_13: Zeutara dead-deck night, six root causes: action checked not outcome, guesses broken by live data, fix not on shared path, lessons lost to louder defaults
 - reference_clay_people_search_finds_buyers: Clay people search that finds the creator buyer, not the talent: identifiers_only beats the 20k read cap, buyer keywords, off-domain email retry, Jev score floor 0.5 (Sabo, 10/16)
 - project_sabo_design_partner_2026_10_16: Sabo (Aucta) is the first creator-manager design partner; parent-domain chain found his own $10K contact cold; weekly Tue 3:45 CT
+- reference_intro_ledger: the intro ledger, an append-only server-dated hash-chained record of every contact handed a creator-GTM client so a late deal is provably ours; live on Railway, deliver.py stamps Delivered On/For (Sabo, 10/16)

@@ -1974,7 +1974,8 @@
         "expect": "manual"
       },
       "confidence": "high: contract and schema from the bundle; the item types (EMPTY, HAS_ERROR, RESULTS...) are the ones views already returns",
-      "verified": false
+      "verified": true,
+      "verified_by": "2026-10-16, Sabo table t_0tmyzmzxwt5tTMoyeQp Default view: view_filter={} sent live while the view had no filter; Clay answered 200 with filter still null and sort and columns unchanged"
     },
     {
       "name": "view-columns",
@@ -2011,7 +2012,8 @@
         "expect": "manual"
       },
       "confidence": "high: contract and schema from the bundle",
-      "verified": false
+      "verified": true,
+      "verified_by": "2026-10-16, Sabo table t_0tmyzmzxwt5tTMoyeQp Default view: Creator column f_0tmz0jaHBtAn6tyAiab set isVisible false, the value it already held; Clay answered 200 with that column still hidden and the rest unchanged"
     }
   ],
   "ui_only": [

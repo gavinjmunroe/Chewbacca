@@ -238,14 +238,14 @@ def kit_file(p, rel):
 
 def test_runner(argv):
     name, args = argv[0], argv[1:]
-    if name == "npm" and args[:2] == ["test", "--"] and cwd:
+    if name == "node" and args[:2] == ["node_modules/vitest/vitest.mjs", "run"] and cwd:
         try:
-            package = json.load(open(os.path.join(cwd, "package.json")))
+            package = json.load(open(os.path.join(cwd, "node_modules", "vitest", "package.json")))
         except (OSError, ValueError):
             return False
         return (os.path.exists(os.path.join(cwd, ".git")) and
-                package.get("scripts", {}).get("test") == "vitest run" and
-                not any(package.get("scripts", {}).get(hook) for hook in ("pretest", "posttest")) and
+                package.get("name") == "vitest" and
+                os.path.isfile(os.path.join(cwd, "node_modules", "vitest", "vitest.mjs")) and
                 all(a == "--maxWorkers=1" or re.fullmatch(r"(?:src|tests)/[A-Za-z0-9_./-]+", a)
                     for a in args[2:]))
     if name == "python3" and len(args) == 1 and re.fullmatch(r"tests/[A-Za-z0-9_.-]+\.py", args[0]):
@@ -303,7 +303,7 @@ if name == "chewbacca" or (base == "chewbacca" and kit_file(name, "bin/chewbacca
         runner = queued[i + 1:] if i < len(queued) else []
         if runner[:2] == ["env", "CHEWBACCA_NO_SEND=1"]:
             runner = runner[2:]
-        if build and runner[:1] == ["npm"] and test_runner(runner):
+        if build and runner[:1] == ["node"] and test_runner(runner):
             out("allow")
         if build and len(runner) >= 2 and runner[0] in ("python3", "bash"):
             path = resolve(runner[1])

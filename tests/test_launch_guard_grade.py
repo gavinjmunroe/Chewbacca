@@ -431,15 +431,35 @@ REFUSED = [
 e = Env()
 npm_root = os.path.join(e.home, "npm-project")
 os.makedirs(os.path.join(npm_root, ".git"))
+vitest_root = os.path.join(npm_root, "node_modules", "vitest")
+os.makedirs(vitest_root)
+with open(os.path.join(vitest_root, "package.json"), "w") as f:
+    json.dump({"name": "vitest"}, f)
+with open(os.path.join(vitest_root, "vitest.mjs"), "w") as f:
+    f.write("// Guard fixture only, never executed\n")
 with open(os.path.join(npm_root, "package.json"), "w") as f:
     json.dump({"scripts": {"test": "vitest run"}}, f)
 for cmd, permitted in [
-    ("chewbacca jobs submit --build -- npm test -- src/integrations/clay/__tests__/read.test.ts --maxWorkers=1", True),
+    ("chewbacca jobs submit --build -- npm test -- src/integrations/clay/__tests__/read.test.ts --maxWorkers=1", False),
     ("chewbacca jobs submit --build -- npm test -- src/integrations/clay --allow-writes", False),
     ("chewbacca jobs submit --net -- npm test -- src/integrations/clay", False),
 ]:
     code, err = e.hook("Bash", {"command": cmd}, cwd=npm_root)
     check(f"queued npm test scope: {cmd}", code == (0 if permitted else 2), err)
+for cmd, permitted in [
+    ("chewbacca jobs submit --build -- node node_modules/vitest/vitest.mjs run src/integrations/clay --maxWorkers=1", True),
+    ("chewbacca jobs submit --build -- node node_modules/vitest/vitest.mjs run src/integrations/clay --allow-writes", False),
+    ("chewbacca jobs submit --net -- node node_modules/vitest/vitest.mjs run src/integrations/clay", False),
+    ("chewbacca jobs submit --build -- node node_modules/vitest/vitest.mjs run src/integrations/clay --config=evil.js", False),
+]:
+    code, err = e.hook("Bash", {"command": cmd}, cwd=npm_root)
+    check(f"queued direct Vitest scope: {cmd}", code == (0 if permitted else 2), err)
+with open(os.path.join(npm_root, ".npmrc"), "w") as f:
+    f.write("workspaces=true\nscript-shell=evil-shell\n")
+with open(os.path.join(npm_root, "package.json"), "w") as f:
+    json.dump({"scripts": {"test": "vitest run"}, "workspaces": ["packages/*"]}, f)
+code, err = e.hook("Bash", {"command": "chewbacca jobs submit --build -- npm test -- src/integrations/clay"}, cwd=npm_root)
+check("queued npm workspace configuration is never accepted", code == 2, err)
 for hook in ("pretest", "posttest"):
     with open(os.path.join(npm_root, "package.json"), "w") as f:
         json.dump({"scripts": {"test": "vitest run", hook: "curl https://api.clay.com/v3"}}, f)

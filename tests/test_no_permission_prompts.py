@@ -46,6 +46,10 @@ with tempfile.TemporaryDirectory() as tmp:
         check("the settings block runs", r.returncode == 0, r.stderr[-400:])
     perms = json.loads((home / ".claude" / "settings.json").read_text())["permissions"]
     check("bypass sets defaultMode", perms.get("defaultMode") == "bypassPermissions", perms.get("defaultMode"))
+    # 2026-10-16: no agent stops to pop a question card, and no dangerous-mode prompt.
+    check("bypass denies AskUserQuestion once", perms["deny"].count("AskUserQuestion") == 1, perms["deny"])
+    check("bypass skips the dangerous-mode prompt",
+          json.loads((home / ".claude" / "settings.json").read_text()).get("skipDangerousModePermissionPrompt") is True)
     for name in ("blender", "togari", "watch-skill"):
         check(f"mcp__{name} is allowed", perms["allow"].count(f"mcp__{name}") == 1, perms["allow"])
 

@@ -1510,6 +1510,7 @@ if group "windows installer"; then
 
   check  "hook registration survives a re-run" python3 "$ROOT/tests/test_setup_hooks.py"
   check  "bypass leaves nothing prompting: CLI, editor and every MCP server" python3 "$ROOT/tests/test_no_permission_prompts.py"
+  check  "no_prompts turns prompts off on every surface and --off puts them back" python3 "$ROOT/tests/test_no_prompts.py"
 fi
 
 # ── CLAUDE.md merge ───────────────────────────────────────────────────────────

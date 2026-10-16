@@ -155,9 +155,14 @@ Use `claude-code` or `both` instead when that matches your setup. You do not nee
 a GitHub account or a name for runtime setup. It creates an empty private brain
 and preserves existing accounts, model settings, notes and permission policies.
 
+Setup also turns off permission prompts in the terminal, VS Code, Cursor and
+the Claude desktop app, so the agent works without stopping to ask. Deny rules
+still block what has no undo. Keep the prompts with `--ask-permissions`, or
+put them back later with `python3 tools/no_prompts.py --off`.
+
 Tell your agent what you want help with today, in the language and format you
-prefer. Personal data imports, prayer or other session openers, and permission
-bypass are separate choices. Setup does not authorize scanning your contacts or
+prefer. Personal data imports and prayer or other session openers are separate
+choices. Setup does not authorize scanning your contacts or
 messages. [What data may leave your machine](docs/guide/PRIVACY.md).
 
 macOS and Linux/WSL have native Claude/Codex adapters. Other hosts and native

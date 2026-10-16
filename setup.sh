@@ -172,15 +172,17 @@ Who this install is for:
                                a name you can remember at the end of a pasted
                                curl line.
 
-Behaviors, both off unless asked for:
+Behaviors:
   --session-opener <name>      Opens every response with a line you choose.
                                Shipped: prayer, gratitude. Default: none.
                                Add it later:
                                  ./setup.sh --only settings --session-opener prayer
   --bypass-permissions         Claude runs shell commands and writes files
-                               without asking, on this whole machine, in every
-                               project, until you undo it in three files.
-                               Default: off, so Claude asks.
+                               without asking, in the terminal, VS Code, Cursor
+                               and the desktop app. Default: ON. Deny rules
+                               still block the irreversible operations.
+  --ask-permissions            Keep the prompts. Undo later with
+                               python3 tools/no_prompts.py --off
 
 Re-running:
   --only <section>             Run one section. Safe to repeat.
@@ -193,7 +195,10 @@ USAGE
 
 NAME=""; GITHUB_USER=""; REPO_DIR=""; ANTHROPIC_KEY=""; GITHUB_PAT=""
 TODOIST_TOKEN=""; COMPOSIO_URL=""; COMPOSIO_KEY=""; ANSWERS=""
-SESSION_OPENER="none"; BYPASS_PERMS="no"; ONLY=""; DRY_RUN=0
+# On by default since 2026-10-16. Caleb: "Make this the case for anyone that
+# uses chewbs, onboarding needs to be magical", after a day of agents stopping
+# to ask on every surface. --ask-permissions keeps the prompts.
+SESSION_OPENER="none"; BYPASS_PERMS="yes"; ONLY=""; DRY_RUN=0
 PROFILE="developer"; NO_GITHUB=0; ONLY_PORTABLE=0
 FAST=0
 AGENT_RUNTIME=""
@@ -223,6 +228,7 @@ while [ $# -gt 0 ]; do
     --answers) ANSWERS="${2:-}"; shift 2 ;;
     --session-opener) SESSION_OPENER="${2:-none}"; shift 2 ;;
     --bypass-permissions) BYPASS_PERMS="yes"; shift ;;
+    --ask-permissions) BYPASS_PERMS="no"; shift ;;
     --profile)
       PROFILE="${2:-developer}"
       case "$PROFILE" in
@@ -266,7 +272,7 @@ if [ -n "$AGENT_RUNTIME" ]; then
   for ((arg_index=0; arg_index<${#REQUESTED_ARGS[@]}; arg_index++)); do
     case "${REQUESTED_ARGS[$arg_index]}" in
       --runtime|--name|--brain-dir) arg_index=$((arg_index + 1)) ;;
-      --dry-run|--json|--team|--no-team|--every-agent) ;;
+      --dry-run|--json|--team|--no-team|--every-agent|--bypass-permissions|--full-send|--ask-permissions) ;;
       *) err "Runtime setup does not accept ${REQUESTED_ARGS[$arg_index]}; use the full installer or native host settings for that option."
          exit 2 ;;
     esac
@@ -283,6 +289,13 @@ if [ -n "$AGENT_RUNTIME" ]; then
     exec python3 "$SCRIPT_DIR/tools/agent_runtime.py" "${runtime_args[@]}"
   fi
   python3 "$SCRIPT_DIR/tools/agent_runtime.py" "${runtime_args[@]}" || exit $?
+  # The one-line install never reached the permission settings, so a new user
+  # was prompted on every surface (2026-10-16). Same default as the full path.
+  if [ "$BYPASS_PERMS" = "yes" ]; then
+    echo
+    echo "Turning off permission prompts (keep them: --ask-permissions):"
+    python3 "$SCRIPT_DIR/tools/no_prompts.py" || true
+  fi
   # The first win, before anyone opens an agent: their own week from the git
   # repos already here, read only, with a receipt of the commands behind it.
   echo
@@ -1491,12 +1504,16 @@ for key, var in (("GITHUB_TOKEN", "D1_GITHUB_PAT"),
         print(f"Wrote credential to settings.json: env.{key}")
 
 perms = settings.setdefault("permissions", {})
-# Off unless --bypass-permissions was passed. Turning it on removes the step
-# where Claude asks before running a shell command or writing a file, on the
-# whole machine, in every project, and it takes three separate files to undo.
-# That is not something an installer should decide on someone's behalf.
+# On unless --ask-permissions was passed (default since 2026-10-16, see the
+# BYPASS_PERMS default). The deny list below still blocks what has no undo.
+# AskUserQuestion is denied too, so an agent can't stop to pop a question card.
+# tools/no_prompts.py --off undoes all of it.
 if env("D1_BYPASS_PERMS", "no") == "yes":
     perms["defaultMode"] = "bypassPermissions"
+    settings["skipDangerousModePermissionPrompt"] = True
+    perms.setdefault("deny", [])
+    if "AskUserQuestion" not in perms["deny"]:
+        perms["deny"].append("AskUserQuestion")
     print("Permission prompts disabled: Claude will not ask before acting.")
 else:
     perms.setdefault("defaultMode", "default")

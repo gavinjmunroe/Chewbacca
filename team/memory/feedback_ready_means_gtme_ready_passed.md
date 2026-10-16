@@ -18,4 +18,10 @@ On 2026-10-12 an agent told Caleb the Zeutara launch was good "until Jonah respo
 - gtme-grade's render gate now fails firm names the copy prints that end in a legal form or carry an emoji; it used to warn and missed "L.P.".
 - Inputs gtme ready cannot find (a per-draft leads file for a signal split, a recipient read in `reviews/<campaign>.json`, senders, suppress) are named in its table. Put them beside the drafts file or in the client's `ready` block in clients.json.
 
+- ready-guard also fires on an all-clear about something else. On 2026-10-16 a
+  tab that only fixed launch-guard answered Caleb's "We good?" with "Yeah we're
+  good" and was refused for Zeutara (41 blockers). In a tab that isn't doing
+  the launch, name the thing that's done ("the guard fix is on main") and say
+  plainly that the client launch isn't ready, quoting the last NOT READY count.
+
 Related: [[feedback_client_review_is_the_gate]], [[feedback_a_silent_guard_proves_nothing]].

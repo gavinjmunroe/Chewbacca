@@ -3580,6 +3580,101 @@
       "minTier": 1,
       "learnedLoggedIn": true,
       "learnedAt": "2026-10-16"
+    },
+    {
+      "name": "updateViewFieldOrder",
+      "description": "WRITE, bundle-derived (contract updateViewContiguousFieldsOrderForWorkspace). Move columns, in the order given, right after one column in one view.",
+      "request": {
+        "method": "PATCH",
+        "url": "https://api.clay.com/v3/workspaces/1372623/tables/t_example/views/gv_example/reorder-fields",
+        "headers": {
+          "accept": "application/json, text/plain, */*",
+          "origin": "https://app.clay.com",
+          "referer": "https://app.clay.com/",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "content-type": "application/json"
+        },
+        "body": "{\"fieldIds\":[],\"afterFieldId\":\"f_example\"}"
+      },
+      "slots": [
+        {
+          "param": "ws",
+          "at": ["path:2"]
+        },
+        {
+          "param": "tableId",
+          "at": ["path:4"]
+        },
+        {
+          "param": "viewId",
+          "at": ["path:6"]
+        },
+        {
+          "param": "fieldIds",
+          "at": ["body", "json:/fieldIds"]
+        },
+        {
+          "param": "afterFieldId",
+          "at": ["body", "json:/afterFieldId"]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://app.clay.com/workspaces/{ws}/workbooks/home/tables/{tableId}"
+      },
+      "match": {
+        "method": "PATCH",
+        "host": "api.clay.com",
+        "path": "/v3/workspaces/*/tables/*/views/*/reorder-fields"
+      },
+      "response": {
+        "format": "json"
+      },
+      "params": [
+        {
+          "name": "ws",
+          "type": "string",
+          "required": true,
+          "example": "1372623",
+          "pattern": "\\d+",
+          "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+        },
+        {
+          "name": "tableId",
+          "type": "string",
+          "required": true,
+          "example": "t_example",
+          "pattern": "t_[A-Za-z0-9]+",
+          "hint": "a table id like t_0tl... (listResources)"
+        },
+        {
+          "name": "viewId",
+          "type": "string",
+          "required": true,
+          "example": "gv_example",
+          "pattern": "gv_[A-Za-z0-9]+",
+          "hint": "a view id like gv_0tl... (views)"
+        },
+        {
+          "name": "fieldIds",
+          "type": "array",
+          "required": true,
+          "example": ["f_example"],
+          "hint": "column ids to move, in the order they should sit"
+        },
+        {
+          "name": "afterFieldId",
+          "type": "string",
+          "required": true,
+          "example": "f_example",
+          "pattern": "f_[A-Za-z0-9_]+",
+          "hint": "the column they go right after"
+        }
+      ],
+      "readOnly": false,
+      "minTier": 1,
+      "learnedLoggedIn": true,
+      "learnedAt": "2026-10-16"
     }
   ]
 }

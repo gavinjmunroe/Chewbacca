@@ -642,7 +642,7 @@ SAMPLES = {
     "holds": '[{"entityId":"1","email":"held@example.com"}]',
     "sort": '[{"fieldId":"f_updated_at","direction":"DESC"}]',
     "view_filter": '{"combinationMode":"AND","items":[{"fieldId":"f_a","type":"NOT_EMPTY"}]}',
-    "columns": '{"f_a":{"isVisible":false}}',
+    "columns": '{"f_a":{"isVisible":false}}', "after_field": "f_brand",
 }
 
 # Synthetic terminal-page evidence lets the restrictive write reach the same
@@ -1093,7 +1093,13 @@ def test_sabo_table_reads_without_clay_open():
                            ("view-columns", "columns", '{"f_a":{"deleted":true}}')):
         code, out, _ = run({}, {}, name, "table=t_ex1", "view=gv_ex1", f"{arg}={bad}", "--dry-run")
         ok(code == 2 and out["class"] == "input", f"{name} refuses {bad}")
-    fx = {"api-anything/getTableViews.json": {"ok": True, "data": [{"id": "gv_ex1", "sort": {"items": []}, "filter": None, "fields": {}}]}}
+    code, out, _ = run({}, {}, "view-move-columns", "table=t_ex1", "view=gv_ex1", "fields=f_a,f_b", "after_field=f_brand", "--dry-run")
+    req = out and out.get("request")
+    ok(code == 0 and req["method"] == "PATCH" and req["url"] == f"{V3}/tables/t_ex1/views/gv_ex1/reorder-fields"
+       and req["body"] == {"fieldIds": ["f_a", "f_b"], "afterFieldId": "f_brand"}, f"view-move-columns builds the bundle's request: {out}")
+    code, out, _ = run({}, {}, "view-move-columns", "table=t_ex1", "view=gv_ex1", "fields=f_a", "after_field=Brand", "--dry-run")
+    ok(code == 2 and out["class"] == "input", "after_field takes a column id only")
+    fx = {"api-anything/getTableViews.json":{"ok": True, "data": [{"id": "gv_ex1", "sort": {"items": []}, "filter": None, "fields": {}}]}}
     code, out, _ = run(fx, {}, "views", "table=t_ex1")
     ok(code == 0 and out["data"][0]["id"] == "gv_ex1", "views reads every view's settings")
 

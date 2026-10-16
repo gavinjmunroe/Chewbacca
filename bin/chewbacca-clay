@@ -656,7 +656,7 @@ const ARG_SHAPES = {
   ws: /^\d{1,12}$/,
   table: ID, row: ID, view: ID, audience: ID, campaign: ID, campaign_id: ID, lead_id: ID,
   workflow: ID, run: ID, detail: /^(summary|full)$/,
-  cursor: /^[A-Za-z0-9_=+-]{1,200}$/, after: ID,
+  cursor: /^[A-Za-z0-9_=+-]{1,200}$/, after: ID, after_field: /^f_[A-Za-z0-9_-]{1,80}$/,
   limit: /^\d{1,5}$/, offset: /^\d{1,7}$/, days: /^\d{1,4}$/,
   ids: /^[A-Za-z0-9_-]{1,80}(,[A-Za-z0-9_-]{1,80}){0,199}$/,
   emailOrDomain: /^([A-Za-z0-9._%+-]+@)?[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/,

@@ -2014,6 +2014,45 @@
       "confidence": "high: contract and schema from the bundle",
       "verified": true,
       "verified_by": "2026-10-16, Sabo table t_0tmyzmzxwt5tTMoyeQp Default view: Creator column f_0tmz0jaHBtAn6tyAiab set isVisible false, the value it already held; Clay answered 200 with that column still hidden and the rest unchanged"
+    },
+    {
+      "name": "view-move-columns",
+      "kind": "write",
+      "gate": "write:view-settings",
+      "summary": "Move columns in one view: fields=f_a,f_b go, in that order, right after after_field=f_x. The fields must already sit next to each other (Clay answers 400 'Fields are not adjacent in the view'), so move non-adjacent ones one call each. Runs and sends nothing.",
+      "args": ["ws", "table", "view", "fields", "after_field"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "updateViewFieldOrder",
+          "args": {
+            "ws": "ws",
+            "tableId": "table",
+            "viewId": "view",
+            "fieldIds": "fields",
+            "afterFieldId": "after_field"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "updateViewContiguousFieldsOrderForWorkspace",
+        "contract_offset": 2017871,
+        "body_schema": "k8t @2009626: {fieldIds:[f_...], beforeFieldId?, afterFieldId?}"
+      },
+      "readback": {
+        "op": "views",
+        "args": {
+          "table": "table"
+        },
+        "expect": "manual"
+      },
+      "confidence": "high: contract and body schema read from the bundle",
+      "verified": true,
+      "verified_by": "2026-10-16, Sabo table Default view: Person and Title moved after Brand, then Why this person after Title; views read back Brand, Person, Title, Why this person. A 3-column call with Why not adjacent got 400."
     }
   ],
   "ui_only": [

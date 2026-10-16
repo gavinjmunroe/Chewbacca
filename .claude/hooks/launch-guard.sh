@@ -238,6 +238,16 @@ def kit_file(p, rel):
 
 def test_runner(argv):
     name, args = argv[0], argv[1:]
+    if name == "node" and args[:2] == ["node_modules/vitest/vitest.mjs", "run"] and cwd:
+        try:
+            package = json.load(open(os.path.join(cwd, "node_modules", "vitest", "package.json")))
+        except (OSError, ValueError):
+            return False
+        return (os.path.exists(os.path.join(cwd, ".git")) and
+                package.get("name") == "vitest" and
+                os.path.isfile(os.path.join(cwd, "node_modules", "vitest", "vitest.mjs")) and
+                all(a == "--maxWorkers=1" or re.fullmatch(r"(?:src|tests)/[A-Za-z0-9_./-]+", a)
+                    for a in args[2:]))
     if name == "python3" and len(args) == 1 and re.fullmatch(r"tests/[A-Za-z0-9_.-]+\.py", args[0]):
         return True
     if name == "bash" and args and args[0] == "tests/run.sh" and len(args) <= 2:
@@ -273,6 +283,38 @@ if name == "chewbacca" or (base == "chewbacca" and kit_file(name, "bin/chewbacca
         out("refuse", "chewbacca with no subcommand")
     if args[0] in ("clay", "gtm", "gtme", "gtme-grade"):
         out("allow")
+    if args[:2] == ["jobs", "submit"]:
+        # Tests still use the shared resource queue. Allow only a structured
+        # build job invoking an existing kit test directly, never a shell,
+        # arbitrary program, network request or nested write command.
+        queued = args[2:]
+        build = False
+        i = 0
+        while i < len(queued) and queued[i] != "--":
+            if queued[i] == "--build":
+                build = True
+                i += 1
+            elif queued[i] in ("--title", "--after", "--writes") and i + 1 < len(queued):
+                i += 2
+            elif queued[i] == "--once":
+                i += 1
+            else:
+                out("refuse", "unknown queued test option")
+        runner = queued[i + 1:] if i < len(queued) else []
+        if runner[:2] == ["env", "CHEWBACCA_NO_SEND=1"]:
+            runner = runner[2:]
+        if build and runner[:1] == ["node"] and test_runner(runner):
+            out("allow")
+        if build and len(runner) >= 2 and runner[0] in ("python3", "bash"):
+            path = resolve(runner[1])
+            if path:
+                root = os.path.dirname(os.path.dirname(path))
+                rel = os.path.relpath(path, root)
+                valid = re.fullmatch(r"tests/[A-Za-z0-9_.-]+\.(py|sh)", rel)
+                checkout = os.path.isfile(os.path.join(root, "library", "clay-api", "registry.json")) and os.path.exists(os.path.join(root, ".git"))
+                if valid and checkout and os.path.isfile(path) and test_runner([runner[0], rel, *runner[2:]]):
+                    out("allow")
+        out("refuse", "only direct kit test runners are allowed in queued Clay jobs")
     out("refuse", f"chewbacca {args[0]} is not a known Clay read")
 if "/" in name or not re.fullmatch(r"[a-z][a-z0-9.-]*", name):
     out("refuse", "the command is a path the kit doesn't know")

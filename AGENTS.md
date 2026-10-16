@@ -92,6 +92,11 @@ the user's cancellation or a documented scope decision. The ledger does not spaw
 workers. Dispatch dependency-ready jobs within the host's actual concurrency and
 resource limits, and retain waiting jobs for later waves.
 
+"Save to todo" or "add to my todo" means `work-ledger add --scope ~`, which every
+tab reads at startup. Never file it in Things, Todoist or Reminders, and call it
+the work ledger in the reply, never a todo app or todo list (Caleb, 2026-10-14:
+"I don't use a todo app!").
+
 Other agent tabs may be live on this machine in any runtime. `tabs context` shows
 each one's runtime, repository, latest ask and recently written files; Claude Code
 and Codex hooks inject it automatically. A runtime without hooks joins with

@@ -549,7 +549,7 @@ reasoned, not yet measured. Numbers are 0 to 1, 1 identical.
   0.020 in the film. It removes CG edges and adds no marks. **hypothesis:** the
   texture needs a painted stroke plate or a stroke layer on top.
 - **tested, pipeline: Blender 5.x compositing needs `render.use_compositing =
-  True`.** The node group attaches and silently never runs without it: a bloom
+True`.** The node group attaches and silently never runs without it: a bloom
   that should have given a ~31px halo rendered a 16px pip.
 - **tested, process: one change per version.** Changing four or five things at
   once moved every targeted axis and dropped four shot scores, with nothing
@@ -725,6 +725,16 @@ times) plus a light/dark layout guard:
   where the frame is brightest and darkest first, match that, then place
   the subject. For a canyon, aim the gap at the reference's brightest
   column.
+- Check the machine before a render campaign. On 2026-10-10 batch 4 sat in
+  the heavy lane from 11:42 until Caleb parked the study, because the queue
+  only admits heavy work under load 18.2 and ten other tabs kept it between
+  85 and 268 all afternoon. Run `uptime` first. If load won't come under the
+  gate, render overnight with the tabs closed or on a second machine, and
+  tell Caleb that plainly instead of reporting "waiting" every half hour.
+- Judge without a subagent when the slots are full. The orchestrator can
+  judge a batch blind by reading the tiles and recording its picks before it
+  opens manifest.json, then decoding. Done that way for interiors batch 3
+  (b94e394); every pair agreed in both orders.
 
 ## Tools worth reaching for
 

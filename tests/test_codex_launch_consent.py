@@ -49,7 +49,11 @@ class ConsentTests(unittest.TestCase):
     def test_repair_does_not_override_a_real_stop_or_quoted_instruction(self):
         for text in ('Fix them. Then launch them. Do not send',
                      'Fix them. Then launch them?',
-                     'Fix them. He said "Then launch them"'):
+                     'Fix them. He said "Then launch them"',
+                     "He said 'Fix them. Then launch them. Then report back'",
+                     "Fix them. 'Then launch them'",
+                     "He said ‘Fix them. Then launch them.’",
+                     "Fix them. Then launch them. He said that yesterday"):
             self.assertIsNone(self.read([START, message(text)]))
 
     def test_caller_home_cannot_supply_fabricated_records(self):
@@ -95,7 +99,9 @@ class ConsentTests(unittest.TestCase):
         for stop in ("Stop\nDo not launch the campaigns", "<stop>", "x" * 400 + " stop",
                      "Don't do it", "Do not proceed", "Don’t do that", "Don't go ahead",
                      "Don't", "Don’t!", "Don't do anything", "Do not do anything", "No.",
-                     "Don't do this", "Don't run it.", "Never do this", "Nope"):
+                     "Don't do this", "Don't run it.", "Never do this", "Nope",
+                     "Never contact these leads again", "Never reach out again",
+                     "Never deliver those messages", "Never make contact again"):
             self.assertIsNone(self.read([START, message("LAUNCH"), START, message(stop)]))
             self.assertIsNone(self.read([START, message("LAUNCH"), message(stop)]))
 

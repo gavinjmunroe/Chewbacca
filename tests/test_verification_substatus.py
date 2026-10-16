@@ -11,6 +11,16 @@ from gtme_recovery import preview
 
 
 class VerificationSubstatusTest(unittest.TestCase):
+    def test_duplicate_enrollment_is_held_in_every_order(self):
+        leads = [{'email': 'lead@fund.example', 'status': 'active', 'terminalOutcome': None},
+                 {'email': 'LEAD@fund.example', 'status': 'active', 'terminalOutcome': 'bounced'}]
+        for rows in (leads, list(reversed(leads))):
+            result = preview({'campaigns': [{'id': 'cam_test', 'leads': rows}]},
+                             {'lead@fund.example': 'valid'})[0]
+            self.assertEqual(result['continuation_candidates'], [])
+            self.assertEqual(len(result['held']), 2)
+            self.assertTrue(all('missing or duplicate identity' in row['reasons'] for row in result['held']))
+
     def test_activity_bounce_wins_over_active_enrollment(self):
         snapshot = {'campaigns': [{'id': 'cam_test', 'leads': [
             {'email': 'lead@fund.example', 'status': 'active', 'terminalOutcome': None}]}]}

@@ -23,9 +23,10 @@ LAUNCH = re.compile(r"(?:(?:bro|please|plz)\s+)*(?:launch(?:\s+the\s+campaigns)?
                     r"(?:\s+(?:now|fix it|bro|please|plz))*[!.]*", re.I)
 STOP = re.compile(r"^\s*(?:no|nope|nah)\s*[!.]*\s*$|"
                   r"\b(?:stop|pause|cancel|hold|wait|not yet|don['’]?t|do not)\b|"
-                  r"\bnever\s+(?:send|launch|relaunch|resume|start|email|do|run|execute|act|"
-                  r"proceed|continue|go\s+ahead)\b", re.I)
+                  r"\bnever\b", re.I)
 REPAIR_LAUNCH = re.compile(r"(?:then\s+)?(?:relaunch|launch)\s+(?:them|the campaigns)(?:\s+now)?", re.I)
+REPAIR_FIRST = re.compile(r"fix\s+(?:them|the campaigns)(?:\s+so\s+they\s+can\s+be\s+relaunched)?", re.I)
+QUALITY_PURPOSE = re.compile(r"\bto never make (?:that mistake|that error|smth that shit|something that bad) (?:ever )?again\b", re.I)
 
 
 def explicit_launch(text):
@@ -34,10 +35,25 @@ def explicit_launch(text):
     # The 10/15 incident instruction included a repair sentence, an explicit
     # 'Then launch them', and 'never make ... again'. Only an imperative
     # sentence in the trusted composer input counts, never a quoted request.
-    if any(mark in text for mark in ('?', '"', '`', '<', '\n')):
+    if any(mark in text for mark in ('?', '"', "'", '‘', '’', '“', '”', '`', '<', '\n')):
         return False
-    return any(REPAIR_LAUNCH.fullmatch(part.strip())
-               for part in re.split(r'[!.]+', text) if part.strip())
+    parts = [part.strip() for part in re.split(r'[!.]+', text) if part.strip()]
+    if len(parts) == 1:
+        return bool(REPAIR_LAUNCH.fullmatch(parts[0]))
+    if len(parts) not in (2, 3) or not REPAIR_FIRST.fullmatch(parts[0]):
+        return False
+    if not REPAIR_LAUNCH.fullmatch(parts[1]):
+        return False
+    return len(parts) == 2 or bool(re.fullmatch(
+        r"(?:then\s+)?fix\s+[^.!?]+?\s+" + QUALITY_PURPOSE.pattern + r"[!\s]*",
+        parts[2], re.I))
+
+
+def revokes(text):
+    # Only the recognized repair plan's explicit quality-purpose clause is
+    # unrelated to sending. Every other 'never' revokes, regardless of its verb.
+    checked = QUALITY_PURPOSE.sub('', text) if explicit_launch(text) else text
+    return bool(STOP.search(checked))
 
 
 def consent_from_records(header, records, session, now):
@@ -61,7 +77,7 @@ def consent_from_records(header, records, session, now):
         text = "\n".join(c.get("text", "") for c in content if c.get("type") == "input_text").strip()
         # Revocation is conservative, including steering inputs in an existing
         # turn. Formatting must never hide a later stop behind an old launch.
-        if STOP.search(text):
+        if revokes(text):
             result = None
             turn = None
             continue

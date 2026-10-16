@@ -1,5 +1,6 @@
 """Read-only recovery preview from provider enrollment and verifier evidence."""
 import argparse
+from collections import Counter
 import hashlib
 import json
 from pathlib import Path
@@ -20,7 +21,8 @@ def preview(snapshot, verdicts, activity_holds=()):
     for campaign in snapshot['campaigns']:
         if campaign.get('nextCursor'):
             raise ValueError('Enrollment snapshot is incomplete; read every page first')
-        seen = set()
+        counts = Counter(str(lead.get('email') or '').strip().lower()
+                         for lead in campaign['leads'])
         held, candidates = [], []
         for lead in campaign['leads']:
             email = str(lead.get('email') or '').strip().lower()
@@ -29,9 +31,8 @@ def preview(snapshot, verdicts, activity_holds=()):
             # Two sender-originated bounces on 2026-10-15 still appeared active
             # with no terminalOutcome. Negative activity evidence must win.
             reasons.extend('activity:' + reason for reason in sorted(holds.get((campaign['id'], email), ())))
-            if not email or email in seen:
+            if not email or counts[email] > 1:
                 reasons.append('missing or duplicate identity')
-            seen.add(email)
             if lead.get('terminalOutcome'):
                 reasons.append(str(lead['terminalOutcome']))
             if lead.get('isPaused'):

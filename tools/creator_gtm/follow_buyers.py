@@ -24,6 +24,9 @@ import time
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 import brand_buyer as L  # noqa: E402
 
+# TODO: call Clay through tools/creator_gtm/provider.py (the shared provider interface, in
+# progress on wt-gtm-provider, session local_e6857244) once it lands, instead of brand_buyer.clay.
+
 WARM = "Warm: past buyer moved"
 
 

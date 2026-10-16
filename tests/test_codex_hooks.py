@@ -534,6 +534,26 @@ class HookTests(unittest.TestCase):
         self.assertEqual(state['sequence'], 12)
         self.assertEqual(state['last_success'], 12)
 
+    def test_repository_observation_does_not_hold_the_receipt_write_lock(self):
+        from contextlib import closing
+        import sqlite3
+        base = {'session_id': 'slow-snapshot', 'cwd': self.state_directory.name}
+        hooks.turn_state(dict(base, hook_event_name='UserPromptSubmit', prompt='Review'))
+        database = hooks.context.codex_home() / 'chewbacca-turn-state' / 'receipts.sqlite'
+
+        def observe(_payload):
+            # Another tab must be able to retain its receipts while this tab
+            # hashes a repository. Zero timeout makes a held lock fail here.
+            with closing(sqlite3.connect(database, timeout=0)) as db, db:
+                db.execute('BEGIN IMMEDIATE')
+            return {}
+
+        with patch.object(hooks, 'review_snapshots', side_effect=observe):
+            for event in ('PreToolUse', 'PostToolUse'):
+                hooks.turn_state(dict(base, hook_event_name=event, tool_name='exec_command',
+                                      tool_input={'cmd': 'read'}, tool_response={'exit_code': 0}))
+        self.assertEqual(hooks.turn_state(dict(base, hook_event_name='Stop'))['last_success'], 1)
+
     def test_shell_write_does_not_verify_itself(self):
         base = {'session_id': 'shell-write', 'cwd': self.state_directory.name,
                 'tool_name': 'exec_command', 'tool_input': {'cmd': 'edit'},

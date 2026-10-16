@@ -150,6 +150,11 @@ def turn_state(payload):
     sid = payload.get('session_id')
     if not sid:
         return {}
+    event = payload.get('hook_event_name')
+    # On 2026-10-15 independent reviews failed with "database is locked":
+    # repository hashing held the one receipt database's write lock across tabs.
+    # Observe first, then serialize only the receipt state update.
+    snapshots = review_snapshots(payload) if event in ('PreToolUse', 'PostToolUse') else {}
     directory = context.codex_home() / 'chewbacca-turn-state'
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     path = directory / 'receipts.sqlite'
@@ -162,7 +167,6 @@ def turn_state(payload):
         if 'review_scope_version' not in state:
             state['legacy_review_required'] = list(state.get('review_required', []))
             state['review_scope_version'] = 2
-        event = payload.get('hook_event_name')
         if event == 'UserPromptSubmit':
             state = {'prompt': payload.get('prompt', ''), 'prompt_started_at': time.time(), 'sequence': 0,
                      'last_write': 0, 'last_success': -1, 'review_scope_failed': False,
@@ -173,7 +177,7 @@ def turn_state(payload):
                      'review_inflight': state.get('review_inflight', {})}
         elif event == 'PreToolUse':
             key = review_tool_key(payload)
-            state.setdefault('review_before', {}).setdefault(key, review_snapshots(payload))
+            state.setdefault('review_before', {}).setdefault(key, snapshots)
             inflight = state.setdefault('review_inflight', {})
             inflight[key] = inflight.get(key, 0) + 1
         elif event == 'PostToolUse':
@@ -194,7 +198,7 @@ def turn_state(payload):
             required = set(state.get('review_required', []))
             key = review_tool_key(payload)
             before = state.setdefault('review_before', {}).get(key, {})
-            for repo, digest in review_snapshots(payload).items():
+            for repo, digest in snapshots.items():
                 if repo not in before and not digest.startswith('unavailable:'):
                     import review_gate
                     if review_gate.repo_root(repo) is not None:

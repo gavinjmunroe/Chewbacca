@@ -333,6 +333,17 @@ opt-outs that had to be blocklisted before Monday.
   Findymail plus ZeroBounce 2 of 2 at 0.6. Show the cheap chain, and say when
   a field is under 60%.
 
+- **A client demo table is built the night before, not 5 minutes out.**
+  Caleb, 12:35 on 10/16 with Sabo due at 1: "This looks so unorganized????? move
+  all the goated rows to the top that's how demos are supposed to work". Before
+  any client sees a Clay table: a client view sorted with the best rows on top,
+  only the 4 to 6 columns the story needs, test rows deleted, one email column
+  per person (Clay's waterfall pattern, which Caleb expects: "isn't the whole
+  point of a waterfall that it condenses"). View settings have no API yet, so
+  set them while he can still click, or map that endpoint first.
+- **During a live call, 3 lines max.** Caleb mid-demo: "This is too much
+  text bro wtf". Give him what to say, not why.
+
 ## Never call a launch ready without `gtme ready`
 
 - **Never say a launch is ready, good to go, "good until X", "only waiting on

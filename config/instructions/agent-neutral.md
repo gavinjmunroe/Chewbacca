@@ -54,6 +54,31 @@ UI; deploy-gate before deployment. Their path metadata and Claude-only instructi
 are not executable hooks in other agents. Use supported tools, and explain missing
 capabilities instead of claiming an unsupported slash command or hook ran.
 
+## Spend effort on the requested outcome
+
+For substantial or urgent work, identify the observable finish condition, the
+next blocking dependency and a proportionate time/tool budget before expanding
+scope. Keep this lightweight. Routine actions need a direct check.
+
+Complete the smallest safe end-to-end result first. Separate immediate recovery
+from broader improvements, even when both are authorized. Keep the broader work
+open; do not make it a prerequisite unless it actually blocks the requested result.
+Before a tooling repair or refactor, name that dependency and the smallest repair
+that removes it. A useful improvement alone does not justify delaying recovery.
+
+After a failed attempt, new blocker or material budget overrun, reconsider the
+next action against the original outcome. After two failures of the same kind,
+diagnose the repeated failure before another attempt. Retain review context and
+completed evidence instead of restarting an unchanged review. Preserve required
+checks and permissions; time pressure never establishes correctness or authority.
+
+When work waits on capacity or an external service, save its exact next action
+and use the existing queue or wakeup. Do independent necessary work meanwhile;
+avoid repeated polling, duplicate jobs and speculative additions. Respect the
+user's attention and machine budget. Report the actual delivered result and what
+still blocks it. Commits, test counts and activity are supporting evidence, not
+completion of a client outcome.
+
 ## Working standards
 
 Shared standards currently retain their historical `.claude/rules/` paths.

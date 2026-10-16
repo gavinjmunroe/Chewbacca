@@ -412,17 +412,17 @@ if name == "git":
         # default. The 2026-10-15 review found both escaped the denylist.
         # This exception covers only bounded patch inspection, with an exact
         # option vocabulary and both external diff mechanisms disabled.
-        if sub not in {"diff", "show", "log"}:
-            out("refuse", "absolute host Git paths support only diff, show and log")
+        if sub != "show":
+            out("refuse", "absolute host Git paths support only commit patch inspection")
         # After -- these strings are file names, not disabling options.
         separator = rest.index("--") if "--" in rest else len(rest)
         options = rest[:separator]
-        if not {"--no-ext-diff", "--no-textconv"}.issubset(options):
-            out("refuse", "host Git inspection requires --no-ext-diff and --no-textconv")
-        safe = {"--no-ext-diff", "--no-textconv", "--no-color", "--color=never",
+        if not {"--no-ext-diff", "--no-textconv", "--no-show-signature", "--format="}.issubset(options):
+            out("refuse", "host Git patch inspection requires explicit disabling flags and an empty format")
+        safe = {"--no-ext-diff", "--no-textconv", "--no-show-signature", "--no-color", "--color=never",
                 "--reverse", "--oneline", "--name-only", "--name-status", "--stat",
-                "--numstat", "--raw", "--summary", "--format=", "--format=%H",
-                "--format=fuller", "--patch", "-p", "--no-renames", "--check",
+                "--numstat", "--raw", "--summary", "--format=",
+                "--patch", "-p", "--no-renames", "--check",
                 "--cached", "--staged", "--"}
         if any(a.startswith("-") and a not in safe for a in options):
             out("refuse", "unsupported host Git inspection option")

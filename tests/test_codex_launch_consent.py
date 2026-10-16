@@ -33,6 +33,25 @@ class ConsentTests(unittest.TestCase):
     def test_direct_desktop_composer_launch(self):
         self.assertEqual(self.read()["source"], "native Desktop composer")
 
+    def test_explicit_recovery_is_scoped_without_renewing_old_launch_authority(self):
+        record = self.read([START, message("Approve Zeutara recovery")])
+        self.assertEqual(record["v"], 4)
+        self.assertEqual(record["recovery_scope"]["workspaceId"], "1372623")
+        self.assertEqual(len(record["recovery_scope"]["campaignIds"]), 3)
+        self.assertEqual(record["recovery_scope"]["operations"],
+                         ["campaign-restrict", "campaign-sender-isolate", "campaign-recovery-resume"])
+        self.assertIsNone(self.read([START, message("status"), message("Approve Zeutara recovery")]))
+        self.assertIsNone(self.read([START, message('"Approve Zeutara recovery"')]))
+        self.assertIsNone(self.read([START, message("Approve Zeutara recovery")], now=1792017012+7200))
+
+    def test_work_persistence_neither_revokes_nor_grants_permission(self):
+        for text in ("Don't stop working until the work is finished", "NEVER TAKE NO FOR AN ANSWER"):
+            self.assertIsNone(self.read([START, message(text)]))
+            old = self.read([START, message("LAUNCH"), START, message(text)])
+            self.assertEqual(old["v"], 3)
+            self.assertEqual(old["at"], 1792017012)
+            self.assertIsNone(self.read([START, message("LAUNCH"), START, message(text + ". Pause now")]))
+
     def test_repair_then_launch_does_not_revoke_on_unrelated_never(self):
         text = "Fix them so they can be relaunched!!!!!!!!!! Then launch them!!!!!!! Then fix the tools to never make that mistake again!!!!!!!!!"
         self.assertIsNotNone(self.read([START, message(text)]))
@@ -109,7 +128,7 @@ class ConsentTests(unittest.TestCase):
 class NativeFallbackTests(unittest.TestCase):
     """Evaluate only the approval selector with mocked I/O, never a sender."""
 
-    def select(self, names=None, missing=False, op="campaign-status", status="active", rec=None):
+    def select(self, names=None, missing=False, op="campaign-status", status="active", rec=None, args=None):
         source = (Path(__file__).resolve().parents[1] / "bin/chewbacca-clay").read_text()
         selector = source[source.index("function chatApproval("):source.index("function noteChatApproval(")]
         record = rec or {"v": 3, "at": 1792017012, "interactive": True,
@@ -128,11 +147,11 @@ const sandbox = {
  spawnSync: () => {spawned++; return {status: 0, stdout: JSON.stringify(opts.rec)};}
 };
 vm.runInNewContext(opts.selector, sandbox);
-const result = sandbox.chatApproval(opts.op, {body: {status: opts.status}});
+const result = sandbox.chatApproval(opts.op, {body: {status: opts.status}}, opts.args);
 process.stdout.write(JSON.stringify({result, spawned}));
 """
         options = {"names": names or [], "missing": missing, "op": op, "status": status,
-                   "rec": record, "selector": selector}
+                   "rec": record, "selector": selector, "args": args or {}}
         result = subprocess.run(["node", "-e", setup, json.dumps(options)],
                                 check=True, capture_output=True, text=True)
         return json.loads(result.stdout)
@@ -160,6 +179,21 @@ process.stdout.write(JSON.stringify({result, spawned}));
                       "source": "native Desktop composer", "session_id": SESSION}
             record.update(change)
             self.assertIsNone(self.select(rec=record)["result"])
+
+    def test_recovery_requires_fresh_native_scope_and_exact_campaign(self):
+        from codex_launch_consent import RECOVERY_SCOPE
+        record = {"v":4,"at":1792017012,"interactive":True,
+                  "source":"native Desktop composer","session_id":SESSION,
+                  "recovery_scope":copy.deepcopy(RECOVERY_SCOPE)}
+        args={"ws":"1372623","campaign":"cam_0tmpnciWKD2QKjY3QAT"}
+        for op in RECOVERY_SCOPE["operations"]:
+            self.assertEqual(self.select(op=op,rec=record,args=args)["result"]["v"],4)
+            for wrong in ({**args,"ws":"other"},{**args,"campaign":"cam_other"}):
+                self.assertIsNone(self.select(op=op,rec=record,args=wrong)["result"])
+            self.assertIsNone(self.select(op=op,args=args)["result"])
+        self.assertIsNone(self.select(rec=record)["result"])
+        bad=copy.deepcopy(record);bad["recovery_scope"]["operations"]=[]
+        self.assertIsNone(self.select(op="campaign-restrict",rec=bad,args=args)["result"])
 
 
 if __name__ == "__main__":

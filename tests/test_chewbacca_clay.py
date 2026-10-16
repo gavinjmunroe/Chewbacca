@@ -676,6 +676,28 @@ RESTRICTION_GATE_FIXTURES = {
          "enrolledAt": "2026-10-14T00:00:00Z"},
     ], "nextCursor": None}},
 }
+SENDER_ISOLATION_CAMPAIGN = {
+    "id": "cam_0tmpnciWKD2QKjY3QAT", "name": "Zeutara | Synthetic recovery fixture",
+    "status": "paused", "settings": {"autoPauseLeadOnSegmentExit": True,
+        "senderAccountIds": ["csea_0tma115WdqRmyRGNjsW", "csea_keep", "csea_0tm9xmwEyHnKWFoZAvS"]},
+    "sequence": [{"id": "original_step"}],
+}
+SENDER_ISOLATION_FIXTURES = {
+    "api-anything/getCampaign.json": {**SENT, "data": SENDER_ISOLATION_CAMPAIGN},
+}
+
+
+def test_sender_isolation_derives_only_the_exact_protective_payload():
+    argv = ["ws=1372623", "campaign=" + SENDER_ISOLATION_CAMPAIGN["id"]]
+    code, out, _ = run(SENDER_ISOLATION_FIXTURES, {}, "campaign-sender-isolate", *argv, "--dry-run")
+    ok(code == 0 and out["sent"] is False, "sender isolation preview must never write")
+    payload = json.loads(out["request"]["argv"][-1])
+    ok(payload == {"settings": {"autoPauseLeadOnSegmentExit": True, "senderAccountIds": ["csea_keep"]}},
+       "isolation payload changes only the two incident senders")
+    ok(out["protection"]["readyToResume"] is False, "sender isolation does not certify resume readiness")
+    code, out, _ = run(SENDER_ISOLATION_FIXTURES, {}, "campaign-sender-isolate", *argv,
+                       'input={"status":"active"}', "--dry-run")
+    ok(code == 2 and "unknown arg" in out["reason"], "callers cannot override the derived payload")
 CLI_READ_LEAVES = {"list", "get", "analytics", "balance", "search-ids", "search-count", "query", "query-live", "query-usage",
                    "audience", "summary", "activities", "list-values", "steps", "reference", "traffic", "aggregate", "search",
                    "schema", "validate", "format", "diagram", "preview-sequence", "resolve", "sender-accounts", "skills",
@@ -704,9 +726,11 @@ def walk_gate(reg_path=None):
     walked = 0
     for op in reg["ops"]:
         own = {"update-rows": {"records": json.dumps(REC_UPD)},
+               "campaign-sender-isolate": {"ws": "1372623", "campaign": SENDER_ISOLATION_CAMPAIGN["id"]},
                "campaign-sequence": {"input": '{"ops":[{"op":"deleteStep"}]}'}}.get(op["name"], {})
         argv = [f"{a.rstrip('?')}={own.get(a.rstrip('?'), SAMPLES[a.rstrip('?')])}" for a in op["args"]]
-        fixtures = RESTRICTION_GATE_FIXTURES if op["name"] == "campaign-restrict" else {}
+        fixtures = (RESTRICTION_GATE_FIXTURES if op["name"] == "campaign-restrict" else
+                    SENDER_ISOLATION_FIXTURES if op["name"] == "campaign-sender-isolate" else {})
         for s in op["surfaces"]:
             if s.get("unless"):
                 continue
@@ -972,6 +996,7 @@ def test_fixtures_are_scrubbed():
 
 
 def main():
+    test_sender_isolation_derives_only_the_exact_protective_payload()
     for fn in (test_registry_matches_spec, test_ops_json_shape, test_routes_to_fastest_measured,
                test_falls_through_on_failure_and_truncation, test_no_complete_surface_fails_closed, test_args_pick_the_surface, test_write_gate,
                test_dry_run_builds_each_write, test_dry_run_never_loads_the_engine, test_derived_writes_stay_gated,

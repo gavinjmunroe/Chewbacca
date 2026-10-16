@@ -27,6 +27,13 @@ STOP = re.compile(r"^\s*(?:no|nope|nah)\s*[!.]*\s*$|"
 REPAIR_LAUNCH = re.compile(r"(?:then\s+)?(?:relaunch|launch)\s+(?:them|the campaigns)(?:\s+now)?", re.I)
 REPAIR_FIRST = re.compile(r"fix\s+(?:them|the campaigns)(?:\s+so\s+they\s+can\s+be\s+relaunched)?", re.I)
 QUALITY_PURPOSE = re.compile(r"\bto never make (?:that mistake|that error|smth that shit|something that bad) (?:ever )?again\b", re.I)
+RECOVERY = re.compile(r"(?:approve zeutara recovery|repair and relaunch the three original zeutara campaigns)[!.]*", re.I)
+RECOVERY_SCOPE = {
+    "workspaceId": "1372623",
+    "campaignIds": ["cam_0tmpnciWKD2QKjY3QAT", "cam_0tmpndgzjN7hMBX8m8v", "cam_0tmrvre4dsi7pjvsfcy"],
+    "operations": ["campaign-restrict", "campaign-sender-isolate", "campaign-recovery-resume"],
+}
+PERSIST = re.compile(r"(?:don['’]t stop working until the work is finished|never take no for an answer)[!.]*", re.I)
 
 
 def explicit_launch(text):
@@ -50,6 +57,9 @@ def explicit_launch(text):
 
 
 def revokes(text):
+    # These observed persistence requests neither authorize sends nor stop them.
+    if PERSIST.fullmatch(text.strip()):
+        return False
     # Only the recognized repair plan's explicit quality-purpose clause is
     # unrelated to sending. Every other 'never' revokes, regardless of its verb.
     checked = QUALITY_PURPOSE.sub('', text) if explicit_launch(text) else text
@@ -92,7 +102,8 @@ def consent_from_records(header, records, session, now):
         # The actual failing prompts were LAUNCH and BRO LAUNCH FIX IT.
         if len(text) > 300 or "\n" in text or "<" in text:
             continue
-        if not explicit_launch(text):
+        recovery = bool(RECOVERY.fullmatch(text))
+        if not explicit_launch(text) and not recovery:
             continue
         try:
             stamp = dt.datetime.fromisoformat(record["timestamp"].replace("Z", "+00:00"))
@@ -102,9 +113,11 @@ def consent_from_records(header, records, session, now):
         except (KeyError, TypeError, ValueError):
             continue
         if 0 <= now - at < TTL:
-            result = {"v": 3, "at": int(at), "session_id": session,
+            result = {"v": 4 if recovery else 3, "at": int(at), "session_id": session,
                       "interactive": True, "excerpt": text[:200],
                       "source": "native Desktop composer"}
+            if recovery:
+                result["recovery_scope"] = RECOVERY_SCOPE
     return result
 
 

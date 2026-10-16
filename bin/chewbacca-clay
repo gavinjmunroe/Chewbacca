@@ -1080,7 +1080,8 @@ function gradeGate(op, request, args) {
 // written only for a prompt chat-approval.sh judged typed by a person. The
 // caller's own session's record wins; otherwise the freshest.
 const CHAT_APPROVAL_MS = 2 * 3600 * 1000;
-function chatApproval(name, request) {
+function chatApproval(name, request, args = {}) {
+  const nativeRecovery = ["campaign-restrict", "campaign-sender-isolate", "campaign-recovery-resume"].includes(name);
   const dir = FIXTURES
     ? process.env.CHEWBACCA_CLAY_CHAT_APPROVAL_DIR
     : path.join(os.userInfo().homedir, ".chewbacca", "state", "clay-chat-approval");
@@ -1098,6 +1099,7 @@ function chatApproval(name, request) {
     if (!rec || rec.v !== 2 || rec.interactive !== true || rec.session_id !== sid) continue;
     const age = Date.now() - Number(rec.at) * 1000;
     if (!(age >= 0 && age < CHAT_APPROVAL_MS)) continue;
+    if (nativeRecovery) continue;
     if (sid === own) return rec;
     if (!best || Number(rec.at) > Number(best.at)) best = rec;
   }
@@ -1105,7 +1107,7 @@ function chatApproval(name, request) {
   // Native Codex consent has different provenance from Claude attendance.
   // Read the real composer turn, never manufacture a legacy approval file.
   const nativeLaunch = name === "campaign-status" && request.body?.status === "active";
-  if (!FIXTURES && nativeLaunch) {
+  if (!FIXTURES && (nativeLaunch || nativeRecovery)) {
     const nativeEnv = { PATH: "/usr/bin:/bin:/usr/sbin:/sbin", HOME: os.userInfo().homedir,
       CODEX_THREAD_ID: process.env.CODEX_THREAD_ID || "", CODEX_SESSION_ID: process.env.CODEX_SESSION_ID || "" };
     const native = spawnSync("/usr/bin/python3", ["-I", path.join(ROOT, "tools/codex_launch_consent.py")],
@@ -1113,11 +1115,20 @@ function chatApproval(name, request) {
     if (native.status === 0) {
       try {
         const rec = JSON.parse(native.stdout);
-        if (rec?.v !== 3 || rec?.interactive !== true || rec?.source !== "native Desktop composer") return null;
+        if (rec?.v !== (nativeRecovery ? 4 : 3) || rec?.interactive !== true || rec?.source !== "native Desktop composer") return null;
         const session = nativeEnv.CODEX_THREAD_ID || nativeEnv.CODEX_SESSION_ID;
         if (!session || rec.session_id !== session) return null;
         const age = Date.now() - Number(rec.at) * 1000;
         if (!(age >= 0 && age < CHAT_APPROVAL_MS)) return null;
+        if (nativeRecovery) {
+          const campaigns = ["cam_0tmpnciWKD2QKjY3QAT", "cam_0tmpndgzjN7hMBX8m8v", "cam_0tmrvre4dsi7pjvsfcy"];
+          const scope = rec.recovery_scope;
+          if (String(args.ws) !== "1372623" || !campaigns.includes(args.campaign) ||
+              scope?.workspaceId !== "1372623" ||
+              !Array.isArray(scope.campaignIds) || scope.campaignIds.length !== 3 ||
+              !campaigns.every(id => scope.campaignIds.includes(id)) ||
+              !Array.isArray(scope.operations) || !scope.operations.includes(name)) return null;
+        }
         return rec;
       } catch { return null; }
     }
@@ -1174,18 +1185,18 @@ function unfinishedReply(args) {
   return null;
 }
 
-function personApproves(name, request) {
+function personApproves(name, request, args = {}) {
   const prompt = approvalPrompt(name, request);
   if (FIXTURES && process.env.CHEWBACCA_CLAY_TTY_TRANSCRIPT) fs.writeFileSync(process.env.CHEWBACCA_CLAY_TTY_TRANSCRIPT, prompt);
   if (FIXTURES && process.env.CHEWBACCA_CLAY_TTY_ANSWER !== undefined) return process.env.CHEWBACCA_CLAY_TTY_ANSWER === name;
   if (FIXTURES) {
-    const rec = chatApproval(name, request);
+    const rec = chatApproval(name, request, args);
     if (rec) noteChatApproval(name, rec);
     return rec ? true : false;
   }
   let fd;
   try { fd = fs.openSync("/dev/tty", "r+"); } catch {
-    const rec = chatApproval(name, request);
+    const rec = chatApproval(name, request, args);
     if (rec) noteChatApproval(name, rec);
     return rec ? true : null;
   }
@@ -1201,8 +1212,7 @@ function personApproves(name, request) {
   }
 }
 
-async function restrictionSnapshot(args) {
-  const read = async (name, values) => {
+async function recoveryRead(name, values) {
     const op = opByName.get(name);
     if (!op || isWrite(op)) throw new Error(`Restriction snapshot needs a registered read: ${name}`);
     const normalized = normalizeArgs(withDefaults(op, values));
@@ -1217,8 +1227,10 @@ async function restrictionSnapshot(args) {
     const result = await attempt(op, candidates[0], {});
     if (!result.ok || result.truncated) throw new Error(`Restriction read ${name} failed or was truncated`);
     return result.data;
-  };
-  return require("./lib/clay-restriction-snapshot").collectRestrictionSnapshot(read, args);
+}
+
+async function restrictionSnapshot(args) {
+  return require("./lib/clay-restriction-snapshot").collectRestrictionSnapshot(recoveryRead, args);
 }
 
 async function runOp(name, kv, flags) {
@@ -1271,6 +1283,17 @@ async function runOp(name, kv, flags) {
   }
   const sendArgs = compose(op, norm.values);
   let restriction;
+  let senderIsolation;
+  if (name === "campaign-sender-isolate") {
+    try {
+      const snapshot = await recoveryRead("campaign", { ws: sendArgs.ws, campaign: sendArgs.campaign });
+      const policy = require("./lib/clay-campaign-sender-isolation");
+      senderIsolation = { snapshot, plan: policy.planSenderIsolation(snapshot, sendArgs) };
+      sendArgs.input = senderIsolation.plan.input;
+    } catch (error) {
+      out({ ok: false, op: name, class: "refused", reason: error.message, sent: false }, EXIT.refused);
+    }
+  }
   if (name === "campaign-restrict") {
     try {
       const snapshot = await restrictionSnapshot(sendArgs);
@@ -1302,7 +1325,7 @@ async function runOp(name, kv, flags) {
   }
   if (flags.dryRun) {
     out({ ok: true, op: name, dry_run: true, sent: false, kind: isWrite(op) ? "write" : "read", gate: op.gate, surface: cands[0].s.type,
-      call: surfaceKey(op, cands[0].s), request, ...(restriction ? { protection: restriction.plan } : {}), ...(op.verified === false ? { verified: false } : {}) }, EXIT.ok);
+      call: surfaceKey(op, cands[0].s), request, ...(restriction ? { protection: restriction.plan } : {}), ...(senderIsolation ? { protection: senderIsolation.plan } : {}), ...(op.verified === false ? { verified: false } : {}) }, EXIT.ok);
   }
   if (isWrite(op)) {
     // One verdict row per write (tools/verdicts.py): the op, never its payload.
@@ -1326,6 +1349,7 @@ async function runOp(name, kv, flags) {
     const prep = await prepareWrite(op, s, request);
     if (prep.error) refuse(prep.error);
     if (restriction) prep.files = [...(prep.files || []), path.join(ROOT, "bin/lib/clay-campaign-restriction.js"), path.join(ROOT, "bin/lib/clay-restriction-snapshot.js")];
+    if (senderIsolation) prep.files = [...(prep.files || []), path.join(ROOT, "bin/lib/clay-campaign-sender-isolation.js")];
     const before = fingerprint(prep);
     const shownHash = sha256(showable({ op: name, request }));
     // A reply answers a person who wrote first, in their own thread, from the
@@ -1338,7 +1362,7 @@ async function runOp(name, kv, flags) {
       const unfinished = unfinishedReply(args);
       if (unfinished) refuse(`${unfinished}; nothing was sent`);
     }
-    const yes = selfApproved ? true : personApproves(name, request);
+    const yes = selfApproved ? true : personApproves(name, request, sendArgs);
     if (yes === null) refuse("a write needs Caleb's ok: him typing the op name at a terminal, or a prompt from him in chat within the last 2 hours (his standing \"do everything yourself\")");
     if (!yes) refuse("the person at the terminal did not approve this payload");
     afterApprovalTestHook();
@@ -1354,6 +1378,13 @@ async function runOp(name, kv, flags) {
         require("./lib/clay-campaign-restriction").verifyBeforeWrite(await restrictionSnapshot(sendArgs), restriction.plan);
       } catch (error) { refuse(`${error.message}; nothing was sent`); }
       if (fingerprint(prep) !== before) refuse("Write dependencies changed during the protective recheck; nothing was sent");
+    }
+    if (senderIsolation) {
+      try {
+        require("./lib/clay-campaign-sender-isolation").verifySenderIsolationBeforeWrite(
+          await recoveryRead("campaign", { ws: sendArgs.ws, campaign: sendArgs.campaign }), senderIsolation.plan);
+      } catch (error) { refuse(`${error.message}; nothing was sent`); }
+      if (fingerprint(prep) !== before) refuse("Write dependencies changed during sender isolation recheck; nothing was sent");
     }
     const t0 = Date.now();
     const r = await prep.send();
@@ -1374,6 +1405,16 @@ async function runOp(name, kv, flags) {
         out({ ok: proof.verified, op: name, sent: true, protection: proof, readyToResume: false, tried }, proof.verified ? EXIT.ok : EXIT.failed);
       } catch (error) {
         out({ ok: false, op: name, sent: true, readyToResume: false, reason: `Restriction write attempted; readback is unverified: ${error.message}`, tried }, EXIT.failed);
+      }
+    }
+    if (senderIsolation) {
+      try {
+        const proof = require("./lib/clay-campaign-sender-isolation").verifySenderIsolation(
+          senderIsolation.snapshot, senderIsolation.plan,
+          await recoveryRead("campaign", { ws: sendArgs.ws, campaign: sendArgs.campaign }));
+        out({ ok: proof.verified, op: name, sent: true, protection: proof, readyToResume: false, tried }, proof.verified ? EXIT.ok : EXIT.failed);
+      } catch (error) {
+        out({ ok: false, op: name, sent: true, readyToResume: false, reason: `Sender isolation write attempted; readback is unverified: ${error.message}`, tried }, EXIT.failed);
       }
     }
     // A write never read back after a real call reads back now, every time,

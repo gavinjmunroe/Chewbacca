@@ -1454,6 +1454,25 @@
       "verified": false
     },
     {
+      "name": "campaign-sender-isolate",
+      "kind": "write",
+      "gate": "write:campaign-protection",
+      "args": ["ws", "campaign"],
+      "summary": "Remove only the two incident senders from an original paused Zeutara recovery campaign. Derives the exact settings payload from a fresh pinned read and verifies all other campaign fields. Never resumes.",
+      "surfaces": [
+        {
+          "type": "cli",
+          "argv": ["campaigns", "update", "{campaign}", "--input", "{input}"]
+        }
+      ],
+      "evidence": {
+        "source": "cli",
+        "command": "clay campaigns update <campaignId> --input <json>",
+        "semantics": "Only settings.senderAccountIds changes, verified against provider readback"
+      },
+      "verified": false
+    },
+    {
       "name": "campaign-update",
       "kind": "write",
       "gate": "write:campaign-draft",

@@ -188,6 +188,20 @@ class ChainTest(_Base):
         self.assertIn("parent vitaminwell.com, after barebells.com returned no one", fake.value(WHY))
         self.assertAlmostEqual(log["credits_observed"], 1.6)
 
+    def test_bare_link_hop_never_marks_its_email_ready(self):
+        """A domain the site only links, with no ownership sentence, is searched but not trusted."""
+        SITES["acme.com"] = {"site_text": "Shop our partners", "links": ["career.vitaminwell.com"]}
+        try:
+            stranger = person("Pat Lee", "US Partnerships Lead")
+            fake = FakeClay({"acme.com": [], "vitaminwell.com": [stranger]},
+                            email_by_url={stranger["url"]: "pat.lee@vitaminwell.com"})
+            log = self.run_chain(fake, "Acme", "acme.com", {"Pat Lee": 1.9})
+        finally:
+            SITES.pop("acme.com")
+        hop = next(s for s in log["steps"] if s["step"] == "parent fallback")
+        self.assertEqual(hop["to"], "vitaminwell.com")
+        self.assertEqual(fake.value(fake.added["Status"]), "Needs work: off-domain vitaminwell.com")
+
     def test_no_parent_on_file_stops_without_email_spend(self):
         fake = FakeClay({"gymshark.com": []})
         log = self.run_chain(fake, "Gymshark", "gymshark.com", {})

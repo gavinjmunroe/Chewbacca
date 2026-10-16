@@ -82,7 +82,12 @@ def sentence_around(text, start, end, width=140):
 
 
 def related_orgs(blocker, data):
-    """Companies the evidence ties to this account, each with the sentence that ties it.
+    """Companies the evidence ties to this account: {domain: {"why", "trust"}}.
+
+    trust says how the tie was made. Only "owned_and_linked" (an ownership sentence on the
+    brand's own site naming a company whose domain the site also links) is strong enough for a
+    caller to treat that domain's emails as the account's. "owned_guessed", "linked_only" and
+    "email_domain" are leads to search, never proof of ownership.
 
     Read from the brand's own words (site, LinkedIn, research), the links its site
     carries, and the email domains of people already found at the account.
@@ -118,13 +123,16 @@ def related_orgs(blocker, data):
                                              or d.split(".")[0] in k for k in keys)]
         for d in matched:
             hosts = ", ".join(sorted(domains[d]))
-            found.setdefault(d, f'the brand\'s own text says "{quote}", and it links {hosts}')
+            found.setdefault(d, {"why": f'the brand\'s own text says "{quote}", and it links {hosts}',
+                                 "trust": "owned_and_linked"})
         if not matched:
             for k in sorted(keys):
-                found.setdefault(f"{k}.com", f'the brand\'s own text says "{quote}"; '
-                                              f"{k}.com is guessed from that name, the site doesn't link it")
+                found.setdefault(f"{k}.com", {"why": f'the brand\'s own text says "{quote}"; '
+                                                     f"{k}.com is guessed from that name, the site doesn't link it",
+                                              "trust": "owned_guessed"})
     for d, hosts in domains.items():
-        found.setdefault(d, f"the brand's site links {', '.join(sorted(hosts))}, with no ownership sentence")
+        found.setdefault(d, {"why": f"the brand's site links {', '.join(sorted(hosts))}, with no ownership sentence",
+                             "trust": "linked_only"})
 
     at = {}
     for p in ev.get("people") or []:
@@ -132,7 +140,8 @@ def related_orgs(blocker, data):
         if dom and dom != brand_dom:
             at.setdefault(dom, []).append(p.get("name") or "someone")
     for d, who in at.items():
-        found.setdefault(d, f"{len(who)} of the people found at this account have email at {d}")
+        found.setdefault(d, {"why": f"{len(who)} of the people found at this account have email at {d}",
+                             "trust": "email_domain"})
     return found
 
 
@@ -153,8 +162,8 @@ def op_org_hop(blocker, data):
     return [{"kind": "org_hop", "target": d, "action": f"rerun the people search on {d}",
              "why": why, "action_class": "paid_write", "credits": cost_of(data, "people_search"),
              "minutes": minutes_of(data, "people_search"), "reversible": True, "touches": ["table_write"],
-             "reruns": "people_search"}
-            for d, why in related_orgs(blocker, data).items()]
+             "reruns": "people_search", "trust": trust}
+            for d, why, trust in ((d, o["why"], o["trust"]) for d, o in related_orgs(blocker, data).items())]
 
 
 def op_read_source(blocker, data):

@@ -201,8 +201,13 @@ def _norm(name):
 
 
 def blocked_search(brand, brand_domain, row, log):
-    """Run gtme next-move on an empty people search. Returns (people, domain, hops)."""
-    found = {"people": [], "domain": brand_domain}
+    """Run gtme next-move on an empty people search. Returns (people, domain, hops, trusted).
+
+    trusted is True only when the brand's own site says it is part of that company and links
+    its domain. Any weaker tie (a guessed name.com, a bare link, an email domain) still gets
+    searched, but its emails stay off the allowlist, so the row lands as Needs work.
+    """
+    found = {"people": [], "domain": brand_domain, "trusted": False}
     hops = []
 
     def read(move, blocker):
@@ -221,7 +226,7 @@ def blocked_search(brand, brand_domain, row, log):
         people = search_people(row, domain, log)
         hops.append(domain)
         if people:
-            found.update(people=people, domain=domain)
+            found.update(people=people, domain=domain, trusted=move.get("trust") == "owned_and_linked")
         return {"cleared": bool(people), "credits": 0.5}
 
     blocker = {"client": CREATOR or "brand-buyer", "step": "people_search",
@@ -237,7 +242,7 @@ def blocked_search(brand, brand_domain, row, log):
     log["steps"].append({"step": "next move", "decision": res["decision"],
                          "moves": [{"move": t["move"], "p": t["p"], "cleared": t["cleared"]} for t in res["trace"]],
                          "next": (res.get("next") or {}).get("signature")})
-    return found["people"], found["domain"], hops
+    return found["people"], found["domain"], hops, found["trusted"]
 
 
 # ── ranking ──────────────────────────────────────────────────────────────────
@@ -468,10 +473,10 @@ def save_row(brand, row, path=None):
 
 
 def finish(brand_domain, row, log, t0, before, cols):
-    domain, hops = brand_domain, []
+    domain, hops, trusted = brand_domain, [], True
     people = search_people(row, domain, log)
     if not people:
-        people, domain, hops = blocked_search(log["brand"], brand_domain, row, log)
+        people, domain, hops, trusted = blocked_search(log["brand"], brand_domain, row, log)
     if not people:
         tried = ", ".join(hops) or "no related company in the evidence"
         log["result"] = {"person": None, "row": row,
@@ -496,7 +501,9 @@ def finish(brand_domain, row, log, t0, before, cols):
                          "candidates": [(p.get("name"), p.get("title")) for p in people]}
         return done(log, before, t0, cols)
 
-    allowed = [brand_domain, domain]
+    # Security review, 2026-10-16: a hop domain from a bare link or a guessed name could put a
+    # stranger's email on the allowlist. Only an ownership sentence plus a link earns it.
+    allowed = [brand_domain] + ([domain] if trusted else [])
     pick, first_try = ranked[0], None
     url, email, verdict = email_for(row, people[pick], log)
     problem = email_problem(email, verdict, allowed)

@@ -46,7 +46,8 @@ class Generate(unittest.TestCase):
         b["evidence"].update(SITE)
         orgs = N.related_orgs(b, N.load_data())
         self.assertIn("vitaminwell.com", orgs)
-        self.assertIn("part of Vitamin Well Group", orgs["vitaminwell.com"])
+        self.assertIn("part of Vitamin Well Group", orgs["vitaminwell.com"]["why"])
+        self.assertEqual(orgs["vitaminwell.com"]["trust"], "owned_and_linked")
         self.assertNotIn("barebells.de", orgs, "the brand's own country sites aren't another company")
         self.assertNotIn("wikipedia.org", orgs, "a platform link says nothing about ownership")
 
@@ -67,8 +68,9 @@ class Generate(unittest.TestCase):
                           "people": [{"name": "A", "email": "a@other.co.uk"}]}}
         orgs = N.related_orgs(b, N.load_data())
         self.assertIn("vitaminwell.com", orgs, "a name with no link is guessed and says so")
-        self.assertIn("guessed", orgs["vitaminwell.com"])
-        self.assertIn("other.co.uk", orgs)
+        self.assertIn("guessed", orgs["vitaminwell.com"]["why"])
+        self.assertEqual(orgs["vitaminwell.com"]["trust"], "owned_guessed")
+        self.assertEqual(orgs["other.co.uk"]["trust"], "email_domain")
 
     def test_tried_moves_are_not_proposed_again(self):
         b = case("sabo-celsius-no-email")["blocker"]

@@ -546,6 +546,11 @@ if group "gtme"; then
   # field ids as constants; a client file and columns found by name make it a product.
   check "brand buyer: parent fallback, ranking, one retry, catch-all never Ready, any client by file" \
     python3 "$ROOT/tests/test_brand_buyer.py"
+  # 2026-10-16: Archer Meat Snacks, the seed's only email was a live inbox at the brand they
+  # left, and the people search missed them; the seed is picked first and an old-brand email
+  # never counts as verified.
+  check "follow past buyers: moved seed gets a warm row, seed picked first, old-brand email never verified" \
+    python3 "$ROOT/tests/test_follow_buyers.py"
   # 2026-10-13: 97 executable lines hard-coded one client and its rulings had
   # two homes; the clients.json entry is the contract a second client fills in.
   check "gtme config checks a client entry, resolves its one workspace, keeps rulings in one file" \

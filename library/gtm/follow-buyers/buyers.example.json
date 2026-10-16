@@ -1,0 +1,19 @@
+[
+  {
+    "name": "Riley Seed",
+    "linkedin": "https://www.linkedin.com/in/riley-seed-0001/",
+    "paid_from": {
+      "brands": ["Old Drink"],
+      "domains": ["olddrink.com", "oldparent.com"]
+    },
+    "history": "ran Old Drink's influencer contracts from 2022 to 2026",
+    "history_source": "where the history came from: a deal record, a call note, a research row",
+    "current": {
+      "employer": "New Snack Co",
+      "domain": "newsnack.com",
+      "title": "Social Media and Influencer Manager",
+      "since": "2026-03",
+      "source": "where the current role came from: Clay people search, a JobChange event, a profile"
+    }
+  }
+]

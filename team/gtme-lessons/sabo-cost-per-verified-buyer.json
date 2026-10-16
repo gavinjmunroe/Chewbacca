@@ -27,7 +27,7 @@
   "next_decision": "Drop fields under 60% fill from the default chain; report cost per verified buyer, not per row.",
   "check": "Before adding a paid field to a table, measure its fill rate on 3 to 5 rows and price it per verified result.",
   "evidence": [
-    "skills/gtm-engineering/SKILL.md",
+    "a40ec6ce",
     "team/memory/reference_clay_people_search_finds_buyers.md"
   ],
   "scope": "Sabo's Clay table, October 2026.",

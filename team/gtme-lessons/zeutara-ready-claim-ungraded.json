@@ -1,0 +1,41 @@
+{
+  "id": "zeutara-ready-claim-ungraded",
+  "title": "A launch called ready had 1 of 14 campaigns graded",
+  "client": "Zeutara",
+  "date": "2026-10-12",
+  "stage": "send",
+  "applies_to": [
+    "launch",
+    "readiness",
+    "grading",
+    "pre-send",
+    "legal-suffix"
+  ],
+  "hypothesis": "The launch was ready apart from the footer address.",
+  "change": "Graded every draft through all five gates and checked the pre-send receipt (gtme ready, b74c7371).",
+  "oracle": {
+    "metric": "grade_score",
+    "numerator": 1,
+    "denominator": 14,
+    "unit": "campaigns",
+    "source": "gtme_grade",
+    "baseline": "85 of 100 bar",
+    "version": 1
+  },
+  "result": "The live drafts graded 25 to 67 against the 85 bar, 1 of 14 campaigns had been graded, gates 3 to 5 were NOT CHECKED, 104 of 746 firm names carried legal suffixes like L.P., and the pre-send receipt had expired.",
+  "verdict": "observed",
+  "next_decision": "Report gtme ready's NOT READY list as it stands; ready-guard refuses a readiness claim without a signed READY under 2 hours old.",
+  "check": "Never call a launch ready until gtme ready prints READY; a gate that is NOT CHECKED counts as a blocker.",
+  "check_ref": [
+    "kit:tools/gtme_ready.py::NOT CHECKED",
+    "kit:.claude/hooks/ready-guard.sh",
+    "kit:tools/gtme_grade.py::LEGAL_SUFFIX"
+  ],
+  "evidence": [
+    "team/memory/feedback_ready_means_gtme_ready_passed.md",
+    "b74c7371"
+  ],
+  "scope": "Any campaign launch, resume or add-leads.",
+  "derived_from": [],
+  "history": []
+}

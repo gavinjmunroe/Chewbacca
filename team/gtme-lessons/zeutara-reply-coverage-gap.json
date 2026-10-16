@@ -27,7 +27,7 @@
   "check": "Two sources disagreeing on a reply count is a finding: reconcile person by person before reporting.",
   "evidence": [
     "~/code/work/zeutara-gtme/findings/2026-10-11-loop-baseline.md",
-    "skills/gtm-engineering/SKILL.md"
+    "a40ec6ce"
   ],
   "scope": "Any client whose replies go through a separate responder.",
   "history": []

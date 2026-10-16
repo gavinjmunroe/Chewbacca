@@ -1,0 +1,39 @@
+{
+  "id": "zeutara-portfolio-graph-coverage",
+  "title": "A free portfolio graph cost nothing but gave few leads a line: decide by cost per usable line",
+  "client": "Zeutara",
+  "date": "2026-10-05",
+  "stage": "copy",
+  "applies_to": [
+    "personalization",
+    "graph",
+    "portfolio",
+    "cost",
+    "fill-rate",
+    "first-line"
+  ],
+  "hypothesis": "Edges built from each firm's own portfolio page (firm, invested_in, company, in_sector) would give most leads a personal line for free.",
+  "change": "Built the graph once with free HTTP, a no-tools model and a Jev check per edge, then walked it per lead (scripts/portfolio_graph.py).",
+  "oracle": {
+    "metric": "observation",
+    "numerator": 10,
+    "denominator": 309,
+    "unit": "leads",
+    "source": "run_log",
+    "baseline": "Clay enrichment at its credit cost",
+    "version": 1
+  },
+  "result": "Zero Clay credits, but only 10 of 309 leads got a line, because most portfolio pages are logo-only.",
+  "verdict": "observed",
+  "next_decision": "Pick graph or Clay enrichment per job by cost per verified usable line, not by habit.",
+  "check": "Before choosing a free route over paid enrichment, measure how many rows it actually fills on a sample.",
+  "evidence": [
+    "~/code/work/zeutara-gtme/scripts/portfolio_graph.py",
+    "~/code/work/zeutara-gtme/findings/portfolio-map.md",
+    "897a0168"
+  ],
+  "scope": "Investor lists where the personal line comes from portfolio pages.",
+  "check_ref": [],
+  "derived_from": [],
+  "history": []
+}

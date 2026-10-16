@@ -172,7 +172,7 @@ first cold email cost deliverability. So:
   those from research or leave them out. The Firm Foundation list is in their
   Downloads, "Firm Foundation video questions.md".
 - `gtme batch` and `gtme today` read the ledger's own lines.json. Pass
-  `--lines` only to override it (10/12: 252 leads held because nobody passed it).
+  `--lines` only to override it (lesson `firm-foundation-lines-not-passed`).
 
 ## Client rulings beat your strategy (2026-10-09)
 
@@ -288,20 +288,10 @@ clay campaign-stats`, `chewbacca gtm sync` then `gtm replies --all` answer in
   out, keychain copies, launchd jobs that post to it, READMEs), because the
   rename kills the old URL.
 
-Also from that build: a reply count that doesn't match across sources is a
-finding, never a footnote. Reconcile person by person before a client sees
-it; on 10/10 the 62 vs 27 gap was 51 replies Togari never got, 10 of them
-opt-outs that had to be blocklisted before Monday.
+Reply counts that disagree across sources, and replies read from a snippet: `chewbacca gtme lesson plan "reply handling"` (lessons `zeutara-reply-coverage-gap`, `zeutara-reply-text-not-category`).
 
-## Four more from the all-night GTME session, 2026-10-11
+## Three more from the all-night GTME session, 2026-10-11
 
-- **Read the reply, never the snippet.** Until 65f7991d the reply snippet
-  was the raw HTML body's first 280 characters: 73 of 87 Zeutara replies
-  were `<div>` soup cut mid-sentence, so 12 classified "unclear" and two
-  investor deck asks sat 2 days with no answer. Classify and draft from
-  `text` (`gtm replies --json`), the whole reply in the lead's own words.
-  Run `gtme-reply intent` over every reply after any change and read each
-  one that isn't auto-handled.
 - **Every rule runs as code, or it doesn't count.** Caleb: "Make chewb not
   just be a storage of a bunch of cool things, but make it actually
   intelligently follow EVERY rule we set it!!!!!!!!!" A ruling in a client's
@@ -322,15 +312,13 @@ opt-outs that had to be blocklisted before Monday.
 
 ## Sabo takeover lessons, 2026-10-16
 
-- **Start from the client's buyer, then flip it.** Caleb: "be efficient and
-  not so narrow minded". For a creator manager, also trace who pays creators
-  like his: run clubs and running creators, then their sponsors. That's how
-  Klarna, Strava, ASICS and Diplo's Run Club sponsors surfaced, none of them on
-  Sabo's list. A contact for a brand he already worked with is recovery.
-- **Search the parent domain when the brand domain comes back empty.** Clay
-  people search found nobody on nocco.com or barebells.com and four people on
-  vitaminwell.com. Resolve the parent first (Vitamin Well, Unilever, Celsius
-  Holdings, Strava).
+- Buyer search, parent domains, `identifiers_only`, off-domain emails, Jev's
+  score floor, cost per verified buyer and flipping the client's list are in
+  the ledger: `chewbacca gtme lesson plan "find the buyer at a brand"`. Before
+  touching a Clay table run `python3 -I tools/table_graph.py <table id>`
+  (`gtme lesson show sabo-table-graph-before-touching`). The working chain is
+  `~/Downloads/Sabo handoff/claude/live_chain.py`; team memory
+  `reference_clay_people_search_finds_buyers`.
 - **Bind columns in Clay, not by hand.** Caleb: "make sure we're following
   best practices for handling column to column flow". Codex found Scout by
   search, then pasted her URL into the Findymail input through the UI. Build
@@ -338,28 +326,6 @@ opt-outs that had to be blocklisted before Monday.
   on that formula, then ZeroBounce on the email, so a new row runs end to end.
   `add-column` only makes plain columns, so formula and enrichment columns are
   built once in the UI.
-- **Turn on `identifiers_only` in the people search, or you can't read the row.**
-  Full profiles run 5,000 to 25,000 chars a person. Celsius at limit 2 came to
-  49,826 chars, over the engine's 20,000-char background read, and the row could
-  never be read again. With `identifiers_only=true`, 5 people came to about 2,800
-  chars for the whole row, and name, title and URL still come back. Keep the row
-  id from the `add-rows` response.
-- **Search for who pays creators, not for creators.** Title keywords like
-  "athlete, ambassador, creator" brought back 5 of 5 Gymshark people the brand
-  pays. Use influencer marketing, partnership, creator marketing, and social,
-  brand, community or marketing manager, and exclude ambassador, athlete, content
-  creator and model. After that, Gymshark gave Alexa Kinoshita (Influencer
-  Marketing Associate).
-- **A valid email at another company is the wrong person.** Gymshark's search
-  gave a "Social Media Ambassador" whose email was ryan@buckedup.com, and
-  ZeroBounce said valid. Check the email domain against the brand and parent
-  domains. Retry the runner-up once when it's invalid, missing or off-domain.
-  Celsius went from Brenna Tanner (no email) to Ava Paszkiewicz (valid).
-- **Jev's pick needs a score floor.** Jev named a Celsius "Mentor" who scored
-  0.03 of 2. Score every candidate and stop under 0.5 before any Findymail spend.
-  Write the pick and its reason into "Why this person" for every row, stops included.
-  The working chain is `~/Downloads/Sabo handoff/claude/live_chain.py`, with
-  18 tests. Team memory: `reference_clay_people_search_finds_buyers`.
 - **Inside a cap he set, don't ask again.** Caleb, 2026-10-16, after three
   approval asks in an hour for the same brands: "Fix chewbs you shouldn't be
   asking for permission maybe its bc im in the claude app instead of the vscode
@@ -370,18 +336,6 @@ opt-outs that had to be blocklisted before Monday.
   should work towards never opening clay". When a read fails, map the endpoint
   into `chewbacca clay` (row `fields=`, views and view-order paging landed on
   fix/bg-nav, 3d9c8ace) instead of working around it in the UI.
-- **Measure the field before showing it.** On the 3 Sabo proof rows, people
-  search filled 1 of 3, professional posts 1 of 3 at 2.5 credits each, and
-  Findymail plus ZeroBounce 2 of 2 at 0.6. Show the cheap chain, and say when
-  a field is under 60%.
-
-- **Read the table's graph before touching a Clay table.** Caleb, 10/16: "chewb
-  should be a clay wizard bro... knowing exactly how column to column effects
-  row to row". Run `python3 -I tools/table_graph.py <table id>` first. It parses
-  every column's `{{f_}}` inputs into run order, says what feeds what and what
-  each paid action costs, and lints client readiness. On the Sabo table it
-  showed the people search fed nothing (a hand bridge), two parallel email
-  chains, five dead columns, and no Status or condensed Contact column.
 - **A client demo table is built the night before, not 5 minutes out.**
   Caleb, 12:35 on 10/16 with Sabo due at 1: "This looks so unorganized????? move
   all the goated rows to the top that's how demos are supposed to work". Before
@@ -398,11 +352,8 @@ opt-outs that had to be blocklisted before Monday.
 - **Never say a launch is ready, good to go, "good until X", "only waiting on
   X" or "just needs X" until `chewbacca gtme ready --client <name> --drafts
 <drafts.json>` prints READY.** Caleb, 2026-10-12: "DONT TELL ME UR READY IF
-  THIS SHIT IS HAPPENING? FIX CHEWBS BRO UR SUPPOSED TO BE A GTME". That day a
-  Zeutara launch was called good "until Jonah responds" while the live copy
-  graded 25 to 67, 1 of 14 campaigns had been graded, gates 3 to 5 were NOT
-  CHECKED, 104 firm names carried "L.P." and the pre-send receipt had expired.
-  The command grades every draft through all five gates, checks the pre-send
+  THIS SHIT IS HAPPENING? FIX CHEWBS BRO UR SUPPOSED TO BE A GTME". What that
+  launch actually looked like is lesson `zeutara-ready-claim-ungraded`. The command grades every draft through all five gates, checks the pre-send
   receipt and owed replies, and counts NOT CHECKED as a blocker. Report its
   NOT READY list as it stands. The Stop hook `ready-guard.sh` refuses a
   readiness claim without a signed READY under 2 hours old.
@@ -501,26 +452,18 @@ import), enrichment columns (Work email waterfall, Validate email, AI or
 Claygent with a source field), price ONE row from the credit balance before and
 after, then Run column and send the table or audience to the campaign.
 `.claude/hooks/clay-native-guard.sh` refuses shell loops of per-row Clay
-workflow or action test runs, because on 2026-10-05 that pattern took a night
-and a Claygent loop burned ~3,400 client credits on 150 rows (~21 credits a row)
-before anyone priced a row.
+workflow or action test runs.
 
 Use graph engineering instead when it is cheaper than the credit spend and the
 data is reusable: firm -> invested_in -> company -> in_sector, built once from
-each firm's own portfolio page (free HTTP, a no-tools model, a Jev check per
-edge, `zeutara-gtme/scripts/portfolio_graph.py`), then walked per lead.
-Measured 2026-10-05: zero Clay credits, but only 10 of 309 leads got a line,
-because most portfolio pages are logo-only. Decide by cost per verified usable
-line, not by habit.
+each firm's own portfolio page, then walked per lead. Decide by cost per
+verified usable line, not by habit.
 
-A live campaign does not pull in contacts added to its segment after launch
-(2026-10-06, a live campaign stayed at 18 leads when its segment grew to 53). Finish
-the segment, then launch; add later contacts as a new campaign.
+Finish a segment, then launch; add later contacts as a new campaign. Build the
+suppression list from actual sends (campaign activity, analytics, the send
+log), never from enrollment.
 
-Build the suppression list from actual sends (campaign activity, analytics, the
-send log), never from enrollment. On 2026-10-05 every contact ever enrolled in a
-paused campaign was treated as emailed, which hid ~1,400 never-emailed contacts
-of the client's own list for a whole night.
+What set those four, each readable with `chewbacca gtme lesson show <id>`: lessons `zeutara-unpriced-per-row-loop`, `zeutara-portfolio-graph-coverage`, `zeutara-live-campaign-segment-frozen`, `zeutara-suppression-from-enrollment`.
 
 Suppression is also everyone who must never be emailed again, whether or not
 we sent: anyone who replied (any class, any campaign, unmatched threads too),
@@ -541,9 +484,7 @@ lives in. On 2026-10-10 every Zeutara card tagged Jonah's retired-workspace
 copy (U0C0PL92WTC) and he never got pinged; Caleb: "it needs to tag the one
 that is signed into the workspace". His real id is U0C7RCPJPM5.
 
-Check the names a feeder sends before they reach a client card. Every Zeutara
-lead name arrived with a stray trailing "e" ("Gary Zimmermane"); Togari strips
-it now (leadNameTrailingE), but the fix belongs in the feeder column.
+Check the names a feeder sends before they reach a client card (lesson `zeutara-feeder-trailing-e`).
 
 When a client can't be added to a client channel ("This user can't be added"),
 check which workspace their Slack account is signed in through before guessing.

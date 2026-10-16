@@ -1,0 +1,39 @@
+{
+  "id": "firm-foundation-lines-not-passed",
+  "title": "A send batch that held every lead was missing its lines input, not judging the leads",
+  "client": "Firm Foundation",
+  "date": "2026-10-12",
+  "stage": "send",
+  "applies_to": [
+    "batch",
+    "lines",
+    "personalization",
+    "held",
+    "inputs"
+  ],
+  "hypothesis": "gtme batch would find each lead's personal line.",
+  "change": "Ran gtme batch without --lines.",
+  "oracle": {
+    "metric": "observation",
+    "numerator": 252,
+    "denominator": 252,
+    "unit": "leads",
+    "source": "run_log",
+    "baseline": "",
+    "version": 1
+  },
+  "result": "All 252 Firm Foundation SoCal leads were held because nobody passed --lines. cf6c0b62 made batch and today read the ledger's own lines.json.",
+  "verdict": "observed",
+  "next_decision": "Pass --lines only to override the ledger's lines.json.",
+  "check": "When a batch holds every lead, check which inputs it read before blaming the leads.",
+  "check_ref": [
+    "kit:tools/gtme_solo.py::lines.json"
+  ],
+  "evidence": [
+    "cf6c0b62",
+    "tools/gtme_solo.py"
+  ],
+  "scope": "gtme batch and gtme today for any one-sender client.",
+  "derived_from": [],
+  "history": []
+}

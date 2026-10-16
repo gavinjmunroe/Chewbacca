@@ -27,7 +27,7 @@
   "check": "When a search on a brand domain returns nobody, rerun it on the parent's domain before giving up.",
   "evidence": [
     "~/Documents/Codex/2026-10-15/che/SABO-STATE.md",
-    "skills/gtm-engineering/SKILL.md"
+    "a40ec6ce"
   ],
   "scope": "Consumer brands owned by holding companies.",
   "history": []

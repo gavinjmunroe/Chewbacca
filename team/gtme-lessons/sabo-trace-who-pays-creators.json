@@ -1,0 +1,28 @@
+{
+  "id": "sabo-trace-who-pays-creators",
+  "title": "For a creator manager, also search who sponsors creators like theirs",
+  "client": "Sabo",
+  "date": "2026-10-16",
+  "stage": "list",
+  "applies_to": ["icp", "account-list", "sponsors", "creators", "buyer"],
+  "hypothesis": "The client's own brand list held the buyers worth emailing.",
+  "change": "Traced run clubs and running creators, then their sponsors, and ran those brands through the live chain.",
+  "oracle": {
+    "metric": "observation",
+    "numerator": 2,
+    "denominator": 3,
+    "unit": "accounts",
+    "source": "run_log",
+    "baseline": "",
+    "version": 1
+  },
+  "result": "Klarna, Strava, ASICS and Diplo's Run Club sponsors surfaced, none on Sabo's list. Strava and Klarna each gave a verified buyer on the live chain; ASICS matched the wrong person, which ZeroBounce caught.",
+  "verdict": "observed",
+  "next_decision": "Add the sponsors to the target accounts; a brand the client already worked with goes on the recovery list.",
+  "check": "Start from the client's buyer, then flip it: list who pays for what the client sells and search those accounts too.",
+  "evidence": ["~/Documents/Codex/2026-10-15/che/SABO-STATE.md"],
+  "scope": "Agencies and managers who sell creators or talent to brands.",
+  "check_ref": [],
+  "derived_from": [],
+  "history": []
+}

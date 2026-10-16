@@ -120,6 +120,18 @@
       "date": "2026-10-16",
       "kind": "pass",
       "body": "No, txs\n\nAnton Weber\nAttorney at Law"
+    },
+    {
+      "id": "not-active-with-firm",
+      "date": "2026-10-16",
+      "kind": "pass",
+      "body": "No, also I'm not active with the firm anymore"
+    },
+    {
+      "id": "too-soon-keep-sending",
+      "date": "2026-10-16",
+      "kind": "pass",
+      "body": "Appreciate your sending, Jonah. We recently invested in a similar company so probably too soon for us to double down on the space. Please keep sending interesting opportunities my way though."
     }
   ]
 }

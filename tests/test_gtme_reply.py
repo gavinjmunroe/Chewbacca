@@ -31,7 +31,7 @@ COPY_CASES = json.loads(COPY_FILE.read_text(encoding="utf-8"))
 # src/agents/smartlead-responder/__tests__/reply-kind-cases.json: the replies
 # both classifiers misread, so neither copy drifts ahead again (2026-10-16).
 KIND_FILE = ROOT / "tests" / "fixtures" / "gtme-reply" / "reply-kind-cases.json"
-KIND_SHA256 = "08383ae15558cd4507f04fecbbe089767e93a4c626319e32f5b23412b0163dcd"
+KIND_SHA256 = "db99d32da6cde9e5241e6440f5efa1890e1cd5bf472a8077172bdf9fc4aa5127"
 ZEUTARA_COPY = COPY_CASES["clients"]["zeutara"]
 
 EM = "—"

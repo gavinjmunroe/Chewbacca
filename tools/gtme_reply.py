@@ -382,7 +382,8 @@ PASS = js_regex(
     # the sectors we are presently targeting ... won't be a fit", "The partners
     # at Bond Capital have all retired and we no longer invest".
     r"|out of (our )?thesis|^\s*np interest\b|falls outside the (sectors|areas|scope)"
-    r"|partners\b[^.]{0,15}\b(have|has) (all )?retired|(i|we) (have|has) retired from)", "i")
+    r"|partners\b[^.]{0,15}\b(have|has) (all )?retired|(i|we) (have|has) retired from"
+    r"|(i'?m|i am) not active (with|at)|(probably |a bit )?too (soon|early) for us)", "i")
 # Passes that can carry a condition ("won't be a fit unless you have $1M ARR.
 # What is your revenue?"), read only after questions and interest.
 SOFT_PASS = js_regex(r"(won'?t be a (good )?fit|no longer invest)", "i")

@@ -103,6 +103,23 @@ client=<name>`, which needs his own chat message naming the number, or him
   `app.clay.com`'s `/assets/*.js`, find `<contractName>:{method:` for the
   path and body schema, then the `.<contractName>.` call site for the body
   the page sends.
+- Before adding any op, look it up in `library/clay-api/contracts.json`: every
+  ts-rest contract in the bundle (1,772 on 2026-10-16) with method, path,
+  query and body keys, and `covered_by` naming the ops that already call it.
+  A contract with an empty `covered_by` is unmapped. After Clay deploys, save
+  the page's `assets/*.js` into an empty dir, run
+  `node tools/clay_contracts.mjs <dir> <clay_version>`, then the clay test:
+  `test_contract_inventory_covers_the_registry` names every op whose contract
+  or path the deploy moved. Never grep the bundle by hand for a contract the
+  inventory already lists. REA's `analyze_javascript_application` parses the
+  bundle but has no ts-rest extractor and timed out at 300 s on the 17 MB store
+  chunk under load 29, so it can't stand in for the inventory.
+- A worktree's new spec ops reach the engine only when its `clay.json` is the
+  newest copy: every checkout syncs into one shared
+  `~/.chewbacca/api-anything/sites/clay.json` by mtime. On 2026-10-16 another
+  tab's sync replaced a worktree's spec mid-run and five verified ops answered
+  "no operation ... on clay". Touch your `clay.json` right before each live
+  check (in a scratch script), and copy the shared file back afterward.
 - Mapping a Clay surface no op covers: reach for REA (the `mcp__rea__*`
   tools, rea.tools) before grepping the bundle by hand.
   `inspect_web_page` on a Chrome debugging port records the request a click

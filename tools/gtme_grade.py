@@ -85,6 +85,10 @@ GEX_LAUNCH = "GEX 12-launch-checklist"
 INSTANTLY = "Instantly list-quality-scorecard"
 LASTLOOK = "lastlook README"
 
+
+def verification_verdict(row, value):
+    return sibling("gtme_presend").verification_verdict(row, value)
+
 VERIFIED = {"valid", "verified", "deliverable", "ok", "safe", "safe_to_send"}
 CATCH_ALL = {"catch-all", "catch_all", "catchall", "accept_all", "accept-all", "risky"}
 ROLE = re.compile(r"^(info|contact|admin|hello|hi|team|office|support|sales|enquiries|inquiries|"
@@ -372,8 +376,8 @@ def gate_list(rows, args, verdicts, suppressed, gate):
     def verdict(r):
         e = r[ecol].lower()
         if verdicts is not None and e in verdicts:
-            return verdicts[e]
-        return r[vcol].lower() if vcol else None
+            return verification_verdict(r, verdicts[e])
+        return verification_verdict(r, r[vcol]) if vcol else None
 
     vs = [verdict(r) for r in rows]
     if all(v is None for v in vs):
@@ -1260,7 +1264,12 @@ def grade(args):
         e, v = col(vr, "email"), col(vr, "verification", "verdict", "status", "result")
         if not e or not v:
             raise SystemExit(f"gtme-grade: {args.verification} needs email and verification columns")
-        verdicts = {r[e].lower(): r[v].lower() for r in vr}
+        verdicts = {}
+        for row in vr:
+            email = row[e].lower()
+            value = verification_verdict(row, row[v])
+            if email not in verdicts or verdicts[email] in VERIFIED:
+                verdicts[email] = value
     suppressed = None
     if args.suppress:
         suppressed = set()

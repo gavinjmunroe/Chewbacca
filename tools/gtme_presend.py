@@ -99,6 +99,17 @@ def _dig(domain, rtype):
     return [ln for ln in out.stdout.splitlines() if ln.strip() and not ln.startswith(";")]
 
 
+def verification_verdict(row, value):
+    """A provider's risky substatus overrides its broad valid status."""
+    substatuses = [str(v or '').strip().lower() for k, v in row.items()
+                   if slug(k) == 'substatus']
+    # Qube's two 2026-10-15 bounces were valid/catch_all. Neither a sidecar
+    # CSV nor an inline verdict may discard the provider's narrower result.
+    if any(v in CATCH_ALL for v in substatuses):
+        return 'catch_all'
+    return str(value or '').strip().lower()
+
+
 def load_verification(path):
     rows, cols = read_rows(path)
     if "email" not in cols:
@@ -110,7 +121,14 @@ def load_verification(path):
         vcol = others[0] if len(others) == 1 else None
     if not vcol:
         raise ValueError(f"{path}: no verification status column")
-    return {get(r, cols, "email").lower(): (r.get(vcol) or "").strip().lower() for r in rows}
+    verdicts = {}
+    for row in rows:
+        email = get(row, cols, 'email').lower()
+        value = verification_verdict(row, row.get(vcol))
+        prior = verdicts.get(email)
+        if prior is None or prior in VERIFIED:
+            verdicts[email] = value
+    return verdicts
 
 
 class UnionFind:
@@ -216,6 +234,7 @@ def gate(paths, verification=None, suppress=(), aliases_path=None,
                 verdict = verification[email]
             elif has_vcol:
                 verdict = get(r, cols, "verification").lower()
+            verdict = verification_verdict(r, verdict) if verdict is not None else None
             if verdict is not None:
                 if verdict in VERIFIED:
                     pass

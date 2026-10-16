@@ -209,6 +209,24 @@ def test_falls_through_on_failure_and_truncation():
     ok(code == 1 and out["ok"] is False and out["ui"] == "clay-go credits", "every surface failing exits 1 with the route")
 
 
+def test_no_complete_surface_fails_closed():
+    fx = {"api-anything/threadHistory.json": {**CUT, "data": {"history": [{"type": "SENT", "time": "2026-10-12T00:00:00Z"}]}}}
+    code, out, _ = run(fx, {}, "thread", "campaign_id=123", "lead_id=456")
+    ok(code == 1 and out["ok"] is False and out["class"] == "incomplete", "a cut thread cannot be mistaken for current provider truth")
+    ok("data" not in out and out["tried"][0]["truncated"], "an incomplete prefix is diagnostic only, never returned as usable thread data")
+    code, out, _ = run({"api-anything/threadHistory.json": {"ok": True, "data": {"history": [{"type": "REPLY", "time": "2026-10-13T00:00:00Z"}]}}}, {}, "thread", "campaign_id=123", "lead_id=456")
+    ok(code == 0 and out["data"]["history"][0]["type"] == "REPLY", "complete thread reads still succeed")
+    history = [{"type": "SENT", "email_body": "x" * 60000}, {"type": "REPLY", "email_body": "Latest investor request"}]
+    with tempfile.TemporaryDirectory() as directory:
+        sent = Path(directory) / "sent.jsonl"
+        code, out, _ = run({"api-anything/threadHistory.json": CUT,
+                           "api-anything-full/threadHistory.json": {"ok": True, "data": {"history": history}}}, {},
+                          "thread", "campaign_id=123", "lead_id=456",
+                          env_extra={"CHEWBACCA_CLAY_SENT_LOG": str(sent)})
+        ok(code == 0 and out["data"]["history"][-1]["email_body"] == "Latest investor request", "full history fallback preserves a reply after a large earlier message")
+        ok(not sent.exists() or not sent.read_text().strip(), "complete-history reads never enter a write-send path")
+
+
 def test_args_pick_the_surface():
     code, route, _ = run({}, {}, "route", "rows", "table=t_example1")
     ok([r["call"] for r in route["order"]] == ["cli:tables rows list {table}"], "no view: only the CLI can page rows")
@@ -918,7 +936,7 @@ def test_fixtures_are_scrubbed():
 
 def main():
     for fn in (test_registry_matches_spec, test_ops_json_shape, test_routes_to_fastest_measured,
-               test_falls_through_on_failure_and_truncation, test_args_pick_the_surface, test_write_gate,
+               test_falls_through_on_failure_and_truncation, test_no_complete_surface_fails_closed, test_args_pick_the_surface, test_write_gate,
                test_dry_run_builds_each_write, test_dry_run_never_loads_the_engine, test_derived_writes_stay_gated,
                test_new_args_are_shape_checked, test_first_live_use_reads_back,
                test_approved_request_is_the_sent_request, test_control_bytes_cannot_fake_the_prompt,

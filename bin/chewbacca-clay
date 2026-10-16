@@ -483,7 +483,25 @@ async function attempt(op, cand, flags) {
   const t0 = Date.now();
   if (isWrite(op)) return { ok: false, surface: s.type, class: "refused", reason: "a write is only sent from its approved, frozen request", ms: 0 };
   if (s.type === "api-anything") {
-    const r = await callEngine(s.op, bound, flags, false);
+    let r = await callEngine(s.op, bound, flags, false);
+    if (r.ok && r.truncated && op.name === "thread" && s.op === "threadHistory") {
+      // execute.call caps output before returning it. For this exact read-only
+      // endpoint, use the same pinned HTTP sender and frozen request builder
+      // already used below, so complete conversations survive that display cap.
+      const frozen = deepFreeze(dryRequest(s, bound, validatedSet(bound), bound));
+      const url = new URL(frozen.url);
+      if (frozen.method !== "POST" || url.origin !== "https://api.clay.com" ||
+          !/^\/v3\/workspaces\/\d+\/clay-sequencer\/master-inbox\/message-history$/.test(url.pathname) || url.search)
+        return { ok: false, surface: s.type, class: "refused", reason: "complete history requires the exact known read endpoint", ms: Date.now() - t0 };
+      if (FIXTURES) {
+        const full = fixture("api-anything-full", s.op);
+        if (full) r = full;
+      } else {
+        const prepared = await prepareWrite(op, s, frozen);
+        if (prepared.error) return { ok: false, surface: s.type, class: "error", reason: prepared.error, ms: Date.now() - t0 };
+        r = await prepared.send();
+      }
+    }
     const res = {
       ok: !!r.ok,
       surface: "api-anything",
@@ -1083,13 +1101,22 @@ function chatApproval(name, request) {
   if (best) return best;
   // Native Codex consent has different provenance from Claude attendance.
   // Read the real composer turn, never manufacture a legacy approval file.
-  if (!FIXTURES && name === "campaign-status" && request.body?.status === "active") {
+  const nativeLaunch = name === "campaign-status" && request.body?.status === "active";
+  if (!FIXTURES && nativeLaunch) {
     const nativeEnv = { PATH: "/usr/bin:/bin:/usr/sbin:/sbin", HOME: os.userInfo().homedir,
       CODEX_THREAD_ID: process.env.CODEX_THREAD_ID || "", CODEX_SESSION_ID: process.env.CODEX_SESSION_ID || "" };
     const native = spawnSync("/usr/bin/python3", ["-I", path.join(ROOT, "tools/codex_launch_consent.py")],
       { env: nativeEnv, encoding: "utf8", timeout: 5000, maxBuffer: 4096 });
     if (native.status === 0) {
-      try { return JSON.parse(native.stdout); } catch { return null; }
+      try {
+        const rec = JSON.parse(native.stdout);
+        if (rec?.v !== 3 || rec?.interactive !== true || rec?.source !== "native Desktop composer") return null;
+        const session = nativeEnv.CODEX_THREAD_ID || nativeEnv.CODEX_SESSION_ID;
+        if (!session || rec.session_id !== session) return null;
+        const age = Date.now() - Number(rec.at) * 1000;
+        if (!(age >= 0 && age < CHAT_APPROVAL_MS)) return null;
+        return rec;
+      } catch { return null; }
     }
   }
   return null;
@@ -1313,6 +1340,10 @@ async function runOp(name, kv, flags) {
     if (r.ok && !r.truncated) break;
     // An input error means the args are wrong, and every surface would say so.
     if (!r.ok && r.class === "input") break;
+  }
+  // A truncated prefix cannot establish current conversation state.
+  if (last.ok && last.truncated) {
+    out({ ok: false, op: name, class: "incomplete", reason: `every available surface returned incomplete data: ${last.truncated}`, truncated: last.truncated, tried, ui: uiRoute(op, args) }, EXIT.failed);
   }
   const best = last.ok ? last : null;
   if (best) {

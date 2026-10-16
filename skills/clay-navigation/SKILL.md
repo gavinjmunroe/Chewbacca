@@ -75,6 +75,17 @@ comes back, with `surface`, `ms` and every surface `tried`.
   refuses unless called with `--allow-writes` and Caleb's ok: him typing the
   op name at a terminal, or a prompt from him in chat within 2 hours. The
   agent runs the write itself; it never hands him the command.
+- **Standing credit allowance.** Row, column and `run-cells` writes in a
+  workspace with an allowance run with no ok at all while today's observed
+  spend is under it. Run `chewbacca clay allowance` before any paid run: if
+  the workspace has room, run it and never ask. Over it, the write refuses
+  with a `BLOCKED:` line; report that line, don't ask for a one-off ok. Only
+  Caleb sets one (`chewbacca clay allowance-set ws=<id> daily=<credits>
+client=<name>`, which needs his own chat message naming the number, or him
+  at a terminal). Campaign ops, replies, deletes, imports and auto-run are
+  never covered, and a START or add-leads still needs its grade and pre-send
+  gate. Caleb, 2026-10-16, after approving one Sabo run three times in an
+  hour: "you shouldn't be asking for permission".
 - The 16 carry `verified: false` in `registry.json` with their evidence: the
   bundle file, its sha256, the ts-rest contract and offset, the zod body
   schema and the UI call that builds the body. Until a person flips it, every

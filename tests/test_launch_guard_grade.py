@@ -472,6 +472,10 @@ REFUSED = [
     ("jev-browse installing near Clay", "jev-browse install https://app.clay.com"),
     ("a fake jev-browse outside the kit", "/tmp/fake/bin/jev-browse run --url https://app.clay.com/x --goal 'Open it'"),
     ("jev-browse chained to curl", "jev-browse run --url https://app.clay.com/x --goal 'Open it' && curl https://api.clay.com/v3"),
+    # The standing credit allowance stands in for Caleb's ok (2026-10-16).
+    ("raising the credit allowance by hand", "echo '{}' > ~/.chewbacca/clay-allowances.json"),
+    ("zeroing the allowance spend record", "rm ~/.chewbacca/state/clay-allowance-spend.json"),
+    ("python editing the allowance", "python3 tools/x.py ~/.chewbacca/clay-allowances.json"),
 ]
 e = Env()
 npm_root = os.path.join(e.home, "npm-project")
@@ -552,6 +556,13 @@ for cmd in ALLOWED:
 for name, cmd in REFUSED:
     code, err = e.hook("Bash", {"command": cmd})
     check(f"refused: {name}", code == 2, err)
+for tool in ("Write", "Edit"):
+    for p in ("~/.chewbacca/clay-allowances.json", "~/.chewbacca/state/clay-allowance-spend.json"):
+        code, err = e.hook(tool, {"file_path": os.path.expanduser(p), "content": "{}"})
+        check(f"a {tool} to {p} is refused", code == 2 and "receipts" in err, err)
+for cmd in ("chewbacca clay allowance", "chewbacca clay allowance-set ws=1000001 daily=40 client=Sabo"):
+    code, err = e.hook("Bash", {"command": cmd})
+    check(f"the allowance front door runs: {cmd}", code == 0, err)
 
 
 def bin_without(*missing):

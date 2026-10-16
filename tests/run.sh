@@ -488,6 +488,8 @@ if group "gtme"; then
   check "only Caleb's explicit chat ok approves Clay work, and a no revokes it" bash "$ROOT/tests/chat_approval.sh"
   check "launch-guard refuses without a signed, fresh gtme-grade bound to that action, campaign and inputs" \
     python3 "$ROOT/tests/test_launch_guard_grade.py"
+  check "a paid Clay run inside the standing credit allowance runs unasked, one over it refuses" \
+    python3 "$ROOT/tests/test_spend_allowance.py"
   # Every case from the upstream TypeScript tests; offline, nothing sends.
   check "gtme-reply labels real replies, cleans HTML, refuses risky auto-sends" python3 "$ROOT/tests/test_gtme_reply.py"
   check "gtme-reply dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-reply intent --help

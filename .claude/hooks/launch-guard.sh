@@ -513,6 +513,11 @@ case "$tool" in
     if printf '%s' "$lower" | grep -qE 'state/gtme-grade|state" *[,/+] *"?gtme-grade|gtme-grade\.key|gtme_grade_key'; then
       refuse "only gtme-grade may touch a grade receipt or its key."
     fi
+    # The standing credit allowance stands in for Caleb's ok on table writes, so
+    # an agent that could edit it or its spend record could approve itself.
+    if printf '%s' "$lower" | grep -qE 'clay-allowance'; then
+      refuse "only chewbacca clay allowance-set (Caleb's own number) may write the credit allowance or its spend record; read it with chewbacca clay allowance."
+    fi
     cmd="$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null)" ||
       refuse "the command could not be read."
     # A UI driver clicks whatever page is open, which the command line doesn't
@@ -582,7 +587,9 @@ for a Clay page in the background, git (not config), local read tools,
 counts.py/checksums.py, code-slop, slop-check, and test runners (python3 tests/x.py,
 bash tests/run.sh [group], pytest tests/...; prefix CHEWBACCA_NO_SEND=1 so nothing
 sends). Writes go through chewbacca clay, which needs Caleb's ok (a terminal, or
-a prompt from him in chat within 2 hours, his standing instruction); a
+a prompt from him in chat within 2 hours, his standing instruction), except
+row, column and run-cells writes inside the workspace's standing credit
+allowance, which run with no ask (chewbacca clay allowance shows it); a
 campaign START or add-leads also needs a passing gtme-grade and a full pre-send
 gate receipt, checked in code before it sends.
 MSG
@@ -624,7 +631,7 @@ MSG
   Write|Edit|MultiEdit|NotebookEdit)
     path_in="$(printf '%s' "$payload" | jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' 2>/dev/null)"
     case "$path_in" in
-      *clay-chat-approval*|*send-gate-receipt*|*launch-guard-last-url*)
+      *clay-chat-approval*|*send-gate-receipt*|*launch-guard-last-url*|*clay-allowance*)
         refuse "approvals and receipts are written only by their own tools, never by a file edit." ;;
     esac
     exit 0

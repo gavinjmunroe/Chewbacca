@@ -1297,6 +1297,158 @@ function unfinishedReply(args) {
   return null;
 }
 
+// ── standing allowance ───────────────────────────────────────────────────────
+// A daily credit allowance per workspace, set once by Caleb, stands in for the
+// per-write ok on table work in that workspace. On 2026-10-16 he approved the
+// same Sabo enrichment run (live_chain.py, about 1.1 credits a brand) three
+// times in one hour because each ok lapsed after 2 hours, and wrote "Fix chewbs
+// you shouldn't be asking for permission". Credits are real spend, so the ok is
+// a number checked here against observed spend instead of a prompt.
+//
+// It covers row, column and run-cells writes only. Campaign ops, replies,
+// deletes, imports and blocklist edits keep their own gates, and a START or
+// add-leads still needs its grade and pre-send receipt. table-auto-run is left
+// out: once on, a table spends with no further call here to check.
+//
+// Spend is the drop in the workspace's credit balance between checks, so a
+// top-up never counts as negative spend. A run's credits land after its call,
+// so one run-cells (five rows at most) can finish past the cap; the next write
+// is refused.
+const ALLOWANCE_GATES = new Set(["write:table-data", "write:schema", "write:spends-credits"]);
+const ALLOWANCE_NEVER = new Set(["table-auto-run"]);
+const ALLOWANCE_FILE = FIXTURES
+  ? process.env.CHEWBACCA_CLAY_ALLOWANCES || ""
+  : path.join(os.userInfo().homedir, ".chewbacca", "clay-allowances.json");
+const ALLOWANCE_SPEND = FIXTURES
+  ? process.env.CHEWBACCA_CLAY_ALLOWANCE_SPEND || ""
+  : path.join(os.userInfo().homedir, ".chewbacca", "state", "clay-allowance-spend.json");
+
+function approvalDir() {
+  return FIXTURES ? process.env.CHEWBACCA_CLAY_CHAT_APPROVAL_DIR || "" : path.join(os.userInfo().homedir, ".chewbacca", "state", "clay-chat-approval");
+}
+
+function stoppedByCaleb() {
+  const d = approvalDir();
+  return !!d && fs.existsSync(path.join(d, "STOPPED"));
+}
+
+function readAllowances() {
+  const cfg = ALLOWANCE_FILE ? readJson(ALLOWANCE_FILE, null) : null;
+  return cfg && cfg.v === 1 && cfg.workspaces && typeof cfg.workspaces === "object" ? cfg : { v: 1, workspaces: {} };
+}
+
+function allowanceFor(ws) {
+  const a = readAllowances().workspaces[String(ws)];
+  const daily = Number(a?.daily_credits);
+  return a && Number.isFinite(daily) && daily > 0 ? { ...a, daily_credits: daily } : null;
+}
+
+function writeJsonAtomic(file, obj) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, `${JSON.stringify(obj, null, 1)}\n`, { mode: 0o600 });
+  fs.renameSync(tmp, file);
+}
+
+function localDay(t = new Date()) {
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+}
+
+// The balance through api-anything only: the clay CLI and clay-balance answer
+// for whichever workspace they are signed in to, not the one asked for.
+function creditBalance(ws) {
+  const argv = [__filename, ...(SESSION_NAME ? ["--session", SESSION_NAME] : []), "--surface", "api-anything", "credits", `ws=${ws}`];
+  const r = spawnSync(process.execPath, argv, { encoding: "utf8", timeout: 60000, env: process.env });
+  const bal = Number(parseOr(r.stdout, null)?.data?.balance);
+  return r.status === 0 && Number.isFinite(bal) ? bal : null;
+}
+
+// null: the allowance doesn't cover this write, so the usual ok applies.
+// { ok: true, note } or { ok: false, reason } otherwise.
+function allowanceCheck(op, args) {
+  if (ALLOWANCE_NEVER.has(op.name) || !ALLOWANCE_GATES.has(op.gate) || args.ws === undefined) return null;
+  const ws = String(args.ws);
+  const a = allowanceFor(ws);
+  if (!a) return null;
+  const who = a.client ? `${a.client} (ws ${ws})` : `ws ${ws}`;
+  if (stoppedByCaleb()) return { ok: false, reason: `BLOCKED: Caleb said stop, which holds the ${who} allowance too until he says go` };
+  const bal = creditBalance(ws);
+  if (bal === null) {
+    process.stderr.write(`chewbacca clay: the ${who} credit balance could not be read, so the allowance can't be checked; asking for the usual ok\n`);
+    return null;
+  }
+  const all = (ALLOWANCE_SPEND && readJson(ALLOWANCE_SPEND, {})) || {};
+  const day = localDay();
+  let rec = all[ws];
+  if (!rec || rec.day !== day) rec = { day, spent: 0, last: Number.isFinite(Number(rec?.last)) ? Number(rec.last) : bal };
+  rec.spent = Math.round((Number(rec.spent) + Math.max(0, Number(rec.last) - bal)) * 100) / 100;
+  rec.last = bal;
+  all[ws] = rec;
+  try { writeJsonAtomic(ALLOWANCE_SPEND, all); } catch (e) {
+    return { ok: false, reason: `BLOCKED: the ${who} spend record could not be written (${e.message}), so spend can't be tracked` };
+  }
+  if (rec.spent >= a.daily_credits) {
+    return { ok: false, reason: `BLOCKED: ${who} has spent ${rec.spent} of its ${a.daily_credits}-credit daily allowance today; nothing was sent. It resets tomorrow, or Caleb raises it: chewbacca clay allowance-set ws=${ws} daily=<credits>` };
+  }
+  return { ok: true, note: `chewbacca clay: ${op.name} inside the ${who} allowance, ${rec.spent} of ${a.daily_credits} credits spent today, balance ${bal}\n` };
+}
+
+// Setting or raising an allowance is the one place it needs Caleb: him typing
+// allowance-set at a terminal, or a fresh prompt of his in chat that names the
+// number and says credits (or budget, allowance, cap). A bare recent prompt is
+// not enough, or any "yo" would let an agent raise its own cap.
+function allowanceApproved(daily) {
+  if (stoppedByCaleb()) return null;
+  const num = String(daily);
+  const names = new RegExp(`(^|[^0-9.])${num.replace(".", "\\.")}([^0-9]|$)`);
+  const d = approvalDir();
+  let files;
+  try { files = fs.readdirSync(d); } catch { files = []; }
+  for (const n of files) {
+    if (!/^[A-Za-z0-9_.-]+\.json$/.test(n)) continue;
+    const rec = readJson(path.join(d, n), null);
+    if (!rec || rec.v !== 2 || rec.interactive !== true || rec.session_id !== n.slice(0, -5)) continue;
+    const age = Date.now() - Number(rec.at) * 1000;
+    if (!(age >= 0 && age < CHAT_APPROVAL_MS)) continue;
+    const said = String(rec.excerpt || "");
+    if (names.test(said) && /credit|budget|allowance|\bcap\b/i.test(said)) return `chat ${rec.session_id}: ${said.replace(/\s+/g, " ").slice(0, 80)}`;
+  }
+  if (FIXTURES) return process.env.CHEWBACCA_CLAY_TTY_ANSWER === "allowance-set" ? "terminal" : null;
+  let fd;
+  try { fd = fs.openSync("/dev/tty", "r+"); } catch { return null; }
+  try {
+    fs.writeSync(fd, `\nchewbacca clay: set a standing allowance of ${num} credits a day? Type allowance-set to confirm: `);
+    const buf = Buffer.alloc(64);
+    const got = buf.toString("utf8", 0, fs.readSync(fd, buf, 0, buf.length, null)).trim();
+    return got === "allowance-set" ? "terminal" : null;
+  } catch { return null; } finally { fs.closeSync(fd); }
+}
+
+function allowanceCommand(cmd, kv) {
+  const cfg = readAllowances();
+  const spend = (ALLOWANCE_SPEND && readJson(ALLOWANCE_SPEND, {})) || {};
+  const today = localDay();
+  const view = () => Object.fromEntries(Object.entries(cfg.workspaces).map(([ws, a]) => [ws,
+    { ...a, spent_today: spend[ws]?.day === today ? spend[ws].spent : 0 }]));
+  if (cmd === "allowance") out({ ok: true, file: ALLOWANCE_FILE, covers: "rows, columns and run-cells in the workspace; never campaigns, replies, deletes or auto-run", allowances: view() }, EXIT.ok);
+  const ws = String(kv.ws ?? "");
+  if (!/^[0-9]{1,12}$/.test(ws)) out({ ok: false, class: "usage", reason: `${cmd} needs ws=<workspace id>` }, EXIT.usage);
+  if (!ALLOWANCE_FILE) out({ ok: false, class: "usage", reason: "no allowance file in fixture mode" }, EXIT.usage);
+  if (cmd === "allowance-clear") {
+    delete cfg.workspaces[ws];
+    writeJsonAtomic(ALLOWANCE_FILE, cfg);
+    out({ ok: true, cleared: ws, allowances: view() }, EXIT.ok);
+  }
+  const daily = Number(kv.daily);
+  if (!(Number.isFinite(daily) && daily > 0 && daily <= 100000)) out({ ok: false, class: "usage", reason: "allowance-set needs daily=<credits a day>, a positive number" }, EXIT.usage);
+  const client = kv.client === undefined ? cfg.workspaces[ws]?.client : String(kv.client).slice(0, 60);
+  const by = allowanceApproved(daily);
+  if (!by) out({ ok: false, class: "refused", reason: `BLOCKED: an allowance needs Caleb: allowance-set typed at a terminal, or his own chat message in the last 2 hours naming ${daily} credits` }, EXIT.refused);
+  cfg.workspaces[ws] = { ...(client ? { client } : {}), daily_credits: daily, set_at: new Date().toISOString(), set_by: by };
+  writeJsonAtomic(ALLOWANCE_FILE, cfg);
+  out({ ok: true, set: ws, allowances: view() }, EXIT.ok);
+}
+
 function personApproves(name, request, args = {}) {
   const prompt = approvalPrompt(name, request);
   if (FIXTURES && process.env.CHEWBACCA_CLAY_TTY_TRANSCRIPT) fs.writeFileSync(process.env.CHEWBACCA_CLAY_TTY_TRANSCRIPT, prompt);
@@ -1495,6 +1647,10 @@ async function runOp(name, kv, flags) {
     };
     if (process.env.CHEWBACCA_NO_SEND === "1") refuse("CHEWBACCA_NO_SEND=1 is set");
     if (!flags.allowWrites) refuse("a write needs --allow-writes");
+    // Checked before prepareWrite so its own balance read can't touch the
+    // session files the approval fingerprint covers.
+    const allowance = allowanceCheck(op, args);
+    if (allowance && !allowance.ok) refuse(allowance.reason);
     const s = cands[0].s;
     const prep = await prepareWrite(op, s, request);
     if (prep.error) refuse(prep.error);
@@ -1517,7 +1673,8 @@ async function runOp(name, kv, flags) {
       const unfinished = unfinishedReply(args);
       if (unfinished) refuse(`${unfinished}; nothing was sent`);
     }
-    const yes = selfApproved ? true : personApproves(name, request, sendArgs);
+    if (allowance) process.stderr.write(allowance.note);
+    const yes = selfApproved || allowance ? true : personApproves(name, request, sendArgs);
     if (yes === null) refuse("a write needs Caleb's ok: him typing the op name at a terminal, or a prompt from him in chat within the last 2 hours (his standing \"do everything yourself\")");
     if (!yes) refuse("the person at the terminal did not approve this payload");
     afterApprovalTestHook();
@@ -1705,9 +1862,14 @@ const HELP = `chewbacca clay: Clay without opening Clay
   chewbacca clay route <op> [k=v ...]    the order it would try, without calling
   chewbacca clay measure <op> [k=v ...]  time each surface once and record it (reads only)
   chewbacca clay doctor                  engine pin, session, spec
+  chewbacca clay allowance               each workspace's standing daily credit allowance and today's spend
+  chewbacca clay allowance-set ws=<id> daily=<credits> [client=<name>]
+                                         set one (needs Caleb: a terminal, or his chat message naming the number)
+  chewbacca clay allowance-clear ws=<id> remove one
 
   --surface cli|api-anything|bin         force one surface
-  --allow-writes                         a write; a person must type the op name at a terminal
+  --allow-writes                         a write; Caleb's ok at a terminal or in chat, or, for rows, columns
+                                         and run-cells, the workspace's standing allowance with room left
   --dry-run                              print the exact request (method, URL, body; no cookie) and send nothing
   --session NAME                         use a second Clay login (api-anything only); import it once with
                                          chewbacca clay --session NAME session-login "Profile N"
@@ -1725,6 +1887,7 @@ ws is ws=<id>, else $CLAY_WORKSPACE_ID, else the one workspace in
   if (cmd === "ops") out(listOps(), EXIT.ok);
   if (cmd === "doctor") doctor();
   if (cmd === "session-login") sessionLogin(rest[0]);
+  if (["allowance", "allowance-set", "allowance-clear"].includes(cmd)) allowanceCommand(cmd, kv);
   // The clay CLI is signed in to one account of its own, so a second session
   // reads through api-anything only, or the CLI would answer for the wrong login.
   if (SESSION_NAME) flags.surface = "api-anything";

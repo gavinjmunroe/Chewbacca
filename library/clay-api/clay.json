@@ -3675,6 +3675,518 @@
       "minTier": 1,
       "learnedLoggedIn": true,
       "learnedAt": "2026-10-16"
+    },
+    {
+      "name": "viewColumnRunStatus",
+      "description": "How one column's cells stand in one view: counts by run status (success, error, queued, not run). (contract getViewRunStatusCountsForFieldForWorkspace).",
+      "request": {
+        "method": "GET",
+        "url": "https://api.clay.com/v3/workspaces/1372623/tables/t_example/views/gv_example/fields/f_example/runstatus",
+        "headers": {
+          "accept": "application/json, text/plain, */*",
+          "origin": "https://app.clay.com",
+          "referer": "https://app.clay.com/",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "ws",
+          "at": ["path:2"]
+        },
+        {
+          "param": "tableId",
+          "at": ["path:4"]
+        },
+        {
+          "param": "viewId",
+          "at": ["path:6"]
+        },
+        {
+          "param": "fieldId",
+          "at": ["path:8"]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://app.clay.com/workspaces/{ws}/workbooks/home/tables/{tableId}"
+      },
+      "match": {
+        "method": "GET",
+        "host": "api.clay.com",
+        "path": "/v3/workspaces/*/tables/*/views/*/fields/*/runstatus"
+      },
+      "response": {
+        "format": "json"
+      },
+      "params": [
+        {
+          "name": "ws",
+          "type": "string",
+          "required": true,
+          "example": "1372623",
+          "pattern": "\\d+",
+          "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+        },
+        {
+          "name": "tableId",
+          "type": "string",
+          "required": true,
+          "example": "t_example",
+          "pattern": "t_[A-Za-z0-9]+",
+          "hint": "a table id like t_0tl... (listResources)"
+        },
+        {
+          "name": "viewId",
+          "type": "string",
+          "required": true,
+          "example": "gv_example",
+          "pattern": "gv_[A-Za-z0-9]+",
+          "hint": "a view id like gv_0tl... (views)"
+        },
+        {
+          "name": "fieldId",
+          "type": "string",
+          "required": true,
+          "example": "f_example",
+          "pattern": "f_[A-Za-z0-9]+",
+          "hint": "a column id like f_0tl... (columns)"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": true,
+      "learnedAt": "2026-10-16"
+    },
+    {
+      "name": "tableActiveRuns",
+      "description": "The column ids with an enrichment run in progress on a table right now. (contract getTableFieldRun).",
+      "request": {
+        "method": "GET",
+        "url": "https://api.clay.com/v3/workspaces/1372623/tables/t_example/fieldrun",
+        "headers": {
+          "accept": "application/json, text/plain, */*",
+          "origin": "https://app.clay.com",
+          "referer": "https://app.clay.com/",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "ws",
+          "at": ["path:2"]
+        },
+        {
+          "param": "tableId",
+          "at": ["path:4"]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://app.clay.com/workspaces/{ws}/workbooks/home/tables/{tableId}"
+      },
+      "match": {
+        "method": "GET",
+        "host": "api.clay.com",
+        "path": "/v3/workspaces/*/tables/*/fieldrun"
+      },
+      "response": {
+        "format": "json"
+      },
+      "params": [
+        {
+          "name": "ws",
+          "type": "string",
+          "required": true,
+          "example": "1372623",
+          "pattern": "\\d+",
+          "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+        },
+        {
+          "name": "tableId",
+          "type": "string",
+          "required": true,
+          "example": "t_example",
+          "pattern": "t_[A-Za-z0-9]+",
+          "hint": "a table id like t_0tl... (listResources)"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": true,
+      "learnedAt": "2026-10-16"
+    },
+    {
+      "name": "tableRunCredits",
+      "description": "A table's enrichment runs in the last N days with the credits each one spent. (contract getRecentRealtimeCreditUsageByRunForWorkspace).",
+      "request": {
+        "method": "GET",
+        "url": "https://api.clay.com/v3/workspaces/1372623/realtime-credit-usage/table/t_example/run/recent?days=7",
+        "headers": {
+          "accept": "application/json, text/plain, */*",
+          "origin": "https://app.clay.com",
+          "referer": "https://app.clay.com/",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "ws",
+          "at": ["path:2"]
+        },
+        {
+          "param": "tableId",
+          "at": ["path:5"]
+        },
+        {
+          "param": "days",
+          "at": ["query:days"]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://app.clay.com/workspaces/{ws}/workbooks/home/tables/{tableId}"
+      },
+      "match": {
+        "method": "GET",
+        "host": "api.clay.com",
+        "path": "/v3/workspaces/*/realtime-credit-usage/table/*/run/recent"
+      },
+      "response": {
+        "format": "json"
+      },
+      "params": [
+        {
+          "name": "ws",
+          "type": "string",
+          "required": true,
+          "example": "1372623",
+          "pattern": "\\d+",
+          "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+        },
+        {
+          "name": "tableId",
+          "type": "string",
+          "required": true,
+          "example": "t_example",
+          "pattern": "t_[A-Za-z0-9]+",
+          "hint": "a table id like t_0tl... (listResources)"
+        },
+        {
+          "name": "days",
+          "type": "number",
+          "required": false,
+          "default": 7,
+          "example": 7,
+          "hint": "days back, 1 to 90"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": true,
+      "learnedAt": "2026-10-16"
+    },
+    {
+      "name": "tableScheduledRuns",
+      "description": "A table's scheduled run history, newest first. (contract getScheduledTableRunHistory).",
+      "request": {
+        "method": "GET",
+        "url": "https://api.clay.com/v3/workspaces/1372623/tables/t_example/scheduled-run-history?limit=20",
+        "headers": {
+          "accept": "application/json, text/plain, */*",
+          "origin": "https://app.clay.com",
+          "referer": "https://app.clay.com/",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "ws",
+          "at": ["path:2"]
+        },
+        {
+          "param": "tableId",
+          "at": ["path:4"]
+        },
+        {
+          "param": "limit",
+          "at": ["query:limit"]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://app.clay.com/workspaces/{ws}/workbooks/home/tables/{tableId}"
+      },
+      "match": {
+        "method": "GET",
+        "host": "api.clay.com",
+        "path": "/v3/workspaces/*/tables/*/scheduled-run-history"
+      },
+      "response": {
+        "format": "json"
+      },
+      "params": [
+        {
+          "name": "ws",
+          "type": "string",
+          "required": true,
+          "example": "1372623",
+          "pattern": "\\d+",
+          "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+        },
+        {
+          "name": "tableId",
+          "type": "string",
+          "required": true,
+          "example": "t_example",
+          "pattern": "t_[A-Za-z0-9]+",
+          "hint": "a table id like t_0tl... (listResources)"
+        },
+        {
+          "name": "limit",
+          "type": "number",
+          "required": false,
+          "default": 20,
+          "example": 20,
+          "hint": "how many, 1 to 100"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": true,
+      "learnedAt": "2026-10-16"
+    },
+    {
+      "name": "workflowRunSummary",
+      "description": "A workflow's runs counted by status, with data and action credits spent across them. (contract getWorkflowRunsAggregateSummary).",
+      "request": {
+        "method": "GET",
+        "url": "https://api.clay.com/v3/workspaces/1372623/tc-workflows/wf_example/runs/aggregate-summary",
+        "headers": {
+          "accept": "application/json, text/plain, */*",
+          "origin": "https://app.clay.com",
+          "referer": "https://app.clay.com/",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "ws",
+          "at": ["path:2"]
+        },
+        {
+          "param": "workflowId",
+          "at": ["path:4"]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://app.clay.com/workspaces/{ws}/workflows/{workflowId}"
+      },
+      "match": {
+        "method": "GET",
+        "host": "api.clay.com",
+        "path": "/v3/workspaces/*/tc-workflows/*/runs/aggregate-summary"
+      },
+      "response": {
+        "format": "json"
+      },
+      "params": [
+        {
+          "name": "ws",
+          "type": "string",
+          "required": true,
+          "example": "1372623",
+          "pattern": "\\d+",
+          "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+        },
+        {
+          "name": "workflowId",
+          "type": "string",
+          "required": true,
+          "example": "wf_example",
+          "pattern": "wf_[A-Za-z0-9]+",
+          "hint": "a workflow id like wf_0tm... (workflows)"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": true,
+      "learnedAt": "2026-10-16"
+    },
+    {
+      "name": "workflowCreditEstimate",
+      "description": "Clay's own per-run credit estimate for a workflow's live graph. (contract getWorkflowCreditEstimate).",
+      "request": {
+        "method": "GET",
+        "url": "https://api.clay.com/v3/workspaces/1372623/tc-workflows/wf_example/credit-estimate",
+        "headers": {
+          "accept": "application/json, text/plain, */*",
+          "origin": "https://app.clay.com",
+          "referer": "https://app.clay.com/",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "ws",
+          "at": ["path:2"]
+        },
+        {
+          "param": "workflowId",
+          "at": ["path:4"]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://app.clay.com/workspaces/{ws}/workflows/{workflowId}"
+      },
+      "match": {
+        "method": "GET",
+        "host": "api.clay.com",
+        "path": "/v3/workspaces/*/tc-workflows/*/credit-estimate"
+      },
+      "response": {
+        "format": "json"
+      },
+      "params": [
+        {
+          "name": "ws",
+          "type": "string",
+          "required": true,
+          "example": "1372623",
+          "pattern": "\\d+",
+          "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+        },
+        {
+          "name": "workflowId",
+          "type": "string",
+          "required": true,
+          "example": "wf_example",
+          "pattern": "wf_[A-Za-z0-9]+",
+          "hint": "a workflow id like wf_0tm... (workflows)"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": true,
+      "learnedAt": "2026-10-16"
+    },
+    {
+      "name": "getAudienceSegment",
+      "description": "One audience segment: name, entity type, filter and size. (contract getAudienceSegmentById).",
+      "request": {
+        "method": "GET",
+        "url": "https://api.clay.com/v3/workspaces/1372623/audiences/segments/audseg_example",
+        "headers": {
+          "accept": "application/json, text/plain, */*",
+          "origin": "https://app.clay.com",
+          "referer": "https://app.clay.com/",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "ws",
+          "at": ["path:2"]
+        },
+        {
+          "param": "segmentId",
+          "at": ["path:5"]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://app.clay.com/workspaces/{ws}/audiences"
+      },
+      "match": {
+        "method": "GET",
+        "host": "api.clay.com",
+        "path": "/v3/workspaces/*/audiences/segments/*"
+      },
+      "response": {
+        "format": "json"
+      },
+      "params": [
+        {
+          "name": "ws",
+          "type": "string",
+          "required": true,
+          "example": "1372623",
+          "pattern": "\\d+",
+          "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+        },
+        {
+          "name": "segmentId",
+          "type": "string",
+          "required": true,
+          "example": "audseg_example",
+          "pattern": "audseg_[A-Za-z0-9]+",
+          "hint": "an audience segment id like audseg_0tl... (audiences)"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": true,
+      "learnedAt": "2026-10-16"
+    },
+    {
+      "name": "listSignalsV2",
+      "description": "Every signal in a workspace (the Signals page list). (contract getSignals).",
+      "request": {
+        "method": "GET",
+        "url": "https://api.clay.com/v3/workspaces/1372623/signals",
+        "headers": {
+          "accept": "application/json, text/plain, */*",
+          "origin": "https://app.clay.com",
+          "referer": "https://app.clay.com/",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "ws",
+          "at": ["path:2"]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://app.clay.com/workspaces/{ws}/signals"
+      },
+      "match": {
+        "method": "GET",
+        "host": "api.clay.com",
+        "path": "/v3/workspaces/*/signals"
+      },
+      "response": {
+        "format": "json",
+        "extract": "signals",
+        "pick": [
+          "id",
+          "type",
+          "createdAt",
+          "name=inputs.name",
+          "active=inputs.active",
+          "monitorType=settings.monitorType",
+          "actionKey=settings.actionKey",
+          "tableId=settings.tableId",
+          "viewId=settings.viewId"
+        ]
+      },
+      "params": [
+        {
+          "name": "ws",
+          "type": "string",
+          "required": true,
+          "example": "1372623",
+          "pattern": "\\d+",
+          "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": true,
+      "learnedAt": "2026-10-16"
     }
   ]
 }

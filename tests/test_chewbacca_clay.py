@@ -1104,6 +1104,107 @@ def test_sabo_table_reads_without_clay_open():
     ok(code == 0 and out["data"][0]["id"] == "gv_ex1", "views reads every view's settings")
 
 
+# Spec ops that call Clay endpoints outside the ts-rest contracts (older routes
+# the bundle builds by hand), so the inventory has no contract for them. Seen
+# 2026-10-16: GET /v3/my-workspaces and GET /v3/tables/{id} match none of the
+# 1,772 contracts in app-3TgCQQBH.js.
+OUTSIDE_CONTRACTS = {"listWorkspaces", "getTable", "getTableColumns", "getTableViews"}
+
+
+def contract_matches(template, path):
+    t, p = template.rstrip("/").split("/"), path.rstrip("/").split("/")
+    return len(t) == len(p) and all(p[i] != "" if s.startswith(":") else s == p[i] for i, s in enumerate(t))
+
+
+def test_contract_inventory_covers_the_registry():
+    """contracts.json is every ts-rest contract in Clay's bundle (tools/clay_contracts.mjs).
+    A Clay deploy that renames or moves an endpoint the registry calls fails
+    here when the inventory is refreshed, before a live call does."""
+    inv = json.loads((LIB / "contracts.json").read_text())
+    reg, spec = registry_and_spec()
+    sops = {o["name"]: o for o in spec["operations"]}
+    contracts = inv["contracts"]
+    ok(inv["schema"] == "clay-contracts/1" and inv["counts"]["contracts"] == len(contracts) > 1000,
+       "the inventory holds the whole bundle, not a sample")
+    ok(all(c["name"] and c["method"] in ("GET", "POST", "PUT", "PATCH", "DELETE") and c["path"].startswith("/") for c in contracts),
+       "every contract has a name, a method and a path")
+    names = {c["name"] for c in contracts} | {a for c in contracts for a in c.get("aliases", [])}
+    files = {f["file"]: f["sha256"] for f in inv["files"]}
+    # Every contract an op names as its evidence is still in the bundle.
+    for op in reg["ops"]:
+        ev = op.get("evidence") or {}
+        if ev.get("contract"):
+            ok(ev["contract"] in names, f"{op['name']} names contract {ev['contract']}, gone from contracts.json")
+            c = next(c for c in contracts if c["name"] == ev["contract"] or ev["contract"] in c.get("aliases", []))
+            # Hand-found offsets (2026-10-16, by regex) point into the contract,
+            # up to 138 chars past its opening brace; the inventory's is the brace.
+            if ev["file"] in files and ev["sha256"] == files[ev["file"]] and c["file"] == ev["file"]:
+                ok(0 <= ev["contract_offset"] - c["offset"] < 400, f"{op['name']}: offset is outside the contract the inventory found")
+    # Every api-anything request the registry sends matches a contract's method and path.
+    want = {}
+    for op in reg["ops"]:
+        for s in op["surfaces"]:
+            if s["type"] != "api-anything":
+                continue
+            req = sops[s["op"]]["request"]
+            path = req["url"].split("?")[0].replace("https://api.clay.com/v3", "")
+            hits = [c for c in contracts if c["method"] == req["method"] and contract_matches(c["path"], path)]
+            if s["op"] in OUTSIDE_CONTRACTS:
+                ok(not hits, f"{s['op']} matches a contract now; take it off OUTSIDE_CONTRACTS")
+                continue
+            ok(hits, f"{op['name']} calls {req['method']} {path}, which no contract in the bundle serves")
+            lit = lambda c: sum(1 for x in c["path"].split("/") if x and not x.startswith(":"))
+            best = max(map(lit, hits))
+            for c in hits:
+                if lit(c) == best:
+                    want.setdefault((c["name"], c["method"], c["path"]), set()).add(op["name"])
+        ev = op.get("evidence") or {}
+        for c in contracts:
+            if ev.get("contract") and (c["name"] == ev["contract"] or ev["contract"] in c.get("aliases", [])):
+                want.setdefault((c["name"], c["method"], c["path"]), set()).add(op["name"])
+    # covered_by is what the registry calls today, so a new op shows up as covered.
+    got = {(c["name"], c["method"], c["path"]): set(c["covered_by"]) for c in contracts if c["covered_by"]}
+    ok(got == want, f"covered_by is stale; rerun node tools/clay_contracts.mjs: {set(got) ^ set(want)}")
+    ok(inv["counts"]["covered"] == len(got), "the covered count matches the contracts marked covered")
+
+
+# The reads added 2026-10-16 from the contract inventory, each verified live
+# against the Sabo table (ws 1149025) that day: (args, the URL it must build).
+INVENTORY_READS = {
+    "column-status": (["table=t_ex1", "view=gv_ex1", "field=f_ex1"], f"{V3}/tables/t_ex1/views/gv_ex1/fields/f_ex1/runstatus"),
+    "running-columns": (["table=t_ex1"], f"{V3}/tables/t_ex1/fieldrun"),
+    "run-credits": (["table=t_ex1", "days=3"], f"{V3}/realtime-credit-usage/table/t_ex1/run/recent?days=3"),
+    "scheduled-runs": (["table=t_ex1"], f"{V3}/tables/t_ex1/scheduled-run-history?limit=20"),
+    "workflow-run-summary": (["workflow=wf_ex1"], f"{V3}/tc-workflows/wf_ex1/runs/aggregate-summary"),
+    "workflow-cost": (["workflow=wf_ex1"], f"{V3}/tc-workflows/wf_ex1/credit-estimate"),
+    "audience-segment": (["audience=audseg_ex1"], f"{V3}/audiences/segments/audseg_ex1"),
+    "signal-list": ([], f"{V3}/signals"),
+}
+
+
+def test_inventory_reads_build_and_stay_reads():
+    reg, spec = registry_and_spec()
+    ops = {o["name"]: o for o in reg["ops"]}
+    sops = {o["name"]: o for o in spec["operations"]}
+    measured = json.loads((LIB / "measured.json").read_text())
+    for name, (args, url) in INVENTORY_READS.items():
+        op = ops.get(name)
+        ok(op and op["kind"] == "read" and op["gate"] == "read" and op["ui"], f"{name} is a registered read with a ui route")
+        s = op["surfaces"][0]
+        ok(sops[s["op"]]["readOnly"] is True and sops[s["op"]]["request"]["method"] == "GET", f"{name} is a GET")
+        ok(op["evidence"]["contract"] and op["evidence"]["source"] == "bundle", f"{name} names its contract")
+        ok(measured.get(name, {}).get(f"api-anything:{s['op']}", {}).get("at") == "2026-10-16", f"{name} has its live measurement")
+        code, out, p = run({}, {}, name, *args, "--dry-run")
+        ok(code == 0 and out["request"]["method"] == "GET" and out["request"]["url"] == url, f"{name} builds {url}: {p.stdout[:300]}")
+    code, out, _ = run({}, {}, "column-status", "table=t_ex1", "view=gv_ex1", "field=../x", "--dry-run")
+    ok(code == 2 and out["class"] == "input", "a field id that walks the path is refused")
+    sig = {"ok": True, "class": "ok", "tier": 1, "ms": 80, "data": [{"id": "sig_ex1", "type": "JobPost", "tableId": "t_ex1"}]}
+    code, out, _ = run({"api-anything/listSignalsV2.json": sig}, {}, "signal-list")
+    ok(code == 0 and out["data"][0]["id"] == "sig_ex1", "signal-list answers through its surface")
+    ok(sops["listSignalsV2"]["response"]["extract"] == "signals" and "settings" not in sops["listSignalsV2"]["response"]["pick"],
+       "signal-list picks fields: the whole list was 857,619 chars on 2026-10-16")
+
+
 def test_fixtures_are_scrubbed():
     text = Path(__file__).read_text()
     import re
@@ -1124,7 +1225,8 @@ def main():
                test_ui_only_prints_route, test_chat_approval_stands_in_for_the_terminal, test_campaign_build_ops_touch_drafts_only, test_a_relabelled_write_is_still_gated, test_refuses_an_unpinned_engine, test_inbox_adapter_keeps_clay_inbox_shape,
                test_query_slot_reads_build, test_new_reads_are_reads_with_a_measured_surface,
                test_second_session_reads_through_its_own_login, test_cli_never_answers_for_another_workspace,
-               test_sabo_table_reads_without_clay_open, test_fixtures_are_scrubbed):
+               test_sabo_table_reads_without_clay_open, test_contract_inventory_covers_the_registry,
+               test_inventory_reads_build_and_stay_reads, test_fixtures_are_scrubbed):
         fn()
     print(f"chewbacca clay: {checks} checks passed")
 

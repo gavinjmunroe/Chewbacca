@@ -2053,6 +2053,225 @@
       "confidence": "high: contract and body schema read from the bundle",
       "verified": true,
       "verified_by": "2026-10-16, Sabo table Default view: Person and Title moved after Brand, then Why this person after Title; views read back Brand, Person, Title, Why this person. A 3-column call with Why not adjacent got 400."
+    },
+    {
+      "name": "column-status",
+      "kind": "read",
+      "gate": "read",
+      "summary": "one column's run status counts in one view (success, error, queued, not run), the numbers under a column header",
+      "args": ["ws", "table", "view", "field"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "viewColumnRunStatus",
+          "args": {
+            "ws": "ws",
+            "tableId": "table",
+            "viewId": "view",
+            "fieldId": "field"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "getViewRunStatusCountsForFieldForWorkspace",
+        "contract_offset": 2016711,
+        "inventory": "library/clay-api/contracts.json"
+      },
+      "ui": "clay-go table --table {table}"
+    },
+    {
+      "name": "running-columns",
+      "kind": "read",
+      "gate": "read",
+      "summary": "the columns with a run in progress on a table right now; empty means nothing is running",
+      "args": ["ws", "table"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "tableActiveRuns",
+          "args": {
+            "ws": "ws",
+            "tableId": "table"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "getTableFieldRun",
+        "contract_offset": 2006591,
+        "inventory": "library/clay-api/contracts.json"
+      },
+      "ui": "clay-go table --table {table}"
+    },
+    {
+      "name": "run-credits",
+      "kind": "read",
+      "gate": "read",
+      "summary": "a table's enrichment run history for the last days=N (default 7): each run and the credits it spent",
+      "args": ["ws", "table", "days?"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "tableRunCredits",
+          "args": {
+            "ws": "ws",
+            "tableId": "table",
+            "days": "days"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "getRecentRealtimeCreditUsageByRunForWorkspace",
+        "contract_offset": 1852774,
+        "inventory": "library/clay-api/contracts.json"
+      },
+      "ui": "clay-go credits"
+    },
+    {
+      "name": "scheduled-runs",
+      "kind": "read",
+      "gate": "read",
+      "summary": "a table's scheduled run history, newest first; empty when the table has no schedule",
+      "args": ["ws", "table", "limit?"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "tableScheduledRuns",
+          "args": {
+            "ws": "ws",
+            "tableId": "table",
+            "limit": "limit"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "getScheduledTableRunHistory",
+        "contract_offset": 1996684,
+        "inventory": "library/clay-api/contracts.json"
+      },
+      "ui": "clay-go table --table {table}"
+    },
+    {
+      "name": "workflow-run-summary",
+      "kind": "read",
+      "gate": "read",
+      "summary": "a workflow's runs counted by status plus the data and action credits they spent, in one call",
+      "args": ["ws", "workflow"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "workflowRunSummary",
+          "args": {
+            "ws": "ws",
+            "workflowId": "workflow"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "getWorkflowRunsAggregateSummary",
+        "contract_offset": 2101545,
+        "inventory": "library/clay-api/contracts.json"
+      },
+      "ui": "clay-go workflow --workflow {workflow}"
+    },
+    {
+      "name": "workflow-cost",
+      "kind": "read",
+      "gate": "read",
+      "summary": "Clay's own estimate of what one run of a workflow costs in credits, before running it",
+      "args": ["ws", "workflow"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "workflowCreditEstimate",
+          "args": {
+            "ws": "ws",
+            "workflowId": "workflow"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "getWorkflowCreditEstimate",
+        "contract_offset": 2071170,
+        "inventory": "library/clay-api/contracts.json"
+      },
+      "ui": "clay-go workflow --workflow {workflow}"
+    },
+    {
+      "name": "audience-segment",
+      "kind": "read",
+      "gate": "read",
+      "summary": "one audience segment with its filter and size, read over the frontend API (audience reads it through the CLI)",
+      "args": ["ws", "audience"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "getAudienceSegment",
+          "args": {
+            "ws": "ws",
+            "segmentId": "audience"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "getAudienceSegmentById",
+        "contract_offset": 1200105,
+        "inventory": "library/clay-api/contracts.json"
+      },
+      "ui": "clay-go people-segment --audience {audience}"
+    },
+    {
+      "name": "signal-list",
+      "kind": "read",
+      "gate": "read",
+      "summary": "every signal in the workspace as the Signals page lists it; signals reads the trigger definitions behind them",
+      "args": ["ws"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "listSignalsV2",
+          "args": {
+            "ws": "ws"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "getSignals",
+        "contract_offset": 1885802,
+        "inventory": "library/clay-api/contracts.json"
+      },
+      "ui": "clay-go signals"
     }
   ],
   "ui_only": [

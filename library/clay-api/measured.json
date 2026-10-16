@@ -11,6 +11,14 @@
    "at": "2026-10-09"
   }
  },
+ "audience-segment": {
+  "api-anything:getAudienceSegment": {
+   "ms": 941,
+   "at": "2026-10-16",
+   "engine_ms": 724,
+   "tier": 1
+  }
+ },
  "audiences": {
   "api-anything:listAudiences": {
    "ms": 885,
@@ -104,6 +112,14 @@
    "ms": 1077,
    "at": "2026-10-09",
    "engine_ms": 895,
+   "tier": 1
+  }
+ },
+ "column-status": {
+  "api-anything:viewColumnRunStatus": {
+   "ms": 819,
+   "at": "2026-10-16",
+   "engine_ms": 594,
    "tier": 1
   }
  },
@@ -201,6 +217,30 @@
    "tier": 1
   }
  },
+ "run-credits": {
+  "api-anything:tableRunCredits": {
+   "ms": 1246,
+   "at": "2026-10-16",
+   "engine_ms": 619,
+   "tier": 1
+  }
+ },
+ "running-columns": {
+  "api-anything:tableActiveRuns": {
+   "ms": 967,
+   "at": "2026-10-16",
+   "engine_ms": 629,
+   "tier": 1
+  }
+ },
+ "scheduled-runs": {
+  "api-anything:tableScheduledRuns": {
+   "ms": 937,
+   "at": "2026-10-16",
+   "engine_ms": 792,
+   "tier": 1
+  }
+ },
  "segment-history": {
   "api-anything:segmentHistory": {
    "ms": 885,
@@ -219,6 +259,14 @@
   "cli:campaigns options sender-accounts": {
    "ms": 566,
    "at": "2026-10-10"
+  }
+ },
+ "signal-list": {
+  "api-anything:listSignalsV2": {
+   "ms": 1084,
+   "at": "2026-10-16",
+   "engine_ms": 941,
+   "tier": 1
   }
  },
  "signals": {
@@ -321,6 +369,14 @@
    "at": "2026-10-10"
   }
  },
+ "workflow-cost": {
+  "api-anything:workflowCreditEstimate": {
+   "ms": 1084,
+   "at": "2026-10-16",
+   "engine_ms": 616,
+   "tier": 1
+  }
+ },
  "workflow-graph": {
   "cli:workflows graph get {workflow}": {
    "ms": 556,
@@ -337,6 +393,14 @@
   "cli:workflows runs steps {workflow} {run}": {
    "ms": 530,
    "at": "2026-10-10"
+  }
+ },
+ "workflow-run-summary": {
+  "api-anything:workflowRunSummary": {
+   "ms": 1042,
+   "at": "2026-10-16",
+   "engine_ms": 720,
+   "tier": 1
   }
  },
  "workflow-runs": {

@@ -279,6 +279,12 @@ if test_runner(argv):
 
 name, args = argv[0], argv[1:]
 base = os.path.basename(name)
+# The 2026-10-15 Togari reviewer used Apple's Git directly after xcrun
+# failed in its read-only sandbox. Permit only these host paths and reads;
+# arbitrary paths, configuration overrides and executable flags stay refused.
+native_git = name in ("/usr/bin/git", "/Library/Developer/CommandLineTools/usr/bin/git")
+if native_git:
+    name, base = "git", "git"
 if name == "gh" and args[:2] == ["pr", "create"]:
     # A code PR titled with Clay was refused on 2026-10-15 as though its
     # title mutated a campaign. This exact CLI only publishes GitHub metadata;
@@ -390,17 +396,41 @@ GIT_SUBS = {"add", "am", "apply", "blame", "branch", "checkout", "cherry-pick", 
             "switch", "tag", "worktree", "merge-base", "cat-file", "ls-tree", "rev-list", "name-rev"}
 if name == "git":
     i = 0
+    pager_disabled = False
     while i < len(args) and args[i].startswith("-"):
         if args[i] == "-C" and i + 1 < len(args):
             i += 2
             continue
         if args[i] in ("--no-pager", "--no-optional-locks"):
+            if args[i] == "--no-pager":
+                pager_disabled = True
             i += 1
             continue
         out("refuse", f"git {args[i]} can change config or run a program")
     sub, rest = (args[i], args[i + 1:]) if i < len(args) else ("", [])
     if sub not in GIT_SUBS:
         out("refuse", f"git {sub or '(none)'} is not an allowed subcommand (config, aliases and hooks stay out)")
+    if native_git:
+        if not pager_disabled:
+            out("refuse", "host Git patch inspection requires global --no-pager")
+        # Git accepts abbreviated executable flags and enables textconv by
+        # default. The 2026-10-15 review found both escaped the denylist.
+        # This exception covers only bounded patch inspection, with an exact
+        # option vocabulary and both external diff mechanisms disabled.
+        if sub != "show":
+            out("refuse", "absolute host Git paths support only commit patch inspection")
+        # After -- these strings are file names, not disabling options.
+        separator = rest.index("--") if "--" in rest else len(rest)
+        options = rest[:separator]
+        if not {"--no-ext-diff", "--no-textconv", "--no-show-signature", "--format="}.issubset(options):
+            out("refuse", "host Git patch inspection requires explicit disabling flags and an empty format")
+        safe = {"--no-ext-diff", "--no-textconv", "--no-show-signature", "--no-color", "--color=never",
+                "--reverse", "--oneline", "--name-only", "--name-status", "--stat",
+                "--numstat", "--raw", "--summary", "--format=",
+                "--patch", "-p", "--no-renames", "--check",
+                "--cached", "--staged", "--"}
+        if any(a.startswith("-") and a not in safe for a in options):
+            out("refuse", "unsupported host Git inspection option")
     if any(a in ("-x", "--exec", "-O", "--open-files-in-pager", "--ext-diff", "--upload-pack", "--receive-pack")
            or a.startswith(("--exec=", "--open-files-in-pager=", "--upload-pack=", "--receive-pack=", "--template"))
            for a in rest):

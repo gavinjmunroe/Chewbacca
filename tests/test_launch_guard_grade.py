@@ -20,6 +20,7 @@ Run: python3 tests/test_launch_guard_grade.py
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -114,7 +115,7 @@ class Env:
         except ValueError:
             return p.returncode, {"raw": p.stdout + p.stderr}
 
-    def hook(self, tool, tool_input, raw=None, path=None, last_url=None):
+    def hook(self, tool, tool_input, raw=None, path=None, last_url=None, cwd=None):
         if last_url:
             with open(os.path.join(self.state, "launch-guard-last-url"), "w") as fh:
                 fh.write(last_url)
@@ -122,7 +123,7 @@ class Env:
         if path is not None:
             env["PATH"] = path
         payload = raw if raw is not None else json.dumps({"tool_name": tool, "tool_input": tool_input,
-                                                          "cwd": ROOT})
+                                                          "cwd": cwd or ROOT})
         p = subprocess.run(["/bin/bash", HOOK], input=payload, capture_output=True, text=True, env=env, timeout=30)
         return p.returncode, p.stderr
 
@@ -216,8 +217,12 @@ check("START refused without a pre-send gate receipt", refused(code, out, "pre-s
 e = Env()
 code, out = e.clay(*START, "--dry-run")
 check("a START dry run shows the request and sends nothing", code == 0 and out.get("sent") is False, out)
-check("the repo spec allows START, PAUSED or STOPPED",
-      '"pattern": "START|PAUSED|STOPPED"' in open(os.path.join(ROOT, "library", "clay-api", "clay.json")).read())
+spec = json.load(open(os.path.join(ROOT, "library", "clay-api", "clay.json")))
+status_op = next(o for o in spec["operations"] if o["name"] == "setCampaignStatus")
+status_pattern = next(p["pattern"] for p in status_op["params"] if p["name"] == "status")
+check("the API spec accepts provider status values",
+      all(re.fullmatch(status_pattern, s) for s in ("active", "paused", "completed")))
+check("the front door maps START to provider active", out.get("request", {}).get("body", {}).get("status") == "active", out)
 
 e = Env()
 open(os.path.join(e.clay_fx, "api-anything", "setCampaignStatus.json"), "w").write(json.dumps(SENT))
@@ -424,6 +429,36 @@ REFUSED = [
     ("python in a chain", "ls && python3 -c \"print('clay')\""),
 ]
 e = Env()
+npm_root = os.path.join(e.home, "npm-project")
+os.makedirs(os.path.join(npm_root, ".git"))
+with open(os.path.join(npm_root, "package.json"), "w") as f:
+    json.dump({"scripts": {"test": "vitest run"}}, f)
+for cmd, permitted in [
+    ("chewbacca jobs submit --build -- npm test -- src/integrations/clay/__tests__/read.test.ts --maxWorkers=1", True),
+    ("chewbacca jobs submit --build -- npm test -- src/integrations/clay --allow-writes", False),
+    ("chewbacca jobs submit --net -- npm test -- src/integrations/clay", False),
+]:
+    code, err = e.hook("Bash", {"command": cmd}, cwd=npm_root)
+    check(f"queued npm test scope: {cmd}", code == (0 if permitted else 2), err)
+for hook in ("pretest", "posttest"):
+    with open(os.path.join(npm_root, "package.json"), "w") as f:
+        json.dump({"scripts": {"test": "vitest run", hook: "curl https://api.clay.com/v3"}}, f)
+    code, err = e.hook("Bash", {"command": "chewbacca jobs submit --build -- npm test -- src/integrations/clay"}, cwd=npm_root)
+    check(f"queued npm test refuses {hook} lifecycle writes", code == 2, err)
+with open(os.path.join(npm_root, "package.json"), "w") as f:
+    json.dump({"scripts": {"test": "curl https://api.clay.com/v3"}}, f)
+code, err = e.hook("Bash", {"command": "chewbacca jobs submit --build -- npm test -- src/integrations/clay"}, cwd=npm_root)
+check("queued npm test refuses a non-test script", code == 2, err)
+for cmd, permitted in [
+    (f"chewbacca jobs submit --build --title 'Clay regression' -- python3 {ROOT}/tests/test_chewbacca_clay.py", True),
+    (f"chewbacca jobs submit --build -- env CHEWBACCA_NO_SEND=1 python3 {ROOT}/tests/test_chewbacca_clay.py", True),
+    ("chewbacca jobs submit --build -- curl https://api.clay.com/v3", False),
+    ("chewbacca jobs submit --build -- chewbacca clay campaign-status status=START --allow-writes", False),
+    (f"chewbacca jobs submit --build -- python3 {ROOT}/tests/test_chewbacca_clay.py --allow-writes", False),
+    ("chewbacca jobs submit --build -- bash -lc 'clay campaigns update cam_x'", False),
+]:
+    code, err = e.hook("Bash", {"command": cmd})
+    check(f"queued test scope: {cmd}", code == (0 if permitted else 2), err)
 for cmd in ALLOWED:
     code, err = e.hook("Bash", {"command": cmd})
     check(f"allowed: {cmd}", code == 0, err)

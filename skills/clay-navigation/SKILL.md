@@ -83,6 +83,15 @@ comes back, with `surface`, `ms` and every surface `tried`.
   `app.clay.com`'s `/assets/*.js`, find `<contractName>:{method:` for the
   path and body schema, then the `.<contractName>.` call site for the body
   the page sends.
+- Mapping a Clay surface no op covers: reach for REA (the `mcp__rea__*`
+  tools, rea.tools) before grepping the bundle by hand.
+  `inspect_web_page` on a Chrome debugging port records the request a click
+  sends and the script that started it; `analyze_javascript_application`
+  maps a downloaded chunk. Caleb, 2026-10-16: "We haven't tried smart
+  enough or hard enough to use this repo on clay. If ppl can do it for the
+  entire adobe stack we can do it for clay". When he sends a site or repo
+  to learn from, read every page in full before acting. Same day: "READ
+  DONT JUST SKIM".
 - UI-only jobs (find people, run empty rows, configure a column) print a
   `clay-go` route the agent drives itself in the background. Starting a
   campaign is not one of them anymore.

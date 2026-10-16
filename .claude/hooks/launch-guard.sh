@@ -279,6 +279,12 @@ if test_runner(argv):
 
 name, args = argv[0], argv[1:]
 base = os.path.basename(name)
+# The 2026-10-15 Togari reviewer used Apple's Git directly after xcrun
+# failed in its read-only sandbox. Permit only these host paths and reads;
+# arbitrary paths, configuration overrides and executable flags stay refused.
+native_git = name in ("/usr/bin/git", "/Library/Developer/CommandLineTools/usr/bin/git")
+if native_git:
+    name, base = "git", "git"
 if name == "gh" and args[:2] == ["pr", "create"]:
     # A code PR titled with Clay was refused on 2026-10-15 as though its
     # title mutated a campaign. This exact CLI only publishes GitHub metadata;
@@ -401,6 +407,8 @@ if name == "git":
     sub, rest = (args[i], args[i + 1:]) if i < len(args) else ("", [])
     if sub not in GIT_SUBS:
         out("refuse", f"git {sub or '(none)'} is not an allowed subcommand (config, aliases and hooks stay out)")
+    if native_git and sub not in {"blame", "describe", "diff", "grep", "log", "ls-files", "reflog", "rev-parse", "shortlog", "show", "show-ref", "status", "merge-base", "cat-file", "ls-tree", "rev-list", "name-rev"}:
+        out("refuse", "absolute host Git paths are allowed only for local reads")
     if any(a in ("-x", "--exec", "-O", "--open-files-in-pager", "--ext-diff", "--upload-pack", "--receive-pack")
            or a.startswith(("--exec=", "--open-files-in-pager=", "--upload-pack=", "--receive-pack=", "--template"))
            for a in rest):

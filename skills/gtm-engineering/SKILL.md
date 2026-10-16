@@ -368,6 +368,12 @@ Reply counts that disagree across sources, and replies read from a snippet: `che
   prototype. Before calling it done, move it to `tools/` or
   `tools/creator_gtm/`, read ids and columns from the client file, add a test
   to `tests/run.sh`, and land it (follow_buyers.py on brand_buyer.py, a8f54457).
+  Ids aren't the only client-specific part: weights, the questions Jev answers,
+  windows and seed research go in the client file too. The first spend_now for
+  Sabo had his weights and Jev questions as code constants, and his run-club
+  sponsor research in a file next to the script. It had to be redone the same
+  day so the weights, questions and windows live in `spend_now.signals` and the
+  sponsors are plain evidence lines (6bd465d6, `reference_spend_now_score`).
 
 ## When a step comes back empty or blocked: `gtme next-move` (2026-10-16)
 

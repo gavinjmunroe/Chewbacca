@@ -1,0 +1,25 @@
+{
+  "client": "Sabo (Aucta, Rawdawg Run Club), the first client, 2026-10-16",
+  "ws": "1149025",
+  "table": "t_0tmyzmzxwt5tTMoyeQp",
+  "view": "gv_0tmyzmzVHVAYS7MJjwk",
+  "client_view": "gv_0tmyzmzkM2erPY7GuNJ",
+  "creator": "Noah Rolette (Rawdawg Run Club)",
+  "parents": "parents.json",
+  "columns": {
+    "brand": "Brand",
+    "domain": "Brand Domain",
+    "creator": "Creator",
+    "people": "Find contacts at company",
+    "profile": "Source links",
+    "findymail": "Find work email from profile URL",
+    "verify": "Verify email"
+  },
+  "hide": [
+    "Contact candidate",
+    "Role",
+    "Professional email",
+    "Email result",
+    "Contact gaps"
+  ]
+}

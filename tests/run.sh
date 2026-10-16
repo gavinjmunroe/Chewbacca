@@ -542,6 +542,10 @@ if group "gtme"; then
   # one client's repo with that client's refused senders as constants.
   check "gtme presend reads the client's config and writes that client's receipt only" \
     python3 "$ROOT/tests/test_gtme_presend.py"
+  # 2026-10-16: the Sabo brand-buyer chain lived in a Downloads folder with one client's
+  # field ids as constants; a client file and columns found by name make it a product.
+  check "brand buyer: parent fallback, ranking, one retry, catch-all never Ready, any client by file" \
+    python3 "$ROOT/tests/test_brand_buyer.py"
   # 2026-10-13: 97 executable lines hard-coded one client and its rulings had
   # two homes; the clients.json entry is the contract a second client fills in.
   check "gtme config checks a client entry, resolves its one workspace, keeps rulings in one file" \

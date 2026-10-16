@@ -374,7 +374,13 @@ PASS = js_regex(
     # A reply that opens on "No" is a pass unless its first sentence turns it.
     r"|^\s*no\b(?![^.?!\n]*\b(but|however|send|share|deck|call|chat|interest|happy|love|open|worries|problem|rush)\b)"
     r"|no longer (making|doing|writing) (new )?(investments|checks|deals)"
-    r"|(we|i) do not invest|will never (talk|work) (to|with) anyone)", "i")
+    r"|(we|i) do not invest|will never (talk|work) (to|with) anyone"
+    # 2026-10-16, five passes read "unclear" and held gtme done open: "will need
+    # to hold off. out of thesis for us.", "Np interest", NFX's "falls outside
+    # the sectors we are presently targeting ... won't be a fit", "The partners
+    # at Bond Capital have all retired and we no longer invest".
+    r"|out of (our )?thesis|^\s*np interest\b|falls outside the (sectors|areas|scope)"
+    r"|won'?t be a (good )?fit|(have|has) (all )?retired|no longer invest)", "i")
 QUESTION_TOPIC = js_regex(
     r"(revenue|arr\b|traction|valuation|raising|round|terms|cap table|burn|runway|users|customers"
     r"|ltm|ntm|how much|metrics)", "i")

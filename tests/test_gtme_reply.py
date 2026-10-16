@@ -99,6 +99,19 @@ class ReplyIntentRealReplies(unittest.TestCase):
             with self.subTest(body):
                 self.assertEqual(reply.reply_intent(body)["kind"], kind)
 
+    def test_passes_that_held_gtme_done_open_on_2026_10_16(self):
+        # Read as "unclear" and listed as owed replies; reworded.
+        cases = [
+            "oh thanks. will need to hold off. out of thesis for us.",
+            "Np interest",
+            "Thank you for reaching out. While the concept is intriguing, it falls outside the "
+            "sectors we are presently targeting. Unfortunately, this won't be a fit for us.",
+            "Jonah, The partners here have all retired and we no longer invest. Best of luck",
+        ]
+        for body in cases:
+            with self.subTest(body):
+                self.assertEqual(reply.reply_intent(body)["kind"], "pass")
+
     def test_passes_that_blocked_the_2026_10_14_launch(self):
         # Five passes read "unclear" and stood as owed replies in front of a
         # 14-campaign launch; reworded, signature shapes kept.

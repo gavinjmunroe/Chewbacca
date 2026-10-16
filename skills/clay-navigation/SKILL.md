@@ -86,6 +86,15 @@ client=<name>`, which needs his own chat message naming the number, or him
   never covered, and a START or add-leads still needs its grade and pre-send
   gate. Caleb, 2026-10-16, after approving one Sabo run three times in an
   hour: "you shouldn't be asking for permission".
+- **Never work on Clay code in silence or in a path named clay.** launch-guard
+  refuses any shell command whose text names clay, sequencer or campaign
+  unless it's a known read, and paths count. The allowance build on
+  2026-10-16 lost most of 15 minutes to `wt-clay-budget`,
+  `tests/test_clay_allowance.py`, `cd`, `mv` and `rm` refusals, with no
+  update to Caleb in between: "15 mins doing what bro wtf?", then "Are you
+  done with your work?". Name worktrees, tests and scratch scripts without
+  those words, use `git -C <dir>` instead of `cd`, and send him a one-line
+  status every few minutes on any Clay build.
 - The 16 carry `verified: false` in `registry.json` with their evidence: the
   bundle file, its sha256, the ts-rest contract and offset, the zod body
   schema and the UI call that builds the body. Until a person flips it, every

@@ -360,3 +360,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - reference_spend_now_score: spend_now ranks a creator client's brands by dated, Jev-confirmed spend evidence from client config, 0 credits; public Greenhouse, Ashby, Workable job feeds are free dated hiring data (Sabo, 10/16)
 - reference_intro_ledger: the intro ledger, an append-only server-dated hash-chained record of every contact handed a creator-GTM client so a late deal is provably ours; live on Railway, deliver.py stamps Delivered On/For (Sabo, 10/16)
 - feedback_claims_match_the_mechanism: a hand-filled lookup like parents.json is never pitched as Chewbacca reasoning around a blocker (Sabo call, 2026-10-16)
+- reference_hud_card_ask: Screen ask= makes a HUD card double-click open the chat w that request (verse card, 10/16); live only after bundle + install

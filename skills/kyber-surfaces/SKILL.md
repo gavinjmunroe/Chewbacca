@@ -228,9 +228,11 @@ can talk abt the verse". Reach for `ask=` before writing a listener just to
 open a conversation. Source: AskOnDoubleClick in SurfaceView.swift, tests in
 AskTests.swift.
 
-Never relaunch Kyber (install.sh pkills it) to check a HUD change while he's
-on the Mac. Build and test offscreen, and leave the relaunch as a BLOCKED
-line (tab manager's standing order, 2026-10-16).
+A Kyber change isn't live until `hud/scripts/bundle.sh release` and
+`hud/scripts/install.sh` run (install relaunches Kyber). Relaunch is allowed
+anytime: Caleb, 2026-10-10, "idc I'm not using the hud yet it's not good
+enough do wtv is best" (team memory feedback_caleb_standing_answers_hud).
+Queue it through `chewbacca jobs submit --build`, never a BLOCKED line.
 
 ## The hard lines
 

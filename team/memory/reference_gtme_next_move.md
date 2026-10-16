@@ -13,3 +13,4 @@ gtme next-move is the loop a blocked GTM step goes through, built 2026-10-16 aft
 - Learn: paid attempts add to a `next-move:<kind>` lesson's `move_stats` in team/gtme-lessons.
 - `tools/brand_buyer.py` calls it on every empty people search. parents.example.json and the `parents` client key are gone.
 - Replays of 5 recorded blockers (live Jev): loop 5/5 cleared, old chain 2/5, one Codex call 3/5. Cleared per credit is close: loop 1.28 (1.14 on one run of four), old chain 1.18. With Jev off the loop drops to 2/5. Not held out after one cost fix, so grade it on the next real blockers.
+- This loop is what makes `feedback_claims_match_the_mechanism` true for the parent-company claim: say "it read the brand's footer and Jev ranked the moves", never "it figured out the parent" without the receipt from `plan`.

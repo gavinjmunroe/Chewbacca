@@ -383,7 +383,9 @@ after barebells.com returned nobody. Caleb: "make chewbs actually smart and
 intuitively think through all the possible courses of action". Now a blocked
 step (0 people, no email, an off-domain email, no buyer, a failed op, a gate)
 goes through `chewbacca gtme next-move`, and `tools/brand_buyer.py` calls it on
-every empty people search. No parents file exists anymore.
+every empty people search. No parents file exists anymore. Describe it to a client as
+what the code does: it reads the brand's site and Jev ranks the moves (team
+memory `feedback_claims_match_the_mechanism`).
 
 - **Write the blocker as evidence, not as a label.** The request holds the
   goal, the persona from the client's research, the step, the failure in plain

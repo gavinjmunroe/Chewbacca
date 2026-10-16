@@ -554,6 +554,10 @@ if group "gtme"; then
   # never counts as verified.
   check "follow past buyers: moved seed gets a warm row, seed picked first, old-brand email never verified" \
     python3 "$ROOT/tests/test_follow_buyers.py"
+  # 2026-10-16: Caleb, "removing clay from the equation is def the play after this phase". The
+  # chain runs on a fake provider with clay() as a tripwire, so the swap is an adapter, not a rewrite.
+  check "gtm provider: brand buyer end to end with no Clay, cost per call, record file first, treg not wired" \
+    python3 "$ROOT/tests/test_gtm_provider.py"
   # 2026-10-13: 97 executable lines hard-coded one client and its rulings had
   # two homes; the clients.json entry is the contract a second client fills in.
   check "gtme config checks a client entry, resolves its one workspace, keeps rulings in one file" \

@@ -24,7 +24,9 @@ import os
 import re
 import subprocess
 import sys
-import urllib.request
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+from creator_gtm import provider as gtm_provider  # noqa: E402
 
 # A title has to carry one of these before Jev is asked about it. Celsius, 2026-10-16: 13 of
 # 13 Workable posts that matched were paid field or campus ambassadors, a NASCAR deal or a
@@ -212,34 +214,15 @@ def validate_item(cfg, raw, today):
             "jev": "unchecked"}
 
 
-def fetch_json(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "chewbacca-spend-now/1"})
-    with urllib.request.urlopen(req, timeout=30) as r:
-        return json.loads(r.read())
+fetch_json = gtm_provider.fetch_json
 
 
 def ats_jobs(board, slug, fetch=fetch_json):
-    """Dated jobs from a public ATS board. Checked live 2026-10-16: Greenhouse gymshark
-    (first_published), Ashby strava (publishedAt), Workable celsius (published_on). Lever's
-    shape is from its public docs and hasn't been seen live."""
-    if board == "greenhouse":
-        data = fetch(f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs")
-        return [{"date": j.get("first_published") or j.get("updated_at"), "title": j["title"],
-                 "where": (j.get("location") or {}).get("name"), "url": j["absolute_url"]} for j in data["jobs"]]
-    if board == "ashby":
-        data = fetch(f"https://api.ashbyhq.com/posting-api/job-board/{slug}")
-        return [{"date": j.get("publishedAt"), "title": j["title"], "where": j.get("location"),
-                 "url": j["jobUrl"]} for j in data["jobs"]]
-    if board == "workable":
-        data = fetch(f"https://apply.workable.com/api/v1/widget/accounts/{slug}")
-        return [{"date": j.get("published_on"), "title": j["title"], "where": j.get("city"),
-                 "url": j["url"]} for j in data["jobs"]]
-    if board == "lever":
-        data = fetch(f"https://api.lever.co/v0/postings/{slug}?mode=json")
-        return [{"date": dt.datetime.fromtimestamp(j["createdAt"] / 1000, dt.timezone.utc).date().isoformat(),
-                 "title": j["text"], "where": (j.get("categories") or {}).get("location"),
-                 "url": j["hostedUrl"]} for j in data]
-    raise Failed(f"unknown ATS board {board}")
+    """Dated jobs from a public ATS board; the reader lives with the provider contract."""
+    try:
+        return gtm_provider.public_ats_jobs(board, slug, fetch)
+    except ValueError as exc:
+        raise Failed(str(exc))
 
 
 def run_jev(request):
@@ -270,21 +253,22 @@ def jev_check(cfg, brand, items, jev=run_jev):
         return None
 
 
-# TODO: when tools/creator_gtm/provider.py lands (tab local_e6857244, ~/code/wt-gtm-provider), get
-# jobs from Provider.company_signals and send writes through it, not ats_jobs and clay() directly.
-def collect(cfg, today, fetch=fetch_json, jev=run_jev):
-    """Every ATS board in config: keep creator-team titles in the window, let Jev judge, append."""
+def collect(cfg, today, fetch=fetch_json, jev=run_jev, provider=None):
+    """Every ATS board in config: keep creator-team titles in the window, let Jev judge, append.
+    The boards are read through the client's provider (company_signals)."""
     spend = cfg["spend_now"]
     window = {**DEFAULT_WINDOW, **(spend.get("window") or {})}
     words = re.compile(spend.get("title_words") or DEFAULT_TITLE_WORDS, re.I)
     if "hiring" not in signals(cfg):
         raise Failed("collect writes hiring evidence, and this client has no hiring signal")
+    provider = provider or gtm_provider.for_client(cfg)
     found = []
     for brand, boards in (spend.get("ats") or {}).items():
         items = []
         for board, slug in boards.items():
             try:
-                jobs = ats_jobs(board, slug, fetch)
+                jobs = provider.company_signals({"brand": brand, "domain": spend["brands"].get(brand),
+                                                 "ats": {board: slug}}, fetch=fetch)
             except Exception as exc:  # a dead board is reported, never read as zero hiring
                 print(f"{brand}: {board}/{slug} unreadable: {exc}", file=sys.stderr)
                 continue

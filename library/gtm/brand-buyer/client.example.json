@@ -5,6 +5,9 @@
   "view": "gv_0tmyzmzVHVAYS7MJjwk",
   "client_view": "gv_0tmyzmzkM2erPY7GuNJ",
   "creator": "Noah Rolette (Rawdawg Run Club)",
+  "client_slug": "sabo",
+  "provider": { "name": "clay", "cents_per_credit": null },
+  "records": "sabo.records.json",
   "columns": {
     "brand": "Brand",
     "domain": "Brand Domain",

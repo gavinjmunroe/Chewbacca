@@ -17,6 +17,10 @@ You give it a brand and get back the person who pays outside creators there, wit
 - Findymail finds the email and ZeroBounce checks it. If the email is invalid, missing or at another company, the runner-up gets one try.
 - It writes Person, Title, Why, Status (Ready or Needs work: reason) and Contact. Every run is logged with its credits in `runs.jsonl`.
 
-Lessons and evidence: team memory `reference_clay_people_search_finds_buyers`.
+## Providers and the record file
+
+The data steps (people search, find email, verify, person posts, company signals) go through the provider the client file names: `"provider": "clay"` today, `"treg"` as a stub that raises "not wired". The contract is in `tools/creator_gtm/provider.py`. Each pick is written first to the client's record file (`"records"`, relative to the client file) and then to the Clay table as a view, so a provider swap keeps every pick. Every paid call is logged with its credits and, when `provider.cents_per_credit` is set, its cents.
+
+Lessons and evidence: team memory `reference_clay_people_search_finds_buyers` and `reference_gtm_provider_contract`.
 
 Built with Chewbacca

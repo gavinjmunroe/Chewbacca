@@ -117,6 +117,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - reference_gtme_lesson_ledger: GTME lesson ledger (team/gtme-lessons, `chewbacca gtme lesson plan`): experiments with oracles that refuse unsupported claims, handed to the next client
 - reference_gtme_lesson_ledger: GTME lesson ledger (team/gtme-lessons, `chewbacca gtme lesson plan`): experiments with oracles that refuse unsupported claims, handed to the next client; fit-share and split checks, how to turn PROSE into CHECKED
 - reference_treg_tool_registry: treg.to, pay-per-call data from 111 providers; optional engine behind gtme find --paid and gtme verify, numbers and terms limits
+- reference_gtm_provider_contract: creator GTM tools call vendors through tools/creator_gtm/provider.py; Clay live, treg stub, client file picks, records file is canonical
 - reference_chewbacca_privacy_reality: What is actually true about Chewbacca privacy as of 2026-09-18: retrieval is...
 - reference_caleb_bma_bigquery_admin: Caleb is already a BMA BigQuery admin via caleb@bluemodernadvisory.com (Karthik, 10/10); never ask for that access
 - reference_clay_query_grammar: Clay's query-mode grammar, discovered by probing: the three entities, the real...

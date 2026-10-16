@@ -15,6 +15,10 @@ email gets one retry on the runner-up. The pick and a one-sentence reason land i
 its own approval gate.
 
 Dry run is the default: it prints each request and spends nothing. Pass --live to execute.
+
+Every data step (people search, find email, verify) goes through the provider the client file
+names, Clay by default; see tools/creator_gtm/provider.py. Each pick lands first in the client's
+record file ("records" in the client file), and the Clay table is written from it as a view.
 """
 import argparse
 import json
@@ -27,6 +31,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from gtme_lessons import same_org, verified_email  # noqa: E402
 import next_move  # noqa: E402
+from creator_gtm import provider as gtm_provider  # noqa: E402
 
 # Set from the client file by configure(); nothing here is one client's table.
 WS = TABLE = VIEW = None
@@ -34,6 +39,8 @@ F_BRAND = F_DOMAIN = F_CREATOR = F_PEOPLE = F_PROFILE = F_FINDYMAIL = F_VERIFY =
 WHY_COLUMN = "Why this person"
 PICK_COLUMNS = {"person": "Person", "title": "Title", "why": WHY_COLUMN, "status": "Status", "contact": "Contact"}
 ROWS_FILE = None
+# The data provider (clay, treg, ...) and the canonical record file, both from the client file.
+PROVIDER = RECORDS_FILE = None
 
 HERE = os.getcwd()
 RUN_LOG = None
@@ -89,7 +96,8 @@ class ClayFailed(SystemExit):
 
 def configure(cfg, strict=True):
     """Point the chain at one client's table: ids, views, creator, parents, people search."""
-    global WS, TABLE, VIEW, CLIENT_VIEW, CREATOR, RUN_LOG, ROWS_FILE, PEOPLE_SEARCH
+    global WS, TABLE, VIEW, CLIENT_VIEW, CREATOR, RUN_LOG, ROWS_FILE, PEOPLE_SEARCH, PROVIDER, RECORDS_FILE
+    PROVIDER = gtm_provider.for_client(cfg, chain=sys.modules[__name__])
     WS, TABLE = str(cfg.get("ws", WS)), cfg.get("table", TABLE)
     VIEW = cfg.get("view", VIEW)
     CLIENT_VIEW = cfg.get("client_view") or cfg.get("view") or CLIENT_VIEW
@@ -97,11 +105,12 @@ def configure(cfg, strict=True):
     base = os.path.dirname(os.path.abspath(cfg["_path"])) if cfg.get("_path") else HERE
     here = lambda key, default: os.path.join(base, os.path.expanduser(cfg.get(key, default)))
     RUN_LOG, ROWS_FILE = here("run_log", "runs.jsonl"), here("rows", "rows.json")
+    RECORDS_FILE = here("records", f"{cfg.get('client_slug') or 'client'}.records.json")
     PEOPLE_SEARCH = {**PEOPLE_SEARCH, **cfg.get("people_search", {})}
     # The client file is shared with other Sabo tools (watcher, ledger), so it can name
     # columns this chain never reads; only the roles below are looked up.
     names = {role: name for role, name in (cfg.get("columns") or {}).items() if role in ROLES}
-    if names:
+    if names and PROVIDER.has_table:
         by_name = {c.get("name"): c["id"] for c in columns()}
         missing = [n for n in names.values() if n not in by_name]
         if missing and strict:
@@ -124,6 +133,14 @@ def load_client(path):
         cfg = json.load(f)
     cfg["_path"] = path
     return cfg
+
+
+def prov():
+    """The configured provider; Clay when no client file set one (the tests' fake Clay path)."""
+    global PROVIDER
+    if PROVIDER is None:
+        PROVIDER = gtm_provider.ClayProvider(sys.modules[__name__])
+    return PROVIDER
 
 
 def clay(op, live, **kw):
@@ -222,7 +239,6 @@ def blocked_search(brand, brand_domain, row, log):
         log["steps"].append({"step": "parent fallback", "from": found["domain"], "to": domain,
                              "why": move["why"][:300]})
         print(f"next move: {brand_domain} returned no one, trying {domain}", file=sys.stderr, flush=True)
-        clay("update-rows", True, ws=WS, table=TABLE, records=json.dumps([{"id": row, "cells": {F_DOMAIN: domain}}]))
         people = search_people(row, domain, log)
         hops.append(domain)
         if people:
@@ -342,7 +358,10 @@ def ensure_why_column(live):
 
 def ensure_pick_columns(live):
     """Person, Title and Why: what Sabo reads. Caleb, 2026-10-16, on the table: "We're not as
-    goated as we pitched yet". The email showed and the person it belonged to did not."""
+    goated as we pitched yet". The email showed and the person it belonged to did not.
+    A provider with no table has no view to set up; the record file holds everything."""
+    if not prov().has_table:
+        return {}
     return {key: ensure_column(name, live) for key, name in PICK_COLUMNS.items()}
 
 
@@ -371,6 +390,8 @@ def setup(live, hide=()):
     buyer keywords stopped the search returning athletes and ambassadors, and Sabo's table
     showed emails with no name or reason next to them.
     """
+    if not prov().has_table:
+        raise ClayFailed(f"--setup prepares a Clay table; the {prov().name} provider has none to set up")
     col = next(c for c in columns() if c["id"] == F_PEOPLE)
     ps = PEOPLE_SEARCH
     want = {"job_title_keywords": json.dumps(ps["keywords"]), "job_title_exclude_keywords": json.dumps(ps["excludes"]),
@@ -400,21 +421,37 @@ def emit(log):
 
 
 def search_people(row, domain, log):
-    state, size = run_and_wait(F_PEOPLE, row)
-    people = (state.get("fields") or {}).get("people", [])
-    log["steps"].append({"step": "Clay people search", "domain": domain, "found": len(people), "row_chars": size})
+    p = prov()
+    people = p.people_search(row, domain, PEOPLE_SEARCH)
+    log["steps"].append({"step": f"{p.label} people search", "domain": domain, "found": len(people),
+                         **getattr(p, "last_meta", {})})
     return people
 
 
 def email_for(row, person, log):
     url = person.get("url") or person.get("profile_url") or person.get("profile")
-    clay("update-rows", True, ws=WS, table=TABLE, records=json.dumps([{"id": row, "cells": {F_PROFILE: url}}]))
-    email = (run_and_wait(F_FINDYMAIL, row)[0].get("fields") or {}).get("email")
-    verdict = None
-    if email:
-        verdict = (run_and_wait(F_VERIFY, row)[0].get("fields") or {}).get("status")
+    email = prov().find_email(row, {**person, "url": url})
+    verdict = prov().verify_email(row, email) if email else None
     log["steps"].append({"step": "email", "person": person.get("name"), "email": email, "zerobounce": verdict})
     return url, email, verdict
+
+
+def show(row, cells):
+    """Write role-keyed cells to the provider's view; empty ids (no table) are dropped."""
+    cells = {k: v for k, v in cells.items() if k}
+    if cells:
+        prov().show(row, cells)
+
+
+def save_record(brand, domain, result, costs=(), lane="brand buyer"):
+    """The brand's contact, in the client's record file, before any view is written from it."""
+    if not RECORDS_FILE:
+        return None
+    rec = {"brand": brand, "domain": domain, "creator": CREATOR, "lane": lane, "provider": prov().name,
+           "view_row": result.get("row"), "contact": {k: result.get(k) for k in (
+               "person", "title", "email", "zerobounce", "profile", "domain", "why", "status", "reason")},
+           "candidates": result.get("team") or [], "last_costs": list(costs)}
+    return gtm_provider.save_record(RECORDS_FILE, _norm(brand), rec)
 
 
 def email_problem(email, verdict, allowed):
@@ -477,6 +514,7 @@ def finish(brand_domain, row, log, t0, before, cols):
     people = search_people(row, domain, log)
     if not people:
         people, domain, hops, trusted = blocked_search(log["brand"], brand_domain, row, log)
+    log["team"] = [(p.get("name"), p.get("title")) for p in people]
     if not people:
         tried = ", ".join(hops) or "no related company in the evidence"
         log["result"] = {"person": None, "row": row,
@@ -537,30 +575,40 @@ def finish(brand_domain, row, log, t0, before, cols):
         why = why[:-1] + f"; ZeroBounce called {email} {verdict or 'unknown'}, so send it after the valid ones."
     elif problem:
         why = why[:-1] + f"; this email is at {email.split('@')[-1]}, not the brand, so do not use it."
-    name, title = people[pick].get("name"), people[pick].get("title")
-    cells = {cols.get("why"): why, cols.get("person"): name, cols.get("title"): title,
-             cols.get("status"): status_for(email, problem, why),
-             cols.get("contact"): contact_line(name, title, email, why)}
-    cells = {k: v for k, v in cells.items() if k}
-    if cells:
-        clay("update-rows", True, ws=WS, table=TABLE, records=json.dumps([{"id": row, "cells": cells}]))
     log["result"] = {"person": people[pick].get("name"), "title": people[pick].get("title"), "profile": url,
-                     "email": email, "zerobounce": verdict, "domain": domain, "row": row, "why": why}
-    return done(log, before, t0)
+                     "email": email, "zerobounce": verdict, "domain": domain, "row": row, "why": why,
+                     "status": status_for(email, problem, why)}
+    return done(log, before, t0, cols)
+
+
+def view_cells(result, cols):
+    """The view's cells, written from the record: a pick, or why there is none."""
+    if result.get("person") is not None:
+        name, title, why = result["person"], result.get("title"), result.get("why")
+        return {cols.get("why"): why, cols.get("person"): name, cols.get("title"): title,
+                cols.get("status"): result.get("status"),
+                cols.get("contact"): contact_line(name, title, result.get("email"), why)}
+    if not cols.get("why"):
+        return {}
+    # Celsius, 2026-10-16: Jev stopped on a "Mentor" and the row said nothing about why.
+    seen = ", ".join(f"{n} ({t or 'no title'})" for n, t in result.get("candidates") or [])
+    why = f"No one picked: {result['reason']}" + (f"; the search returned {seen}." if seen else ".")
+    return {cols.get("why"): why, cols.get("status"): f"Needs work: {result['reason']}"}
 
 
 def done(log, before, t0, cols=None):
     result = log.get("result") or {}
-    why_field = (cols or {}).get("why")
-    if why_field and result.get("person") is None and result.get("row"):
-        # Celsius, 2026-10-16: Jev stopped on a "Mentor" and the row said nothing about why.
-        seen = ", ".join(f"{n} ({t or 'no title'})" for n, t in result.get("candidates") or [])
-        why = f"No one picked: {result['reason']}" + (f"; the search returned {seen}." if seen else ".")
-        cells = {why_field: why, (cols or {}).get("status"): f"Needs work: {result['reason']}"}
-        clay("update-rows", True, ws=WS, table=TABLE,
-             records=json.dumps([{"id": result["row"], "cells": {k: v for k, v in cells.items() if k}}]))
-    after = clay("credits", True).get("data", {}).get("balance")
+    if result.get("person") is None and result.get("reason"):
+        result.setdefault("status", f"Needs work: {result['reason']}")
+    costs = prov().drain_costs()
+    save_record(log["brand"], log.get("domain"), {**result, "team": log.get("team")}, costs,
+                lane=log.get("lane", "brand buyer"))
+    if result.get("row"):
+        show(result["row"], view_cells(result, cols or {}))
+    after = prov().balance()
     log["credits_observed"] = round(before - after, 2) if before is not None and after is not None else None
+    log["costs"], log["cost"] = costs, gtm_provider.cost_total(costs)
+    log["provider"] = prov().name
     log["seconds"] = round(time.time() - t0)
     emit(log)
     return log
@@ -590,8 +638,12 @@ def main(argv=None):
     log = {"brand": a.brand, "domain": a.domain, "live": a.live, "steps": [],
            "at": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
     t0 = time.time()
-    before = clay("credits", True).get("data", {}).get("balance")
-    if a.people_limit:
+    p = prov()
+    log["provider"] = p.name
+    before = p.balance()
+    if not p.has_table:
+        log["people_limit"] = PEOPLE_SEARCH.get("limit")
+    elif a.people_limit:
         log["people_limit"] = set_people_limit(a.people_limit, a.live)
     else:
         binding = people_limit_binding()[1]
@@ -603,21 +655,16 @@ def main(argv=None):
     if row and a.live:
         return finish(a.domain, row, log, t0, before, cols)
 
-    added = clay("add-rows", a.live, ws=WS, table=TABLE, records=json.dumps(
-        [{F_BRAND: a.brand, F_DOMAIN: a.domain, F_CREATOR: CREATOR}]))
-    log["steps"].append({"step": "add row", "ms": added["_ms"]})
+    opened = p.open_account(a.brand, a.domain, CREATOR, a.live)
+    log["steps"].append({"step": "add row", "ms": opened["receipt"].get("_ms")})
     if not a.live:
-        print(json.dumps({"dry_run": added, "people_limit": log["people_limit"],
+        print(json.dumps({"dry_run": opened["receipt"], "provider": p.name, "people_limit": log["people_limit"],
                           "pick_columns": {k: v or f"would add {PICK_COLUMNS[k]!r}" for k, v in cols.items()},
                           "if_empty": "gtme next-move: read the brand's site, rerun on the related company Jev rates best",
                           "next": ["people search", "next-move if 0", "Jev rank", "find email",
                                    "verify", "retry runner-up once if invalid", "write why"]}, indent=1))
         return log
-    # listRowsAfter stopped after 10 of 397 rows on 2026-10-16, so take the id from the add response.
-    ids = re.findall(r'"(r_[0-9A-Za-z]{15,})"', json.dumps(added.get("data")))
-    row = ids[0] if len(set(ids)) == 1 else None
-    if not row:
-        raise ClayFailed(f"added, but could not find the new row: {json.dumps(added)[:600]}")
+    row = opened["ref"]
     print(f"row {row}", file=sys.stderr, flush=True)
     save_row(a.brand, row)
     return finish(a.domain, row, log, t0, before, cols)

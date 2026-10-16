@@ -145,7 +145,8 @@ class _Base(unittest.TestCase):
         L.RUN_LOG = os.path.join(self.tmp.name, "runs.jsonl")
         self.saved_rows_file = L.ROWS_FILE
         self.saved_globals = {k: getattr(L, k) for k in list(L.ROLES.values()) + [
-            "WS", "TABLE", "VIEW", "CLIENT_VIEW", "CREATOR", "PEOPLE_SEARCH", "CLIENT_FILE", "RUN_LOG"]}
+            "WS", "TABLE", "VIEW", "CLIENT_VIEW", "CREATOR", "PEOPLE_SEARCH", "CLIENT_FILE", "RUN_LOG",
+            "PROVIDER", "RECORDS_FILE"]}
         L.CLIENT_FILE = os.path.join(self.tmp.name, "minimal-client.json")
         with open(L.CLIENT_FILE, "w") as f:
             json.dump({}, f)

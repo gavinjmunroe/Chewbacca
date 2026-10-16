@@ -113,22 +113,18 @@ def follow(seed, live, cols):
     log = {"brand": brand, "domain": cur["domain"], "live": live, "seed": seed["name"],
            "lane": "follow past buyers", "steps": [], "at": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
     t0 = time.time()
-    before = L.clay("credits", True).get("data", {}).get("balance")
+    before = L.prov().balance()
     row = L.load_rows().get(L._norm(brand))
     if row:
         log["steps"].append({"step": "reuse row", "row": row})
     else:
-        added = L.clay("add-rows", live, ws=L.WS, table=L.TABLE, records=json.dumps(
-            [{L.F_BRAND: brand, L.F_DOMAIN: cur["domain"], L.F_CREATOR: L.CREATOR}]))
+        opened = L.prov().open_account(brand, cur["domain"], L.CREATOR, live)
         if not live:
-            print(json.dumps({"dry_run": added, "seed": seed["name"], "brand": brand,
+            print(json.dumps({"dry_run": opened["receipt"], "seed": seed["name"], "brand": brand,
                               "next": ["people search at " + cur["domain"], "seed first if found",
                                        "seed email + verify", "Status " + WARM]}, indent=1))
             return log
-        ids = sorted(set(L.re.findall(r'"(r_[0-9A-Za-z]{15,})"', json.dumps(added.get("data")))))
-        if len(ids) != 1:
-            raise L.ClayFailed(f"added, but could not find the new row: {json.dumps(added)[:600]}")
-        row = ids[0]
+        row = opened["ref"]
         L.save_row(brand, row)
         log["steps"].append({"step": "add row", "row": row})
     if not live:
@@ -140,12 +136,11 @@ def follow(seed, live, cols):
     L.jev_rank, L.emit = prefer_seed(rank, seed["name"]), (lambda _log: None)
     try:
         chain = L.finish(cur["domain"], row, {"brand": brand, "domain": cur["domain"], "live": True,
-                                              "steps": log["steps"]}, t0, before, cols)
+                                              "steps": log["steps"], "lane": log["lane"]}, t0, before, cols)
     finally:
         L.jev_rank, L.emit = rank, emit
     result = dict(chain.get("result") or {})
-    found = ((L.read_row(row).get("cells", {}).get(L.F_PEOPLE) or {}).get("fields") or {}).get("people") or []
-    result["team"] = [(p.get("name"), p.get("title")) for p in found]
+    result["team"] = [tuple(t) for t in chain.get("team") or []]
     seed_in_search = any(L._norm(n) == L._norm(seed["name"]) for n, _ in result["team"])
     if result.get("email") and not L.email_problem(result["email"], result.get("zerobounce"), [cur["domain"]]):
         result["door"] = (result.get("person"), result["email"])
@@ -163,18 +158,22 @@ def follow(seed, live, cols):
     result["seed_verdict"] = verdict
     why = why_line(seed, result, seed_in_search, email, problem)
     status = WARM if not problem else f"{WARM}; needs work: {problem}"
-    cells = {cols.get("person"): seed["name"], cols.get("title"): cur["title"], cols.get("why"): why,
-             cols.get("status"): status, cols.get("contact"): L.contact_line(seed["name"], cur["title"],
-                                                                              None if problem else email, why)}
-    L.clay("update-rows", True, ws=L.WS, table=L.TABLE,
-           records=json.dumps([{"id": row, "cells": {k: v for k, v in cells.items() if k}}]))
+    costs = (chain.get("costs") or []) + L.prov().drain_costs()
+    L.save_record(brand, cur["domain"], {"person": seed["name"], "title": cur["title"], "email": email,
+                                         "zerobounce": verdict, "profile": seed.get("linkedin"),
+                                         "domain": cur["domain"], "why": why, "status": status, "row": row,
+                                         "team": result["team"]}, costs, lane="follow past buyers")
+    L.show(row, {cols.get("person"): seed["name"], cols.get("title"): cur["title"], cols.get("why"): why,
+                 cols.get("status"): status, cols.get("contact"): L.contact_line(seed["name"], cur["title"],
+                                                                                  None if problem else email, why)})
     seed["current"].update({"email": email, "zerobounce": verdict, "email_problem": problem,
                             "door": result.get("door"), "row": row,
                             "checked": time.strftime("%Y-%m-%d"), "in_clay_search": seed_in_search})
     log["result"] = {"person": seed["name"], "email": email, "zerobounce": verdict, "problem": problem,
                      "row": row, "status": status, "why": why, "team": result["team"],
                      "chain_pick": result.get("person"), "door": result.get("door")}
-    after = L.clay("credits", True).get("data", {}).get("balance")
+    after = L.prov().balance()
+    log["costs"], log["cost"] = costs, L.gtm_provider.cost_total(costs)
     log["credits_observed"] = round(before - after, 2) if before is not None and after is not None else None
     log["seconds"] = round(time.time() - t0)
     L.emit(log)

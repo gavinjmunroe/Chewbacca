@@ -113,6 +113,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - reference_chewbacca_connect: `chewbacca connect` wires Claude Code, Codex, Cursor, Gemini and chat-app exports...
 - reference_chewbacca_gtm_arsenal: Where Chewbacca's GTM tooling lives after the 2026-10-09 scavenge: repo atlas, 5...
 - feedback_rule_on_clear_gtm_calls: A GTM call with a clear best answer gets made and reported with its reason, never asked of Caleb in jargon (catch-all, 2026-10-16)
+- feedback_model_baseline_and_land_traps: codex exec needs stdin closed and its hook can eat the answer; claude -p shares the weekly cap; cherry-pick land conflict means land --paths, then commit local copies before merging (10/16)
 - reference_gtme_next_move: gtme next-move, the blocker loop that replaced parents.json: moves from evidence, boundaries as data, Jev ranks, attempts in the lesson ledger
 - reference_gtme_lesson_ledger: GTME lesson ledger (team/gtme-lessons, `chewbacca gtme lesson plan`): experiments with oracles that refuse unsupported claims, handed to the next client
 - reference_gtme_lesson_ledger: GTME lesson ledger (team/gtme-lessons, `chewbacca gtme lesson plan`): experiments with oracles that refuse unsupported claims, handed to the next client; fit-share and split checks, how to turn PROSE into CHECKED

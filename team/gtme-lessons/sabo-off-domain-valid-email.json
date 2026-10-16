@@ -22,9 +22,9 @@
     "domain_checked": true,
     "version": 1
   },
-  "result": "Gymshark's search returned a Social Media Ambassador whose email was at buckedup.com, and ZeroBounce called it valid. With the domain check and one runner-up retry, Gymshark, Celsius and Barebells all ended on valid on-domain buyers.",
+  "result": "Gymshark's search returned a Social Media Ambassador whose email was at buckedup.com, and ZeroBounce called it valid. With the domain check and one runner-up retry, Gymshark, Celsius and Barebells all ended on valid on-domain buyers. Ruled 2026-10-16 (Caleb, 'do wtv is best'): a catch-all or unknown verdict doesn't count as verified either.",
   "verdict": "observed",
-  "next_decision": "Keep the domain check in the chain; this is the Zeutara mismatch lesson found again by hand.",
+  "next_decision": "The chain retries the runner-up on catch-all or unknown too, keeps a catch-all pick only as 'catch-all, unverified, send after the valid ones', and calls gtme_lessons.verified_email so chain and oracle can't drift (sent to the live_chain session 2026-10-16).",
   "check": "Run `chewbacca gtme lesson verified-email` on every found email before spending on outreach.",
   "check_ref": [
     "kit:tools/gtme_lessons.py::def verified_email"
@@ -37,5 +37,22 @@
     "~/Downloads/Sabo handoff/claude/live_chain.py"
   ],
   "scope": "Brand contacts found by people search plus Findymail.",
-  "history": []
+  "history": [
+    {
+      "date": "2026-10-16",
+      "result": "Gymshark's search returned a Social Media Ambassador whose email was at buckedup.com, and ZeroBounce called it valid. With the domain check and one runner-up retry, Gymshark, Celsius and Barebells all ended on valid on-domain buyers.",
+      "verdict": "observed",
+      "next_decision": "Keep the domain check in the chain; this is the Zeutara mismatch lesson found again by hand.",
+      "oracle": {
+        "metric": "verified_email_rate",
+        "numerator": 3,
+        "denominator": 3,
+        "unit": "contacts",
+        "source": "zerobounce",
+        "baseline": "verifier status alone",
+        "domain_checked": true,
+        "version": 1
+      }
+    }
+  ]
 }

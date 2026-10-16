@@ -270,6 +270,8 @@ def jev_check(cfg, brand, items, jev=run_jev):
         return None
 
 
+# TODO: when tools/creator_gtm/provider.py lands (tab local_e6857244, ~/code/wt-gtm-provider), get
+# jobs from Provider.company_signals and send writes through it, not ats_jobs and clay() directly.
 def collect(cfg, today, fetch=fetch_json, jev=run_jev):
     """Every ATS board in config: keep creator-team titles in the window, let Jev judge, append."""
     spend = cfg["spend_now"]

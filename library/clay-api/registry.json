@@ -1473,6 +1473,26 @@
       "verified": false
     },
     {
+      "name": "campaign-recovery-resume",
+      "kind": "write",
+      "gate": "write:campaign-state",
+      "args": ["ws", "campaign"],
+      "summary": "Resume one of the three paused original Zeutara recovery campaigns (status active), only after a fresh read proves the incident senders are gone and all 16 holds are out of the base audience and either finished or blocklisted. Nothing but status changes, verified against provider readback.",
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "setCampaignStatus",
+          "args": { "ws": "ws", "campaignId": "campaign", "status": "status" }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "command": "PATCH /v3/workspaces/:ws/campaigns/:cam_id {\"status\":\"active\"}, the Campaigns UI's own resume request and the same endpoint Togari's bounce guard pauses with",
+        "semantics": "Only status changes from paused to active, verified against provider readback. On 2026-10-16 clay campaigns update refused a status key (validation_error, nothing changed)."
+      },
+      "verified": false
+    },
+    {
       "name": "campaign-update",
       "kind": "write",
       "gate": "write:campaign-draft",

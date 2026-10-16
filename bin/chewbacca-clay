@@ -1080,6 +1080,13 @@ function gradeGate(op, request, args) {
 // written only for a prompt chat-approval.sh judged typed by a person. The
 // caller's own session's record wins; otherwise the freshest.
 const CHAT_APPROVAL_MS = 2 * 3600 * 1000;
+// The three Zeutara campaigns the 2026-10-16 recovery covers. A recovery op
+// aimed anywhere else is never approved from chat, by either runtime.
+const RECOVERY_WS = "1372623";
+const RECOVERY_CAMPAIGNS = ["cam_0tmpnciWKD2QKjY3QAT", "cam_0tmpndgzjN7hMBX8m8v", "cam_0tmrvre4dsi7pjvsfcy"];
+function inRecoveryScope(args) {
+  return String(args.ws) === RECOVERY_WS && RECOVERY_CAMPAIGNS.includes(args.campaign);
+}
 function chatApproval(name, request, args = {}) {
   const nativeRecovery = ["campaign-restrict", "campaign-sender-isolate", "campaign-recovery-resume"].includes(name);
   const dir = FIXTURES
@@ -1099,7 +1106,14 @@ function chatApproval(name, request, args = {}) {
     if (!rec || rec.v !== 2 || rec.interactive !== true || rec.session_id !== sid) continue;
     const age = Date.now() - Number(rec.at) * 1000;
     if (!(age >= 0 && age < CHAT_APPROVAL_MS)) continue;
-    if (nativeRecovery) continue;
+    // Recovery ops take Claude's attendance only from the caller's own tab,
+    // never the freshest record from another tab, and only inside the scope.
+    // On 2026-10-16 Caleb typed the relaunch instruction into the Claude tab
+    // that ran the repair; the Codex-only branch refused it as unauthenticated.
+    if (nativeRecovery) {
+      if (own && sid === own && inRecoveryScope(args)) return rec;
+      continue;
+    }
     if (sid === own) return rec;
     if (!best || Number(rec.at) > Number(best.at)) best = rec;
   }
@@ -1121,9 +1135,9 @@ function chatApproval(name, request, args = {}) {
         const age = Date.now() - Number(rec.at) * 1000;
         if (!(age >= 0 && age < CHAT_APPROVAL_MS)) return null;
         if (nativeRecovery) {
-          const campaigns = ["cam_0tmpnciWKD2QKjY3QAT", "cam_0tmpndgzjN7hMBX8m8v", "cam_0tmrvre4dsi7pjvsfcy"];
+          const campaigns = RECOVERY_CAMPAIGNS;
           const scope = rec.recovery_scope;
-          if (String(args.ws) !== "1372623" || !campaigns.includes(args.campaign) ||
+          if (!inRecoveryScope(args) ||
               scope?.workspaceId !== "1372623" ||
               !Array.isArray(scope.campaignIds) || scope.campaignIds.length !== 3 ||
               !campaigns.every(id => scope.campaignIds.includes(id)) ||
@@ -1284,6 +1298,17 @@ async function runOp(name, kv, flags) {
   const sendArgs = compose(op, norm.values);
   let restriction;
   let senderIsolation;
+  let recoveryResume;
+  if (name === "campaign-recovery-resume") {
+    try {
+      const policy = require("./lib/clay-campaign-recovery-resume");
+      const snapshot = await policy.collectResumeSnapshot(recoveryRead, sendArgs);
+      recoveryResume = { snapshot, plan: policy.planResume(snapshot, sendArgs) };
+      sendArgs.status = recoveryResume.plan.input.status;
+    } catch (error) {
+      out({ ok: false, op: name, class: "refused", reason: error.message, sent: false }, EXIT.refused);
+    }
+  }
   if (name === "campaign-sender-isolate") {
     try {
       const snapshot = await recoveryRead("campaign", { ws: sendArgs.ws, campaign: sendArgs.campaign });
@@ -1325,7 +1350,7 @@ async function runOp(name, kv, flags) {
   }
   if (flags.dryRun) {
     out({ ok: true, op: name, dry_run: true, sent: false, kind: isWrite(op) ? "write" : "read", gate: op.gate, surface: cands[0].s.type,
-      call: surfaceKey(op, cands[0].s), request, ...(restriction ? { protection: restriction.plan } : {}), ...(senderIsolation ? { protection: senderIsolation.plan } : {}), ...(op.verified === false ? { verified: false } : {}) }, EXIT.ok);
+      call: surfaceKey(op, cands[0].s), request, ...(restriction ? { protection: restriction.plan } : {}), ...(senderIsolation ? { protection: senderIsolation.plan } : {}), ...(recoveryResume ? { protection: recoveryResume.plan } : {}), ...(op.verified === false ? { verified: false } : {}) }, EXIT.ok);
   }
   if (isWrite(op)) {
     // One verdict row per write (tools/verdicts.py): the op, never its payload.
@@ -1350,7 +1375,12 @@ async function runOp(name, kv, flags) {
     if (prep.error) refuse(prep.error);
     if (restriction) prep.files = [...(prep.files || []), path.join(ROOT, "bin/lib/clay-campaign-restriction.js"), path.join(ROOT, "bin/lib/clay-restriction-snapshot.js")];
     if (senderIsolation) prep.files = [...(prep.files || []), path.join(ROOT, "bin/lib/clay-campaign-sender-isolation.js")];
+    if (recoveryResume) prep.files = [...(prep.files || []), path.join(ROOT, "bin/lib/clay-campaign-recovery-resume.js")];
     const before = fingerprint(prep);
+    // Everything but the session file, for the resume recheck below.
+    const sessionFiles = new Set((prep.files || []).filter((f) => !f.startsWith(ROOT)));
+    const stableFingerprint = (p) => fingerprint({ ...p, files: (p.files || []).filter((f) => !sessionFiles.has(f)) });
+    const beforeStable = stableFingerprint(prep);
     const shownHash = sha256(showable({ op: name, request }));
     // A reply answers a person who wrote first, in their own thread, from the
     // inbox they wrote to. Caleb, 2026-10-11, after 16 investors sat a weekend
@@ -1386,8 +1416,23 @@ async function runOp(name, kv, flags) {
       } catch (error) { refuse(`${error.message}; nothing was sent`); }
       if (fingerprint(prep) !== before) refuse("Write dependencies changed during sender isolation recheck; nothing was sent");
     }
+    let sender = prep;
+    if (recoveryResume) {
+      try {
+        const policy = require("./lib/clay-campaign-recovery-resume");
+        policy.verifyResumeBeforeWrite(await policy.collectResumeSnapshot(recoveryRead, sendArgs), recoveryResume.plan);
+      } catch (error) { refuse(`${error.message}; nothing was sent`); }
+      // The recheck reads go through the same Clay session, which refreshes
+      // its cookie file (2026-10-16: the first resume refused on exactly that).
+      // Reload the session and require everything else to be unchanged.
+      const fresh = await prepareWrite(op, s, request);
+      if (fresh.error) refuse(fresh.error);
+      fresh.files = [...(fresh.files || []), path.join(ROOT, "bin/lib/clay-campaign-recovery-resume.js")];
+      if (stableFingerprint(fresh) !== beforeStable) refuse("Write dependencies other than the session changed during the resume recheck; nothing was sent");
+      sender = fresh;
+    }
     const t0 = Date.now();
-    const r = await prep.send();
+    const r = await sender.send();
     const tried = [{ surface: s.type, call: surfaceKey(op, s), ok: !!r.ok, ms: Date.now() - t0, ...(r.ok ? {} : { class: r.class, reason: r.reason }) }];
     verdict(r.ok ? "sent" : "failed", r.ok ? "" : `${r.class}: ${r.reason}`);
     if (!r.ok) {
@@ -1405,6 +1450,16 @@ async function runOp(name, kv, flags) {
         out({ ok: proof.verified, op: name, sent: true, protection: proof, readyToResume: false, tried }, proof.verified ? EXIT.ok : EXIT.failed);
       } catch (error) {
         out({ ok: false, op: name, sent: true, readyToResume: false, reason: `Restriction write attempted; readback is unverified: ${error.message}`, tried }, EXIT.failed);
+      }
+    }
+    if (recoveryResume) {
+      try {
+        const proof = require("./lib/clay-campaign-recovery-resume").verifyResume(
+          recoveryResume.snapshot, recoveryResume.plan,
+          await recoveryRead("campaign", { ws: sendArgs.ws, campaign: sendArgs.campaign }));
+        out({ ok: proof.verified, op: name, sent: true, protection: proof, tried }, proof.verified ? EXIT.ok : EXIT.failed);
+      } catch (error) {
+        out({ ok: false, op: name, sent: true, reason: `Resume write attempted; readback is unverified: ${error.message}`, tried }, EXIT.failed);
       }
     }
     if (senderIsolation) {

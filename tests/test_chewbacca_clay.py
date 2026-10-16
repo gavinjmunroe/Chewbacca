@@ -698,6 +698,34 @@ def test_sender_isolation_derives_only_the_exact_protective_payload():
     code, out, _ = run(SENDER_ISOLATION_FIXTURES, {}, "campaign-sender-isolate", *argv,
                        'input={"status":"active"}', "--dry-run")
     ok(code == 2 and "unknown arg" in out["reason"], "callers cannot override the derived payload")
+
+
+def test_recovery_ops_take_claude_approval_only_from_own_tab_in_scope():
+    # 2026-10-16: Caleb typed the relaunch instruction into the Claude tab doing
+    # the repair. Recovery ops honor that tab's own record, never another tab's,
+    # and never outside the three campaigns.
+    import json as _json
+    import tempfile
+    import time as _time
+    argv = ["ws=1372623", "campaign=" + SENDER_ISOLATION_CAMPAIGN["id"], "--allow-writes"]
+    with tempfile.TemporaryDirectory() as d:
+        def put(sid):
+            with open(os.path.join(d, sid + ".json"), "w") as f:
+                _json.dump({"v": 2, "interactive": True, "at": int(_time.time()) - 60, "session_id": sid}, f)
+        put("s-other-tab")
+        env = {"CHEWBACCA_CLAY_CHAT_APPROVAL_DIR": d, "CLAUDE_CODE_SESSION_ID": "s-repair-tab"}
+        code, out, _ = run(SENDER_ISOLATION_FIXTURES, {}, "campaign-sender-isolate", *argv, env_extra=env)
+        ok(code == 3 and "did not approve" in out["reason"], f"another tab's chat record never approves a recovery op: {out}")
+        put("s-repair-tab")
+        code, out, _ = run(SENDER_ISOLATION_FIXTURES, {}, "campaign-sender-isolate", *argv, env_extra=env)
+        ok("did not approve" not in str(out.get("reason", "")), f"the repair tab's own fresh record approves an in-scope recovery op: {out}")
+        outside = {**SENDER_ISOLATION_CAMPAIGN, "id": "cam_outside"}
+        code, out, _ = run({"api-anything/getCampaign.json": {**SENT, "data": outside}}, {}, "campaign-sender-isolate",
+                           "ws=1372623", "campaign=cam_outside", "--allow-writes", env_extra=env)
+        ok(code == 3 and out.get("sent") is not True, f"a recovery op outside the three campaigns is refused: {out}")
+        open(os.path.join(d, "STOPPED"), "w").write("1")
+        code, out, _ = run(SENDER_ISOLATION_FIXTURES, {}, "campaign-sender-isolate", *argv, env_extra=env)
+        ok(code == 3 and "did not approve" in out["reason"], "a standing stop refuses the recovery op too")
 CLI_READ_LEAVES = {"list", "get", "analytics", "balance", "search-ids", "search-count", "query", "query-live", "query-usage",
                    "audience", "summary", "activities", "list-values", "steps", "reference", "traffic", "aggregate", "search",
                    "schema", "validate", "format", "diagram", "preview-sequence", "resolve", "sender-accounts", "skills",
@@ -736,6 +764,12 @@ def walk_gate(reg_path=None):
                 continue
             mutates = op["kind"] == "write" or surface_mutates(s, sops)
             code, out, p = run(fixtures, {}, op["name"], *argv, "--surface", s["type"], env_extra=extra)
+            if mutates and op["name"] == "campaign-recovery-resume":
+                # Its live preconditions refuse sample args before the write gate.
+                ok(code == 3 and out["class"] == "refused" and out.get("sent") is False,
+                   f"campaign-recovery-resume ran on sample args: {p.stdout[:200]}")
+                walked += 1
+                continue
             if mutates:
                 ok(code == 3 and out["class"] == "refused" and "allow-writes" in out["reason"],
                    f"{op['name']} via {s['type']} ran without the gate: {p.stdout[:200]}")
@@ -997,6 +1031,7 @@ def test_fixtures_are_scrubbed():
 
 def main():
     test_sender_isolation_derives_only_the_exact_protective_payload()
+    test_recovery_ops_take_claude_approval_only_from_own_tab_in_scope()
     for fn in (test_registry_matches_spec, test_ops_json_shape, test_routes_to_fastest_measured,
                test_falls_through_on_failure_and_truncation, test_no_complete_surface_fails_closed, test_args_pick_the_surface, test_write_gate,
                test_dry_run_builds_each_write, test_dry_run_never_loads_the_engine, test_derived_writes_stay_gated,

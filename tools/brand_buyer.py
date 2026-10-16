@@ -6,7 +6,9 @@ The client file names the table, its columns, the creator and the parents file; 
 library/gtm/brand-buyer/client.example.json. Sabo (2026-10-16) was the first client.
 
 Chewbacca picks the domain to search, Clay's native people search finds candidates, and when
-the brand domain has nobody the chain reruns on the parent domain from parents.json. Jev scores
+the brand domain has nobody, gtme next-move (tools/next_move.py) reads the brand's own site,
+derives the companies it names as owner or links to, and reruns the search on the one Jev rates
+most likely, with no lookup table. Jev scores
 every candidate on title and remit, the top one goes to Findymail and ZeroBounce, and an invalid
 email gets one retry on the runner-up. The pick and a one-sentence reason land in the
 "Why this person" column. Every write and paid run goes through `chewbacca clay`, which keeps
@@ -24,6 +26,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from gtme_lessons import same_org, verified_email  # noqa: E402
+import next_move  # noqa: E402
 
 # Set from the client file by configure(); nothing here is one client's table.
 WS = TABLE = VIEW = None
@@ -33,7 +36,14 @@ PICK_COLUMNS = {"person": "Person", "title": "Title", "why": WHY_COLUMN, "status
 ROWS_FILE = None
 
 HERE = os.getcwd()
-PARENTS = RUN_LOG = None
+RUN_LOG = None
+# Seams for the blocked-search loop, swapped in tests: the site reader, Jev (None is live Jev),
+# and the lesson ledger the loop records org hops into (None is team/gtme-lessons).
+SITE_READ = next_move.read_site
+NEXT_MOVE_JEV = None
+NEXT_MOVE_LEDGER = None
+# Moves the loop may run inside one brand's chain: one free read and up to three reruns.
+NEXT_MOVE_STEPS = 4
 
 # Keywords that put a title on the buying side. Measured on one batch of four Vitamin Well
 # people: only Scout's title carried one, and Jev agreed she was the partnership lead.
@@ -79,14 +89,14 @@ class ClayFailed(SystemExit):
 
 def configure(cfg, strict=True):
     """Point the chain at one client's table: ids, views, creator, parents, people search."""
-    global WS, TABLE, VIEW, CLIENT_VIEW, CREATOR, PARENTS, RUN_LOG, ROWS_FILE, PEOPLE_SEARCH
+    global WS, TABLE, VIEW, CLIENT_VIEW, CREATOR, RUN_LOG, ROWS_FILE, PEOPLE_SEARCH
     WS, TABLE = str(cfg.get("ws", WS)), cfg.get("table", TABLE)
     VIEW = cfg.get("view", VIEW)
     CLIENT_VIEW = cfg.get("client_view") or cfg.get("view") or CLIENT_VIEW
     CREATOR = cfg.get("creator", CREATOR)
     base = os.path.dirname(os.path.abspath(cfg["_path"])) if cfg.get("_path") else HERE
     here = lambda key, default: os.path.join(base, os.path.expanduser(cfg.get(key, default)))
-    PARENTS, RUN_LOG, ROWS_FILE = here("parents", "parents.json"), here("run_log", "runs.jsonl"), here("rows", "rows.json")
+    RUN_LOG, ROWS_FILE = here("run_log", "runs.jsonl"), here("rows", "rows.json")
     PEOPLE_SEARCH = {**PEOPLE_SEARCH, **cfg.get("people_search", {})}
     # The client file is shared with other Sabo tools (watcher, ledger), so it can name
     # columns this chain never reads; only the roles below are looked up.
@@ -99,7 +109,6 @@ def configure(cfg, strict=True):
         for role, name in names.items():
             if name in by_name:
                 globals()[ROLES[role]] = by_name[name]
-    parent_domains.__defaults__ = (PARENTS,)
 
 
 CLIENTS_DIR = os.path.expanduser("~/.chewbacca/gtm/clients")
@@ -181,36 +190,54 @@ def find_row(brand, domain):
     return found
 
 
-# ── parent fallback ──────────────────────────────────────────────────────────
+# ── blocked search ───────────────────────────────────────────────────────────
 
+# Barebells, 2026-10-16: barebells.com returned 0 and the parent came from a parents.json row
+# filled by hand after the miss, so nothing reasoned. Now the loop reads the brand's own site
+# ("Barebells is part of Vitamin Well Group", linking career.vitaminwell.com), proposes every
+# related domain plus the other moves, drops what breaks a boundary, and Jev ranks the rest.
 def _norm(name):
     return re.sub(r"[^a-z0-9]", "", (name or "").lower())
 
 
-def parent_domains(brand, tried, path=PARENTS):
-    """Domains parents.json names for this brand, in its order, minus the ones already tried.
+def blocked_search(brand, brand_domain, row, log):
+    """Run gtme next-move on an empty people search. Returns (people, domain, hops)."""
+    found = {"people": [], "domain": brand_domain}
+    hops = []
 
-    search_domain is free text ("liquid-iv.com, fallback unilever.com"), so this pulls every
-    domain-shaped token out of it rather than trusting one value.
-    """
-    try:
-        with open(path) as f:
-            entries = json.load(f)
-    except (OSError, json.JSONDecodeError):
-        return []
-    want = _norm(brand)
-    for entry in entries:
-        name = _norm(entry.get("brand"))
-        if name and (want == name or want.startswith(name)):
-            found = re.findall(r"\b[a-z0-9-]+(?:\.[a-z0-9-]+)+\b", (entry.get("search_domain") or "").lower())
-            seen = {d.lower() for d in tried}
-            out = []
-            for d in found:
-                if d not in seen:
-                    seen.add(d)
-                    out.append(d)
-            return out
-    return []
+    def read(move, blocker):
+        try:
+            ev = SITE_READ(brand_domain)
+        except Exception as e:
+            return {"cleared": False, "credits": 0.0, "evidence": {"error": f"site read failed: {e}"}}
+        return {"cleared": False, "credits": 0.0, "evidence": ev}
+
+    def hop(move, blocker):
+        domain = move["target"]
+        log["steps"].append({"step": "parent fallback", "from": found["domain"], "to": domain,
+                             "why": move["why"][:300]})
+        print(f"next move: {brand_domain} returned no one, trying {domain}", file=sys.stderr, flush=True)
+        clay("update-rows", True, ws=WS, table=TABLE, records=json.dumps([{"id": row, "cells": {F_DOMAIN: domain}}]))
+        people = search_people(row, domain, log)
+        hops.append(domain)
+        if people:
+            found.update(people=people, domain=domain)
+        return {"cleared": bool(people), "credits": 0.5}
+
+    blocker = {"client": CREATOR or "brand-buyer", "step": "people_search",
+               "goal": f"the person who decides which outside creators {brand} pays, with a verified email "
+                       f"at {brand} or its parent",
+               "persona": [k.strip() for k in PEOPLE_SEARCH.get("keywords", "").split(",") if k.strip()],
+               "account": {"brand": brand, "domain": brand_domain},
+               "failure": f"Clay people search returned 0 people at {brand_domain}",
+               "evidence": {"filters": {"limit": PEOPLE_SEARCH.get("limit")}, "people": []},
+               "tried": [f"org_hop:{brand_domain}"]}
+    res = next_move.run(blocker, {"read_source:site_read": read, "org_hop": hop}, evaluate=NEXT_MOVE_JEV,
+                        max_steps=NEXT_MOVE_STEPS, ledger=NEXT_MOVE_LEDGER)
+    log["steps"].append({"step": "next move", "decision": res["decision"],
+                         "moves": [{"move": t["move"], "p": t["p"], "cleared": t["cleared"]} for t in res["trace"]],
+                         "next": (res.get("next") or {}).get("signature")})
+    return found["people"], found["domain"], hops
 
 
 # ── ranking ──────────────────────────────────────────────────────────────────
@@ -441,23 +468,14 @@ def save_row(brand, row, path=None):
 
 
 def finish(brand_domain, row, log, t0, before, cols):
-    domain = brand_domain
+    domain, hops = brand_domain, []
     people = search_people(row, domain, log)
     if not people:
-        for parent in parent_domains(log["brand"], [brand_domain]):
-            # Barebells, 2026-10-16: barebells.com returned 0 and the parent row was added by
-            # hand. The chain now points the same row at the parent domain and searches again.
-            log["steps"].append({"step": "parent fallback", "from": domain, "to": parent})
-            print(f"fallback: {domain} returned no one, trying parent {parent}", file=sys.stderr, flush=True)
-            clay("update-rows", True, ws=WS, table=TABLE,
-                 records=json.dumps([{"id": row, "cells": {F_DOMAIN: parent}}]))
-            domain = parent
-            people = search_people(row, domain, log)
-            if people:
-                break
+        people, domain, hops = blocked_search(log["brand"], brand_domain, row, log)
     if not people:
+        tried = ", ".join(hops) or "no related company in the evidence"
         log["result"] = {"person": None, "row": row,
-                         "reason": f"no people at {brand_domain} or any parent domain on file"}
+                         "reason": f"no people at {brand_domain}; next-move tried {tried}"}
         return done(log, before, t0, cols)
 
     ranked, scores, gate = jev_rank(people)
@@ -478,7 +496,7 @@ def finish(brand_domain, row, log, t0, before, cols):
                          "candidates": [(p.get("name"), p.get("title")) for p in people]}
         return done(log, before, t0, cols)
 
-    allowed = [brand_domain, domain] + parent_domains(log["brand"], [])
+    allowed = [brand_domain, domain]
     pick, first_try = ranked[0], None
     url, email, verdict = email_for(row, people[pick], log)
     problem = email_problem(email, verdict, allowed)
@@ -544,9 +562,9 @@ def done(log, before, t0, cols=None):
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("brand", nargs="?")
-    ap.add_argument("domain", nargs="?", help="the brand's own domain; the chain falls back to parents.json")
+    ap.add_argument("domain", nargs="?", help="the brand's own domain; an empty search goes to gtme next-move")
     ap.add_argument("--live", action="store_true")
-    ap.add_argument("--client", default=CLIENT_FILE, help="client slug (sabo) or client.json: table, columns by name, creator, parents")
+    ap.add_argument("--client", default=CLIENT_FILE, help="client slug (sabo) or client.json: table, columns by name, creator")
     ap.add_argument("--setup", action="store_true", help="set up the client table, then stop")
     ap.add_argument("--row", help="rerun on this row (default: the brand's row in rows.json)")
     ap.add_argument("--new-row", action="store_true", help="add a fresh row even if the brand has one")
@@ -584,8 +602,8 @@ def main(argv=None):
     if not a.live:
         print(json.dumps({"dry_run": added, "people_limit": log["people_limit"],
                           "pick_columns": {k: v or f"would add {PICK_COLUMNS[k]!r}" for k, v in cols.items()},
-                          "parent_fallback": parent_domains(a.brand, [a.domain]) or "none on file",
-                          "next": ["people search", "parent fallback if 0", "Jev rank", "find email",
+                          "if_empty": "gtme next-move: read the brand's site, rerun on the related company Jev rates best",
+                          "next": ["people search", "next-move if 0", "Jev rank", "find email",
                                    "verify", "retry runner-up once if invalid", "write why"]}, indent=1))
         return log
     # listRowsAfter stopped after 10 of 397 rows on 2026-10-16, so take the id from the add response.

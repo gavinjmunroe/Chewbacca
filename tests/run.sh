@@ -497,6 +497,9 @@ if group "gtme"; then
   # Oracle reject cases, the sealed held-out retrieval cases and the real ledger's audit; offline.
   check "gtme lesson oracles refuse unsupported claims and retrieval passes the sealed cases" python3 "$ROOT/tests/test_gtme_lessons.py"
   check "gtme lesson ledger in git audits clean" python3 "$ROOT/tools/gtme_lessons.py" audit
+  # Moves from evidence, boundaries as data, Barebells with no parents table; Jev stubbed, offline.
+  check "gtme next-move derives moves from evidence and never runs one a boundary drops" python3 "$ROOT/tests/test_next_move.py"
+  check "gtme next-move dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme next-move --help
   expect "gtme-reply appears in help" "chewbacca gtme-reply" bash "$ROOT/bin/chewbacca" --help
   # Ported from togari-platform's dnc and scoring modules with their TypeScript cases; offline.
   check "gtme-dnc matches Togari's DNC check and calls an unreadable list unknown, never allowed" \

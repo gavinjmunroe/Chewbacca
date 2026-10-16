@@ -16,6 +16,8 @@
     gtme why                 why the last recommendation was made, with its numbers and rule
     gtme lesson plan "..."   what earlier campaigns learned that applies, each with the check to run;
                              gtme lesson add/record/audit keep the experiment ledger
+    gtme next-move plan FILE  a step came back empty or blocked: every move the evidence supports,
+                             boundaries applied, Jev-ranked; replay DIR measures it on old blockers
     gtme sync                refresh the graph (chewbacca gtm sync) and record credit balances
 
 Nothing here sends an email, spends a credit or creates an account. Reads run
@@ -2425,6 +2427,9 @@ def main(argv=None) -> int:
     if argv and argv[0] == "lesson":
         import gtme_lessons
         return gtme_lessons.main(argv[1:])
+    if argv and argv[0] == "next-move":
+        import next_move
+        return next_move.main(argv[1:])
     if argv and argv[0] == "recovery-preview":
         import gtme_recovery
         return gtme_recovery.main(argv[1:])

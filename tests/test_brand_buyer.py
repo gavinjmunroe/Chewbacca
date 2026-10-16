@@ -115,6 +115,16 @@ class FakeClay:
         return [c for c in self.calls if c[0] == name]
 
 
+SITES = {"barebells.com": json.load(open(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "fixtures", "next_move", "barebells_home_excerpt.json")))}
+
+
+def likes_career_site(req):
+    """Jev stand-in for the next-move loop: rates highest the move that cites the careers site."""
+    return {"answers": {q: {"type": "noul", "noul": 0.9 if "career.vitaminwell" in spec["instructions"] else 0.3}
+                        for q, spec in req["questions"].items()}}
+
+
 def fake_jev(scores, gate=True):
     def rank(people):
         s = [scores[p["name"]] for p in people]
@@ -125,29 +135,29 @@ def fake_jev(scores, gate=True):
 class _Base(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.parents = os.path.join(self.tmp.name, "parents.json")
-        with open(self.parents, "w") as f:
-            json.dump([{"brand": "Barebells", "search_domain": "vitaminwell.com"},
-                       {"brand": "Liquid I.V.", "search_domain": "liquid-iv.com, fallback unilever.com"}], f)
-        self.saved = (L.clay, L.jev_rank, L.PARENTS, L.RUN_LOG, L.time.sleep)
-        L.PARENTS = self.parents
+        self.saved = (L.clay, L.jev_rank, L.SITE_READ, L.RUN_LOG, L.time.sleep)
+        self.saved_next = (L.NEXT_MOVE_JEV, L.NEXT_MOVE_LEDGER)
+        # The empty-search loop reads the brand's site; tests hand it the saved Barebells footer
+        # or nothing, and a Jev stand-in, and keep its lessons out of the real ledger.
+        L.SITE_READ = lambda domain: SITES.get(domain, {"site_text": "", "links": []})
+        L.NEXT_MOVE_JEV = likes_career_site
+        L.NEXT_MOVE_LEDGER = os.path.join(self.tmp.name, "lessons")
         L.RUN_LOG = os.path.join(self.tmp.name, "runs.jsonl")
         self.saved_rows_file = L.ROWS_FILE
         self.saved_globals = {k: getattr(L, k) for k in list(L.ROLES.values()) + [
-            "WS", "TABLE", "VIEW", "CLIENT_VIEW", "CREATOR", "PEOPLE_SEARCH", "CLIENT_FILE", "PARENTS", "RUN_LOG"]}
+            "WS", "TABLE", "VIEW", "CLIENT_VIEW", "CREATOR", "PEOPLE_SEARCH", "CLIENT_FILE", "RUN_LOG"]}
         L.CLIENT_FILE = os.path.join(self.tmp.name, "minimal-client.json")
         with open(L.CLIENT_FILE, "w") as f:
             json.dump({}, f)
         L.ROWS_FILE = os.path.join(self.tmp.name, "rows.json")
         L.time.sleep = lambda s: None
-        L.parent_domains.__defaults__ = (self.parents,)
 
     def tearDown(self):
-        L.clay, L.jev_rank, L.PARENTS, L.RUN_LOG, L.time.sleep = self.saved
+        L.clay, L.jev_rank, L.SITE_READ, L.RUN_LOG, L.time.sleep = self.saved
+        L.NEXT_MOVE_JEV, L.NEXT_MOVE_LEDGER = self.saved_next
         L.ROWS_FILE = self.saved_rows_file
         for k, v in self.saved_globals.items():
             setattr(L, k, v)
-        L.parent_domains.__defaults__ = (self.saved[2],)
         self.tmp.cleanup()
 
     def run_chain(self, fake, brand, domain, scores, gate=True, argv=()):
@@ -163,13 +173,17 @@ class _Base(unittest.TestCase):
 
 class ChainTest(_Base):
     def test_parent_fallback_reruns_on_parent_domain(self):
+        """No parents file: the parent comes from barebells.com's own footer through gtme next-move."""
         scout = person("Scout Brown", "US Partnerships Lead")
         fake = FakeClay({"barebells.com": [], "vitaminwell.com": [scout]},
                         email_by_url={scout["url"]: "scout.brown@vitaminwell.com"})
         log = self.run_chain(fake, "Barebells", "barebells.com", {"Scout Brown": 1.9})
         self.assertEqual(fake.value(L.F_DOMAIN), "vitaminwell.com")
         self.assertEqual(len([c for c in fake.ops("run-cells") if c[2]["fields"] == L.F_PEOPLE]), 2)
-        self.assertIn({"step": "parent fallback", "from": "barebells.com", "to": "vitaminwell.com"}, log["steps"])
+        hop = next(s for s in log["steps"] if s["step"] == "parent fallback")
+        self.assertEqual((hop["from"], hop["to"]), ("barebells.com", "vitaminwell.com"))
+        self.assertIn("part of Vitamin Well Group", hop["why"])
+        self.assertEqual(next(s for s in log["steps"] if s["step"] == "next move")["decision"], "cleared")
         self.assertEqual(log["result"]["email"], "scout.brown@vitaminwell.com")
         self.assertIn("parent vitaminwell.com, after barebells.com returned no one", fake.value(WHY))
         self.assertAlmostEqual(log["credits_observed"], 1.6)
@@ -454,22 +468,12 @@ class ClientConfigTest(_Base):
         self.assertFalse(fake.ops("add-rows"))
 
 
-class ParentDomainsTest(unittest.TestCase):
-    def test_free_text_search_domain(self):
-        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
-            json.dump([{"brand": "Liquid I.V.", "search_domain": "liquid-iv.com, fallback unilever.com"},
-                       {"brand": "Celsius", "search_domain": "celsius.com; Alani Nu staff may sit under alaninu.com"}], f)
-        try:
-            self.assertEqual(L.parent_domains("Liquid I.V.", ["liquid-iv.com"], f.name), ["unilever.com"])
-            self.assertEqual(L.parent_domains("Celsius", ["celsius.com"], f.name), ["alaninu.com"])
-            self.assertEqual(L.parent_domains("Barebells USA", ["barebells.com"], f.name), [])
-        finally:
-            os.unlink(f.name)
-
-    def test_example_parents_file_maps_barebells(self):
-        example = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "library", "gtm",
-                               "brand-buyer", "parents.example.json")
-        self.assertEqual(L.parent_domains("Barebells", ["barebells.com"], example), ["vitaminwell.com"])
+class NoLookupTableTest(unittest.TestCase):
+    def test_brand_buyer_reads_no_parents_file(self):
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tools", "brand_buyer.py")) as f:
+            src = f.read()
+        self.assertNotIn("parent_domains", src)
+        self.assertNotIn('"vitaminwell.com"', src, "no parent domain written into the code")
 
 
 if __name__ == "__main__":

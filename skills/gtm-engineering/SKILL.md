@@ -326,8 +326,9 @@ Reply counts that disagree across sources, and replies read from a snippet: `che
   the ledger: `chewbacca gtme lesson plan "find the buyer at a brand"`. Before
   touching a Clay table run `python3 -I tools/table_graph.py <table id>`
   (`gtme lesson show sabo-table-graph-before-touching`). The working chain is
-  `~/Downloads/Sabo handoff/claude/live_chain.py`; team memory
-  `reference_clay_people_search_finds_buyers`.
+  `tools/brand_buyer.py` (live_chain.py is a shim over it); team memory
+  `reference_clay_people_search_finds_buyers`. An empty search goes to
+  `gtme next-move`, below, not to a parents file.
 - **Bind columns in Clay, not by hand.** Caleb: "make sure we're following
   best practices for handling column to column flow". Codex found Scout by
   search, then pasted her URL into the Findymail input through the UI. Build
@@ -355,6 +356,77 @@ Reply counts that disagree across sources, and replies read from a snippet: `che
   set them while he can still click, or map that endpoint first.
 - **During a live call, 3 lines max.** Caleb mid-demo: "This is too much
   text bro wtf". Give him what to say, not why.
+
+## When a step comes back empty or blocked: `gtme next-move` (2026-10-16)
+
+On the Sabo call we said Chewbacca "found a way around a blocker" by looking up
+Barebells' parent. It didn't. The parent came from a parents.json row typed in
+after barebells.com returned nobody. Caleb: "make chewbs actually smart and
+intuitively think through all the possible courses of action". Now a blocked
+step (0 people, no email, an off-domain email, no buyer, a failed op, a gate)
+goes through `chewbacca gtme next-move`, and `tools/brand_buyer.py` calls it on
+every empty people search. No parents file exists anymore.
+
+- **Write the blocker as evidence, not as a label.** The request holds the
+  goal, the persona from the client's research, the step, the failure in plain
+  words, and what was seen: people with titles and scores, filters, site text,
+  errors, what was tried. The operators read that. Put your own ideas in
+  `extra`, each with `action_class` (read, paid_write, write, ask, send,
+  launch, add_leads, delete), `touches`, credits and minutes. A move with no
+  class is dropped.
+- **Every operator runs every time.** Related company (from the brand's own
+  ownership sentence, the hosts its site links and the email domains of people
+  found), next person, persona swap, loosen one filter, retry, a source read,
+  ask the client. There's no "if X then Y". An operator with nothing in the
+  evidence proposes nothing, which is why the free site read usually goes first:
+  on Barebells it turned up "Barebells is part of Vitamin Well Group" and a link
+  to career.vitaminwell.com, and the next round proposed vitaminwell.com itself.
+- **Boundaries are data.** `references/next-move.json` holds them with their
+  source: no send, launch or add-leads without a signed `gtme ready`, no
+  deletes, no purchases, nothing over the credit allowance, no auto-run, no hand
+  step in the vendor UI, no interest from a category, no off-account contact.
+  Client rulings come from the client's `DECISIONS.json` through `client_rulings`
+  (Zeutara's no-postal-address drops "add Jonah's office address"). A new rule
+  is a new entry there, never an if-statement. Dropped moves print with the rule
+  that dropped them, and `run` checks again right before any executor.
+- **Jev ranks, code counts.** Jev gives each surviving move a probability of
+  progress from the evidence. Code ranks on p / (credits + the credits the move
+  still owes downstream + minutes x 0.02 + 0.25), halved when irreversible. A
+  search rerun owes the 0.6 email lookup too, so a 0.6 next-person lookup that
+  finishes the job can outrank it. Jev's number is never permission.
+- **It learns in the lesson ledger.** Each paid attempt adds to a
+  `next-move:<kind>` lesson (`move_stats`, history kept), and the next ranking
+  blends that clear rate with Jev's. `gtme next-move record` adds one by hand.
+- **Commands.** `plan FILE` shows every move, its p, cost and why, plus the
+  dropped ones. `run FILE` only does free reads and then hands back the paid pick
+  for a caller with its own gates. `replay DIR` replays recorded blockers.
+
+Rules taken from how others do this, before building:
+
+- ReAct (Yao et al. 2022): act, observe, think again. A cheap read that adds
+  evidence is a real move, and the next round plans from what it saw.
+- Tree of Thoughts (Yao et al. 2023): generate several candidates, score each,
+  keep the ones you didn't pick for the next round. Tried moves go to `tried`
+  and are never proposed twice.
+- SayCan ([Ahn et al. 2022](https://arxiv.org/pdf/2204.01691)): the model says
+  what's useful, a separate check says what's possible, and the pick needs
+  both. Here Jev is the "useful" and the boundary file is the "possible".
+- Reflexion (Shinn et al. 2023): write down why an attempt failed so the next
+  try reads it. That's the ledger's `move_stats`.
+- Clay's waterfall: try sources cheapest first and stop at the first valid
+  result, paying only for the ones that ran. That's the cost term and the stop
+  on `cleared`. (From memory of Clay's docs; not re-read 2026-10-16.)
+
+Measured 2026-10-16 on 5 recorded blockers (`tests/fixtures/next_move/replays`,
+3 Sabo, 1 Gymshark email, 1 Zeutara gate), live Jev, 4 runs. A move the record
+doesn't cover counts as a miss at full cost. The loop cleared 5 of 5. The old
+hard-coded chain cleared 2 of 5, and 0 of 1 on Barebells with parents.json gone.
+One Codex call per blocker cleared 3 of 5. Cleared per credit: loop 1.28 in 3
+runs and 1.14 in 1 (a 0.67 vs 0.66 tie between vitaminwell.com and
+vitaminwellgroup.com), old chain 1.18, one call 1.07. With Jev off the loop
+cleared 2 of 5 at 0.32 per credit, so Jev's ranking is doing the work. The
+downstream-credit term was added after the first replay, so these five aren't
+held out anymore. Grade it on the next 10 real blockers.
 
 ## Never call a launch ready without `gtme ready`
 

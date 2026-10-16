@@ -1,0 +1,98 @@
+{
+ "name": "sabo-gymshark-off-domain-email",
+ "date": "2026-10-16",
+ "source": "Downloads/Sabo handoff/claude/runs.jsonl rows 4 and 7",
+ "blocker": {
+  "client": "Sabo",
+  "goal": "the person who decides which outside creators Gymshark pays, with a verified email at Gymshark or its parent",
+  "persona": [
+   "influencer marketing",
+   "partnerships",
+   "creator marketing",
+   "social media manager",
+   "brand manager",
+   "community manager",
+   "marketing manager"
+  ],
+  "step": "email_find",
+  "account": {
+   "brand": "Gymshark",
+   "domain": "gymshark.com"
+  },
+  "failure": "the top pick's email came back valid but at buckedup.com, another company",
+  "evidence": {
+   "filters": {
+    "titles": [
+     "athlete",
+     "ambassador",
+     "creator"
+    ],
+    "limit": 5
+   },
+   "people": [
+    {
+     "name": "Ryan Shaw",
+     "title": "Social Media Ambassador",
+     "score": 0.93,
+     "email": "redacted@buckedup.com",
+     "email_status": "valid",
+     "tried": true
+    },
+    {
+     "name": "Nona Bayat",
+     "title": "Influencer",
+     "score": 0.76,
+     "email": null,
+     "email_status": null,
+     "tried": false
+    },
+    {
+     "name": "Luke Elsman",
+     "title": "Content Creator",
+     "score": 0.29,
+     "email": null,
+     "email_status": null,
+     "tried": false
+    },
+    {
+     "name": "Michael Smith",
+     "title": "Athlete",
+     "score": 0.01,
+     "email": null,
+     "email_status": null,
+     "tried": false
+    },
+    {
+     "name": "Gabriella Chevalier-Rivera",
+     "title": "Athlete",
+     "score": 0.01,
+     "email": null,
+     "email_status": null,
+     "tried": false
+    }
+   ]
+  },
+  "tried": [],
+  "credits_left": 20
+ },
+ "world": {
+  "persona_swap:": {
+   "cleared": true,
+   "credits": 1.1,
+   "source": "row 7: Alexa Kinoshita, valid at gymshark.com"
+  },
+  "retry:": {
+   "cleared": false,
+   "credits": 0.6,
+   "source": "row 1 and row 4 both gave the same buckedup.com email"
+  }
+ },
+ "old_path": [],
+ "note": "the chain's retry was skipped: no runner-up scored 1.0 or more.",
+ "ask_once": {
+  "model": "codex",
+  "date": "2026-10-16",
+  "answer": "persona_swap:",
+  "signature": "persona_swap:"
+ }
+}

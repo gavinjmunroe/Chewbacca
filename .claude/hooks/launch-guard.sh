@@ -303,6 +303,18 @@ if name in ("chewbacca-clay",) or (base == "chewbacca-clay" and kit_file(name, "
     out("allow")
 if name == "node" and args and os.path.basename(args[0]) == "chewbacca-clay" and kit_file(args[0], "bin/chewbacca-clay"):
     out("allow")
+# jev-browse on a Clay page. It was never on this list, so from the 2026-10-10
+# allowlist on, every `jev-browse run --url https://app.clay.com/...` refused,
+# and on 2026-10-16 no agent could sort the Sabo table before the call. Its
+# floor (bin/lib/jev_browse_runner.py COMMIT) is code: a click labelled send,
+# run, enrich, launch, start, resume or enroll is not executed. --allow-commit
+# lifts that floor, so near Clay it stays refused.
+if base == "jev-browse" and (name == "jev-browse" or kit_file(name, "bin/jev-browse")):
+    if args[:1] == ["doctor"] and len(args) == 1:
+        out("allow")
+    if args[:1] == ["run"] and "--allow-commit" not in args:
+        out("allow")
+    out("refuse", "near Clay jev-browse runs only `run` without --allow-commit, or `doctor`; the person presses a send, run or launch")
 if name == "bash" and args and os.path.basename(args[0]) == "chewbacca" and kit_file(args[0], "bin/chewbacca"):
     name, args, base = "chewbacca", args[1:], "chewbacca"
 if name == "chewbacca" or (base == "chewbacca" and kit_file(name, "bin/chewbacca")):
@@ -565,7 +577,8 @@ launch-guard: refusing a shell command that mentions Clay: ${why:-it could not b
 Near Clay a shell runs only known commands, alone or joined by ; && || | with
 every piece a known read, and no other shell syntax: the kit's front
 door (chewbacca clay <op>, bin/chewbacca-clay <op>, node bin/chewbacca-clay <op>),
-chewbacca gtm/gtme/gtme-grade, clay CLI reads, git (not config), local read tools,
+chewbacca gtm/gtme/gtme-grade, clay CLI reads, jev-browse run (no --allow-commit)
+for a Clay page in the background, git (not config), local read tools,
 counts.py/checksums.py, code-slop, slop-check, and test runners (python3 tests/x.py,
 bash tests/run.sh [group], pytest tests/...; prefix CHEWBACCA_NO_SEND=1 so nothing
 sends). Writes go through chewbacca clay, which needs Caleb's ok (a terminal, or

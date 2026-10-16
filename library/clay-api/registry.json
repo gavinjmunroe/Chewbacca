@@ -229,6 +229,23 @@
       "ui": "clay-go column-settings --table {table}"
     },
     {
+      "name": "views",
+      "kind": "read",
+      "gate": "read",
+      "summary": "a table's views with sort, filter and per-column visibility (isVisible), as Clay stores them",
+      "args": ["table"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "getTableViews",
+          "args": {
+            "tableId": "table"
+          }
+        }
+      ],
+      "ui": "clay-go table --table {table}"
+    },
+    {
       "name": "table-status",
       "kind": "read",
       "gate": "read",
@@ -250,8 +267,16 @@
       "name": "rows",
       "kind": "read",
       "gate": "read",
-      "summary": "a page of rows with every cell; pass after=<last row id> (api) or cursor= (cli) for the next page",
-      "args": ["ws", "table", "view?", "limit?", "after?", "cursor?"],
+      "summary": "a page of rows with every cell. after=<row id> with view= pages in the view's own order (its row ids, then rows by id), because Clay's own afterrecordid skipped and repeated rows on 2026-10-16; cursor= pages the cli surface. fields=f_a,f_b keeps only those cells. A read over the engine's 20,000-char cap is fetched again whole through the pinned sender.",
+      "args": [
+        "ws",
+        "table",
+        "view?",
+        "limit?",
+        "after?",
+        "cursor?",
+        "fields?"
+      ],
       "surfaces": [
         {
           "type": "api-anything",
@@ -286,14 +311,15 @@
           "extract": "data"
         }
       ],
-      "ui": "clay-go table --table {table}"
+      "ui": "clay-go table --table {table}",
+      "narrow": "cells"
     },
     {
       "name": "row",
       "kind": "read",
       "gate": "read",
-      "summary": "one row: every cell with its status (success, error, running, queued, empty)",
-      "args": ["ws", "table", "row"],
+      "summary": "one row: every cell with its status (success, error, running, queued, empty); fields=f_a,f_b keeps only those cells. A read over the engine's 20,000-char cap is fetched again whole through the pinned sender, so a big people cell reads in full.",
+      "args": ["ws", "table", "row", "fields?"],
       "surfaces": [
         {
           "type": "api-anything",
@@ -309,7 +335,68 @@
           "argv": ["tables", "rows", "get", "{table}", "{row}"]
         }
       ],
-      "ui": "clay-go row-detail --table {table}"
+      "ui": "clay-go row-detail --table {table}",
+      "narrow": "cells"
+    },
+    {
+      "name": "rows-by-id",
+      "kind": "read",
+      "gate": "read",
+      "summary": "rows by id (rows=r_a,r_b, 100 at most), every cell. fields=f_a,f_b keeps only those cells. A read over the engine's 20,000-char cap is fetched again whole through the pinned sender, so a big people cell reads in full.",
+      "args": ["ws", "table", "rows", "fields?"],
+      "limits": {
+        "rows": 100
+      },
+      "narrow": "cells",
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "bulkFetchRecords",
+          "args": {
+            "ws": "ws",
+            "tableId": "table",
+            "recordIds": "rows"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "bulkFetchRecordsByIdForWorkspace",
+        "contract_offset": 1990479,
+        "body_schema": "inline: {recordIds[], includeExternalContentFieldIds?}"
+      },
+      "ui": "clay-go table --table {table}"
+    },
+    {
+      "name": "row-ids",
+      "kind": "read",
+      "gate": "read",
+      "summary": "every row id in a view, in the view's sort order; read the rows 100 at a time with rows-by-id",
+      "args": ["ws", "table", "view"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "getViewRecordIds",
+          "args": {
+            "ws": "ws",
+            "tableId": "table",
+            "viewId": "view"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "getViewRecordIds",
+        "contract_offset": 2012085,
+        "ui_call": "nf @351080: `${view}/records/ids`"
+      },
+      "ui": "clay-go table --table {table}"
     },
     {
       "name": "audiences",
@@ -1482,7 +1569,11 @@
         {
           "type": "api-anything",
           "op": "setCampaignStatus",
-          "args": { "ws": "ws", "campaignId": "campaign", "status": "status" }
+          "args": {
+            "ws": "ws",
+            "campaignId": "campaign",
+            "status": "status"
+          }
         }
       ],
       "evidence": {
@@ -1809,6 +1900,118 @@
       },
       "confidence": "high: the only one of the 16 the crawl also recorded",
       "verified": false
+    },
+    {
+      "name": "view-sort",
+      "kind": "write",
+      "gate": "write:view-settings",
+      "summary": "Set a view's sort: sort=[{\"fieldId\":\"f_...\",\"direction\":\"DESC\"}], [] clears it. Changes what everyone sees in that view; runs and sends nothing.",
+      "args": ["ws", "table", "view", "sort"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "updateViewSort",
+          "args": {
+            "ws": "ws",
+            "tableId": "table",
+            "viewId": "view",
+            "sortItems": "sort"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "updateViewSortSettings",
+        "contract_offset": 2010341,
+        "body_schema": "XEt @1251701: {items:[{fieldId, direction ASC|DESC}]}"
+      },
+      "readback": {
+        "op": "views",
+        "args": {
+          "table": "table"
+        },
+        "expect": "manual"
+      },
+      "confidence": "high: contract and body schema read from the bundle; views shows the same shape stored",
+      "verified": true,
+      "verified_by": "2026-10-16, Sabo table t_0tmyzmzxwt5tTMoyeQp Default view: sort=[f_updated_at DESC] sent live (the value it already held, so nothing a viewer sees changed); Clay answered 200 with the view holding that sort"
+    },
+    {
+      "name": "view-filter",
+      "kind": "write",
+      "gate": "write:view-settings",
+      "summary": "Set a view's filter: view_filter={\"combinationMode\":\"AND\",\"items\":[{\"fieldId\":\"f_...\",\"type\":\"NOT_EMPTY\"}]}, {} clears it. Runs and sends nothing.",
+      "args": ["ws", "table", "view", "view_filter"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "updateViewFilter",
+          "args": {
+            "ws": "ws",
+            "tableId": "table",
+            "viewId": "view",
+            "viewFilter": "view_filter"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "updateViewFilterSettings",
+        "contract_offset": 2010588,
+        "body_schema": "P8t @2009626: {combinationMode AND|OR, items:[M8t {fieldId,type,value?} | N8t group]} or a record"
+      },
+      "readback": {
+        "op": "views",
+        "args": {
+          "table": "table"
+        },
+        "expect": "manual"
+      },
+      "confidence": "high: contract and schema from the bundle; the item types (EMPTY, HAS_ERROR, RESULTS...) are the ones views already returns",
+      "verified": false
+    },
+    {
+      "name": "view-columns",
+      "kind": "write",
+      "gate": "write:view-settings",
+      "summary": "Show, hide, pin or size columns in one view: columns={\"f_...\":{\"isVisible\":false}}. Runs and sends nothing.",
+      "args": ["ws", "table", "view", "columns"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "updateViewFields",
+          "args": {
+            "ws": "ws",
+            "tableId": "table",
+            "viewId": "view",
+            "viewFields": "columns"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "updateViewFieldsSettingsForWorkspace",
+        "contract_offset": 2017688,
+        "body_schema": "O8t @2009626: record<fieldId, {isVisible?, color?, isPinned?, width?, beforeFieldId?, afterFieldId?}>"
+      },
+      "readback": {
+        "op": "views",
+        "args": {
+          "table": "table"
+        },
+        "expect": "manual"
+      },
+      "confidence": "high: contract and schema from the bundle",
+      "verified": false
     }
   ],
   "ui_only": [
@@ -1847,6 +2050,11 @@
       {
         "file": "store-D9TAa6Zj.js",
         "sha256": "dae6829dfa84c83c9d4f456fca6c2b69405c716321dfd5a93016105b9bd076a6"
+      },
+      {
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "read_at": "2026-10-16"
       }
     ],
     "read_at": "2026-10-09",

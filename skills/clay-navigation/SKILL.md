@@ -33,7 +33,15 @@ comes back, with `surface`, `ms` and every surface `tried`.
   campaign-activity, table-count, table-history, table-sources,
   segment-history, workflow, workflow-graph, workflow-runs, workflow-run,
   workflow-run-steps (each node's output or error, for "did the Togari
-  reply/blocklist/forward webhook run").
+  reply/blocklist/forward webhook run"). Added 2026-10-16 after the Sabo
+  call, each read live on the Sabo table: views (every view's sort, filter
+  and which columns show), row-ids (a view's row ids in its own order),
+  rows-by-id (100 rows by id).
+- A read the engine cuts at 20,000 chars (a people cell ran to 50,000 on one
+  Sabo row) is sent again once, whole, through the pinned sender: `tried`
+  then says `whole`. `row`, `rows` and `rows-by-id` take `fields=f_a,f_b` to
+  keep only those cells. `rows view= after=<row id>` pages in the view's own
+  order; Clay's own afterrecordid gave 3 rows after the 10th of 404, and after the 100th started over at the 2nd.
 - Which op answers which question (each runs as `chewbacca clay <op> k=v`):
 
   | Question                                         | Op                                                                    |
@@ -48,6 +56,9 @@ comes back, with `surface`, `ms` and every surface `tried`.
   | did a workflow run, which step failed            | workflows, workflow-runs workflow=, workflow-run-steps workflow= run= |
   | is a lead still enrolled, paused or finished     | campaign-leads campaign=                                              |
   | is this address blocked                          | blocklist, or `gtme-dnc check EMAIL` across every source              |
+  | how is this view sorted, filtered, which columns | views table=                                                          |
+  | every row in a view, in order                    | row-ids table= view=, then rows-by-id rows= (100 a call)              |
+  | one huge cell (people, research)                 | row table= row= fields=f\_...                                         |
 
 - Writes: `reply`, `forward`, `blocklist-add`, and 16 more built from Clay's
   own frontend code without ever sending one: `add-column`, `update-column`,
@@ -57,7 +68,10 @@ comes back, with `surface`, `ms` and every surface `tried`.
   campaign required, after a passing `gtme-grade --action add-leads` on that
   campaign), `campaign-status` (PAUSED, STOPPED, or START on a draft with a
   passing launch grade and pre-send gate), `lead-category`, `mark-read`,
-  `blocklist-remove`, `blocklist-add-bulk`, `page-view-activity`. Every write
+  `blocklist-remove`, `blocklist-add-bulk`, `page-view-activity`, and the
+  view settings from 2026-10-16: `view-sort` (sort=[{fieldId, direction}],
+  sent live once), `view-filter` (view_filter={combinationMode, items}) and
+  `view-columns` (columns={f_id:{isVisible}}). Every write
   refuses unless called with `--allow-writes` and Caleb's ok: him typing the
   op name at a terminal, or a prompt from him in chat within 2 hours. The
   agent runs the write itself; it never hands him the command.

@@ -68,7 +68,19 @@ const EXIT = { ok: 0, failed: 1, usage: 2, refused: 3 };
 function out(obj, code) {
   // The 2026-10-15 piped ops read exited after only 512 bytes of JSON.
   // Flush synchronously before exit so snapshot readers receive the envelope.
-  fs.writeFileSync(1, `${JSON.stringify(obj)}\n`);
+  // A pipe is non-blocking, so past its 64 KB buffer writeSync throws EAGAIN
+  // mid-line; on 2026-10-16 a 65 KB Sabo row came out as half a row followed by
+  // an error envelope. Keep writing until every byte is out.
+  const buf = Buffer.from(`${JSON.stringify(obj)}\n`);
+  let off = 0;
+  while (off < buf.length) {
+    try {
+      off += fs.writeSync(1, buf, off, buf.length - off);
+    } catch (e) {
+      if (e.code !== "EAGAIN") throw e;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
+    }
+  }
   process.exit(code);
 }
 
@@ -427,7 +439,12 @@ function where(data, cond) {
 // The only POSTs that read. Any other non-GET request in the spec is a write,
 // whatever the registry's `kind` says, so relabeling one in the registry can't
 // slip it past the person-at-a-terminal gate.
-const READ_POSTS = new Set(["listResources", "inboxReplies", "threadHistory"]);
+const READ_POSTS = new Set(["listResources", "inboxReplies", "threadHistory", "bulkFetchRecords"]);
+// Reads whose answer can pass the engine's 20,000-char display cap (a people
+// cell alone ran past it on the Sabo table, 2026-10-16, and `row` came back
+// "incomplete"). When the engine cuts one, the same frozen request is sent once
+// more through the pinned sender and the whole body is shaped here instead.
+const FULL_READS = new Set(["getRow", "listRows", "listRowsAfter", "bulkFetchRecords", "getViewRecordIds", "getTableViews", "getTableColumns"]);
 function specWrites(specName) {
   const so = specOps.get(specName);
   if (!so) return true;
@@ -479,6 +496,58 @@ function isWrite(op) {
   return op.kind !== "read" || String(op.gate || "").startsWith("write") || op.surfaces.some(surfaceWrites);
 }
 
+// The keys of each item (or the one object) a spec's response.pick names. Only
+// plain keys: an op whose pick renames or reaches into arrays stays out of
+// FULL_READS.
+function pickKeys(data, keys) {
+  if (!keys?.length) return data;
+  const one = (o) => (o && typeof o === "object" ? Object.fromEntries(keys.filter((k) => k in o).map((k) => [k, o[k]])) : o);
+  return Array.isArray(data) ? data.map(one) : one(data);
+}
+
+// A FULL_READS op sent again, whole. The request is the one the engine built
+// from validated args, frozen; it must be a read (GET, or a POST in READ_POSTS)
+// to api.clay.com under /v3/, and the sender refuses a redirect or rewrite.
+async function fullRead(op, s, bound) {
+  const sop = specOps.get(s.op);
+  const shapedPick = (sop?.response?.pick || []).some((k) => /[=[.]/.test(k));
+  if (!sop || specWrites(s.op) || sop.readOnly === false || shapedPick) {
+    return { ok: false, class: "refused", reason: `${s.op} can't be read whole` };
+  }
+  let frozen;
+  try {
+    frozen = deepFreeze(dryRequest(s, bound, validatedSet(bound), bound));
+  } catch (e) {
+    return { ok: false, class: "input", reason: e.message };
+  }
+  const url = new URL(frozen.url);
+  const method = String(frozen.method).toUpperCase();
+  if (url.origin !== `https://${CLAY_API_HOST}` || !url.pathname.startsWith("/v3/") || !(method === "GET" || (method === "POST" && READ_POSTS.has(s.op)))) {
+    return { ok: false, class: "refused", reason: "a whole read goes only to a known read endpoint" };
+  }
+  let raw;
+  if (FIXTURES) {
+    raw = fixture("api-anything-full", s.op);
+    if (!raw) return { ok: false, class: "error", reason: `no full fixture for ${s.op}` };
+  } else {
+    const prepared = await prepareWrite(op, s, frozen);
+    if (prepared.error) return { ok: false, class: "error", reason: prepared.error };
+    raw = await prepared.send();
+  }
+  if (!raw.ok) return { ok: false, class: raw.class || "error", reason: raw.reason };
+  return { ok: true, data: pickKeys(pluck(raw.data, sop.response?.extract), sop.response?.pick) };
+}
+
+// fields=f_a,f_b on a row read: each row keeps only those cells, so one big
+// cell can be read on its own.
+function narrowCells(data, fields) {
+  const keep = new Set(fields);
+  const one = (row) => (row && typeof row === "object" && row.cells && typeof row.cells === "object"
+    ? { ...row, cells: Object.fromEntries(Object.entries(row.cells).filter(([k]) => keep.has(k))) }
+    : row);
+  return Array.isArray(data) ? data.map(one) : one(data);
+}
+
 // Reads only. A write never reaches here: runOp sends it through prepareWrite.
 async function attempt(op, cand, flags) {
   const { s, bound } = cand;
@@ -504,6 +573,13 @@ async function attempt(op, cand, flags) {
         r = await prepared.send();
       }
     }
+    if (r.ok && r.truncated && FULL_READS.has(s.op)) {
+      const full = await fullRead(op, s, bound);
+      // A whole read that fails leaves the cut result as it was, so the next
+      // surface still gets its turn and the cut stays reported.
+      if (full.ok) r = { ...r, data: full.data, truncated: undefined, whole: `the engine cut it (${r.truncated}); read again whole` };
+      else r = { ...r, truncated: `${r.truncated}; the whole read failed: ${full.reason}` };
+    }
     const res = {
       ok: !!r.ok,
       surface: "api-anything",
@@ -514,7 +590,7 @@ async function attempt(op, cand, flags) {
       ...(typeof r.ms === "number" ? { engine_ms: r.ms } : {}),
     };
     if (!r.ok) return { ...res, class: r.class, reason: r.reason, next: r.next };
-    return { ...res, data: where(r.data, s.where), truncated: r.truncated, healed: r.healed };
+    return { ...res, data: where(r.data, s.where), truncated: r.truncated, healed: r.healed, ...(r.whole ? { whole: r.whole } : {}) };
   }
   const file = s.type === "cli" ? "clay" : path.join(ROOT, "bin", bound[0]);
   const argv = s.type === "cli" ? bound : bound.slice(1);
@@ -631,6 +707,28 @@ const JSON_ARGS = {
     }
     return null;
   },
+  // View settings (bundle schemas XEt, P8t, O8t, app-3TgCQQBH.js 2026-10-16).
+  sort: (v) => (Array.isArray(v) && v.length <= 20 && v.every((x) => isObj(x) && Object.keys(x).every((k) => k === "fieldId" || k === "direction") &&
+    CELL_KEY.test(String(x.fieldId)) && (x.direction === "ASC" || x.direction === "DESC"))
+    ? null : "must be [{\"fieldId\":\"f_...\",\"direction\":\"ASC\"|\"DESC\"}], [] to clear"),
+  view_filter: (v) => {
+    if (!isObj(v)) return "must be a JSON object, {} to clear";
+    if (!Object.keys(v).length) return null;
+    const item = (x, depth) => {
+      if (!isObj(x)) return false;
+      if (x.filterType === "Group") return depth < 2 && (x.combinationMode === undefined || ["AND", "OR"].includes(x.combinationMode)) &&
+        Array.isArray(x.items) && x.items.length <= 50 && x.items.every((y) => item(y, depth + 1));
+      return CELL_KEY.test(String(x.fieldId)) && /^[A-Z][A-Z_]{1,40}$/.test(String(x.type)) &&
+        Object.keys(x).every((k) => ["fieldId", "type", "value", "filterType", "disabled"].includes(k));
+    };
+    return ["AND", "OR"].includes(v.combinationMode) && Array.isArray(v.items) && v.items.length >= 1 && v.items.length <= 50 &&
+      Object.keys(v).every((k) => k === "combinationMode" || k === "items") && v.items.every((x) => item(x, 0))
+      ? null : "must be {\"combinationMode\":\"AND\"|\"OR\",\"items\":[{\"fieldId\":\"f_...\",\"type\":\"NOT_EMPTY\"}, ...]} (the shape views shows)";
+  },
+  columns: (v) => (isObj(v) && Object.keys(v).length >= 1 && Object.keys(v).length <= 200 && Object.entries(v).every(([k, x]) =>
+    CELL_KEY.test(k) && isObj(x) && Object.keys(x).length >= 1 &&
+    Object.entries(x).every(([p, y]) => (["isVisible", "isPinned"].includes(p) && typeof y === "boolean") || (p === "width" && Number.isInteger(y) && y >= 40 && y <= 2000)))
+    ? null : "must map column ids to {isVisible?, isPinned?, width?}, e.g. {\"f_...\":{\"isVisible\":false}}"),
   filter: (v) => (isObj(v) && v.type === "GroupOp" && Array.isArray(v.items) ? null : "must be a filter AST whose root is a GroupOp with items"),
   // campaign-update and campaign-sequence. A status key would launch or stop a
   // campaign from here, which only campaign-status (never START) may do.
@@ -1247,6 +1345,33 @@ async function restrictionSnapshot(args) {
   return require("./lib/clay-restriction-snapshot").collectRestrictionSnapshot(recoveryRead, args);
 }
 
+// rows after=<id>, in the view's own order. Clay's afterrecordid does not follow
+// the view: on the 404-row Sabo table (2026-10-16) after the 10th row it gave 3
+// rows and stopped, and after the 100th it started over at the 2nd. The app
+// itself pages by reading the view's ids and fetching rows by id, so this does too.
+async function rowsAfter(values) {
+  const readOne = async (opName, args) => {
+    const op = opByName.get(opName);
+    const cand = plan(op, args, "api-anything")[0];
+    if (!cand) return { ok: false, class: "input", reason: `${opName} has no surface for these args` };
+    return attempt(op, cand, {});
+  };
+  const ids = await readOne("row-ids", { ws: values.ws, table: values.table, view: values.view });
+  if (!ids.ok) return [{ ok: false, op: "rows", class: ids.class, reason: ids.reason }, EXIT.failed];
+  const at = ids.data.indexOf(values.after);
+  if (at < 0) return [{ ok: false, op: "rows", class: "input", reason: `${values.after} is not in view ${values.view}` }, EXIT.usage];
+  const limit = Math.min(100, Number(values.limit ?? 25));
+  // Ids come back from Clay, so they get the same shape check a typed id does.
+  const page = ids.data.slice(at + 1, at + 1 + limit).filter((id) => typeof id === "string" && ID.test(id));
+  const meta = { op: "rows", surface: "api-anything", call: "clay.getViewRecordIds+clay.bulkFetchRecords", remaining: Math.max(0, ids.data.length - at - 1 - page.length) };
+  if (!page.length) return [{ ok: true, ...meta, data: [] }, EXIT.ok];
+  const rows = await readOne("rows-by-id", { ws: values.ws, table: values.table, rows: page });
+  if (!rows.ok) return [{ ok: false, op: "rows", class: rows.class, reason: rows.reason }, EXIT.failed];
+  const byId = new Map(rows.data.map((r) => [r.id, r]));
+  const data = page.map((id) => byId.get(id)).filter(Boolean);
+  return [{ ok: true, ...meta, ...(rows.whole ? { whole: rows.whole } : {}), data: values.fields ? narrowCells(data, values.fields) : data }, EXIT.ok];
+}
+
 async function runOp(name, kv, flags) {
   const ui = uiByName.get(name);
   if (ui) {
@@ -1477,12 +1602,15 @@ async function runOp(name, kv, flags) {
     const rb = op.verified === false ? await readback(op, sendArgs) : null;
     out({ ok: true, op: name, surface: s.type, call: surfaceKey(op, s), ms: tried[0].ms, sha256: shownHash, ...(rb ? { verified: false, readback: rb } : {}), tried, data: r.data }, EXIT.ok);
   }
+  if (name === "rows" && norm.values.after !== undefined && norm.values.view !== undefined) {
+    out(...(await rowsAfter(norm.values)));
+  }
   const tried = [];
   let last;
   for (const cand of cands) {
     const r = await attempt(op, cand, flags);
     last = r;
-    tried.push({ surface: r.surface, call: r.call, ok: r.ok, ms: r.ms, ...(r.ok ? {} : { class: r.class, reason: r.reason }), ...(r.truncated ? { truncated: r.truncated } : {}) });
+    tried.push({ surface: r.surface, call: r.call, ok: r.ok, ms: r.ms, ...(r.ok ? {} : { class: r.class, reason: r.reason }), ...(r.truncated ? { truncated: r.truncated } : {}), ...(r.whole ? { whole: r.whole } : {}) });
     if (r.ok && !r.truncated) break;
     // An input error means the args are wrong, and every surface would say so.
     if (!r.ok && r.class === "input") break;
@@ -1493,7 +1621,8 @@ async function runOp(name, kv, flags) {
   }
   const best = last.ok ? last : null;
   if (best) {
-    const { ok, surface, call, tier, ms, engine_ms, data, truncated, healed, cursor } = best;
+    const { ok, surface, call, tier, ms, engine_ms, truncated, healed, cursor } = best;
+    const data = op.narrow === "cells" && norm.values.fields ? narrowCells(best.data, norm.values.fields) : best.data;
     out({ ok, op: name, surface, call, ...(tier ? { tier } : {}), ms, ...(engine_ms !== undefined ? { engine_ms } : {}), ...(truncated ? { truncated } : {}), ...(healed ? { healed } : {}), ...(cursor ? { cursor } : {}), tried, data }, EXIT.ok);
   }
   out({ ok: false, op: name, class: last.class, reason: last.reason, ...(last.next ? { next: last.next } : {}), tried, ui: uiRoute(op, args) }, EXIT.failed);

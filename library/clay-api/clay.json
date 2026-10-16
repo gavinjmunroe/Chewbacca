@@ -204,6 +204,53 @@
       "learnedAt": "2026-10-09"
     },
     {
+      "name": "getTableViews",
+      "description": "A table's views with their settings: sort, filter, hidden and ordered columns. Same GET as getTable, kept whole.",
+      "request": {
+        "method": "GET",
+        "url": "https://api.clay.com/v3/tables/t_0tltd1yb4ae85teyATw",
+        "headers": {
+          "accept": "application/json, text/plain, */*",
+          "origin": "https://app.clay.com",
+          "referer": "https://app.clay.com/",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "tableId",
+          "at": ["path:2"]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://app.clay.com/workspaces/{ws}/workbooks/home/tables/{tableId}"
+      },
+      "match": {
+        "method": "GET",
+        "host": "api.clay.com",
+        "path": "/v3/tables/*"
+      },
+      "response": {
+        "format": "json",
+        "extract": "table.views"
+      },
+      "params": [
+        {
+          "name": "tableId",
+          "type": "string",
+          "required": true,
+          "example": "t_0tltd1yb4ae85teyATw",
+          "pattern": "t_[A-Za-z0-9]+",
+          "hint": "a table id like t_0tl... (listResources)"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": true,
+      "learnedAt": "2026-10-16"
+    },
+    {
       "name": "tableRunStatus",
       "description": "Per-column enrichment status counts for a table (success, error, running, queued...).",
       "request": {
@@ -3123,6 +3170,416 @@
       "minTier": 1,
       "learnedLoggedIn": true,
       "learnedAt": "2026-10-10"
+    },
+    {
+      "name": "getViewRecordIds",
+      "description": "Every row id in a view, in the view's order (contract getViewRecordIds). Page with bulkFetchRecords.",
+      "request": {
+        "method": "GET",
+        "url": "https://api.clay.com/v3/workspaces/1372623/tables/t_example/views/gv_example/records/ids",
+        "headers": {
+          "accept": "application/json, text/plain, */*",
+          "origin": "https://app.clay.com",
+          "referer": "https://app.clay.com/",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "ws",
+          "at": ["path:2"]
+        },
+        {
+          "param": "tableId",
+          "at": ["path:4"]
+        },
+        {
+          "param": "viewId",
+          "at": ["path:6"]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://app.clay.com/workspaces/{ws}/workbooks/home/tables/{tableId}"
+      },
+      "match": {
+        "method": "GET",
+        "host": "api.clay.com",
+        "path": "/v3/workspaces/*/tables/*/views/*/records/ids"
+      },
+      "response": {
+        "format": "json",
+        "extract": "results"
+      },
+      "params": [
+        {
+          "name": "ws",
+          "type": "string",
+          "required": true,
+          "example": "1372623",
+          "pattern": "\\d+",
+          "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+        },
+        {
+          "name": "tableId",
+          "type": "string",
+          "required": true,
+          "example": "t_example",
+          "pattern": "t_[A-Za-z0-9]+",
+          "hint": "a table id like t_0tl... (listResources)"
+        },
+        {
+          "name": "viewId",
+          "type": "string",
+          "required": true,
+          "example": "gv_example",
+          "pattern": "gv_[A-Za-z0-9]+",
+          "hint": "a view id like gv_0tl... (views)"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": true,
+      "learnedAt": "2026-10-16"
+    },
+    {
+      "name": "bulkFetchRecords",
+      "description": "Rows by id, every cell (contract bulkFetchRecordsByIdForWorkspace). A POST that only reads.",
+      "request": {
+        "method": "POST",
+        "url": "https://api.clay.com/v3/workspaces/1372623/tables/t_example/bulk-fetch-records",
+        "headers": {
+          "accept": "application/json, text/plain, */*",
+          "origin": "https://app.clay.com",
+          "referer": "https://app.clay.com/",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "content-type": "application/json"
+        },
+        "body": "{\"recordIds\":[]}"
+      },
+      "slots": [
+        {
+          "param": "ws",
+          "at": ["path:2"]
+        },
+        {
+          "param": "tableId",
+          "at": ["path:4"]
+        },
+        {
+          "param": "recordIds",
+          "at": ["body", "json:/recordIds"]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://app.clay.com/workspaces/{ws}/workbooks/home/tables/{tableId}"
+      },
+      "match": {
+        "method": "POST",
+        "host": "api.clay.com",
+        "path": "/v3/workspaces/*/tables/*/bulk-fetch-records"
+      },
+      "response": {
+        "format": "json",
+        "extract": "results",
+        "pick": ["id", "cells", "createdAt", "updatedAt"]
+      },
+      "params": [
+        {
+          "name": "ws",
+          "type": "string",
+          "required": true,
+          "example": "1372623",
+          "pattern": "\\d+",
+          "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+        },
+        {
+          "name": "tableId",
+          "type": "string",
+          "required": true,
+          "example": "t_example",
+          "pattern": "t_[A-Za-z0-9]+",
+          "hint": "a table id like t_0tl... (listResources)"
+        },
+        {
+          "name": "recordIds",
+          "type": "array",
+          "required": true,
+          "example": ["r_example"],
+          "hint": "row ids, 100 at most"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": true,
+      "learnedAt": "2026-10-16"
+    },
+    {
+      "name": "updateViewSort",
+      "description": "WRITE, bundle-derived (contract updateViewSortSettings). Replace a view's sort.",
+      "request": {
+        "method": "PATCH",
+        "url": "https://api.clay.com/v3/workspaces/1372623/tables/t_example/views/gv_example/sort",
+        "headers": {
+          "accept": "application/json, text/plain, */*",
+          "origin": "https://app.clay.com",
+          "referer": "https://app.clay.com/",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "content-type": "application/json"
+        },
+        "body": "{\"items\":[]}"
+      },
+      "slots": [
+        {
+          "param": "ws",
+          "at": ["path:2"]
+        },
+        {
+          "param": "tableId",
+          "at": ["path:4"]
+        },
+        {
+          "param": "viewId",
+          "at": ["path:6"]
+        },
+        {
+          "param": "sortItems",
+          "at": ["body", "json:/items"]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://app.clay.com/workspaces/{ws}/workbooks/home/tables/{tableId}"
+      },
+      "match": {
+        "method": "PATCH",
+        "host": "api.clay.com",
+        "path": "/v3/workspaces/*/tables/*/views/*/sort"
+      },
+      "response": {
+        "format": "json"
+      },
+      "params": [
+        {
+          "name": "ws",
+          "type": "string",
+          "required": true,
+          "example": "1372623",
+          "pattern": "\\d+",
+          "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+        },
+        {
+          "name": "tableId",
+          "type": "string",
+          "required": true,
+          "example": "t_example",
+          "pattern": "t_[A-Za-z0-9]+",
+          "hint": "a table id like t_0tl... (listResources)"
+        },
+        {
+          "name": "viewId",
+          "type": "string",
+          "required": true,
+          "example": "gv_example",
+          "pattern": "gv_[A-Za-z0-9]+",
+          "hint": "a view id like gv_0tl... (views)"
+        },
+        {
+          "name": "sortItems",
+          "type": "array",
+          "required": true,
+          "example": [
+            {
+              "fieldId": "f_updated_at",
+              "direction": "DESC"
+            }
+          ],
+          "hint": "[{fieldId, direction ASC|DESC}], [] clears"
+        }
+      ],
+      "readOnly": false,
+      "minTier": 1,
+      "learnedLoggedIn": true,
+      "learnedAt": "2026-10-16"
+    },
+    {
+      "name": "updateViewFilter",
+      "description": "WRITE, bundle-derived (contract updateViewFilterSettings). Replace a view's filter.",
+      "request": {
+        "method": "PATCH",
+        "url": "https://api.clay.com/v3/workspaces/1372623/tables/t_example/views/gv_example/filter",
+        "headers": {
+          "accept": "application/json, text/plain, */*",
+          "origin": "https://app.clay.com",
+          "referer": "https://app.clay.com/",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "content-type": "application/json"
+        },
+        "body": "{}"
+      },
+      "slots": [
+        {
+          "param": "ws",
+          "at": ["path:2"]
+        },
+        {
+          "param": "tableId",
+          "at": ["path:4"]
+        },
+        {
+          "param": "viewId",
+          "at": ["path:6"]
+        },
+        {
+          "param": "viewFilter",
+          "at": ["body"]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://app.clay.com/workspaces/{ws}/workbooks/home/tables/{tableId}"
+      },
+      "match": {
+        "method": "PATCH",
+        "host": "api.clay.com",
+        "path": "/v3/workspaces/*/tables/*/views/*/filter"
+      },
+      "response": {
+        "format": "json"
+      },
+      "params": [
+        {
+          "name": "ws",
+          "type": "string",
+          "required": true,
+          "example": "1372623",
+          "pattern": "\\d+",
+          "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+        },
+        {
+          "name": "tableId",
+          "type": "string",
+          "required": true,
+          "example": "t_example",
+          "pattern": "t_[A-Za-z0-9]+",
+          "hint": "a table id like t_0tl... (listResources)"
+        },
+        {
+          "name": "viewId",
+          "type": "string",
+          "required": true,
+          "example": "gv_example",
+          "pattern": "gv_[A-Za-z0-9]+",
+          "hint": "a view id like gv_0tl... (views)"
+        },
+        {
+          "name": "viewFilter",
+          "type": "object",
+          "required": true,
+          "example": {
+            "combinationMode": "AND",
+            "items": [
+              {
+                "fieldId": "f_x",
+                "type": "NOT_EMPTY"
+              }
+            ]
+          },
+          "hint": "{combinationMode, items:[{fieldId, type, value?}|{filterType:Group,...}]}, {} clears"
+        }
+      ],
+      "readOnly": false,
+      "minTier": 1,
+      "learnedLoggedIn": true,
+      "learnedAt": "2026-10-16"
+    },
+    {
+      "name": "updateViewFields",
+      "description": "WRITE, bundle-derived (contract updateViewFieldsSettingsForWorkspace). Show, hide, pin or size columns in one view.",
+      "request": {
+        "method": "PATCH",
+        "url": "https://api.clay.com/v3/workspaces/1372623/tables/t_example/views/gv_example/fields",
+        "headers": {
+          "accept": "application/json, text/plain, */*",
+          "origin": "https://app.clay.com",
+          "referer": "https://app.clay.com/",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "content-type": "application/json"
+        },
+        "body": "{}"
+      },
+      "slots": [
+        {
+          "param": "ws",
+          "at": ["path:2"]
+        },
+        {
+          "param": "tableId",
+          "at": ["path:4"]
+        },
+        {
+          "param": "viewId",
+          "at": ["path:6"]
+        },
+        {
+          "param": "viewFields",
+          "at": ["body"]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://app.clay.com/workspaces/{ws}/workbooks/home/tables/{tableId}"
+      },
+      "match": {
+        "method": "PATCH",
+        "host": "api.clay.com",
+        "path": "/v3/workspaces/*/tables/*/views/*/fields"
+      },
+      "response": {
+        "format": "json"
+      },
+      "params": [
+        {
+          "name": "ws",
+          "type": "string",
+          "required": true,
+          "example": "1372623",
+          "pattern": "\\d+",
+          "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+        },
+        {
+          "name": "tableId",
+          "type": "string",
+          "required": true,
+          "example": "t_example",
+          "pattern": "t_[A-Za-z0-9]+",
+          "hint": "a table id like t_0tl... (listResources)"
+        },
+        {
+          "name": "viewId",
+          "type": "string",
+          "required": true,
+          "example": "gv_example",
+          "pattern": "gv_[A-Za-z0-9]+",
+          "hint": "a view id like gv_0tl... (views)"
+        },
+        {
+          "name": "viewFields",
+          "type": "object",
+          "required": true,
+          "example": {
+            "f_x": {
+              "isVisible": false
+            }
+          },
+          "hint": "{f_id: {isVisible?, isPinned?, width?}}"
+        }
+      ],
+      "readOnly": false,
+      "minTier": 1,
+      "learnedLoggedIn": true,
+      "learnedAt": "2026-10-16"
     }
   ]
 }

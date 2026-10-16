@@ -49,6 +49,14 @@ class FloorTests(unittest.TestCase):
                       "Posts", "Facebook"):
             self.assertFalse(runner.committing({"kind": "click", "label": label}), label)
 
+    def test_campaign_state_is_caught(self):
+        # launch-guard lets jev-browse onto Clay pages on the strength of these.
+        for label in ("Launch campaign", "Launch", "Start", "Start campaign", "Resume", "Unpause",
+                      "Activate", "Enroll leads", "Add leads", "Add to campaign"):
+            self.assertTrue(runner.committing({"kind": "click", "label": label}), label)
+        for label in ("Sort", "Updated At", "Get started guide", "Hide fields", "Default view"):
+            self.assertFalse(runner.committing({"kind": "click", "label": label}), label)
+
     def test_typing_is_never_a_commit(self):
         self.assertFalse(runner.committing({"kind": "type", "label": "Send a message"}))
 

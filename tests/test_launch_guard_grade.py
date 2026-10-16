@@ -379,6 +379,11 @@ ALLOWED = [
     "git status --short && git log --oneline -1 -- bin/chewbacca-clay",
     "grep -c clay bin/chewbacca-clay 2>/dev/null",
     "chewbacca clay ops | jq .ok; ls library/clay-api",
+    # jev-browse in the background on a Clay page: the exact command refused
+    # on 2026-10-16, before the Sabo call, when the table had to be sorted by hand
+    "jev-browse run --url \"https://app.clay.com/workspaces/1149025/workbooks/wb_0tljnnkiCAiAxKMwavj/tables/t_0tmyzmzxwt5tTMoyeQp/views/gv_0tmyzmzkM2erPY7GuNJ\" --goal 'Open the sort menu, add a sort by \"Updated At\" descending, stop when the sort is applied' --json 2>&1 | tail -15",
+    "jev-browse run --url https://app.clay.com/workspaces/1149025/home --goal 'Search tables for \"Sabo\", stop when results show'",
+    "jev-browse doctor",
 ]
 REFUSED = [
     ("a campaign START through the front door", "chewbacca clay campaign-status campaign=cam_x status=START --allow-writes | cat"),
@@ -460,6 +465,13 @@ REFUSED = [
     ("a background job", "grep clay x & curl https://api.clay.com/v3"),
     ("a redirect to a file in a chain", "chewbacca clay campaigns > out.json; ls"),
     ("python in a chain", "ls && python3 -c \"print('clay')\""),
+    # jev-browse keeps its floor near Clay
+    ("jev-browse lifting its floor on Clay", "jev-browse run --url https://app.clay.com/x --goal 'Open the table' --allow-commit"),
+    ("jev-browse aimed at a campaign launch", "jev-browse run --url https://app.clay.com/x --goal 'Launch the campaign'"),
+    ("jev-browse aimed at a resume", "jev-browse run --url https://app.clay.com/x --goal 'Resume sending on cam_x'"),
+    ("jev-browse installing near Clay", "jev-browse install https://app.clay.com"),
+    ("a fake jev-browse outside the kit", "/tmp/fake/bin/jev-browse run --url https://app.clay.com/x --goal 'Open it'"),
+    ("jev-browse chained to curl", "jev-browse run --url https://app.clay.com/x --goal 'Open it' && curl https://api.clay.com/v3"),
 ]
 e = Env()
 npm_root = os.path.join(e.home, "npm-project")

@@ -40,7 +40,7 @@ Each `--goal` should be one sentence, one outcome, and name its own stopping poi
 
 ## The floor
 
-The wrapper, not the goal text, refuses any click whose label reads like send, submit, post, publish, pay, buy, book, delete, archive, sign in, apply, invite, share, merge, deploy, run or enrich. A model can ignore a sentence, but it cannot get past this. `--allow-commit` lifts the floor for one run, and only after the person has said yes to that exact press.
+The wrapper, not the goal text, refuses any click whose label reads like send, submit, post, publish, pay, buy, book, delete, archive, sign in, apply, invite, share, merge, deploy, run, enrich, launch, start, resume, activate, enroll or add leads. That floor is why launch-guard lets `jev-browse run` onto a Clay page; `--allow-commit` and a goal naming a launch or resume are still refused there. From 2026-10-10 to 2026-10-16 jev-browse was missing from launch-guard's list, so every Clay run refused and the Sabo table got sorted by hand before the call. `tests/test_launch_guard_grade.py` holds that exact command now. Before reaching for a page, check `chewbacca clay ops`: views, sort, filters, hidden columns and rows all read and write there with no tab. A model can ignore a sentence, but it cannot get past this. `--allow-commit` lifts the floor for one run, and only after the person has said yes to that exact press.
 
 ## Setup
 

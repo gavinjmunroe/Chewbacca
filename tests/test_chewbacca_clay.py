@@ -640,6 +640,9 @@ SAMPLES = {
     "workflow": "wf_ex1", "run": "wfr_ex1", "detail": "summary",
     "trigger": "15a2668a-07fd-4844-be50-37981ebb971a", "csv": "/tmp/leads.csv", "input": '{"name":"x"}',
     "holds": '[{"entityId":"1","email":"held@example.com"}]',
+    "sort": '[{"fieldId":"f_updated_at","direction":"DESC"}]',
+    "view_filter": '{"combinationMode":"AND","items":[{"fieldId":"f_a","type":"NOT_EMPTY"}]}',
+    "columns": '{"f_a":{"isVisible":false}}',
 }
 
 # Synthetic terminal-page evidence lets the restrictive write reach the same
@@ -1027,6 +1030,74 @@ def test_cli_never_answers_for_another_workspace():
         del os.environ["CHEWBACCA_CLAY_CLI_WS"]
 
 
+def test_sabo_table_reads_without_clay_open():
+    """The three reads that sent people into the Clay UI before the 2026-10-16
+    Sabo call: a people cell over the engine's 20,000-char cap, rows after= that
+    stopped, and view settings (sort, filter, hidden columns) with no op."""
+    people = {"value": "x", "fullValue": {"people": [{"name": f"p{i}", "title": "t" * 400} for i in range(250)]}}
+    row = {"id": "r_ex1", "cells": {"f_brand": {"value": "Strava"}, "f_people": people}}
+    cut_row = {**CUT, "data": {"id": "r_ex1", "cells": {"f_brand": {"value": "Strava"}}}, "truncated": "cut to 19000 of 120000 chars"}
+    fx = {"api-anything/getRow.json": cut_row, "api-anything-full/getRow.json": {"ok": True, "data": row}}
+    code, out, p = run(fx, {}, "row", "table=t_ex1", "row=r_ex1")
+    ok(code == 0 and out and out["data"]["cells"]["f_people"] == people, f"a cut row is read again whole: {p.stdout[:300]}")
+    ok(len(p.stdout) > 65536, "the whole row is over a pipe's 64 KB and still one line of JSON")
+    ok("whole" in out["tried"][0] and "truncated" not in out, "the result says it was read again whole")
+    code, out, _ = run(fx, {}, "row", "table=t_ex1", "row=r_ex1", "fields=f_people")
+    ok(code == 0 and list(out["data"]["cells"]) == ["f_people"], "fields= narrows the row to one cell")
+    code, out, _ = run({"api-anything/getRow.json": cut_row}, {}, "row", "table=t_ex1", "row=r_ex1")
+    ok(code == 1 and out["ok"] is False and "data" not in out and "whole read failed" in out["tried"][0]["truncated"],
+       f"a cut row with no whole read fails closed: {out}")
+    code, out, _ = run(fx, {}, "row", "table=t_ex1", "row=r_ex1", "fields=brand")
+    ok(code == 2 and out["class"] == "input", "fields= takes column ids only")
+
+    # after= pages in the view's own order, never through Clay's afterrecordid.
+    ids = [f"r_{i:02d}" for i in range(15)]
+    fetched = [{"id": i, "cells": {"f_brand": {"value": i}}} for i in reversed(ids[10:15])]
+    fx = {"api-anything/getViewRecordIds.json": {"ok": True, "data": ids},
+          "api-anything/bulkFetchRecords.json": {"ok": True, "data": fetched},
+          "api-anything/listRowsAfter.json": {"ok": True, "data": [{"id": "r_00"}]}}
+    code, out, _ = run(fx, {}, "rows", "table=t_ex1", "view=gv_ex1", "after=r_09", "limit=10")
+    ok(code == 0 and [r["id"] for r in out["data"]] == ids[10:15], f"after= returns the next rows in view order: {out}")
+    ok(out["remaining"] == 0 and "getViewRecordIds" in out["call"], "after= says how many rows are left and how it read them")
+    code, out, _ = run(fx, {}, "rows", "table=t_ex1", "view=gv_ex1", "after=r_99")
+    ok(code == 2 and out["class"] == "input", "an after= id not in the view is an input error")
+    code, out, _ = run(fx, {}, "row-ids", "table=t_ex1", "view=gv_ex1")
+    ok(code == 0 and out["data"] == ids, "row-ids lists the view's ids")
+    code, out, _ = run(fx, {}, "rows-by-id", "table=t_ex1", "rows=r_10,r_11", "fields=f_brand")
+    ok(code == 0 and out["data"][0]["cells"] == {"f_brand": {"value": "r_14"}}, "rows-by-id reads rows by id")
+    code, out, _ = run(fx, {}, "rows-by-id", "table=t_ex1", "rows=" + ",".join(f"r_{i}" for i in range(101)))
+    ok(code == 2 and out["class"] == "input", "rows-by-id takes 100 ids at most")
+    reg, spec = registry_and_spec()
+    bulk = next(o for o in spec["operations"] if o["name"] == "bulkFetchRecords")
+    ok(bulk["request"]["method"] == "POST" and bulk["readOnly"] is True, "the bulk row read is a POST the front door treats as a read")
+
+    # View settings: one op each, gated writes, each body shape-checked.
+    want = {
+        "view-sort": (SAMPLES["sort"], "sort", {"items": [{"fieldId": "f_updated_at", "direction": "DESC"}]}),
+        "view-filter": (SAMPLES["view_filter"], "filter", json.loads(SAMPLES["view_filter"])),
+        "view-columns": (SAMPLES["columns"], "fields", {"f_a": {"isVisible": False}}),
+    }
+    for name, (value, leaf, body) in want.items():
+        arg = {"view-sort": "sort", "view-filter": "view_filter", "view-columns": "columns"}[name]
+        code, out, _ = run({}, {}, name, "table=t_ex1", "view=gv_ex1", f"{arg}={value}", "--dry-run")
+        req = out and out.get("request")
+        ok(code == 0 and req["method"] == "PATCH" and req["url"] == f"{V3}/tables/t_ex1/views/gv_ex1/{leaf}" and req["body"] == body,
+           f"{name} builds the bundle's request: {out}")
+        code, out, _ = run({}, {}, name, "table=t_ex1", "view=gv_ex1", f"{arg}={value}")
+        ok(code == 3 and out["class"] == "refused" and out["gate"] == "write:view-settings", f"{name} refuses without --allow-writes")
+    for name, arg, bad in (("view-sort", "sort", '[{"fieldId":"f_a","direction":"down"}]'),
+                           ("view-sort", "sort", '[{"fieldId":"Brand","direction":"ASC"}]'),
+                           ("view-filter", "view_filter", '{"combinationMode":"AND","items":[]}'),
+                           ("view-filter", "view_filter", '{"combinationMode":"XOR","items":[{"fieldId":"f_a","type":"EMPTY"}]}'),
+                           ("view-columns", "columns", '{"f_a":{"isVisible":"no"}}'),
+                           ("view-columns", "columns", '{"f_a":{"deleted":true}}')):
+        code, out, _ = run({}, {}, name, "table=t_ex1", "view=gv_ex1", f"{arg}={bad}", "--dry-run")
+        ok(code == 2 and out["class"] == "input", f"{name} refuses {bad}")
+    fx = {"api-anything/getTableViews.json": {"ok": True, "data": [{"id": "gv_ex1", "sort": {"items": []}, "filter": None, "fields": {}}]}}
+    code, out, _ = run(fx, {}, "views", "table=t_ex1")
+    ok(code == 0 and out["data"][0]["id"] == "gv_ex1", "views reads every view's settings")
+
+
 def test_fixtures_are_scrubbed():
     text = Path(__file__).read_text()
     import re
@@ -1047,7 +1118,7 @@ def main():
                test_ui_only_prints_route, test_chat_approval_stands_in_for_the_terminal, test_campaign_build_ops_touch_drafts_only, test_a_relabelled_write_is_still_gated, test_refuses_an_unpinned_engine, test_inbox_adapter_keeps_clay_inbox_shape,
                test_query_slot_reads_build, test_new_reads_are_reads_with_a_measured_surface,
                test_second_session_reads_through_its_own_login, test_cli_never_answers_for_another_workspace,
-               test_fixtures_are_scrubbed):
+               test_sabo_table_reads_without_clay_open, test_fixtures_are_scrubbed):
         fn()
     print(f"chewbacca clay: {checks} checks passed")
 

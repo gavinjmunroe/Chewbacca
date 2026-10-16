@@ -500,6 +500,25 @@ if (len(parts) < 2 and not stripped) or any(not p for p in parts):
 sys.stdout.write("\n".join(parts) + "\n")
 PY
 
+# A leading `cd <absolute path> &&` into a real Chewbacca checkout (the Clay op
+# registry and a git marker both there) prints the resolved directory, which
+# becomes the cwd the later pieces are judged from; anything else prints
+# nothing. On 2026-10-16 `cd <worktree> && python3 tests/test_chewbacca_clay.py`
+# refused because cd isn't a read, and agents hid test runs in scratch scripts
+# this hook never sees, which is worse than letting the cd through.
+CDKIT=""
+IFS= read -r -d '' CDKIT <<'PY' || true
+import os, re, shlex, sys
+m = re.match(r"\s*(cd\s+[A-Za-z0-9_./@+,:-]+)\s*&&", sys.stdin.read())
+if m:
+    argv = shlex.split(m.group(1))
+    if len(argv) == 2 and os.path.isabs(argv[1]):
+        d = os.path.realpath(argv[1])
+        if (os.path.isfile(os.path.join(d, "library", "clay-api", "registry.json"))
+                and os.path.exists(os.path.join(d, ".git"))):
+            print(d)
+PY
+
 case "$tool" in
   Bash)
     # Receipts and the grade key are written only by their own tools, and the
@@ -556,11 +575,16 @@ case "$tool" in
     # classify as a known read on its own, mention of Clay or not.
     segments="$(printf '%s' "$cmd" | python3 -I -c "$SPLIT" 2>/dev/null)" || segments=""
     if [ -n "$segments" ]; then
+      cdkit="$(printf '%s' "$cmd" | python3 -I -c "$CDKIT" 2>/dev/null)" || cdkit=""
+      seg_cwd="$cwd"
       # `|| [ -n "$seg" ]`: the substitution strips the last newline, and
       # without it the final piece was never read, so `grep clay x | sh` passed
       # on the grep alone (caught by tests/test_launch_guard_grade.py).
       while IFS= read -r seg || [ -n "$seg" ]; do
-        v="$(printf '%s' "$seg" | python3 -I -c "$CLASSIFY" "${kit:-/nonexistent}" "$cwd" force 2>/dev/null)" ||
+        if [ -n "$cdkit" ]; then
+          seg_cwd="$cdkit"; cdkit=""; verdict="allow"; continue
+        fi
+        v="$(printf '%s' "$seg" | python3 -I -c "$CLASSIFY" "${kit:-/nonexistent}" "$seg_cwd" force 2>/dev/null)" ||
           refuse "the command classifier failed, so a command that mentions Clay is refused."
         case "$v" in
           allow*) ;;

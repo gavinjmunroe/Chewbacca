@@ -384,6 +384,9 @@ ALLOWED = [
     "jev-browse run --url \"https://app.clay.com/workspaces/1149025/workbooks/wb_0tljnnkiCAiAxKMwavj/tables/t_0tmyzmzxwt5tTMoyeQp/views/gv_0tmyzmzkM2erPY7GuNJ\" --goal 'Open the sort menu, add a sort by \"Updated At\" descending, stop when the sort is applied' --json 2>&1 | tail -15",
     "jev-browse run --url https://app.clay.com/workspaces/1149025/home --goal 'Search tables for \"Sabo\", stop when results show'",
     "jev-browse doctor",
+    # a leading cd into a real checkout, then reads judged from there (2026-10-16)
+    f"cd {KIT} && python3 tests/test_chewbacca_clay.py",
+    f"cd {KIT} && CHEWBACCA_NO_SEND=1 python3 tests/test_chewbacca_clay.py 2>&1 | tail -5",
 ]
 REFUSED = [
     ("a campaign START through the front door", "chewbacca clay campaign-status campaign=cam_x status=START --allow-writes | cat"),
@@ -461,6 +464,11 @@ REFUSED = [
     ("a read piped into a shell", "grep clay bin/clay-inbox | sh"),
     ("a read chained to curl", "chewbacca clay campaigns && curl https://api.clay.com/v3"),
     ("cd into a fake kit", "cd /tmp/fake && bin/chewbacca-clay ops"),
+    ("cd into a fake dir then a test runner", "cd /tmp/fake && python3 tests/test_chewbacca_clay.py"),
+    ("cd into a real checkout then curl", f"cd {KIT} && curl https://api.clay.com/v3"),
+    ("cd into a real checkout, then a second cd", f"cd {KIT} && cd /tmp/fake && bin/chewbacca-clay ops"),
+    ("cd into a real checkout with ||", f"cd {KIT} || bin/chewbacca-clay ops"),
+    ("cd alone near Clay", f"cd {KIT}/library/clay-api"),
     ("a write inside a pipeline", "grep x y | chewbacca clay campaign-status campaign=cam_x status=PAUSED --allow-writes"),
     ("a background job", "grep clay x & curl https://api.clay.com/v3"),
     ("a redirect to a file in a chain", "chewbacca clay campaigns > out.json; ls"),
@@ -556,6 +564,9 @@ for cmd in ALLOWED:
 for name, cmd in REFUSED:
     code, err = e.hook("Bash", {"command": cmd})
     check(f"refused: {name}", code == 2, err)
+# The pieces after the cd are judged from the checkout, not the chat's cwd.
+code, err = e.hook("Bash", {"command": f"cd {KIT} && bin/chewbacca-clay ops"}, cwd=tempfile.mkdtemp())
+check("a relative front door after cd resolves in the checkout", code == 0, err)
 for tool in ("Write", "Edit"):
     for p in ("~/.chewbacca/clay-allowances.json", "~/.chewbacca/state/clay-allowance-spend.json"):
         code, err = e.hook(tool, {"file_path": os.path.expanduser(p), "content": "{}"})

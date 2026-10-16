@@ -228,6 +228,15 @@ attempted row, a proxy score or under 500 per arm, so write `observed` or
 `inconclusive` when that's what the evidence supports. The design is in
 `docs/plans/GTME-MEMORY.md`.
 
+When the ledger and a client's chain disagree on a GTM call with a clear best
+answer, make the call and say why. Don't hand Caleb the choice. On 2026-10-16
+the wrap-up asked "Should Sabo's chain count a catch-all email as verified?"
+He answered "Confused by the ask?", then "Do wtv is best". The right move was
+to rule on it (catch-all isn't verified: Sabo fears sending too much, and a
+bounce costs more than a missing contact), apply it, and report it in one
+line. Ask only for something only he can decide (money, a client's say, a
+send), and then ask in plain words, not vendor jargon.
+
 ## Client state comes from the graph, never from memory files
 
 Before answering anything about a client (who was emailed, who replied, what is

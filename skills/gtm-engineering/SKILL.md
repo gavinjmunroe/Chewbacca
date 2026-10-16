@@ -360,6 +360,13 @@ opt-outs that had to be blocklisted before Monday.
   Findymail plus ZeroBounce 2 of 2 at 0.6. Show the cheap chain, and say when
   a field is under 60%.
 
+- **Read the table's graph before touching a Clay table.** Caleb, 10/16: "chewb
+  should be a clay wizard bro... knowing exactly how column to column effects
+  row to row". Run `python3 -I tools/table_graph.py <table id>` first. It parses
+  every column's `{{f_}}` inputs into run order, says what feeds what and what
+  each paid action costs, and lints client readiness. On the Sabo table it
+  showed the people search fed nothing (a hand bridge), two parallel email
+  chains, five dead columns, and no Status or condensed Contact column.
 - **A client demo table is built the night before, not 5 minutes out.**
   Caleb, 12:35 on 10/16 with Sabo due at 1: "This looks so unorganized????? move
   all the goated rows to the top that's how demos are supposed to work". Before

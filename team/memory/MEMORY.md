@@ -149,6 +149,8 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 
 ## Lessons
 
+- feedback_campaign_recovery_graph_2026_10_16: a paused-campaign recovery runs as a task graph in one sitting: fan out reads, one writer, blocklist held enrollments, window before resume, native second replies, Vantage wins
+
 - feedback_read_all_of_brightspace: course material can hide behind announcement links (ACAD 185 master spreadsheet links every deck); read news + homepage links and export Google files before saying "0 files" (10/11)
 - feedback_usc_signin_uses_school_profile: chewb signs students into USC itself in the usc.edu Chrome profile, waits for SSO, BLOCKED only on a real password/Duo; Default profile hit SSO Login Failed (10/11)
 - feedback_practice_tool_is_a_session: study/practice tools are a one-thing-at-a-time session around the real object, never tabs over cards; teach each item before any quiz ("idk any of the chords", 10/12); interface-first.sh refuses a UI page before the interface skill (10/11)

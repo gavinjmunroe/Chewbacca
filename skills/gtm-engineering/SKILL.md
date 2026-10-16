@@ -356,6 +356,18 @@ Reply counts that disagree across sources, and replies read from a snippet: `che
   set them while he can still click, or map that endpoint first.
 - **During a live call, 3 lines max.** Caleb mid-demo: "This is too much
   text bro wtf". Give him what to say, not why.
+- **Nothing recurring runs on a Mac.** Caleb, 2026-10-16 3:05 PM: "we should
+  never hv anythign dependent on our computer being open on a loop!" A watcher
+  (job changes, refreshes, new rows) is a Clay signal, a Clay schedule or a
+  Railway service, never cron, launchd, a daemon or `chewbacca jobs`. The Mac
+  only does one-time setup. The past-buyer watcher is a Clay JobChange signal
+  (`reference_follow_past_buyers`).
+- **Client work lands in the kit, parameterized by client.** Caleb, 2026-10-16
+  3:07 PM: "Make sure everythign we do for sabo is repeatable and
+  productizable!" A script in a Downloads folder with one client's ids is a
+  prototype. Before calling it done, move it to `tools/` or
+  `tools/creator_gtm/`, read ids and columns from the client file, add a test
+  to `tests/run.sh`, and land it (follow_buyers.py on brand_buyer.py, a8f54457).
 
 ## When a step comes back empty or blocked: `gtme next-move` (2026-10-16)
 

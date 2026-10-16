@@ -27,6 +27,10 @@ file belongs to a team repository, or a promise taken from a meeting) is only
 crossed off here. Either way it is recorded in ~/.bob/home-done.json and stays
 on the list, struck through, until the day ends. After that the app is the
 truth for what it was written to, and the record for what it was not.
+
+A to-do typed on the panel (`kyber-surfaces home --add <text>`) goes into
+Reminders, his default list, with no date. It is recorded in
+~/.bob/home-added.json so the panel shows it for a day whatever the cap.
 """
 from __future__ import annotations
 
@@ -79,6 +83,16 @@ DONE_SHOWN = 3
 # press he asked for that day was never on the panel. Classwork gives up the
 # places, and it is also on the calendar as "6 due". Guessed, never measured.
 PEOPLE_SLOTS = 2
+# To-dos added on the panel, beside the feed.
+ADDED_NAME = "home-added.json"
+# A to-do added on the panel is shown whatever the cap for this long. On
+# 2026-10-16 four overdue reminders and a dated one already held the five
+# places, and an undated one sorts last, so the row he had just typed would
+# not have been on the panel at all. Guessed, never measured.
+ADDED_KEEP_H = 24
+# Reminders takes any length; past this it was pasted, not typed, and the
+# graph clips a title at 100 anyway (osgraph_ingest.reminders). Guessed.
+ADDED_MOST_CHARS = 200
 # Where the person's own commands live when Kyber, launched with launchd's
 # bare PATH, runs a refresh: `mac` and `people` in ~/.local/bin, node for
 # `people` from Homebrew.
@@ -231,13 +245,15 @@ def cached_projects(now: datetime, clock: float, home: Path) -> list[dict]:
 
 
 def build(graph, now: datetime, project_rows: list[dict], errors=None, written: datetime | None = None,
-          done: dict | None = None, agent: dict | None = None) -> dict:
+          done: dict | None = None, agent: dict | None = None, added: dict | None = None) -> dict:
     """`written` is when the graph was last ingested, if not now: the panel
     shows the feed's age from `at`, so a graph nobody refreshes says so.
-    `done` is the crossed-off record (load_done), and `agent` the runs handed
-    to the agent from the panel (home_agent.load)."""
+    `done` is the crossed-off record (load_done), `agent` the runs handed
+    to the agent from the panel (home_agent.load), and `added` the to-dos
+    typed on the panel (load_added)."""
     body = osgraph_walks.home(graph, now, most_todos=None)
-    body["todos"], body["todoCount"] = crossed(body["todos"], done or {}, now, keep=waiting(agent))
+    body["todos"], body["todoCount"] = crossed(body["todos"], done or {}, now,
+                                               keep=waiting(agent) | fresh(added, now))
     if agent:
         import home_agent  # noqa: PLC0415  it imports this module
 
@@ -567,3 +583,52 @@ def _uncross(row_id: str, path: Path) -> str:
     del done[row_id]
     write(done, path)
     return "Back on the list."
+
+
+# ── added on the panel ───────────────────────────────────────────────────
+
+
+def added_path(feed: Path) -> Path:
+    return feed.with_name(ADDED_NAME)
+
+
+def load_added(path: Path) -> dict:
+    return {k: v for k, v in read(path).items() if isinstance(v, dict)}
+
+
+def fresh(added: dict | None, now: datetime) -> set[str]:
+    """The to-dos typed on the panel in the last ADDED_KEEP_H hours, which
+    are shown whatever the cap."""
+    since = now - timedelta(hours=ADDED_KEEP_H)
+    return {k for k, v in (added or {}).items() if (at := _crossed_at(v)) is not None and at >= since}
+
+
+def add(title: str, now: datetime, path: Path, home: Path | None = None, run=None) -> tuple[str, str]:
+    """Add a to-do to Reminders, on his default list with no date, and record
+    it so the feed keeps it on the panel. Returns the row id the next
+    Reminders ingest gives it (osgraph_ingest.reminders) and a line to say."""
+    words = " ".join(title.split())
+    if not words:
+        raise Refused("Type the to-do first.")
+    if len(words) > ADDED_MOST_CHARS:
+        raise Refused(f"That is {len(words)} characters; keep a to-do under {ADDED_MOST_CHARS}.")
+    home = home or Path.home()
+    run = run or (lambda argv: run_tool(argv, home))
+    code, out = run(["mac", "reminders", "add", words, "--json"])
+    if code != 0:
+        raise Refused(out[:120] or "mac reminders add failed")
+    try:
+        made = json.loads(out)
+    except json.JSONDecodeError:
+        made = None
+    rid = made.get("id") if isinstance(made, dict) else None
+    if not isinstance(rid, str) or not rid:
+        # It may well be in Reminders; only its place on the panel is unknown.
+        return "", "Added to Reminders; it shows here after the next pass."
+    row_id = osgraph.node_key("task", "reminders", rid, str(made.get("title") or words))
+    with _Locked(path):
+        since = now - timedelta(hours=ADDED_KEEP_H)
+        kept = {k: v for k, v in load_added(path).items() if (at := _crossed_at(v)) is not None and at >= since}
+        kept[row_id] = {"title": words, "at": now.isoformat(), "reminder": rid}
+        write(kept, path)
+    return row_id, "Added to Reminders."

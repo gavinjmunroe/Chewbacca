@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 import os
 
@@ -17,7 +18,8 @@ import os
 /// the widgets it replaces, so it is there when the windows are not and never
 /// over work. The rows come from `~/.bob/home-panel.json`, which the surfaces
 /// daemon writes after every ingest (`bin/lib/home_feed.py`); this file draws
-/// them and sends a cross-off back as `kyber-surfaces home --done <id>`.
+/// them and sends a cross-off back as `kyber-surfaces home --done <id>`, and
+/// a to-do typed on it as `kyber-surfaces home --add <text>`.
 /// Only the mark moves while idle (HomeMark.swift).
 
 // MARK: - The feed
@@ -573,6 +575,58 @@ public final class HomeModel: ObservableObject {
         }
     }
 
+    // MARK: Adding
+
+    /// The field for a new to-do is open.
+    @Published public private(set) var isComposing = false
+    /// What is typed in it. Kept when Reminders refuses, so nothing typed is
+    /// lost to a failed write.
+    @Published public var draft = ""
+    /// A to-do on its way to Reminders, drawn faint where the field was until
+    /// the feed it rewrites is read back.
+    @Published public private(set) var adding: String?
+
+    public func compose() {
+        guard adding == nil else { return }
+        isComposing = true
+    }
+
+    /// Escape, or a press away from an empty field.
+    public func cancelCompose() {
+        isComposing = false
+        draft = ""
+    }
+
+    /// `home --add`: into Reminders, then back as a row. An empty field
+    /// closes instead.
+    public func add() {
+        let words = draft.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        guard adding == nil else { return }
+        guard !words.isEmpty else { return cancelCompose() }
+        isComposing = false
+        adding = words
+        let finish: @MainActor (Int32, String) -> Void = { [weak self] status, said in
+            guard let self else { return }
+            if status != 0 {
+                Self.log.notice("home.add status=\(status, privacy: .public) \(said, privacy: .private)")
+                let line = said.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
+                notice = line.isEmpty ? "That to-do could not be added." : line
+                isComposing = true
+            } else {
+                notice = nil
+                draft = ""
+            }
+            adding = nil
+        }
+        if let writer {
+            writer(["home", "--add", words], finish)
+        } else if refresher != nil {
+            surfaces(["home", "--add", words], then: finish)
+        } else {
+            finish(127, "Kyber could not find kyber-surfaces, so nothing was added.")
+        }
+    }
+
     private func write(_ arguments: [String], for id: String) {
         waiting[id] = nil
         let finish: @MainActor (Int32, String) -> Void = { [weak self] status, said in
@@ -856,13 +910,21 @@ struct HomeList: View {
                         .homeLight()
                         .foregroundStyle(HUD.faint)
                 }
+                if section == .todos, !model.isComposing, model.adding == nil {
+                    HomeVerb(word: "add", tone: HUD.dim, help: "Add a to-do to Reminders") { model.compose() }
+                        .padding(.vertical, -9)
+                        .padding(.trailing, -6)
+                }
             }
             .padding(.bottom, 5)
             .overlay(alignment: .bottom) {
                 Color.white.opacity(0.16).frame(height: 1)
             }
             .padding(.bottom, 4)
-            if rows.isEmpty {
+            if section == .todos, model.isComposing || model.adding != nil {
+                HomeAddRow(model: model)
+            }
+            if rows.isEmpty, !(section == .todos && (model.isComposing || model.adding != nil)) {
                 Text(section.empty)
                     .homeLight()
                     .foregroundStyle(HUD.faint)
@@ -1058,6 +1120,56 @@ struct HomeRowView: View {
         case .todos: return "Open your tasks on the glass"
         case .projects: return row.path.isEmpty ? "No folder for \(row.title)" : "Open \(row.title) in Terminal"
         }
+    }
+}
+
+/// A new to-do: a dashed ring where its box will be and the words being
+/// typed. Return adds it, Escape leaves it. While Reminders is written the
+/// words stay, faint, where the row will appear.
+struct HomeAddRow: View {
+    @ObservedObject var model: HomeModel
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 0) {
+            Circle()
+                .strokeBorder(Color.white.opacity(0.45), style: StrokeStyle(lineWidth: 1.25, dash: [2, 2]))
+                .frame(width: 15, height: 15)
+                .padding(.leading, 6)
+                .frame(width: 24, height: 36, alignment: .leading)
+                .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4.5 }
+                .accessibilityHidden(true)
+            if let adding = model.adding {
+                Text(adding)
+                    .homePixel()
+                    .foregroundStyle(HUD.faint)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 6)
+                Spacer(minLength: 6)
+                Text("adding")
+                    .homeLight()
+                    .foregroundStyle(HUD.running)
+                    .padding(.trailing, 6)
+            } else {
+                TextField("New to-do", text: $model.draft, prompt: Text("new to-do").foregroundStyle(HUD.faint))
+                    .textFieldStyle(.plain)
+                    .homePixel()
+                    .foregroundStyle(HUD.ink)
+                    .focused($focused)
+                    .onSubmit { model.add() }
+                    .onExitCommand { model.cancelCompose() }
+                    .padding(.horizontal, 6)
+                if !model.draft.trimmingCharacters(in: .whitespaces).isEmpty {
+                    HomeVerb(word: "add", tone: HUD.running, help: "Add it to Reminders") { model.add() }
+                }
+            }
+        }
+        .frame(minHeight: 36)
+        .padding(.horizontal, -6)
+        // The window takes the keys when the field opens; focus waits a turn
+        // for that, or the field draws focused and gets nothing.
+        .onAppear { DispatchQueue.main.async { focused = true } }
     }
 }
 
@@ -1394,6 +1506,10 @@ struct HomeGlass: View {
 public final class HomeWindow: NSPanel {
     public let model: HomeModel
     private var host: HomeHostingView<HomeView>?
+    private var typing: AnyCancellable?
+    /// The app in front when the field opened, given the keys back when it
+    /// closes.
+    private var keysFrom: NSRunningApplication?
     private static let placeKey = "hud.home.topLeft"
     private static let sizeKey = "hud.home.size"
     /// Just above the desktop icons, below every app window.
@@ -1437,6 +1553,19 @@ public final class HomeWindow: NSPanel {
         contentView = host
         layOut()
 
+        typing = model.$isComposing.removeDuplicates().dropFirst().sink { [weak self] on in
+            MainActor.assumeIsolated { self?.takeKeys(on) }
+        }
+        // A press anywhere else with nothing typed closes the field.
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didResignKeyNotification, object: self, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let model = self?.model, model.isComposing,
+                      model.draft.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+                model.cancelCompose()
+            }
+        }
         NotificationCenter.default.addObserver(
             forName: NSWindow.didMoveNotification, object: self, queue: .main
         ) { [weak self] _ in
@@ -1450,7 +1579,24 @@ public final class HomeWindow: NSPanel {
         }
     }
 
-    public override var canBecomeKey: Bool { false }
+    /// Only while the new to-do field is open: the rest of the time a press
+    /// on the panel leaves the keys with the app he was in.
+    public override var canBecomeKey: Bool { acceptsTyping }
+    public private(set) var acceptsTyping = false
+
+    func takeKeys(_ on: Bool) {
+        guard on != acceptsTyping else { return }
+        acceptsTyping = on
+        if on {
+            keysFrom = NSWorkspace.shared.frontmostApplication
+            makeKey()
+        } else {
+            // A nonactivating panel never made Kyber the active app, so the
+            // app in front is still his; this hands it its keys back.
+            if isKeyWindow, let app = keysFrom, app != NSRunningApplication.current { app.activate() }
+            keysFrom = nil
+        }
+    }
     public override var canBecomeMain: Bool { false }
 
     /// What the content last asked for, before the cap.

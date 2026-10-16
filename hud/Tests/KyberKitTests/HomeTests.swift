@@ -300,6 +300,54 @@ struct HomeTests {
         #expect(model.agentPress.isEmpty && model.notice == nil)
     }
 
+    /// Typing a to-do runs `home --add` once with the words on one line, shows
+    /// them as adding until it returns, and an empty field just closes.
+    @Test func addingRunsItsCommand() async throws {
+        let calls = Calls()
+        var finish: (@MainActor (Int32, String) -> Void)?
+        let model = HomeModel(feed: HomeFeed(), now: Self.now) { arguments, done in
+            calls.made.append(arguments)
+            finish = done
+        }
+        model.compose()
+        model.add()
+        #expect(!model.isComposing && calls.made.isEmpty)
+
+        model.compose()
+        model.draft = "  Pick up\n the suit "
+        model.add()
+        #expect(model.adding == "Pick up the suit" && !model.isComposing)
+        model.compose()
+        model.add()
+        #expect(calls.made == [["home", "--add", "Pick up the suit"]])
+        finish?(0, "")
+        #expect(model.adding == nil && model.draft.isEmpty && model.notice == nil)
+    }
+
+    /// A refused add says why and gives the words back in an open field.
+    @Test func aRefusedAddKeepsTheWords() {
+        let model = HomeModel(feed: HomeFeed(), now: Self.now) { _, done in
+            done(2, "Reminders access denied\n")
+        }
+        model.compose()
+        model.draft = "Call the bank"
+        model.add()
+        #expect(model.notice == "Reminders access denied")
+        #expect(model.isComposing && model.draft == "Call the bank" && model.adding == nil)
+    }
+
+    /// The panel takes the keys only while the field is open, so a press on
+    /// it at any other time leaves them with the app he was in.
+    @Test func takesTheKeysOnlyToType() {
+        let model = HomeModel(feed: HomeFeed(), now: Self.now)
+        let window = HomeWindow(model: model) { _, _ in }
+        #expect(!window.canBecomeKey)
+        model.compose()
+        #expect(window.canBecomeKey)
+        model.cancelCompose()
+        #expect(!window.canBecomeKey)
+    }
+
     /// Reminders can complete a reminder and never reopen one, so a row it
     /// finished cannot be put back from the panel.
     @Test func aRowItsAppFinishedStaysDone() {
@@ -378,11 +426,25 @@ struct HomeTests {
         renderer.scale = 2
         let image = try #require(renderer.nsImage)
         #expect(image.size.height - 48 > 200)
+        try Self.keep(image, as: "home.png")
 
+        // A to-do on its way to Reminders, where the field was.
+        let adding = HomeModel(feed: feed, now: Self.now) { _, _ in }
+        adding.compose()
+        adding.draft = "Pick up the suit"
+        adding.add()
+        let pending = ImageRenderer(content: HomeView(model: adding, width: limit.width, scrolls: false)
+            .environment(\.hudOffscreen, true).padding(24).background(Color(red: 0.3, green: 0.36, blue: 0.3))
+            .frame(width: limit.width + 48).fixedSize(horizontal: false, vertical: true))
+        pending.scale = 2
+        try Self.keep(try #require(pending.nsImage), as: "home-adding.png")
+    }
+
+    static func keep(_ image: NSImage, as name: String) throws {
         if let dir = ProcessInfo.processInfo.environment["HUD_SNAPSHOT_DIR"],
            let tiff = image.tiffRepresentation,
            let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
-            let url = URL(fileURLWithPath: dir).appendingPathComponent("home.png")
+            let url = URL(fileURLWithPath: dir).appendingPathComponent(name)
             try? FileManager.default.createDirectory(
                 at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try png.write(to: url)

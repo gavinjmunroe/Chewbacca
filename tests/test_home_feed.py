@@ -251,6 +251,65 @@ def crossing(tmp: Path) -> None:
     g.db.close()
 
 
+def adding(tmp: Path) -> None:
+    """A to-do typed on the panel goes into Reminders and stays on the panel
+    for a day whatever the cap."""
+    now = datetime.now().astimezone().replace(hour=12, minute=0, second=0, microsecond=0)
+    record = tmp / "bob" / "home-added.json"
+    calls = []
+    answer = [(0, json.dumps({"id": "R-NEW", "isCompleted": False, "list": "Reminders",
+                              "title": "Pick up the suit"}))]
+
+    def run(argv):
+        calls.append(argv)
+        return answer[0]
+
+    for title, want in (("   ", "Type the to-do first."),
+                        ("x" * 201, "That is 201 characters; keep a to-do under 200.")):
+        try:
+            home_feed.add(title, now, record, home=tmp, run=run)
+            refused = ""
+        except home_feed.Refused as err:
+            refused = str(err)
+        check(f"an add of {len(title)} characters is refused before Reminders is asked",
+              refused == want and not calls, (refused, calls))
+    row_id, said = home_feed.add("  Pick up\n the   suit ", now, record, home=tmp, run=run)
+    check("the words go to Reminders as one line, asking for its id back",
+          calls == [["mac", "reminders", "add", "Pick up the suit", "--json"]] and said == "Added to Reminders.",
+          (calls, said))
+    check("the row id is the one the Reminders ingest gives the same reminder",
+          row_id == osgraph.node_key("task", "reminders", "R-NEW", "Pick up the suit"), row_id)
+    mode = stat.S_IMODE(record.stat().st_mode)
+    check("the record is owner-only", mode == 0o600, oct(mode))
+
+    added = home_feed.load_added(record)
+    many = [{"id": f"task:{i}", "title": str(i), "day": "2026-10-14", "overdue": True} for i in range(6)]
+    new_row = {"id": row_id, "title": "Pick up the suit", "detail": "", "day": "", "overdue": False}
+    rows, count = home_feed.crossed(many + [new_row], {}, now, keep=home_feed.fresh(added, now))
+    check("a to-do just added is on the panel though six overdue ones sort ahead of it",
+          row_id in [r["id"] for r in rows] and len(rows) == 5 and count == 7, ([r["id"] for r in rows], count))
+    later = now + timedelta(hours=home_feed.ADDED_KEEP_H + 1)
+    rows, _ = home_feed.crossed(many + [new_row], {}, later, keep=home_feed.fresh(added, later))
+    check("a day later it takes its place like any other row", row_id not in [r["id"] for r in rows], rows)
+    home_feed.add("Second one", later, record, home=tmp, run=run)
+    check("an old add leaves the record when the next is written",
+          list(home_feed.load_added(record).values())[0]["title"] == "Second one"
+          and len(home_feed.load_added(record)) == 1, home_feed.load_added(record))
+
+    answer[0] = (1, "Reminders access denied")
+    try:
+        home_feed.add("Call the bank", now, record, home=tmp, run=run)
+        refused = ""
+    except home_feed.Refused as err:
+        refused = str(err)
+    check("a failed add says what Reminders said", refused == "Reminders access denied", refused)
+    answer[0] = (0, "Added.")
+    row_id, said = home_feed.add("Call the bank", now, record, home=tmp, run=run)
+    check("an add with no id back is not called a failure, and records nothing",
+          row_id == "" and said.startswith("Added to Reminders;") and len(home_feed.load_added(record)) == 1,
+          (row_id, said))
+
+
 # A backlog row the to-do walk lists: a P0 decision.
 BLOCKING = {"kind": "backlog", "status": "decision", "priority": "P0"}
 
@@ -381,6 +440,8 @@ def main() -> int:
         pinned(Path(d))
     with tempfile.TemporaryDirectory() as d:
         crossing(Path(d))
+    with tempfile.TemporaryDirectory() as d:
+        adding(Path(d))
     with tempfile.TemporaryDirectory() as d:
         overlapping(Path(d))
     with tempfile.TemporaryDirectory() as d:

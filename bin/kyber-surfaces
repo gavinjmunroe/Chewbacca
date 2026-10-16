@@ -81,6 +81,8 @@ HOME_PANEL = BOB / "home-panel.json"
 HOME_DONE = BOB / "home-done.json"
 # To-dos handed to the agent from the panel (home_agent).
 HOME_AGENT = BOB / "home-agent.json"
+# To-dos typed on the panel (home_feed.add).
+HOME_ADDED = BOB / "home-added.json"
 CONFIG = Path(os.environ.get("KYBER_SURFACES_CONFIG", str(Path.home() / ".chewbacca" / "surfaces.json")))
 LOG = Path.home() / "Library" / "Logs" / "com.calebnewton.chewbacca.surfaces.log"
 
@@ -270,7 +272,8 @@ class Daemon:
             rows = home_feed.cached_projects(now, time.monotonic(), self.ctx.home)
             body = home_feed.build(self.ctx.graph, now, rows, getattr(self.ctx, "ingest_errors", {}),
                                    done=home_feed.load_done(home_feed.done_path(self.home_path)),
-                                   agent=home_agent.load(home_agent.state_path(self.home_path)))
+                                   agent=home_agent.load(home_agent.state_path(self.home_path)),
+                                   added=home_feed.load_added(home_feed.added_path(self.home_path)))
             home_feed.write(body, self.home_path)
         except Exception as err:  # noqa: BLE001  the panel never takes the daemon down
             log(f"home: {err}")
@@ -1110,7 +1113,7 @@ def spawn_home_work(row_id: str) -> int:
 
 
 def cmd_home(write: bool, done: str = "", undo: str = "", handle: str = "", work: str = "",
-             send: str = "", drop: str = "") -> int:
+             send: str = "", drop: str = "", add: str = "") -> int:
     """The home panel's feed from the graph as it stands. It never ingests:
     Kyber runs `home --write` when the feed is stale, and the daemon owns
     ingesting. Stamped with when the graph was last written, so a graph
@@ -1119,8 +1122,10 @@ def cmd_home(write: bool, done: str = "", undo: str = "", handle: str = "", work
     `done` crosses a to-do off and `undo` puts it back (home_feed.cross).
     `handle` hands a to-do for someone to the agent, `work` is that run,
     `send` sends the text it drafted and `drop` throws the draft or the
-    answer away (home_agent). Each then writes the feed, so the panel shows
-    it at once."""
+    answer away (home_agent). `add` puts a typed to-do in Reminders and
+    reads Reminders alone back into the graph, so the row is in the feed
+    when the panel next reads it (home_feed.add). Each then writes the feed,
+    so the panel shows it at once."""
     import home_agent  # noqa: PLC0415
     import home_feed  # noqa: PLC0415
 
@@ -1132,10 +1137,16 @@ def cmd_home(write: bool, done: str = "", undo: str = "", handle: str = "", work
         return 1
     ctx = live_context()
     now = ctx.now()
-    acted = bool(done or undo or handle or work or send or drop)
+    acted = bool(done or undo or handle or work or send or drop or add)
     if acted:
         try:
-            if done:
+            if add:
+                _, said = home_feed.add(add, now, HOME_ADDED, home=ctx.home)
+                report = osgraph_ingest.ingest_all(ctx.graph, ctx, days=INGEST_DAYS, only=["reminders"],
+                                                   ids=ctx.ids)
+                if (report.get("reminders") or {}).get("error"):
+                    said = "Added to Reminders; it shows here after the next pass."
+            elif done:
                 said = home_feed.cross(ctx.graph, done, now, HOME_DONE, home=ctx.home)
             elif undo:
                 said = home_feed.uncross(undo, HOME_DONE)
@@ -1174,7 +1185,7 @@ def home_body(ctx, now, graph_path: Path) -> dict:
     failed = home_feed.read(HOME_PANEL).get("failed") or []
     return home_feed.build(ctx.graph, now, rows, [str(f) for f in failed if isinstance(f, str)],
                            written=home_feed.graph_written(graph_path), done=home_feed.load_done(HOME_DONE),
-                           agent=home_agent.load(HOME_AGENT))
+                           agent=home_agent.load(HOME_AGENT), added=home_feed.load_added(HOME_ADDED))
 
 
 def write_home_feed(ctx, now, graph_path: Path) -> None:
@@ -1202,7 +1213,7 @@ def cmd_forget() -> int:
         gone.append(str(osgraph_runs.RUNS))
     # The home feed and its crossed-off record hold to-do titles and names,
     # so they go with the graph they were read from.
-    for derived in (BADGES, HOME_PANEL, HOME_DONE, HOME_AGENT):
+    for derived in (BADGES, HOME_PANEL, HOME_DONE, HOME_AGENT, HOME_ADDED):
         if derived.exists():
             derived.unlink()
             gone.append(str(derived))
@@ -1243,6 +1254,7 @@ def main(argv: list[str] | None = None) -> int:
     h = sub.add_parser("home", help="the desktop home panel's feed, as JSON")
     h.add_argument("--write", action="store_true", help="write ~/.bob/home-panel.json instead of printing it")
     crossing = h.add_mutually_exclusive_group()
+    crossing.add_argument("--add", default="", metavar="TEXT", help="add a to-do to Reminders and the panel")
     crossing.add_argument("--done", default="", metavar="ID", help="cross a to-do off, in its own app where it can be")
     crossing.add_argument("--undo", default="", metavar="ID", help="put a crossed-off to-do back")
     crossing.add_argument("--handle", default="", metavar="ID", help="hand a to-do for someone to the agent")
@@ -1269,7 +1281,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "graph":
         return cmd_graph()
     if args.cmd == "home":
-        return cmd_home(args.write, args.done, args.undo, args.handle, args.work, args.send, args.drop)
+        return cmd_home(args.write, args.done, args.undo, args.handle, args.work, args.send, args.drop, args.add)
     if args.cmd == "forget":
         return cmd_forget()
     if args.cmd in ("open", "walk"):

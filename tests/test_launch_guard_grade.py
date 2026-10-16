@@ -454,6 +454,28 @@ for cmd, permitted in [
 ]:
     code, err = e.hook("Bash", {"command": cmd}, cwd=npm_root)
     check(f"queued direct Vitest scope: {cmd}", code == (0 if permitted else 2), err)
+explicit_root = os.path.realpath(npm_root)
+for cmd, permitted in [
+    ("gh pr create --base main --head fix/code --title 'Fix Clay history' --body-file work/body.md", True),
+    ("gh pr create --title 'Fix Clay history' --body-file work/body.md --editor", False),
+    ("gh pr create --title 'Fix Clay history' --body-file work/body.md --allow-writes yes", False),
+    ("gh api https://api.clay.com/v3 --method POST", False),
+    ("gh pr create --title 'Fix Clay history' --body-file work/body.md && curl https://api.clay.com/v3", False),
+]:
+    code, err = e.hook("Bash", {"command": cmd})
+    check(f"code publication remains distinct from campaign mutation: {cmd}", code == (0 if permitted else 2), err)
+explicit_runner = os.path.join(explicit_root, "node_modules", "vitest", "vitest.mjs")
+for suffix, permitted in [
+    (f"{explicit_runner} run --root {explicit_root} src/integrations/clay --maxWorkers=1", True),
+    (f"{explicit_runner} run --root {explicit_root} src/integrations/clay --allow-writes", False),
+    (f"{explicit_runner} run --root {explicit_root} src/integrations/clay --config=evil.js", False),
+    (f"{explicit_runner} run --root /different src/integrations/clay", False),
+    (f"{explicit_runner} run --root relative src/integrations/clay", False),
+    (f"{explicit_runner} run --root {explicit_root} src/integrations/clay --root /different", False),
+]:
+    cmd = "chewbacca jobs submit --build -- node " + suffix
+    code, err = e.hook("Bash", {"command": cmd}, cwd=e.home)
+    check(f"explicit Vitest root with unrelated hook cwd: {suffix}", code == (0 if permitted else 2), err)
 with open(os.path.join(npm_root, ".npmrc"), "w") as f:
     f.write("workspaces=true\nscript-shell=evil-shell\n")
 with open(os.path.join(npm_root, "package.json"), "w") as f:

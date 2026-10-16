@@ -238,16 +238,27 @@ def kit_file(p, rel):
 
 def test_runner(argv):
     name, args = argv[0], argv[1:]
-    if name == "node" and args[:2] == ["node_modules/vitest/vitest.mjs", "run"] and cwd:
+    runner_cwd, runner_args = cwd, args
+    if name == "node" and len(args) >= 4 and os.path.isabs(args[0]) and args[1:3] == ["run", "--root"]:
+        # The Desktop bridge supplied Bash with only command + chat cwd on
+        # 2026-10-15, dropping exec_command.workdir. Explicit Vitest roots
+        # bind both the proposed check and execution to the same repository.
+        if not os.path.isabs(args[3]):
+            return False
+        root = os.path.realpath(args[3])
+        if args[0] != os.path.join(root, "node_modules", "vitest", "vitest.mjs"):
+            return False
+        runner_cwd, runner_args = root, ["node_modules/vitest/vitest.mjs", "run"] + args[4:]
+    if name == "node" and runner_args[:2] == ["node_modules/vitest/vitest.mjs", "run"] and runner_cwd:
         try:
-            package = json.load(open(os.path.join(cwd, "node_modules", "vitest", "package.json")))
+            package = json.load(open(os.path.join(runner_cwd, "node_modules", "vitest", "package.json")))
         except (OSError, ValueError):
             return False
-        return (os.path.exists(os.path.join(cwd, ".git")) and
+        return (os.path.exists(os.path.join(runner_cwd, ".git")) and
                 package.get("name") == "vitest" and
-                os.path.isfile(os.path.join(cwd, "node_modules", "vitest", "vitest.mjs")) and
+                os.path.isfile(os.path.join(runner_cwd, "node_modules", "vitest", "vitest.mjs")) and
                 all(a == "--maxWorkers=1" or re.fullmatch(r"(?:src|tests)/[A-Za-z0-9_./-]+", a)
-                    for a in args[2:]))
+                    for a in runner_args[2:]))
     if name == "python3" and len(args) == 1 and re.fullmatch(r"tests/[A-Za-z0-9_.-]+\.py", args[0]):
         return True
     if name == "bash" and args and args[0] == "tests/run.sh" and len(args) <= 2:
@@ -268,6 +279,16 @@ if test_runner(argv):
 
 name, args = argv[0], argv[1:]
 base = os.path.basename(name)
+if name == "gh" and args[:2] == ["pr", "create"]:
+    # A code PR titled with Clay was refused on 2026-10-15 as though its
+    # title mutated a campaign. This exact CLI only publishes GitHub metadata;
+    # publication authority remains a separate check from campaign permission.
+    options = args[2:]
+    allowed = {"--base", "--head", "--title", "--body-file", "--repo"}
+    if (len(options) % 2 == 0 and all(options[i] in allowed for i in range(0, len(options), 2))
+            and "--title" in options[::2] and "--body-file" in options[::2]):
+        out("allow")
+    out("refuse", "unsupported GitHub PR creation options")
 
 # The kit's own front door, in any spelling of its path. Writes there are gated
 # in code (a person at a terminal, and a passing grade for a START or add-leads),

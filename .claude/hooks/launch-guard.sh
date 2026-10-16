@@ -408,6 +408,8 @@ if name == "git":
     if sub not in GIT_SUBS:
         out("refuse", f"git {sub or '(none)'} is not an allowed subcommand (config, aliases and hooks stay out)")
     if native_git:
+        if "--no-pager" not in args[:i]:
+            out("refuse", "host Git patch inspection requires global --no-pager")
         # Git accepts abbreviated executable flags and enables textconv by
         # default. The 2026-10-15 review found both escaped the denylist.
         # This exception covers only bounded patch inspection, with an exact

@@ -5,6 +5,7 @@ tests/fixtures/gtme-reply/reply_intent_cases.json is the 27 investor
 replies from reply-intent.test.ts, anonymized (every name, firm, address, phone
 number and link invented) and stored ASCII-escaped.
 """
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -26,6 +27,11 @@ CASES = json.loads((ROOT / "tests" / "fixtures" / "gtme-reply" / "reply_intent_c
 COPY_FILE = ROOT / "tests" / "fixtures" / "gtme-reply" / "reply-copy-cases.json"
 COPY_SHA256 = "cf3d9f40ffb8429fe95e1439947b6698c418a7df1b1c648caa2cf246de443ac4"
 COPY_CASES = json.loads(COPY_FILE.read_text(encoding="utf-8"))
+# Also shared byte for byte with togari-platform's
+# src/agents/smartlead-responder/__tests__/reply-kind-cases.json: the replies
+# both classifiers misread, so neither copy drifts ahead again (2026-10-16).
+KIND_FILE = ROOT / "tests" / "fixtures" / "gtme-reply" / "reply-kind-cases.json"
+KIND_SHA256 = "08383ae15558cd4507f04fecbbe089767e93a4c626319e32f5b23412b0163dcd"
 ZEUTARA_COPY = COPY_CASES["clients"]["zeutara"]
 
 EM = "—"
@@ -98,6 +104,14 @@ class ReplyIntentRealReplies(unittest.TestCase):
         for body, kind in cases.items():
             with self.subTest(body):
                 self.assertEqual(reply.reply_intent(body)["kind"], kind)
+
+    def test_shared_reply_kind_corpus(self):
+        raw = KIND_FILE.read_bytes()
+        self.assertEqual(hashlib.sha256(raw).hexdigest(), KIND_SHA256,
+                         "reply-kind-cases.json drifted from togari-platform's copy")
+        for c in json.loads(raw)["cases"]:
+            with self.subTest(c["id"]):
+                self.assertEqual(reply.reply_intent(c["body"], "a@fund.example")["kind"], c["kind"])
 
     def test_passes_that_held_gtme_done_open_on_2026_10_16(self):
         # Read as "unclear" and listed as owed replies; reworded.

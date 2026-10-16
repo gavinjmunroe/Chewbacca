@@ -1,0 +1,125 @@
+{
+  "about": "Investor replies the reply classifiers misread, reworded, with the kind a person gave each after reading it. Togari's reply-intent.ts and Chewbacca's gtme_reply.py both pin this file by sha256 and must agree on every case. Add a case to both repos in the same change.",
+  "cases": [
+    {
+      "id": "out-of-thesis",
+      "date": "2026-10-16",
+      "kind": "pass",
+      "body": "oh thanks. will need to hold off. out of thesis for us."
+    },
+    {
+      "id": "np-interest",
+      "date": "2026-10-16",
+      "kind": "pass",
+      "body": "Np interest"
+    },
+    {
+      "id": "sectors-not-a-fit",
+      "date": "2026-10-16",
+      "kind": "pass",
+      "body": "Thank you for reaching out. While the concept is intriguing, it falls outside the sectors we are presently targeting. Unfortunately, this won't be a fit for us."
+    },
+    {
+      "id": "partners-retired",
+      "date": "2026-10-16",
+      "kind": "pass",
+      "body": "Jonah, The partners here have all retired and we no longer invest. Best of luck"
+    },
+    {
+      "id": "apply-directly-via",
+      "date": "2026-10-16",
+      "kind": "form",
+      "body": "We now route active opportunities through our fundraising platform, which helps us evaluate fit more efficiently. Please apply directly via the platform. That's the best way to get into our review process."
+    },
+    {
+      "id": "no-then-signature",
+      "date": "2026-10-14",
+      "kind": "pass",
+      "body": "No\n\nTeresa\n10437 W. Innovation Drive"
+    },
+    {
+      "id": "no-longer-new-investments",
+      "date": "2026-10-14",
+      "kind": "pass",
+      "body": "Thanks Jonah, we are no longer making new investments."
+    },
+    {
+      "id": "no-individual-deals",
+      "date": "2026-10-14",
+      "kind": "pass",
+      "body": "We do not invest in individual deals."
+    },
+    {
+      "id": "never-third-party",
+      "date": "2026-10-14",
+      "kind": "pass",
+      "body": "We will never talk to anyone who is using a third-party to raise."
+    },
+    {
+      "id": "conflict-of-interest",
+      "date": "2026-10-11",
+      "kind": "pass",
+      "body": "It would be a conflict of interest since we have our own fund in the space"
+    },
+    {
+      "id": "have-to-pass",
+      "date": "2026-10-11",
+      "kind": "pass",
+      "body": "Thanks for thinking of us. I have to pass on this one."
+    },
+    {
+      "id": "lead-condition",
+      "date": "2026-10-11",
+      "kind": "later",
+      "body": "Jonah - I'm happy to chat once they identify a lead for the round, but until then, I have to pass."
+    },
+    {
+      "id": "what-is-the-company",
+      "date": "2026-10-16",
+      "kind": "question",
+      "body": "what is the company?"
+    },
+    {
+      "id": "no-need-then-question",
+      "date": "2026-10-16",
+      "kind": "question",
+      "body": "No need to apologize. What are you raising?"
+    },
+    {
+      "id": "no-pressure-then-meet",
+      "date": "2026-10-16",
+      "kind": "interested",
+      "body": "No pressure on timing, let's set up time next week"
+    },
+    {
+      "id": "retired-fund-interested",
+      "date": "2026-10-16",
+      "kind": "interested",
+      "body": "We have retired Fund II and are actively investing from Fund III. Interested."
+    },
+    {
+      "id": "conditional-fit-question",
+      "date": "2026-10-16",
+      "kind": "question",
+      "body": "Won't be a fit unless you have $1M ARR. What is your revenue?"
+    },
+    {
+      "id": "no-get-outlook",
+      "date": "2026-10-14",
+      "kind": "pass",
+      "body": "No  Get Outlook for Mac"
+    },
+    {
+      "id": "no-but-open",
+      "date": "2026-10-16",
+      "kind": "interested",
+      "body": "No, but I'd be open to a call next week"
+    },
+    {
+      "id": "no-comma-thanks",
+      "date": "2026-10-16",
+      "kind": "pass",
+      "body": "No, txs\n\nAnton Weber\nAttorney at Law"
+    }
+  ]
+}

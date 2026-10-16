@@ -339,7 +339,7 @@ MOVED_ON = js_regex(
     r"|is (now )?the best person|best person to (reach|contact)|reach out to (him|her|them|anyone)"
     r"|feel free to reach out to|is more on the|\(cc'?d\)|cc'?ing|looping in)", "i")
 FORM = js_regex(
-    r"(intake form|founder form|application|apply (through|via|on|at)|submit (your|the|a|it|their)"
+    r"(intake form|founder form|application|apply (directly )?(through|via|on|at)|submit (your|the|a|it|their)"
     r"|fill (out|in)|our website|investment criteria|typeform|airtable|vettable|portal"
     r"|form (at|here|below|link))", "i")
 # "More information" alone is a signature line ("for more information please
@@ -371,8 +371,10 @@ PASS = js_regex(
     # "No Teresa Esser 10437 W. Innovation Drive...", "No  Get Outlook for Mac",
     # "North Coast is no longer making new investments", "We do not invest in
     # individual deals", "We will never talk to anyone who is using a third-party".
-    # A reply that opens on "No" is a pass unless its first sentence turns it.
-    r"|^\s*no\b(?![^.?!\n]*\b(but|however|send|share|deck|call|chat|interest|happy|love|open|worries|problem|rush)\b)"
+    # A reply that opens on "No" is a pass only when a signature or nothing
+    # follows it: "No need to apologize. What are you raising?" read as a pass
+    # under the broader 10/14 rule (review of the Togari port, 2026-10-16).
+    r"|^\s*no\b(\s*[.!]?\s*$|[,.!]?\s*(thanks?|thank you|txs|thx)\b)|^\s*no\b(?=[\s,.!]*(get outlook|sent from|([A-Z][a-z]+\s+){1,3}\d|$))"
     r"|no longer (making|doing|writing) (new )?(investments|checks|deals)"
     r"|(we|i) do not invest|will never (talk|work) (to|with) anyone"
     # 2026-10-16, five passes read "unclear" and held gtme done open: "will need
@@ -380,10 +382,13 @@ PASS = js_regex(
     # the sectors we are presently targeting ... won't be a fit", "The partners
     # at Bond Capital have all retired and we no longer invest".
     r"|out of (our )?thesis|^\s*np interest\b|falls outside the (sectors|areas|scope)"
-    r"|won'?t be a (good )?fit|(have|has) (all )?retired|no longer invest)", "i")
+    r"|partners\b[^.]{0,15}\b(have|has) (all )?retired|(i|we) (have|has) retired from)", "i")
+# Passes that can carry a condition ("won't be a fit unless you have $1M ARR.
+# What is your revenue?"), read only after questions and interest.
+SOFT_PASS = js_regex(r"(won'?t be a (good )?fit|no longer invest)", "i")
 QUESTION_TOPIC = js_regex(
     r"(revenue|arr\b|traction|valuation|raising|round|terms|cap table|burn|runway|users|customers"
-    r"|ltm|ntm|how much|metrics)", "i")
+    r"|ltm|ntm|how much|metrics|what('?s| is) the (company|startup|business)|which company|company name)", "i")
 INTERESTED = js_regex(
     r"(interested|happy to (chat|take a look|connect|meet)|let'?s (set up|schedule|find)"
     r"|would love|open to (a )?(call|chat)|send me (a )?time|calendly)", "i")
@@ -560,6 +565,9 @@ def _reply_intent(reply_text, lead_email, sending_email, company_name, copy=None
 
     if INTERESTED.search(text):
         return {"kind": "interested", "label": "Interested", "nextStep": f"Book the call with {copy['callWith']}." if copy.get("callWith") else "Book the call."}
+
+    if SOFT_PASS.search(text):
+        return {"kind": "pass", "label": "Passed", "nextStep": "No reply needed. Logged as replied."}
 
     return {"kind": "unclear", "label": "Needs a read", "nextStep": "Read their reply and decide."}
 

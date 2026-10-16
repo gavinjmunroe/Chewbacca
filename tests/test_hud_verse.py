@@ -22,6 +22,10 @@ def main() -> int:
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
 
+    # Landed 100644 on 2026-10-16, so `hud-verse` on PATH said permission denied.
+    import os
+    check("the script is executable", os.access(BIN, os.X_OK))
+
     base = 1_800_000_000.0
     q = m.SLOT_SECONDS
     check("two runs in one quarter hour agree", m.verse_for(base) == m.verse_for(base + 59))

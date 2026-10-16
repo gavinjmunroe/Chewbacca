@@ -146,6 +146,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - reference_voice_agent_e2e_test: prove a browser voice agent works headless by feeding a spoken WAV as the fake mic; caught askforthefire's white-box WebGL bug (10/10)
 - reference_kyber_invisible_to_screenshots: Kyber's glass never shows in screencapture, so a HUD card can't be verified by screenshot; what to use instead
 - reference_watch_skill: Watch Skill (oxbshw/watch-skill) is installed globally: video/screen perception +...
+- reference_clay_contract_inventory: library/clay-api/contracts.json maps all 1,772 Clay ts-rest contracts and which chewbacca clay ops call each; refresh after a Clay deploy, the drift test names what moved; worktrees race on the shared engine spec (10/16)
 - reference_rea_reverse_engineering: REA (rea-agents 6.4.0) is the rea MCP behind `chewbacca rea mcp` (pinned, thinned, tree-killed at 900 s); drive it through the MCP with detail summary, never the CLI; inventory whole, trace scoped; live headless click capture beats grep (10/13)
 - reference_writing_toolchain: Four writing tools are installed and they overlap; which one to reach for, plus...
 

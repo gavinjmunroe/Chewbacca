@@ -240,7 +240,8 @@ public struct SurfaceView: View {
                             .modifier(Stagger(part: isAction(child) ? .actions : .body))
                             .modifier(FoldFade())
                     }
-                })
+                }
+                .modifier(AskOnDoubleClick(ask: p["ask"]?.display, store: store)))
         }
 
         let gap = CGFloat(p["gap"]?.doubleValue ?? 2) * 4
@@ -1255,5 +1256,25 @@ struct LoadingView: View {
             .trimmingCharacters(in: .whitespaces)
         guard let first = words.first else { return "" }
         return first.uppercased() + words.dropFirst()
+    }
+}
+
+/// `ask="<request>"` on a Screen: a double-click anywhere on the card takes the
+/// request into the conversation panel. Only a count-2 gesture is added, so a
+/// single click, a row's press and the card's X behave as before. No `ask`,
+/// no gesture.
+struct AskOnDoubleClick: ViewModifier {
+    let ask: String?
+    let store: SurfaceStore
+
+    func body(content: Content) -> some View {
+        if let ask, !ask.isEmpty {
+            content
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) { store.ask(ask) }
+                .accessibilityAction(named: "Talk about it") { store.ask(ask) }
+        } else {
+            content
+        }
     }
 }

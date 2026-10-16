@@ -117,6 +117,20 @@ public final class SurfaceStore {
     /// is a legitimate state: a surface streamed and the agent walked away.
     public var onEvent: ((OutboundEvent) -> Void)?
 
+    /// Where a Screen's `ask=` goes when the card is double-clicked: into the
+    /// conversation as a typed request, set by the overlay. It never goes up
+    /// as an `e` line, because the sender that drew the card (a one-shot like
+    /// hud-verse) has usually exited, and an owner's private line would be
+    /// dropped with it.
+    public var onAsk: ((String) -> Void)?
+
+    /// The card was double-clicked and carries `ask=`: talk about it.
+    public func ask(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        onAsk?(trimmed)
+    }
+
     /// The surface this store draws, set when the overlay opens it. Every
     /// action carries it as `surface=`, because component ids are only unique
     /// inside one surface and a daemon with five panels open needs to know

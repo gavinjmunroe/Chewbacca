@@ -1247,6 +1247,16 @@ spaces inside them: `points=[31,28,44]`, not `points=[31, 28, 44]`.
   c s Screen title="RELATIONSHIPS"
   ```
 
+  `ask="<request>"` makes the card talk: a double-click anywhere on it puts
+  the request into the conversation panel as if it had been typed there, and
+  opens the panel on the answer. It never goes up as an `e` line, so it works
+  for a one-shot sender that has already exited (the verse card, 2026-10-16).
+  Single clicks, rows, buttons and the X are untouched.
+
+  ```
+  c s Screen title="PHILIPPIANS 4:11" ask="Let's talk abt Philippians 4:11: For I have learned..."
+  ```
+
 - **Stack** Groups components. Vertical by default; use grid with cols for several small numbers, because four metrics in a column waste the height of a panel that is already capped. Gap is in units of 4 points. A horizontal Stack is top aligned; give it `align=center` when a row mixes words with a Button, whose 44-point target otherwise sits it below them.
 
   ```

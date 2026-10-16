@@ -196,6 +196,9 @@ public final class OverlayModel {
     /// and the glass must never.
     public var onChatOpen: (() -> Void)?
     public var onChatClose: (() -> Void)?
+    /// A card's `ask=` after a double-click: main.swift sends it the way the
+    /// panel's own Return does, so the assistant answers it in writing.
+    public var onAsk: ((String) -> Void)?
     private var nextTurn = 0
 
     /// Whether a long answer is written for the panel and only pointed at,
@@ -727,6 +730,15 @@ public final class OverlayModel {
         return nextTurn
     }
 
+    /// A double-click on a card with `ask=` (the verse, 2026-10-16: "If I
+    /// double click on them I want it to go into chat w the hud and chewbs
+    /// where I can talk abt the verse"). The request goes in first and the
+    /// panel opens on it, so the first frame already shows what was asked.
+    public func askedFromCard(_ text: String) {
+        onAsk?(text)
+        openChat()
+    }
+
     public func openChat() {
         guard !chatOpen else { return }
         chatOpen = true
@@ -1161,6 +1173,7 @@ public final class OverlayModel {
             if id == FilesGlass.id, self?.filesPressed(event) == true { return }
             self?.onEvent?(event)
         }
+        store.onAsk = { [weak self] text in self?.askedFromCard(text) }
 
         nextDepth += 1
         nextTouch += 1

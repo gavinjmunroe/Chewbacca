@@ -5,7 +5,8 @@ Caleb, 2026-10-16: "Add hourly verses to the hud popping up", then "Make them
 stay until I x them out, also make it every 15 min". The daemon runs this every
 900 s, and each run puts one verse at the top of the screen. It stays until he
 closes it, and the next run replaces the card in place rather than stacking.
-Nothing is drawn from 2am to 8am.
+Nothing is drawn from 2am to 8am. Double-clicking the card opens the HUD's
+chat already asking about that verse (the Screen's `ask=`).
 
 The verses walk in order, one per quarter hour since the epoch, so two runs in
 the same quarter show the same verse, and there are more verses than waking
@@ -119,12 +120,20 @@ def quiet(now: float) -> bool:
     return time.localtime(now).tm_hour in QUIET_HOURS
 
 
+def ask_for(ref: str, text: str) -> str:
+    """What a double-click on the card says in the chat, in his register."""
+    return f"Let's talk abt {ref}: {text}"
+
+
 def payload(ref: str, text: str) -> str:
     # Ambient: it never breaks through a hidden display, because a verse is
     # an encouragement, not an alarm.
     return "\n".join([
         "@ verse at=top w=480 urgency=ambient",
-        f'c s Screen title="{ref.upper()}"',
+        # Double-click the card and this goes into the HUD's chat as a typed
+        # request (Caleb, 2026-10-16: "If I double click on them I want it to
+        # go into chat w the hud and chewbs where I can talk abt the verse").
+        f'c s Screen title="{ref.upper()}" ask="{ask_for(ref, text)}"',
         f'c t Text value="{text}"',
         "> s t",
         "r s",

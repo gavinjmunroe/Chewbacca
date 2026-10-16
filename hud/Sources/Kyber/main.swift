@@ -613,6 +613,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.overlay?.show()
             self.chat?.present()
         }
+        // A card's `ask=`, double-clicked: the same path as Return in the panel.
+        model.onAsk = { [weak self] text in
+            Task { @MainActor in self?.dispatch(text, typed: true) }
+        }
         model.onChatClose = { [weak self] in
             guard let self, let chat = self.chat else { return }
             chat.conceal()

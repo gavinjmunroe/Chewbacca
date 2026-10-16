@@ -41,6 +41,11 @@ def main() -> int:
     p = m.payload(*m.VERSES[0])
     check("payload stays until he closes it", "life=" not in p and p.startswith("@ verse "))
     check("payload never breaks through a hidden display", "urgency=ambient" in p)
+    ref, text = m.VERSES[1]
+    p = m.payload(ref, text)
+    ask = f'ask="Let\'s talk abt {ref}: {text}"'
+    check("a double-click asks the chat abt this verse", ask in p.splitlines()[1], p.splitlines()[1][:80])
+    check("the ask carries no stray quote", p.splitlines()[1].count('"') == 4)
     return 1 if failures else 0
 
 

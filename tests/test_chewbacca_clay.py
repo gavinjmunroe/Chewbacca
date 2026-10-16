@@ -639,6 +639,42 @@ SAMPLES = {
     "emails": "a@example.com", "resource": "t_ex1", "resource_type": "TABLE", "name": "x", "data_type": "text",
     "workflow": "wf_ex1", "run": "wfr_ex1", "detail": "summary",
     "trigger": "15a2668a-07fd-4844-be50-37981ebb971a", "csv": "/tmp/leads.csv", "input": '{"name":"x"}',
+    "holds": '[{"entityId":"1","email":"held@example.com"}]',
+}
+
+# Synthetic terminal-page evidence lets the restrictive write reach the same
+# approval assertions as every other mutation. No live records or sessions.
+RESTRICTION_CAMPAIGN = {
+    "id": "cam_ex1", "status": "paused", "leadBaseSegmentId": "seg_ex1",
+    "leadExclusionSegmentIds": [],
+    "settings": {"autoPauseLeadOnSegmentExit": True, "senderAccountIds": ["csea_example"]},
+    "sequence": [{"id": "original_step"}],
+}
+RESTRICTION_AUDIENCE = {
+    "id": "seg_ex1", "workspace": {"id": WS}, "entityType": "people",
+    "filter": {"type": "GroupOp", "combinationMode": "And", "items": [
+        {"type": "BinOp", "key": "email", "operator": "ContainAny",
+         "dataPath": ["contact_entity_field_values", "field", "email"],
+         "entityType": "CONTACT", "value": ["held@example.com", "keep@example.com"]},
+    ]},
+}
+RESTRICTION_GATE_FIXTURES = {
+    "api-anything/getCampaign.json": {**SENT, "data": RESTRICTION_CAMPAIGN},
+    "cli/audience.json": {"exit": 0, "stdout": json.dumps(RESTRICTION_AUDIENCE), "stderr": ""},
+    "cli/campaigns-page.json": {"exit": 0, "stdout": json.dumps({"data": [
+        {"id": "cam_ex1", "audience": {"id": "seg_ex1"}},
+    ]}), "stderr": ""},
+    "cli/audience-record-ids-page.json": {"exit": 0, "stdout": json.dumps({"data": [1, 2]}), "stderr": ""},
+    "cli/audience-records.json": {"exit": 0, "stdout": json.dumps({"data": [
+        {"recordId": 1, "fields": {"email": "held@example.com"}},
+        {"recordId": 2, "fields": {"email": "keep@example.com"}},
+    ]}), "stderr": ""},
+    "api-anything/campaignLeads.json": {**SENT, "data": {"leads": [
+        {"entityId": "1", "email": "held@example.com", "status": "active", "isPaused": False,
+         "enrolledAt": "2026-10-14T00:00:00Z"},
+        {"entityId": "2", "email": "keep@example.com", "status": "active", "isPaused": False,
+         "enrolledAt": "2026-10-14T00:00:00Z"},
+    ], "nextCursor": None}},
 }
 CLI_READ_LEAVES = {"list", "get", "analytics", "balance", "search-ids", "search-count", "query", "query-live", "query-usage",
                    "audience", "summary", "activities", "list-values", "steps", "reference", "traffic", "aggregate", "search",
@@ -670,19 +706,20 @@ def walk_gate(reg_path=None):
         own = {"update-rows": {"records": json.dumps(REC_UPD)},
                "campaign-sequence": {"input": '{"ops":[{"op":"deleteStep"}]}'}}.get(op["name"], {})
         argv = [f"{a.rstrip('?')}={own.get(a.rstrip('?'), SAMPLES[a.rstrip('?')])}" for a in op["args"]]
+        fixtures = RESTRICTION_GATE_FIXTURES if op["name"] == "campaign-restrict" else {}
         for s in op["surfaces"]:
             if s.get("unless"):
                 continue
             mutates = op["kind"] == "write" or surface_mutates(s, sops)
-            code, out, p = run({}, {}, op["name"], *argv, "--surface", s["type"], env_extra=extra)
+            code, out, p = run(fixtures, {}, op["name"], *argv, "--surface", s["type"], env_extra=extra)
             if mutates:
                 ok(code == 3 and out["class"] == "refused" and "allow-writes" in out["reason"],
                    f"{op['name']} via {s['type']} ran without the gate: {p.stdout[:200]}")
                 if op["name"] == "reply":
                     continue  # needs no confirmation since 2026-10-11; its gate is tested above
-                code, out, _ = run({}, {}, op["name"], *argv, "--surface", s["type"], "--allow-writes", env_extra=extra)
+                code, out, _ = run(fixtures, {}, op["name"], *argv, "--surface", s["type"], "--allow-writes", env_extra=extra)
                 ok(code == 3 and "did not approve" in out["reason"], f"{op['name']} via {s['type']} ran with nobody at the terminal")
-                code, out, _ = run({}, {}, op["name"], *argv, "--surface", s["type"], "--allow-writes",
+                code, out, _ = run(fixtures, {}, op["name"], *argv, "--surface", s["type"], "--allow-writes",
                                    env_extra={**extra, "CHEWBACCA_CLAY_TTY_ANSWER": op["name"], "CHEWBACCA_NO_SEND": "1"})
                 ok(code == 3 and "NO_SEND" in out["reason"], f"{op['name']} via {s['type']} ran under CHEWBACCA_NO_SEND=1")
             else:

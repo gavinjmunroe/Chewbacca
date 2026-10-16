@@ -66,7 +66,9 @@ const ENGINE_HOME = SESSION_NAME
 const EXIT = { ok: 0, failed: 1, usage: 2, refused: 3 };
 
 function out(obj, code) {
-  process.stdout.write(`${JSON.stringify(obj)}\n`);
+  // The 2026-10-15 piped ops read exited after only 512 bytes of JSON.
+  // Flush synchronously before exit so snapshot readers receive the envelope.
+  fs.writeFileSync(1, `${JSON.stringify(obj)}\n`);
   process.exit(code);
 }
 
@@ -606,6 +608,7 @@ const CELL_KEY = /^f_[A-Za-z0-9_-]{1,80}$/;
 const cellsBad = (c) => (!isObj(c) || !Object.keys(c).length || !Object.keys(c).every((k) => CELL_KEY.test(k)) ? "cells must map column ids (f_...) to values" : null);
 // JSON args, each checked for the shape its body slot expects.
 const JSON_ARGS = {
+  holds: (v) => Array.isArray(v) && v.length > 0 && v.length <= 100 ? null : "must be an array of exact email/entityId holds",
   forward_data: (v) => (isObj(v) ? null : "must be a JSON object"),
   reply_data: (v) => (isObj(v) ? null : "must be a JSON object"),
   settings: (v) => (isObj(v) && Object.keys(v).length <= 100 && Object.keys(v).every((k) => /^[A-Z][A-Z0-9_]{0,63}$/.test(k))
@@ -1198,6 +1201,26 @@ function personApproves(name, request) {
   }
 }
 
+async function restrictionSnapshot(args) {
+  const read = async (name, values) => {
+    const op = opByName.get(name);
+    if (!op || isWrite(op)) throw new Error(`Restriction snapshot needs a registered read: ${name}`);
+    const normalized = normalizeArgs(withDefaults(op, values));
+    if (normalized.error) throw new Error(normalized.error);
+    const bad = badArg(normalized.values, op);
+    if (bad) throw new Error(bad);
+    let candidates = plan(op, normalized.values, null);
+    if (name === "campaign") candidates = candidates.filter((candidate) => candidate.s.type === "api-anything" && candidate.s.op === "getCampaign");
+    // Snapshot reads have one documented surface. Do not downgrade to a
+    // fallback that strips the cursor envelope needed to prove completeness.
+    if (candidates.length !== 1) throw new Error(`Restriction read ${name} must have one pinned surface`);
+    const result = await attempt(op, candidates[0], {});
+    if (!result.ok || result.truncated) throw new Error(`Restriction read ${name} failed or was truncated`);
+    return result.data;
+  };
+  return require("./lib/clay-restriction-snapshot").collectRestrictionSnapshot(read, args);
+}
+
 async function runOp(name, kv, flags) {
   const ui = uiByName.get(name);
   if (ui) {
@@ -1247,13 +1270,25 @@ async function runOp(name, kv, flags) {
     }
   }
   const sendArgs = compose(op, norm.values);
+  let restriction;
+  if (name === "campaign-restrict") {
+    try {
+      const snapshot = await restrictionSnapshot(sendArgs);
+      const policy = require("./lib/clay-campaign-restriction");
+      restriction = { snapshot, plan: policy.planRestriction(snapshot, sendArgs.holds) };
+      sendArgs.filter = restriction.plan.filter;
+    } catch (error) {
+      out({ ok: false, op: name, class: "refused", reason: error.message, sent: false }, EXIT.refused);
+    }
+  }
   const validated = validatedSet(sendArgs);
   const cands = plan(op, sendArgs, flags.surface);
   if (!cands.length) {
     out({ ok: false, op: name, class: "input", reason: `no surface has every arg it needs; ${name} takes ${op.args.join(", ")}`, ui: uiRoute(op, args) }, EXIT.usage);
   }
-  // --dry-run: the exact request the first surface would send. Nothing is sent,
-  // no engine is loaded and no session or cookie is read.
+  // --dry-run: the exact request the first surface would send. Nothing is sent.
+  // campaign-restrict first reads a complete snapshot to derive its protective
+  // payload; other operations do not load an engine or session for a preview.
   // The request is built once and frozen here. --dry-run prints it, the person
   // approves it, and the surface is handed it: nothing transforms it after.
   let request;
@@ -1267,7 +1302,7 @@ async function runOp(name, kv, flags) {
   }
   if (flags.dryRun) {
     out({ ok: true, op: name, dry_run: true, sent: false, kind: isWrite(op) ? "write" : "read", gate: op.gate, surface: cands[0].s.type,
-      call: surfaceKey(op, cands[0].s), request, ...(op.verified === false ? { verified: false } : {}) }, EXIT.ok);
+      call: surfaceKey(op, cands[0].s), request, ...(restriction ? { protection: restriction.plan } : {}), ...(op.verified === false ? { verified: false } : {}) }, EXIT.ok);
   }
   if (isWrite(op)) {
     // One verdict row per write (tools/verdicts.py): the op, never its payload.
@@ -1290,6 +1325,7 @@ async function runOp(name, kv, flags) {
     const s = cands[0].s;
     const prep = await prepareWrite(op, s, request);
     if (prep.error) refuse(prep.error);
+    if (restriction) prep.files = [...(prep.files || []), path.join(ROOT, "bin/lib/clay-campaign-restriction.js"), path.join(ROOT, "bin/lib/clay-restriction-snapshot.js")];
     const before = fingerprint(prep);
     const shownHash = sha256(showable({ op: name, request }));
     // A reply answers a person who wrote first, in their own thread, from the
@@ -1313,6 +1349,12 @@ async function runOp(name, kv, flags) {
     if (live) refuse(`${live}; nothing was sent`);
     const ungraded = gradeGate(op, request, args);
     if (ungraded) refuse(`no passing grade for this campaign: ${ungraded}. Run gtme-grade on it first; nothing was sent`);
+    if (restriction) {
+      try {
+        require("./lib/clay-campaign-restriction").verifyBeforeWrite(await restrictionSnapshot(sendArgs), restriction.plan);
+      } catch (error) { refuse(`${error.message}; nothing was sent`); }
+      if (fingerprint(prep) !== before) refuse("Write dependencies changed during the protective recheck; nothing was sent");
+    }
     const t0 = Date.now();
     const r = await prep.send();
     const tried = [{ surface: s.type, call: surfaceKey(op, s), ok: !!r.ok, ms: Date.now() - t0, ...(r.ok ? {} : { class: r.class, reason: r.reason }) }];
@@ -1325,6 +1367,14 @@ async function runOp(name, kv, flags) {
         if (typeof r.data?.[key] === "string") providerError[key] = r.data[key].slice(0, 500);
       }
       out({ ok: false, op: name, class: r.class, reason: r.reason, providerError, sha256: shownHash, tried, ui: uiRoute(op, args) }, EXIT.failed);
+    }
+    if (restriction) {
+      try {
+        const proof = require("./lib/clay-campaign-restriction").verifyRestriction(restriction.snapshot, restriction.plan, await restrictionSnapshot(sendArgs));
+        out({ ok: proof.verified, op: name, sent: true, protection: proof, readyToResume: false, tried }, proof.verified ? EXIT.ok : EXIT.failed);
+      } catch (error) {
+        out({ ok: false, op: name, sent: true, readyToResume: false, reason: `Restriction write attempted; readback is unverified: ${error.message}`, tried }, EXIT.failed);
+      }
     }
     // A write never read back after a real call reads back now, every time,
     // until a person sets verified:true in registry.json.

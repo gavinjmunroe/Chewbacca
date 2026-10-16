@@ -17,6 +17,67 @@
   },
   "ops": [
     {
+      "name": "campaign-restrict",
+      "kind": "write",
+      "gate": "write:audience-protection",
+      "summary": "Protectively subtract exact held email/entity IDs from a paused campaign base audience. Reads full pages for preview, preserves the original AST, refuses shared audiences, and verifies enrollment pauses. Never resumes a campaign.",
+      "args": ["ws", "campaign", "audience", "holds"],
+      "surfaces": [
+        {
+          "type": "cli",
+          "argv": ["audiences", "update", "{audience}", "--filter", "{filter}"]
+        }
+      ],
+      "evidence": {
+        "source": "cli",
+        "command": "clay audiences update --help",
+        "semantics": "Replacement filter AST; derived AND restriction only, with live membership and enrollment proof required"
+      },
+      "verified": false
+    },
+    {
+      "name": "campaigns-page",
+      "kind": "read",
+      "gate": "read",
+      "summary": "A campaign list page preserving data and cursor metadata for complete scans.",
+      "args": ["ws", "limit?", "cursor?"],
+      "surfaces": [
+        {
+          "type": "cli",
+          "argv": ["campaigns", "list"],
+          "optional": {
+            "limit": ["--limit", "{limit}"],
+            "cursor": ["--cursor", "{cursor}"]
+          }
+        }
+      ]
+    },
+    {
+      "name": "audience-record-ids-page",
+      "kind": "read",
+      "gate": "read",
+      "summary": "An unsorted audience ID page preserving data and cursor metadata for complete scans.",
+      "args": ["ws", "audience", "limit?", "cursor?"],
+      "surfaces": [
+        {
+          "type": "cli",
+          "argv": [
+            "audiences",
+            "records",
+            "search-ids",
+            "--entity-type",
+            "people",
+            "--audience-id",
+            "{audience}"
+          ],
+          "optional": {
+            "limit": ["--limit", "{limit}"],
+            "cursor": ["--cursor", "{cursor}"]
+          }
+        }
+      ]
+    },
+    {
       "name": "workspaces",
       "kind": "read",
       "gate": "read",

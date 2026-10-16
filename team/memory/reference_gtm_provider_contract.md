@@ -21,6 +21,10 @@ Pick, Jev ranking, retry, status, attribution and spend scoring never touch a ve
 - The canonical brand/contact record is the client's `"records"` file (Sabo:
   `~/.chewbacca/gtm/clients/sabo.records.json`). The chain writes it first, then the Clay table
   as a view from it.
+- The Clay adapter looks up `clay()` and `run_and_wait()` on the brand_buyer module at call
+  time (`ClayProvider(chain)`), never by import. The 34 existing brand/follow tests swap
+  `L.clay` for a fake Clay, so an adapter that copied the function in would have skipped the
+  fake and called real Clay from a test. A new adapter for any patched module does the same.
 - `tests/test_gtm_provider.py` runs the brand buyer chain end to end on a fake provider with
   `clay()` replaced by a tripwire.
 

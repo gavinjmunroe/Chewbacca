@@ -4,7 +4,7 @@ You give it a brand and get back the person who pays outside creators there, wit
 
 ## A new client in four steps
 
-1. Copy `client.example.json` and `parents.example.json` into the client's folder. Fill in the workspace, table, views, creator and column names. Columns are matched by name, so you don't need field ids.
+1. Copy `client.example.json` to `~/.chewbacca/gtm/clients/<slug>.json` (one file per client, shared with the other client tools), then pass `--client <slug>`. Copy `parents.example.json` too. Fill in the workspace, table, views, creator and column names. Columns are matched by name, so you don't need field ids.
 2. `python3 tools/brand_buyer.py --client <folder>/client.json --setup` prints what it would change. Add `--live` to apply it. Setup puts the people search on the settings that worked (identifiers_only, buyer title keywords, limit 5) and adds Person, Title, Why this person, Status and Contact. It shows those columns in the client view and hides the ones listed under `hide`.
 3. `python3 tools/brand_buyer.py --client <folder>/client.json "Gymshark" gymshark.com` is a dry run. Add `--live` to spend credits, about 1.1 a brand and up to 1.6 with a fallback or retry. Paid runs go through `chewbacca clay` and its credit allowance.
 4. Show the client the Contact column, filtered to Status = Ready.

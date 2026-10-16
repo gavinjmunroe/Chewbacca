@@ -402,6 +402,21 @@ class ClientConfigTest(_Base):
         self.assertEqual(json.loads(add[2]["records"])[0]["f_newbrand"], "Strava")
         self.assertIn("Mia Run (Mia Runs)", add[2]["records"])
 
+    def test_slug_resolves_in_clients_dir_and_unknown_roles_are_ignored(self):
+        saved = L.CLIENTS_DIR
+        L.CLIENTS_DIR = self.tmp.name
+        try:
+            with open(os.path.join(self.tmp.name, "acme.json"), "w") as f:
+                json.dump({"ws": "7", "table": "t_acme", "view": "gv_acme",
+                           "columns": {"brand": "Brand", "status": "Status", "email": "Email"}}, f)
+            fake = FakeClay({})
+            fake.column_list = lambda: [{"id": "f_acmebrand", "name": "Brand"}]
+            L.clay = fake
+            L.configure(L.load_client("acme"))
+        finally:
+            L.CLIENTS_DIR = saved
+        self.assertEqual((L.TABLE, L.F_BRAND, L.CLIENT_VIEW), ("t_acme", "f_acmebrand", "gv_acme"))
+
     def test_missing_column_refuses_with_a_fix(self):
         L.clay = FakeClay({})
         with self.assertRaises(SystemExit) as e:

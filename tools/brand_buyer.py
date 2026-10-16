@@ -81,14 +81,16 @@ def configure(cfg, strict=True):
     """Point the chain at one client's table: ids, views, creator, parents, people search."""
     global WS, TABLE, VIEW, CLIENT_VIEW, CREATOR, PARENTS, RUN_LOG, ROWS_FILE, PEOPLE_SEARCH
     WS, TABLE = str(cfg.get("ws", WS)), cfg.get("table", TABLE)
-    VIEW, CLIENT_VIEW = cfg.get("view", VIEW), cfg.get("client_view", CLIENT_VIEW)
+    VIEW = cfg.get("view", VIEW)
+    CLIENT_VIEW = cfg.get("client_view") or cfg.get("view") or CLIENT_VIEW
     CREATOR = cfg.get("creator", CREATOR)
     base = os.path.dirname(os.path.abspath(cfg["_path"])) if cfg.get("_path") else HERE
-    PARENTS = os.path.join(base, cfg.get("parents", "parents.json"))
-    RUN_LOG = os.path.join(base, cfg.get("run_log", "runs.jsonl"))
-    ROWS_FILE = os.path.join(base, cfg.get("rows", "rows.json"))
+    here = lambda key, default: os.path.join(base, os.path.expanduser(cfg.get(key, default)))
+    PARENTS, RUN_LOG, ROWS_FILE = here("parents", "parents.json"), here("run_log", "runs.jsonl"), here("rows", "rows.json")
     PEOPLE_SEARCH = {**PEOPLE_SEARCH, **cfg.get("people_search", {})}
-    names = cfg.get("columns") or {}
+    # The client file is shared with other Sabo tools (watcher, ledger), so it can name
+    # columns this chain never reads; only the roles below are looked up.
+    names = {role: name for role, name in (cfg.get("columns") or {}).items() if role in ROLES}
     if names:
         by_name = {c.get("name"): c["id"] for c in columns()}
         missing = [n for n in names.values() if n not in by_name]
@@ -100,7 +102,13 @@ def configure(cfg, strict=True):
     parent_domains.__defaults__ = (PARENTS,)
 
 
+CLIENTS_DIR = os.path.expanduser("~/.chewbacca/gtm/clients")
+
+
 def load_client(path):
+    """A client file path, or a client slug like "sabo" for ~/.chewbacca/gtm/clients/sabo.json."""
+    if path and os.sep not in path and not path.endswith(".json"):
+        path = os.path.join(CLIENTS_DIR, path + ".json")
     if not path or not os.path.exists(path):
         return None
     with open(path) as f:
@@ -538,7 +546,7 @@ def main(argv=None):
     ap.add_argument("brand", nargs="?")
     ap.add_argument("domain", nargs="?", help="the brand's own domain; the chain falls back to parents.json")
     ap.add_argument("--live", action="store_true")
-    ap.add_argument("--client", default=CLIENT_FILE, help="client.json: table, columns by name, creator, parents")
+    ap.add_argument("--client", default=CLIENT_FILE, help="client slug (sabo) or client.json: table, columns by name, creator, parents")
     ap.add_argument("--setup", action="store_true", help="set up the client table, then stop")
     ap.add_argument("--row", help="rerun on this row (default: the brand's row in rows.json)")
     ap.add_argument("--new-row", action="store_true", help="add a fresh row even if the brand has one")
@@ -546,7 +554,7 @@ def main(argv=None):
     a = ap.parse_args(argv)
     cfg = load_client(a.client)
     if not cfg:
-        ap.error("--client <client.json> is required (or set BRAND_BUYER_CLIENT)")
+        ap.error("--client <slug or client.json> is required (or set BRAND_BUYER_CLIENT); slugs live in ~/.chewbacca/gtm/clients")
     configure(cfg, strict=not a.setup)
     if a.setup:
         out = setup(a.live, hide=(cfg or {}).get("hide", ()))

@@ -305,6 +305,34 @@ opt-outs that had to be blocklisted before Monday.
   what's working, and keep process words (Togari, Clay inbox, tags, wave
   names) off the page.
 
+## Sabo takeover lessons, 2026-10-16
+
+- **Start from the client's buyer, then flip it.** Caleb: "be efficient and
+  not so narrow minded". For a creator manager, also trace who pays creators
+  like his: run clubs and running creators, then their sponsors. That's how
+  Klarna, Strava, ASICS and Diplo's Run Club sponsors surfaced, none of them on
+  Sabo's list. A contact for a brand he already worked with is recovery.
+- **Search the parent domain when the brand domain comes back empty.** Clay
+  people search found nobody on nocco.com or barebells.com and four people on
+  vitaminwell.com. Resolve the parent first (Vitamin Well, Unilever, Celsius
+  Holdings, Strava).
+- **Bind columns in Clay, not by hand.** Caleb: "make sure we're following
+  best practices for handling column to column flow". Codex found Scout by
+  search, then pasted her URL into the Findymail input through the UI. Build
+  people search, then a formula that picks the buyer by title, then Findymail
+  on that formula, then ZeroBounce on the email, so a new row runs end to end.
+  `add-column` only makes plain columns, so formula and enrichment columns are
+  built once in the UI.
+- **The background read can't see a fresh people search.** `chewbacca clay row`
+  refuses a row whose people cell is over 20,000 chars (Klarna, 5 people: 35,714),
+  and `rows` with `after=` stopped after 10 of 397 rows. Keep the row id from
+  the `add-rows` response, read results as formula values, and budget for this
+  before you promise a live chain.
+- **Measure the field before showing it.** On the 3 Sabo proof rows, people
+  search filled 1 of 3, professional posts 1 of 3 at 2.5 credits each, and
+  Findymail plus ZeroBounce 2 of 2 at 0.6. Show the cheap chain, and say when
+  a field is under 60%.
+
 ## Never call a launch ready without `gtme ready`
 
 - **Never say a launch is ready, good to go, "good until X", "only waiting on

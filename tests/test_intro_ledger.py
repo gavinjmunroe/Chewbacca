@@ -134,6 +134,40 @@ class HttpTest(unittest.TestCase):
         self.assertIn("jkevane@strava.com", csv_body)
 
 
+class HardeningTest(HttpTest):
+    def test_an_empty_read_token_refuses_to_start(self):
+        os.environ["LEDGER_READ_TOKENS"] = "sabo:"
+        with self.assertRaises(SystemExit):
+            ledger.read_tokens()
+        os.environ["LEDGER_READ_TOKENS"] = "sabo:short"
+        with self.assertRaises(SystemExit):
+            ledger.read_tokens()
+
+    def test_no_bearer_reads_nothing(self):
+        self.call("POST", "/intros", INTRO, TOKEN)
+        req = urllib.request.Request(self.base + "/intros?client=sabo", headers={"Authorization": "Bearer "})
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(req)
+        self.assertEqual(e.exception.code, 401)
+
+    def test_csv_neutralises_formulas(self):
+        self.call("POST", "/intros", {**INTRO, "why": "=HYPERLINK(\"http://x\")", "person": "@SUM(1)"}, TOKEN)
+        _, body = self.call("GET", "/intros.csv?client=sabo", token=TOKEN)
+        self.assertIn("'=HYPERLINK", body)
+        self.assertIn("'@SUM", body)
+        self.assertNotIn(",=HYPERLINK", body)
+
+    def test_negative_content_length_is_refused(self):
+        import http.client
+        conn = http.client.HTTPConnection("127.0.0.1", self.server.server_address[1], timeout=5)
+        conn.putrequest("POST", "/intros")
+        conn.putheader("Authorization", f"Bearer {TOKEN}")
+        conn.putheader("Content-Length", "-1")
+        conn.endheaders()
+        self.assertEqual(conn.getresponse().status, 400)
+        conn.close()
+
+
 class DeliverTest(unittest.TestCase):
     IDS = {"brand": "b", "domain": "d", "creator": "c", "person": "p", "title": "t", "email": "e",
            "verify": "v", "profile": "l", "why": "w", "contact": "k", "status": "s"}

@@ -119,20 +119,31 @@ CSV_COLUMNS = ("seq", "delivered_on", "brand", "person", "title", "email", "emai
                "delivered_for", "why", "evidence", "hash")
 
 
+def cell(value):
+    """A cell a spreadsheet would run as a formula (=, +, -, @) gets a leading quote."""
+    text = json.dumps(value) if isinstance(value, (dict, list)) else str(value if value is not None else "")
+    return "'" + text if text[:1] in ("=", "+", "-", "@", "\t", "\r") else text
+
+
 def to_csv(records):
     buf = io.StringIO()
     w = csv.DictWriter(buf, fieldnames=CSV_COLUMNS, extrasaction="ignore")
     w.writeheader()
     for r in records:
-        w.writerow({k: (json.dumps(r[k]) if isinstance(r.get(k), (dict, list)) else r.get(k, ""))
-                    for k in CSV_COLUMNS})
+        w.writerow({k: cell(r.get(k)) for k in CSV_COLUMNS})
     return buf.getvalue()
 
 
 def read_tokens():
     """LEDGER_READ_TOKENS="sabo:abc,acme:def" gives one client a read-only key to its own rows."""
-    pairs = (p.split(":", 1) for p in os.environ.get("LEDGER_READ_TOKENS", "").split(",") if ":" in p)
-    return {tok.strip(): client.strip().lower() for client, tok in pairs}
+    tokens = {}
+    for entry in filter(None, (p.strip() for p in os.environ.get("LEDGER_READ_TOKENS", "").split(","))):
+        client, _, tok = entry.partition(":")
+        # "sabo:" would map the empty bearer to Sabo's rows, so a short token is refused at start.
+        if len(tok.strip()) < 24 or not client.strip():
+            raise SystemExit("each LEDGER_READ_TOKENS entry is client:<token of 24+ characters>")
+        tokens[tok.strip()] = client.strip().lower()
+    return tokens
 
 
 def make_handler(ledger, admin_token):
@@ -159,7 +170,11 @@ def make_handler(ledger, admin_token):
             return bool(admin_token) and hmac.compare_digest(self.bearer(), admin_token)
 
         def reader_client(self):
-            return read_tokens().get(self.bearer())
+            given = self.bearer()
+            if not given:
+                return None
+            return next((client for tok, client in read_tokens().items()
+                         if hmac.compare_digest(given, tok)), None)
 
         def do_GET(self):
             url = urlparse(self.path)
@@ -184,7 +199,12 @@ def make_handler(ledger, admin_token):
                 return self.send(404, {"ok": False, "error": "not found"})
             if not self.is_admin():
                 return self.send(401, {"ok": False, "error": "admin token required"})
-            size = int(self.headers.get("Content-Length") or 0)
+            try:
+                size = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                size = -1
+            if size < 0:
+                return self.send(400, {"ok": False, "error": "Content-Length must be a whole number"})
             if size > MAX_BODY:
                 return self.send(413, {"ok": False, "error": f"body over {MAX_BODY} bytes"})
             try:
@@ -209,6 +229,7 @@ def main():
     if len(token) < 24:
         raise SystemExit("set LEDGER_TOKEN to a random string of 24+ characters")
     path = os.path.join(os.environ.get("LEDGER_DIR", "./data"), "ledger.jsonl")
+    read_tokens()  # a malformed read token stops the server here, not on the first request
     ledger = Ledger(path)
     port = int(os.environ.get("PORT", "8080"))
     print(f"intro-ledger on :{port}, {len(ledger.records)} records, head {ledger.head[:12]}", flush=True)

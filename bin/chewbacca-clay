@@ -1378,7 +1378,7 @@ async function runOp(name, kv, flags) {
     if (recoveryResume) prep.files = [...(prep.files || []), path.join(ROOT, "bin/lib/clay-campaign-recovery-resume.js")];
     const before = fingerprint(prep);
     // Everything but the session file, for the resume recheck below.
-    const sessionFiles = new Set((prep.files || []).filter((f) => !f.startsWith(ROOT)));
+    const sessionFiles = new Set((prep.files || []).filter((f) => !f.startsWith(ROOT + path.sep)));
     const stableFingerprint = (p) => fingerprint({ ...p, files: (p.files || []).filter((f) => !sessionFiles.has(f)) });
     const beforeStable = stableFingerprint(prep);
     const shownHash = sha256(showable({ op: name, request }));

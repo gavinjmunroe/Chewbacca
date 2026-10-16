@@ -726,6 +726,11 @@ def test_recovery_ops_take_claude_approval_only_from_own_tab_in_scope():
         open(os.path.join(d, "STOPPED"), "w").write("1")
         code, out, _ = run(SENDER_ISOLATION_FIXTURES, {}, "campaign-sender-isolate", *argv, env_extra=env)
         ok(code == 3 and "did not approve" in out["reason"], "a standing stop refuses the recovery op too")
+    # The resume recheck may skip only the session file, never a sibling of
+    # the kit whose path merely starts with the kit's (review, 2026-10-16).
+    src = (ROOT / "bin" / "chewbacca-clay").read_text()
+    ok("f.startsWith(ROOT + path.sep)" in src and "f.startsWith(ROOT))" not in src,
+       "the resume recheck compares kit paths with a separator")
 CLI_READ_LEAVES = {"list", "get", "analytics", "balance", "search-ids", "search-count", "query", "query-live", "query-usage",
                    "audience", "summary", "activities", "list-values", "steps", "reference", "traffic", "aggregate", "search",
                    "schema", "validate", "format", "diagram", "preview-sequence", "resolve", "sender-accounts", "skills",

@@ -323,11 +323,38 @@ opt-outs that had to be blocklisted before Monday.
   on that formula, then ZeroBounce on the email, so a new row runs end to end.
   `add-column` only makes plain columns, so formula and enrichment columns are
   built once in the UI.
-- **The background read can't see a fresh people search.** `chewbacca clay row`
-  refuses a row whose people cell is over 20,000 chars (Klarna, 5 people: 35,714),
-  and `rows` with `after=` stopped after 10 of 397 rows. Keep the row id from
-  the `add-rows` response, read results as formula values, and budget for this
-  before you promise a live chain.
+- **Turn on `identifiers_only` in the people search, or you can't read the row.**
+  Full profiles run 5,000 to 25,000 chars a person. Celsius at limit 2 came to
+  49,826 chars, over the engine's 20,000-char background read, and the row could
+  never be read again. With `identifiers_only=true`, 5 people came to about 2,800
+  chars for the whole row, and name, title and URL still come back. Keep the row
+  id from the `add-rows` response.
+- **Search for who pays creators, not for creators.** Title keywords like
+  "athlete, ambassador, creator" brought back 5 of 5 Gymshark people the brand
+  pays. Use influencer marketing, partnership, creator marketing, and social,
+  brand, community or marketing manager, and exclude ambassador, athlete, content
+  creator and model. After that, Gymshark gave Alexa Kinoshita (Influencer
+  Marketing Associate).
+- **A valid email at another company is the wrong person.** Gymshark's search
+  gave a "Social Media Ambassador" whose email was ryan@buckedup.com, and
+  ZeroBounce said valid. Check the email domain against the brand and parent
+  domains. Retry the runner-up once when it's invalid, missing or off-domain.
+  Celsius went from Brenna Tanner (no email) to Ava Paszkiewicz (valid).
+- **Jev's pick needs a score floor.** Jev named a Celsius "Mentor" who scored
+  0.03 of 2. Score every candidate and stop under 0.5 before any Findymail spend.
+  Write the pick and its reason into "Why this person" for every row, stops included.
+  The working chain is `~/Downloads/Sabo handoff/claude/live_chain.py`, with
+  18 tests. Team memory: `reference_clay_people_search_finds_buyers`.
+- **Inside a cap he set, don't ask again.** Caleb, 2026-10-16, after three
+  approval asks in an hour for the same brands: "Fix chewbs you shouldn't be
+  asking for permission maybe its bc im in the claude app instead of the vscode
+  one". It wasn't the app. The asks were the agent's own. Reruns, retries and
+  keyword fixes on the approved brands under the approved credits just run.
+  Asking again is only for new brands or for going over the cap.
+- **A missing Clay read is a build, not a reason to open Clay.** Caleb: "We
+  should work towards never opening clay". When a read fails, map the endpoint
+  into `chewbacca clay` (row `fields=`, views and view-order paging landed on
+  fix/bg-nav, 3d9c8ace) instead of working around it in the UI.
 - **Measure the field before showing it.** On the 3 Sabo proof rows, people
   search filled 1 of 3, professional posts 1 of 3 at 2.5 credits each, and
   Findymail plus ZeroBounce 2 of 2 at 0.6. Show the cheap chain, and say when

@@ -572,6 +572,8 @@ if group "gtme"; then
     check "clay dispatches through chewbacca" bash "$ROOT/bin/chewbacca" clay --help
     expect "clay appears in help" "chewbacca clay" bash "$ROOT/bin/chewbacca" --help
     check "the clay finder picks one visible control or stops" node --test "$ROOT/tests/test_clay_find.mjs"
+    check "a recovery resume refuses while any hold could still be emailed" \
+      node --test "$ROOT/tests/test_clay_campaign_recovery_resume.js" "$ROOT/tests/test_clay_campaign_sender_isolation.js"
   fi
   # clay-build (docs/plans/CLAY-HUD.md): fakes for the page, Clay and Kyber; nothing
   # opens Chrome, reads Clay or draws on the glass.

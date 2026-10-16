@@ -84,7 +84,9 @@ async function collectResumeSnapshot(read, args) {
     ws: args.ws,
     campaign: args.campaign,
   });
-  const members = await collectPages(
+  // collectPages keeps raw rows, and these rows are numbers; compare as
+  // strings like the restriction snapshot does (review, 2026-10-16).
+  const memberRows = await collectPages(
     read,
     "audience-record-ids-page",
     { ws: args.ws, audience: spec.audience, limit: "100" },
@@ -92,6 +94,7 @@ async function collectResumeSnapshot(read, args) {
     "cursor",
     (id) => (Number.isSafeInteger(id) && id > 0 ? String(id) : null),
   );
+  const members = memberRows.map(String);
   const enrolled = await collectPages(
     read,
     "campaign-leads",

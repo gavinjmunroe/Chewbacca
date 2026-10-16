@@ -1,0 +1,123 @@
+#!/usr/bin/env python3
+"""A verse on the glass, once an hour.
+
+Caleb, 2026-10-16: "Add hourly verses to the hud popping up". The daemon runs
+this on the hour during waking hours (setup.sh registers the slots), and each
+run puts one verse at the top of the screen that takes itself down.
+
+The verses walk in order, one per hour since the epoch, so two runs in the same
+hour show the same verse and a day never repeats one. The list leans on the
+victory of Jesus and on contentment in Him, the two things his grandfather and
+Joel George keep pointing him back to (second-brain domains/faith.md, people.md).
+KJV, because it is public domain and every line here can be checked against it.
+
+Usage:
+    hud-verse            put this hour's verse up
+    hud-verse --dry-run  print what it would draw
+    hud-verse --list     every verse, in order
+"""
+
+from __future__ import annotations
+
+import shutil
+import subprocess
+import sys
+import time
+
+VERSES: tuple[tuple[str, str], ...] = (
+    ("Colossians 2:15", "And having spoiled principalities and powers, he made a shew of them openly, triumphing over them in it."),
+    ("Philippians 4:11", "For I have learned, in whatsoever state I am, therewith to be content."),
+    ("John 16:33", "In the world ye shall have tribulation: but be of good cheer; I have overcome the world."),
+    ("Psalm 46:10", "Be still, and know that I am God: I will be exalted among the heathen, I will be exalted in the earth."),
+    ("Romans 8:37", "Nay, in all these things we are more than conquerors through him that loved us."),
+    ("Mark 1:35", "And in the morning, rising up a great while before day, he went out, and departed into a solitary place, and there prayed."),
+    ("1 Corinthians 15:57", "But thanks be to God, which giveth us the victory through our Lord Jesus Christ."),
+    ("Isaiah 26:3", "Thou wilt keep him in perfect peace, whose mind is stayed on thee: because he trusteth in thee."),
+    ("1 John 3:8", "For this purpose the Son of God was manifested, that he might destroy the works of the devil."),
+    ("Matthew 11:28", "Come unto me, all ye that labour and are heavy laden, and I will give you rest."),
+    ("Zechariah 4:6", "Not by might, nor by power, but by my spirit, saith the LORD of hosts."),
+    ("Lamentations 3:22-23", "It is of the LORD's mercies that we are not consumed, because his compassions fail not. They are new every morning: great is thy faithfulness."),
+    ("Psalm 23:1", "The LORD is my shepherd; I shall not want."),
+    ("Proverbs 3:5-6", "Trust in the LORD with all thine heart; and lean not unto thine own understanding. In all thy ways acknowledge him, and he shall direct thy paths."),
+    ("Joshua 1:9", "Be strong and of a good courage; be not afraid, neither be thou dismayed: for the LORD thy God is with thee whithersoever thou goest."),
+    ("Isaiah 40:31", "But they that wait upon the LORD shall renew their strength; they shall mount up with wings as eagles; they shall run, and not be weary; and they shall walk, and not faint."),
+    ("2 Timothy 1:7", "For God hath not given us the spirit of fear; but of power, and of love, and of a sound mind."),
+    ("1 Peter 2:9", "But ye are a chosen generation, a royal priesthood, an holy nation, a peculiar people; that ye should shew forth the praises of him who hath called you out of darkness into his marvellous light."),
+    ("Genesis 50:20", "But as for you, ye thought evil against me; but God meant it unto good."),
+    ("Matthew 6:33", "But seek ye first the kingdom of God, and his righteousness; and all these things shall be added unto you."),
+    ("Psalm 16:11", "Thou wilt shew me the path of life: in thy presence is fulness of joy; at thy right hand there are pleasures for evermore."),
+    ("Galatians 2:20", "I am crucified with Christ: nevertheless I live; yet not I, but Christ liveth in me."),
+    ("Ephesians 2:10", "For we are his workmanship, created in Christ Jesus unto good works, which God hath before ordained that we should walk in them."),
+    ("Romans 8:28", "And we know that all things work together for good to them that love God, to them who are the called according to his purpose."),
+    ("Isaiah 41:10", "Fear thou not; for I am with thee: be not dismayed; for I am thy God: I will strengthen thee; yea, I will help thee; yea, I will uphold thee with the right hand of my righteousness."),
+    ("John 14:27", "Peace I leave with you, my peace I give unto you: not as the world giveth, give I unto you. Let not your heart be troubled, neither let it be afraid."),
+    ("Psalm 27:1", "The LORD is my light and my salvation; whom shall I fear? the LORD is the strength of my life; of whom shall I be afraid?"),
+    ("Hebrews 13:5", "For he hath said, I will never leave thee, nor forsake thee."),
+    ("1 Thessalonians 5:16-18", "Rejoice evermore. Pray without ceasing. In every thing give thanks: for this is the will of God in Christ Jesus concerning you."),
+    ("Romans 12:2", "And be not conformed to this world: but be ye transformed by the renewing of your mind."),
+    ("Psalm 62:1", "Truly my soul waiteth upon God: from him cometh my salvation."),
+    ("Colossians 3:23", "And whatsoever ye do, do it heartily, as to the Lord, and not unto men."),
+    ("Revelation 11:15", "The kingdoms of this world are become the kingdoms of our Lord, and of his Christ; and he shall reign for ever and ever."),
+    ("Hebrews 12:2", "Looking unto Jesus the author and finisher of our faith; who for the joy that was set before him endured the cross, despising the shame."),
+    ("Psalm 121:1-2", "I will lift up mine eyes unto the hills, from whence cometh my help. My help cometh from the LORD, which made heaven and earth."),
+    ("Psalm 118:24", "This is the day which the LORD hath made; we will rejoice and be glad in it."),
+    ("2 Corinthians 5:17", "Therefore if any man be in Christ, he is a new creature: old things are passed away; behold, all things are become new."),
+    ("Luke 5:16", "And he withdrew himself into the wilderness, and prayed."),
+    ("Matthew 28:20", "And, lo, I am with you alway, even unto the end of the world."),
+    ("Micah 6:8", "He hath shewed thee, O man, what is good; and what doth the LORD require of thee, but to do justly, and to love mercy, and to walk humbly with thy God?"),
+    ("Philippians 4:13", "I can do all things through Christ which strengtheneth me."),
+)
+
+# Thirty seconds: the longest verse here reads aloud in about twelve, and a
+# toast that leaves mid-sentence reads as a bug (hud skill, "Panels that take
+# themselves down"). Guessed from that, never measured on him.
+LIFE_SECONDS = 30
+
+
+def verse_for(now: float) -> tuple[str, str]:
+    """This hour's verse, in local time, so the same hour always agrees."""
+    hour = int((now + time.localtime(now).tm_gmtoff) // 3600)
+    return VERSES[hour % len(VERSES)]
+
+
+def payload(ref: str, text: str) -> str:
+    # Ambient: it never breaks through a hidden display, because a verse is
+    # an encouragement, not an alarm.
+    return "\n".join([
+        f"@ verse at=top w=480 urgency=ambient life={LIFE_SECONDS}",
+        f'c s Screen title="{ref.upper()}"',
+        f'c t Text value="{text}"',
+        "> s t",
+        "r s",
+    ]) + "\n"
+
+
+def main(argv: list[str]) -> int:
+    if argv[:1] in (["-h"], ["--help"]):
+        print(__doc__)
+        return 0
+    if "--list" in argv:
+        for ref, text in VERSES:
+            print(f"{ref}: {text}")
+        return 0
+    ref, text = verse_for(time.time())
+    lines = payload(ref, text)
+    if "--dry-run" in argv:
+        print(lines, end="")
+        return 0
+    hud = shutil.which("hud")
+    if not hud:
+        print("hud-verse: no hud on PATH", file=sys.stderr)
+        return 1
+    try:
+        done = subprocess.run([hud, "draw"], input=lines, capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError) as err:
+        print(f"hud-verse: {err}", file=sys.stderr)
+        return 1
+    if done.returncode != 0:
+        print(f"hud-verse: hud draw failed: {done.stderr.strip()}", file=sys.stderr)
+    return done.returncode
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

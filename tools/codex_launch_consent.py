@@ -21,7 +21,23 @@ TTL = 2 * 3600  # Same two-hour sitting as the existing human approval reader.
 SID = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}")
 LAUNCH = re.compile(r"(?:(?:bro|please|plz)\s+)*(?:launch(?:\s+the\s+campaigns)?|go|just do it|do it)"
                     r"(?:\s+(?:now|fix it|bro|please|plz))*[!.]*", re.I)
-STOP = re.compile(r"\b(?:stop|pause|cancel|hold|wait|don'?t|do not|never|not yet)\b", re.I)
+STOP = re.compile(r"^\s*(?:no|nope|nah)\s*[!.]*\s*$|"
+                  r"\b(?:stop|pause|cancel|hold|wait|not yet|don['’]?t|do not)\b|"
+                  r"\bnever\s+(?:send|launch|relaunch|resume|start|email|do|run|execute|act|"
+                  r"proceed|continue|go\s+ahead)\b", re.I)
+REPAIR_LAUNCH = re.compile(r"(?:then\s+)?(?:relaunch|launch)\s+(?:them|the campaigns)(?:\s+now)?", re.I)
+
+
+def explicit_launch(text):
+    if LAUNCH.fullmatch(text):
+        return True
+    # The 10/15 incident instruction included a repair sentence, an explicit
+    # 'Then launch them', and 'never make ... again'. Only an imperative
+    # sentence in the trusted composer input counts, never a quoted request.
+    if any(mark in text for mark in ('?', '"', '`', '<', '\n')):
+        return False
+    return any(REPAIR_LAUNCH.fullmatch(part.strip())
+               for part in re.split(r'[!.]+', text) if part.strip())
 
 
 def consent_from_records(header, records, session, now):
@@ -60,7 +76,7 @@ def consent_from_records(header, records, session, now):
         # The actual failing prompts were LAUNCH and BRO LAUNCH FIX IT.
         if len(text) > 300 or "\n" in text or "<" in text:
             continue
-        if not LAUNCH.fullmatch(text):
+        if not explicit_launch(text):
             continue
         try:
             stamp = dt.datetime.fromisoformat(record["timestamp"].replace("Z", "+00:00"))

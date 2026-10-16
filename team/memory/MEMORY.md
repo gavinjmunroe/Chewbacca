@@ -115,6 +115,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_rule_on_clear_gtm_calls: A GTM call with a clear best answer gets made and reported with its reason, never asked of Caleb in jargon (catch-all, 2026-10-16)
 - reference_gtme_next_move: gtme next-move, the blocker loop that replaced parents.json: moves from evidence, boundaries as data, Jev ranks, attempts in the lesson ledger
 - reference_gtme_lesson_ledger: GTME lesson ledger (team/gtme-lessons, `chewbacca gtme lesson plan`): experiments with oracles that refuse unsupported claims, handed to the next client
+- reference_gtme_lesson_ledger: GTME lesson ledger (team/gtme-lessons, `chewbacca gtme lesson plan`): experiments with oracles that refuse unsupported claims, handed to the next client; fit-share and split checks, how to turn PROSE into CHECKED
 - reference_treg_tool_registry: treg.to, pay-per-call data from 111 providers; optional engine behind gtme find --paid and gtme verify, numbers and terms limits
 - reference_chewbacca_privacy_reality: What is actually true about Chewbacca privacy as of 2026-09-18: retrieval is...
 - reference_caleb_bma_bigquery_admin: Caleb is already a BMA BigQuery admin via caleb@bluemodernadvisory.com (Karthik, 10/10); never ask for that access

@@ -396,11 +396,14 @@ GIT_SUBS = {"add", "am", "apply", "blame", "branch", "checkout", "cherry-pick", 
             "switch", "tag", "worktree", "merge-base", "cat-file", "ls-tree", "rev-list", "name-rev"}
 if name == "git":
     i = 0
+    pager_disabled = False
     while i < len(args) and args[i].startswith("-"):
         if args[i] == "-C" and i + 1 < len(args):
             i += 2
             continue
         if args[i] in ("--no-pager", "--no-optional-locks"):
+            if args[i] == "--no-pager":
+                pager_disabled = True
             i += 1
             continue
         out("refuse", f"git {args[i]} can change config or run a program")
@@ -408,7 +411,7 @@ if name == "git":
     if sub not in GIT_SUBS:
         out("refuse", f"git {sub or '(none)'} is not an allowed subcommand (config, aliases and hooks stay out)")
     if native_git:
-        if "--no-pager" not in args[:i]:
+        if not pager_disabled:
             out("refuse", "host Git patch inspection requires global --no-pager")
         # Git accepts abbreviated executable flags and enables textconv by
         # default. The 2026-10-15 review found both escaped the denylist.

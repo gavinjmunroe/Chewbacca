@@ -444,6 +444,7 @@ REFUSED = [
     ("native patch pathspec safety strings", "/usr/bin/git --no-pager show HEAD -- --no-ext-diff --no-textconv --no-show-signature --format= clay.dat"),
     ("native patch overriding safe format", "/usr/bin/git --no-pager show --no-ext-diff --no-textconv --no-show-signature --format= --format=%G? HEAD -- clay.dat"),
     ("native patch output abbreviation", "/usr/bin/git --no-pager show --no-ext-diff --no-textconv --no-show-signature --format= --out=clay.dat HEAD"),
+    ("native pager string as directory operand", "/usr/bin/git -C --no-pager show --no-ext-diff --no-textconv --no-show-signature --format= HEAD -- clay.dat"),
     ("git rebase --exec", "git rebase --exec 'clay campaigns update cam_x' main"),
     ("rg --pre", "rg --pre clay campaign ."),
     ("find -delete", "find library/clay-api -delete"),

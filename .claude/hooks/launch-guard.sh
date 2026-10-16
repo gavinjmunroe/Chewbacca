@@ -407,10 +407,22 @@ if name == "git":
     sub, rest = (args[i], args[i + 1:]) if i < len(args) else ("", [])
     if sub not in GIT_SUBS:
         out("refuse", f"git {sub or '(none)'} is not an allowed subcommand (config, aliases and hooks stay out)")
-    if native_git and sub not in {"blame", "describe", "diff", "grep", "log", "ls-files", "rev-parse", "shortlog", "show", "show-ref", "status", "merge-base", "cat-file", "ls-tree", "rev-list", "name-rev"}:
-        out("refuse", "absolute host Git paths are allowed only for local reads")
-    if native_git and any(a in ("--output", "--textconv", "--filters") or a.startswith(("--output=", "-O")) for a in rest):
-        out("refuse", "that host Git read flag writes a file or runs another program")
+    if native_git:
+        # Git accepts abbreviated executable flags and enables textconv by
+        # default. The 2026-10-15 review found both escaped the denylist.
+        # This exception covers only bounded patch inspection, with an exact
+        # option vocabulary and both external diff mechanisms disabled.
+        if sub not in {"diff", "show", "log"}:
+            out("refuse", "absolute host Git paths support only diff, show and log")
+        if not {"--no-ext-diff", "--no-textconv"}.issubset(rest):
+            out("refuse", "host Git inspection requires --no-ext-diff and --no-textconv")
+        safe = {"--no-ext-diff", "--no-textconv", "--no-color", "--color=never",
+                "--reverse", "--oneline", "--name-only", "--name-status", "--stat",
+                "--numstat", "--raw", "--summary", "--format=", "--format=%H",
+                "--format=fuller", "--patch", "-p", "--no-renames", "--check",
+                "--cached", "--staged", "--"}
+        if any(a.startswith("-") and a not in safe for a in rest):
+            out("refuse", "unsupported host Git inspection option")
     if any(a in ("-x", "--exec", "-O", "--open-files-in-pager", "--ext-diff", "--upload-pack", "--receive-pack")
            or a.startswith(("--exec=", "--open-files-in-pager=", "--upload-pack=", "--receive-pack=", "--template"))
            for a in rest):

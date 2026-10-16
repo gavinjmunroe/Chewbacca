@@ -279,6 +279,16 @@ if test_runner(argv):
 
 name, args = argv[0], argv[1:]
 base = os.path.basename(name)
+if name == "gh" and args[:2] == ["pr", "create"]:
+    # A code PR titled with Clay was refused on 2026-10-15 as though its
+    # title mutated a campaign. This exact CLI only publishes GitHub metadata;
+    # publication authority remains a separate check from campaign permission.
+    options = args[2:]
+    allowed = {"--base", "--head", "--title", "--body-file", "--repo"}
+    if (len(options) % 2 == 0 and all(options[i] in allowed for i in range(0, len(options), 2))
+            and "--title" in options[::2] and "--body-file" in options[::2]):
+        out("allow")
+    out("refuse", "unsupported GitHub PR creation options")
 
 # The kit's own front door, in any spelling of its path. Writes there are gated
 # in code (a person at a terminal, and a passing grade for a START or add-leads),

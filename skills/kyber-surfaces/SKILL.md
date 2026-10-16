@@ -216,6 +216,22 @@ Where it loses, which is where Kyber wins:
 - **Demo data.** Kyber is judged on Caleb's real day, and on a stranger's first
   ten minutes on a fresh Mac.
 
+## A card that talks when double-clicked
+
+`ask="<request>"` on a Screen: a double-click anywhere on the card puts that
+request into the HUD's chat as if typed there, and opens the chat on the
+answer. It goes through `dispatch(text, typed: true)` in Kyber itself, never
+up the socket as an `e` line, so it works for a one-shot sender that already
+exited (hud-verse runs every 15 min and quits). Caleb, 2026-10-16: "If I
+double click on them I want it to go into chat w the hud and chewbs where I
+can talk abt the verse". Reach for `ask=` before writing a listener just to
+open a conversation. Source: AskOnDoubleClick in SurfaceView.swift, tests in
+AskTests.swift.
+
+Never relaunch Kyber (install.sh pkills it) to check a HUD change while he's
+on the Mac. Build and test offscreen, and leave the relaunch as a BLOCKED
+line (tab manager's standing order, 2026-10-16).
+
 ## The hard lines
 
 - **Only a press sends.** Message and mail text is rendered, never read for

@@ -46,6 +46,11 @@ def main() -> int:
     ask = f'ask="Let\'s talk abt {ref}: {text}"'
     check("a double-click asks the chat abt this verse", ask in p.splitlines()[1], p.splitlines()[1][:80])
     check("the ask carries no stray quote", p.splitlines()[1].count('"') == 4)
+    q0 = m.surface_for(base)
+    check("a rerun in the same quarter redraws its own card", q0 == m.surface_for(base + 59))
+    check("the next quarter adds a card beside it", q0 != m.surface_for(base + q))
+    check("the card name is a HUD word", all(c.isalnum() or c in "_-.:/" for c in q0), q0)
+    check("the payload opens that quarter's card", m.payload(ref, text, q0).startswith(f"@ {q0} "))
     return 1 if failures else 0
 
 

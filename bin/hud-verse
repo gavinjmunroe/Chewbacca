@@ -4,7 +4,8 @@
 Caleb, 2026-10-16: "Add hourly verses to the hud popping up", then "Make them
 stay until I x them out, also make it every 15 min". The daemon runs this every
 900 s, and each run puts one verse at the top of the screen. It stays until he
-closes it, and the next run replaces the card in place rather than stacking.
+closes it, and each quarter hour gets its own card, so they pile up while he's
+away; a rerun in the same quarter redraws that quarter's card.
 Nothing is drawn from 2am to 8am. Double-clicking the card opens the HUD's
 chat already asking about that verse (the Screen's `ask=`).
 
@@ -110,10 +111,27 @@ SLOT_SECONDS = 15 * 60
 QUIET_HOURS = range(2, 8)
 
 
+def slot_for(now: float) -> int:
+    """Which quarter hour this is, in local time, so the same quarter always agrees."""
+    return int((now + time.localtime(now).tm_gmtoff) // SLOT_SECONDS)
+
+
 def verse_for(now: float) -> tuple[str, str]:
-    """This quarter hour's verse, in local time, so the same quarter always agrees."""
-    slot = int((now + time.localtime(now).tm_gmtoff) // SLOT_SECONDS)
-    return VERSES[slot % len(VERSES)]
+    """This quarter hour's verse."""
+    return VERSES[slot_for(now) % len(VERSES)]
+
+
+def surface_for(now: float) -> str:
+    """One card per quarter hour, so verses pile up beside each other.
+
+    Caleb, 2026-10-16: "If a verse is alr on the screen, just keep piling them
+    up next to each other. I wanna come back from a long break and see a bunch
+    of verses!" A rerun inside the same quarter redraws its own card in place
+    instead of adding a twin. The HUD stacks cards in one region and folds the
+    oldest to their title rows once the column is full, so a long break reads
+    as a column of references, newest open.
+    """
+    return f"verse-{slot_for(now)}"
 
 
 def quiet(now: float) -> bool:
@@ -125,11 +143,11 @@ def ask_for(ref: str, text: str) -> str:
     return f"Let's talk abt {ref}: {text}"
 
 
-def payload(ref: str, text: str) -> str:
+def payload(ref: str, text: str, surface: str = "verse") -> str:
     # Ambient: it never breaks through a hidden display, because a verse is
     # an encouragement, not an alarm.
     return "\n".join([
-        "@ verse at=top w=480 urgency=ambient",
+        f"@ {surface} at=top w=480 urgency=ambient",
         # Double-click the card and this goes into the HUD's chat as a typed
         # request (Caleb, 2026-10-16: "If I double click on them I want it to
         # go into chat w the hud and chewbs where I can talk abt the verse").
@@ -152,7 +170,7 @@ def main(argv: list[str]) -> int:
     if quiet(now) and "--now" not in argv:
         return 0
     ref, text = verse_for(now)
-    lines = payload(ref, text)
+    lines = payload(ref, text, surface_for(now))
     if "--dry-run" in argv:
         print(lines, end="")
         return 0

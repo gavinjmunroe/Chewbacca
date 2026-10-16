@@ -363,3 +363,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - reference_intro_ledger: the intro ledger, an append-only server-dated hash-chained record of every contact handed a creator-GTM client so a late deal is provably ours; live on Railway, deliver.py stamps Delivered On/For (Sabo, 10/16)
 - feedback_claims_match_the_mechanism: a hand-filled lookup like parents.json is never pitched as Chewbacca reasoning around a blocker (Sabo call, 2026-10-16)
 - reference_hud_card_ask: Screen ask= makes a HUD card double-click open the chat w that request (verse card, 10/16); live only after bundle + install
+- feedback_landing_a_railway_service: landing a Railway service from tools/: name it *.Dockerfile (pre-push compiles tools/ as Python), rebuild on fresh main when run.sh conflicts, ready-guard matches the bare word, 3 HTTP checks before ship (10/16)

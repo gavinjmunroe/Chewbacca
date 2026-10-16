@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
-"""A verse on the glass, once an hour.
+"""A verse on the glass, every fifteen minutes.
 
-Caleb, 2026-10-16: "Add hourly verses to the hud popping up". The daemon runs
-this on the hour during waking hours (setup.sh registers the slots), and each
-run puts one verse at the top of the screen that takes itself down.
+Caleb, 2026-10-16: "Add hourly verses to the hud popping up", then "Make them
+stay until I x them out, also make it every 15 min". The daemon runs this every
+900 s, and each run puts one verse at the top of the screen. It stays until he
+closes it, and the next run replaces the card in place rather than stacking.
+Nothing is drawn from 2am to 8am.
 
-The verses walk in order, one per hour since the epoch, so two runs in the same
-hour show the same verse and a day never repeats one. The list leans on the
+The verses walk in order, one per quarter hour since the epoch, so two runs in
+the same quarter show the same verse, and there are more verses than waking
+quarters so a day never repeats one. The list leans on the
 victory of Jesus and on contentment in Him, the two things his grandfather and
 Joel George keep pointing him back to (second-brain domains/faith.md, people.md).
 KJV, because it is public domain and every line here can be checked against it.
 
 Usage:
-    hud-verse            put this hour's verse up
+    hud-verse            put this quarter hour's verse up (nothing 2am to 8am)
+    hud-verse --now      put it up even in quiet hours
     hud-verse --dry-run  print what it would draw
     hud-verse --list     every verse, in order
 """
@@ -66,25 +70,60 @@ VERSES: tuple[tuple[str, str], ...] = (
     ("Matthew 28:20", "And, lo, I am with you alway, even unto the end of the world."),
     ("Micah 6:8", "He hath shewed thee, O man, what is good; and what doth the LORD require of thee, but to do justly, and to love mercy, and to walk humbly with thy God?"),
     ("Philippians 4:13", "I can do all things through Christ which strengtheneth me."),
+    ("Psalm 34:8", "O taste and see that the LORD is good: blessed is the man that trusteth in him."),
+    ("Psalm 119:105", "Thy word is a lamp unto my feet, and a light unto my path."),
+    ("John 3:16", "For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life."),
+    ("John 15:5", "I am the vine, ye are the branches: He that abideth in me, and I in him, the same bringeth forth much fruit: for without me ye can do nothing."),
+    ("Romans 8:1", "There is therefore now no condemnation to them which are in Christ Jesus, who walk not after the flesh, but after the Spirit."),
+    ("Psalm 110:1", "The LORD said unto my Lord, Sit thou at my right hand, until I make thine enemies thy footstool."),
+    ("Romans 5:8", "But God commendeth his love toward us, in that, while we were yet sinners, Christ died for us."),
+    ("Hebrews 4:16", "Let us therefore come boldly unto the throne of grace, that we may obtain mercy, and find grace to help in time of need."),
+    ("James 1:5", "If any of you lack wisdom, let him ask of God, that giveth to all men liberally, and upbraideth not; and it shall be given him."),
+    ("1 John 4:19", "We love him, because he first loved us."),
+    ("Psalm 37:4", "Delight thyself also in the LORD; and he shall give thee the desires of thine heart."),
+    ("Psalm 139:14", "I will praise thee; for I am fearfully and wonderfully made: marvellous are thy works; and that my soul knoweth right well."),
+    ("Isaiah 9:7", "Of the increase of his government and peace there shall be no end."),
+    ("Isaiah 53:5", "But he was wounded for our transgressions, he was bruised for our iniquities: the chastisement of our peace was upon him; and with his stripes we are healed."),
+    ("Matthew 5:16", "Let your light so shine before men, that they may see your good works, and glorify your Father which is in heaven."),
+    ("John 8:36", "If the Son therefore shall make you free, ye shall be free indeed."),
+    ("2 Corinthians 12:9", "My grace is sufficient for thee: for my strength is made perfect in weakness."),
+    ("Philippians 4:6-7", "Be careful for nothing; but in every thing by prayer and supplication with thanksgiving let your requests be made known unto God. And the peace of God, which passeth all understanding, shall keep your hearts and minds through Christ Jesus."),
+    ("Hebrews 2:14", "That through death he might destroy him that had the power of death, that is, the devil."),
+    ("Psalm 34:18", "The LORD is nigh unto them that are of a broken heart; and saveth such as be of a contrite spirit."),
+    ("Nahum 1:7", "The LORD is good, a strong hold in the day of trouble; and he knoweth them that trust in him."),
+    ("Psalm 103:12", "As far as the east is from the west, so far hath he removed our transgressions from us."),
+    ("Matthew 16:18", "Upon this rock I will build my church; and the gates of hell shall not prevail against it."),
+    ("Daniel 2:44", "And in the days of these kings shall the God of heaven set up a kingdom, which shall never be destroyed."),
+    ("Psalm 91:1", "He that dwelleth in the secret place of the most High shall abide under the shadow of the Almighty."),
+    ("Psalm 51:10", "Create in me a clean heart, O God; and renew a right spirit within me."),
+    ("Proverbs 16:3", "Commit thy works unto the LORD, and thy thoughts shall be established."),
+    ("Psalm 90:12", "So teach us to number our days, that we may apply our hearts unto wisdom."),
+    ("Isaiah 43:2", "When thou passest through the waters, I will be with thee; and through the rivers, they shall not overflow thee: when thou walkest through the fire, thou shalt not be burned."),
+    ("John 1:5", "And the light shineth in darkness; and the darkness comprehended it not."),
+    ("Psalm 19:1", "The heavens declare the glory of God; and the firmament sheweth his handywork."),
+    ("Ephesians 2:8", "For by grace are ye saved through faith; and that not of yourselves: it is the gift of God."),
 )
 
-# Thirty seconds: the longest verse here reads aloud in about twelve, and a
-# toast that leaves mid-sentence reads as a bug (hud skill, "Panels that take
-# themselves down"). Guessed from that, never measured on him.
-LIFE_SECONDS = 30
+SLOT_SECONDS = 15 * 60
+# He works late, so the window runs past midnight: 8am up to 2am is 72 quarters.
+QUIET_HOURS = range(2, 8)
 
 
 def verse_for(now: float) -> tuple[str, str]:
-    """This hour's verse, in local time, so the same hour always agrees."""
-    hour = int((now + time.localtime(now).tm_gmtoff) // 3600)
-    return VERSES[hour % len(VERSES)]
+    """This quarter hour's verse, in local time, so the same quarter always agrees."""
+    slot = int((now + time.localtime(now).tm_gmtoff) // SLOT_SECONDS)
+    return VERSES[slot % len(VERSES)]
+
+
+def quiet(now: float) -> bool:
+    return time.localtime(now).tm_hour in QUIET_HOURS
 
 
 def payload(ref: str, text: str) -> str:
     # Ambient: it never breaks through a hidden display, because a verse is
     # an encouragement, not an alarm.
     return "\n".join([
-        f"@ verse at=top w=480 urgency=ambient life={LIFE_SECONDS}",
+        "@ verse at=top w=480 urgency=ambient",
         f'c s Screen title="{ref.upper()}"',
         f'c t Text value="{text}"',
         "> s t",
@@ -100,7 +139,10 @@ def main(argv: list[str]) -> int:
         for ref, text in VERSES:
             print(f"{ref}: {text}")
         return 0
-    ref, text = verse_for(time.time())
+    now = time.time()
+    if quiet(now) and "--now" not in argv:
+        return 0
+    ref, text = verse_for(now)
     lines = payload(ref, text)
     if "--dry-run" in argv:
         print(lines, end="")

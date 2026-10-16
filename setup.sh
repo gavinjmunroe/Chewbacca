@@ -3119,11 +3119,12 @@ if command -v brew &>/dev/null; then
   _daemon register usage --at 05:40 --nice 15 -- /usr/bin/python3 "$_svc_root/tools/usage_report.py" --daily &&
     log "usage report folded daily, written weekly" || warn "could not schedule the usage report"
 
-  # A verse on the HUD on the hour, 8am through 1am, that takes itself down
-  # after thirty seconds. Caleb, 2026-10-16: "Add hourly verses to the hud
-  # popping up". He works late, so the slots run past midnight.
-  _daemon register verse --at 08:00,09:00,10:00,11:00,12:00,13:00,14:00,15:00,16:00,17:00,18:00,19:00,20:00,21:00,22:00,23:00,00:00,01:00 --nice 10 -- /usr/bin/python3 "$_svc_root/bin/hud-verse" &&
-    log "a verse on the HUD every hour" || warn "could not schedule the hourly verse"
+  # A verse on the HUD every fifteen minutes that stays until he closes it.
+  # Caleb, 2026-10-16: "Add hourly verses to the hud popping up", then "Make
+  # them stay until I x them out, also make it every 15 min". hud-verse itself
+  # stays quiet from 2am to 8am, and each run replaces the card in place.
+  _daemon register verse --every 900 --nice 10 -- /usr/bin/python3 "$_svc_root/bin/hud-verse" &&
+    log "a verse on the HUD every 15 min" || warn "could not schedule the verse"
 
   # Install the one LaunchAgent last, and fold in any per-job agent an older
   # install left behind, so Login Items ends with a single Chewbacca row.

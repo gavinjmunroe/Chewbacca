@@ -17,3 +17,12 @@ The GTME lesson ledger, built 2026-10-16 from REA's Touhou essays at Caleb's ask
 - Two lesson checks run as code since 04998fdf (2026-10-16). `gtme-score fit-share leads.csv` exits 1 when under half the list fits, and an unscored row counts against it (zeutara-list-fit-before-copy). `gtme-learning split --unit people --arm A=12/366 --arm B=3/351` names no winner without a unit, under 500 per arm, under the powered size for the gap, or at p of .05 or more (zeutara-variant-a-leads-unit-unstated, zeutara-grader-not-validated). Audit went from 4 to 7 CHECKED. gtme-grade does not call fit-share yet, so it only stops someone who runs it.
 - Still PROSE on purpose: zeutara-recovery-window-before-resume. Its check belongs in the resume op on fix/zeutara-claude-recovery, which was 6 commits off main on 10-16. Once that branch merges, point the lesson's check_ref at the window check there.
 - To turn a PROSE lesson into CHECKED: write the refusal in the tool, a test with the lesson's own real numbers as the reject case, then add `check_ref` (kit:path::needle) right after `check` in the JSON. Regenerate SHA256SUMS.txt in the same commit or the manifest guard refuses it, and run bin/gtme-* shims with python3, never bash.
+
+Moving skill prose into the ledger (learned on 55d03aa7):
+
+- Experiments with a number, commit or file go in the ledger; Caleb's rulings and standing procedure stay in the skill.
+- Cite a commit or a kit file as evidence, never the SKILL.md text you're about to delete. Four seed lessons cited SKILL.md and now cite a40ec6ce.
+- `derived_from` means a lesson from ANOTHER client. The H6 test hides the lesson's own client and expects the parent in the top 5, so a same-client parent fails it.
+- A new lesson can push a sealed case's expected lesson out of the top 5 (H2: a Sabo sponsor lesson outranked list-fit). Reword the new lesson's words that overlap the query; never edit the sealed fixture.
+- Debug ranking with `chewbacca gtme lesson plan "<query>" --json | jq -c '.[] | [.score, .id, .matched]'`. launch-guard refuses python3 scripts, sed -i and heredocs in a command near GTM words, so edit lesson files with the Edit tool.
+- Check that a SKILL.md pointer query returns the lessons it names at the default limit; when it doesn't, name the ids and `gtme lesson show <id>`.

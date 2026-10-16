@@ -50,9 +50,28 @@ Fix: the poller checks `pgrep -xq <App>` first and leaves the app alone when it'
 closed. On 2026-10-09 kyber-surfaces read unread mail every 60 s and reopened Mail
 after every force quit (b9b9323e, test in tests/test_osgraph.py).
 
+### An app comes back seconds after you kill it, with nothing polling it
+
+**Its own launch agent restarts it.** Look for a vendor plist before killing anything:
+
+```bash
+ls ~/Library/LaunchAgents /Library/LaunchAgents | grep -i <vendor>
+launchctl list | grep -i <vendor>             # a pid here means launchd owns it
+sfltool dumpbtm | grep -i -A2 <vendor>        # login items, no AppleScript needed
+```
+
+On 2026-10-16 `kill` on Perplexity (idle at 17 to 33% CPU since boot, which Caleb
+never opened: "PERPLEXITY?????", "I don't use either lmao") came back within a
+minute as `Perplexity --daemon-headless`, and Comet was running the whole time. When
+he doesn't use the app, uninstall it: `launchctl bootout gui/$(id -u)/<label>` for
+each agent, kill the processes, then move the app, its LaunchAgents plists and its
+Application Support, Caches, Preferences and HTTPStorages entries into one Trash
+folder. Then confirm with `ps` and `launchctl list` that nothing of it is running.
+Check every vendor app the same way: Perplexity installs Comet alongside itself.
+
 ### Clicks do nothing from inside an app
 
-**App Sandbox** silently blocks `CGEvent.post`. No error. No fix inside the sandbox;
+**App Sandbox** silently blocks `CGEvent.post` and returns no error. There's no fix inside the sandbox;
 this is why every serious macOS automation tool ships outside the App Store.
 
 ### Accessibility tree is empty or all elements unnamed

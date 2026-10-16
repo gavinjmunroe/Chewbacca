@@ -432,6 +432,8 @@ REFUSED = [
     ("absolute git missing external diff disable", "/usr/bin/git show --no-textconv HEAD -- clay.dat"),
     ("absolute git unknown output abbreviation", "/usr/bin/git diff --no-ext-diff --no-textconv --out=clay.dat HEAD"),
     ("absolute git signature format", "/usr/bin/git log --no-ext-diff --no-textconv --format=%G? -- clay.dat"),
+    ("absolute git safety flags after separator", "/usr/bin/git diff HEAD -- --no-ext-diff --no-textconv clay.dat"),
+    ("absolute git one safety flag after separator", "/usr/bin/git diff --no-ext-diff HEAD -- --no-textconv clay.dat"),
     ("git rebase --exec", "git rebase --exec 'clay campaigns update cam_x' main"),
     ("rg --pre", "rg --pre clay campaign ."),
     ("find -delete", "find library/clay-api -delete"),

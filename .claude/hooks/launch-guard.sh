@@ -414,14 +414,17 @@ if name == "git":
         # option vocabulary and both external diff mechanisms disabled.
         if sub not in {"diff", "show", "log"}:
             out("refuse", "absolute host Git paths support only diff, show and log")
-        if not {"--no-ext-diff", "--no-textconv"}.issubset(rest):
+        # After -- these strings are file names, not disabling options.
+        separator = rest.index("--") if "--" in rest else len(rest)
+        options = rest[:separator]
+        if not {"--no-ext-diff", "--no-textconv"}.issubset(options):
             out("refuse", "host Git inspection requires --no-ext-diff and --no-textconv")
         safe = {"--no-ext-diff", "--no-textconv", "--no-color", "--color=never",
                 "--reverse", "--oneline", "--name-only", "--name-status", "--stat",
                 "--numstat", "--raw", "--summary", "--format=", "--format=%H",
                 "--format=fuller", "--patch", "-p", "--no-renames", "--check",
                 "--cached", "--staged", "--"}
-        if any(a.startswith("-") and a not in safe for a in rest):
+        if any(a.startswith("-") and a not in safe for a in options):
             out("refuse", "unsupported host Git inspection option")
     if any(a in ("-x", "--exec", "-O", "--open-files-in-pager", "--ext-diff", "--upload-pack", "--receive-pack")
            or a.startswith(("--exec=", "--open-files-in-pager=", "--upload-pack=", "--receive-pack=", "--template"))

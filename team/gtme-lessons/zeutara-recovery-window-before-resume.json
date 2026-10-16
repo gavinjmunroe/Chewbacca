@@ -1,0 +1,35 @@
+{
+  "id": "zeutara-recovery-window-before-resume",
+  "title": "Write the bounce guard's recovery window before resuming a paused campaign",
+  "client": "Zeutara",
+  "date": "2026-10-16",
+  "stage": "deliverability",
+  "applies_to": [
+    "deliverability",
+    "bounce",
+    "resume",
+    "recovery",
+    "paused-campaign"
+  ],
+  "hypothesis": "A repaired campaign can be resumed directly.",
+  "change": "Wrote the Togari recovery window baseline, then proved it with a one-lead simulation before resuming three campaigns.",
+  "oracle": {
+    "metric": "bounce_rate",
+    "numerator": 2,
+    "denominator": 32,
+    "unit": "sends",
+    "source": "togari",
+    "baseline": "lifetime 3% rule",
+    "version": 1
+  },
+  "result": "Without the window the lifetime 3% rule pauses a repaired campaign on its next five-minute tick (Qube B sat at 2 bounces in 32 sends). With it, all three resumed and guard ticks read atRisk 0. Held enrollments also stay active while paused, so they were blocklisted first.",
+  "verdict": "observed",
+  "next_decision": "Make the window part of the resume op so it can't be skipped.",
+  "check": "Before a resume: blocklist held enrollments, write the recovery window, simulate one bounce and one clean send, then resume.",
+  "evidence": [
+    "team/memory/feedback_campaign_recovery_graph_2026_10_16.md",
+    "~/code/work/zeutara-gtme/RECOVERY-STATE.md"
+  ],
+  "scope": "Campaigns watched by Togari's bounce guard.",
+  "history": []
+}

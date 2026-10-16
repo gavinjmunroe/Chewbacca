@@ -1,0 +1,33 @@
+{
+  "id": "zeutara-variant-a-leads-unit-unstated",
+  "title": "Variant A (founder story first) leads variant B, unit not yet pinned",
+  "client": "Zeutara",
+  "date": "2026-10-16",
+  "stage": "copy",
+  "applies_to": [
+    "copy",
+    "split-test",
+    "variant",
+    "founder-story"
+  ],
+  "hypothesis": "Founder story first (variant A) beats number first (variant B) on replies.",
+  "change": "Ran Sagar's two variants 50/50 across the Monday batch.",
+  "oracle": {
+    "metric": "reply_rate",
+    "numerator": 12,
+    "denominator": 366,
+    "unit": null,
+    "source": "clay_campaign_stats",
+    "baseline": "variant B: 3 of 351",
+    "version": 1
+  },
+  "result": "Variant A 12 of 366 against variant B 3 of 351, as written in RECOVERY-STATE without saying whether the denominators are people or sends. Step 3 is weakest at 1.0%. Under 500 per arm, so the playbook says don't know yet.",
+  "verdict": "inconclusive",
+  "next_decision": "Pin the unit from campaign stats, keep both arms running to 500 per arm, then record the verdict here.",
+  "check": "A split result names its unit (people or sends) and reaches 500 per arm before anyone calls a winner.",
+  "evidence": [
+    "~/code/work/zeutara-gtme/RECOVERY-STATE.md"
+  ],
+  "scope": "Zeutara investor sequences, Monday batch of 2026-10-12.",
+  "history": []
+}

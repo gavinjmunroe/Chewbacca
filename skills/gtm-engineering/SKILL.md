@@ -213,6 +213,21 @@ Togari's capabilities and their Chewbacca equivalents, row by row, are in
 address" across every local source; `gtme-score` ports Togari's lead, affiliation,
 primary-contact, tier and contact-quality rubrics.
 
+## Start from the lesson ledger, and add to it (2026-10-16)
+
+Before planning any campaign, list, table or copy change, run
+`chewbacca gtme lesson plan "<what you're about to build>" --client NAME` and
+run every check it prints. On 2026-10-16 Sabo's chain rediscovered by hand
+the off-domain-email failure that Zeutara's lists had shown on 10-03. The
+ledger (`team/gtme-lessons/`) now hands that check over. When an experiment
+ends, success or failure, record it: `chewbacca gtme lesson template`, fill it
+in, `chewbacca gtme lesson add FILE`. Later results go through `gtme lesson
+record ID`, which keeps the old verdict in history. The oracles refuse a
+`confirmed` built on a Clay category, an unchecked email domain, cost per
+attempted row, a proxy score or under 500 per arm, so write `observed` or
+`inconclusive` when that's what the evidence supports. The design is in
+`docs/plans/GTME-MEMORY.md`.
+
 ## Client state comes from the graph, never from memory files
 
 Before answering anything about a client (who was emailed, who replied, what is

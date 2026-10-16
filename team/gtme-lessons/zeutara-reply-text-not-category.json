@@ -1,0 +1,38 @@
+{
+  "id": "zeutara-reply-text-not-category",
+  "title": "Classify interest from the whole reply text, never a category or a snippet",
+  "client": "Zeutara",
+  "date": "2026-10-11",
+  "stage": "reply",
+  "applies_to": [
+    "reply-handling",
+    "interest",
+    "classification",
+    "positive-reply"
+  ],
+  "hypothesis": "The reply category and the 280-character snippet were enough to tell who was interested.",
+  "change": "Fed the reply reader the whole reply text instead of the raw HTML's first 280 characters (65f7991d, 15b0384c).",
+  "oracle": {
+    "metric": "positive_reply_rate",
+    "numerator": 4,
+    "denominator": 1077,
+    "unit": "people",
+    "source": "reply_text",
+    "baseline": "snippet-based reading",
+    "version": 1
+  },
+  "result": "73 of 87 replies had been cut mid-sentence. With the whole reply, unreadable replies fell from 12 to 4, and two investor deck requests that sat two days unanswered surfaced.",
+  "verdict": "observed",
+  "next_decision": "Classify and draft only from `text` in `gtm replies --json`, and run `gtme-reply intent` over every reply after any change.",
+  "check": "Positive reply counts come from reply text read by a person or gtme-reply; a Clay category alone never counts as interest. `gtme-rules check-text` refuses client text claiming interest no reply quotes.",
+  "check_ref": [
+    "kit:tools/gtme_rules.py::interest-from-text",
+    "kit:tools/gtme_reply.py::def clean_reply_text"
+  ],
+  "evidence": [
+    "~/code/work/zeutara-gtme/findings/2026-10-11-loop-baseline.md",
+    "~/code/work/zeutara-gtme/DECISIONS.json"
+  ],
+  "scope": "Any client; ruling from Caleb 2026-10-05.",
+  "history": []
+}

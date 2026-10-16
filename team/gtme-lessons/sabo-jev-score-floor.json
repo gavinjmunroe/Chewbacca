@@ -1,0 +1,38 @@
+{
+  "id": "sabo-jev-score-floor",
+  "title": "Jev's pick needs a score floor before any spend",
+  "client": "Sabo",
+  "date": "2026-10-16",
+  "stage": "enrich",
+  "applies_to": [
+    "contact-selection",
+    "jev",
+    "people-search",
+    "buyer",
+    "spend"
+  ],
+  "hypothesis": "Jev's choice question alone picks the buyer.",
+  "change": "Scored every candidate 0 to 2 with a rubric that ranks paid people lowest, and stopped under 0.5.",
+  "oracle": {
+    "metric": "fit_score",
+    "numerator": 1,
+    "denominator": 1,
+    "unit": "contacts",
+    "source": "jev",
+    "baseline": "Jev choice alone",
+    "version": 1
+  },
+  "result": "Jev's choice alone named a Celsius Mentor who scored 0.03 of 2. A 1.0 floor for the runner-up skipped a 0.76; 0.5 worked for both.",
+  "verdict": "observed",
+  "next_decision": "Write the pick and its reason into a Why this person column on every row, stops included.",
+  "check": "A model pick is a proxy: give it a score, a floor, and a written reason before a paid lookup runs on it.",
+  "derived_from": [
+    "zeutara-list-fit-before-copy"
+  ],
+  "evidence": [
+    "team/memory/reference_clay_people_search_finds_buyers.md",
+    "skills/gtm-engineering/SKILL.md"
+  ],
+  "scope": "Jev picking among people-search candidates.",
+  "history": []
+}

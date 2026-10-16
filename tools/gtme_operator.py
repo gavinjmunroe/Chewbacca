@@ -14,6 +14,8 @@
                              and report flag any recommendation that would cross it
     gtme explain TERM        one plain sentence for a word like ICP or deliverability
     gtme why                 why the last recommendation was made, with its numbers and rule
+    gtme lesson plan "..."   what earlier campaigns learned that applies, each with the check to run;
+                             gtme lesson add/record/audit keep the experiment ledger
     gtme sync                refresh the graph (chewbacca gtm sync) and record credit balances
 
 Nothing here sends an email, spends a credit or creates an account. Reads run
@@ -683,6 +685,32 @@ def show_plan(t: Teacher, plan: dict) -> None:
     t.say("Draft email 1 (the {{...}} parts get filled per person):")
     for line in plan["copy"][0]["body"].splitlines():
         t.say(f"  | {line}")
+    show_lessons(t, plan)
+
+
+def show_lessons(t: Teacher, plan: dict, limit: int = 3) -> None:
+    """What earlier campaigns learned that applies to this plan, from the
+    lesson ledger (team/gtme-lessons). A new client starts from the last
+    client's checks instead of rediscovering them: on 2026-10-16 a second
+    client's chain found by hand the off-domain email the first client's lists
+    had already shown on 10-03. Only the title and the check print, and both
+    are refused by `gtme lesson add` when they name the client, so another
+    person's clients never show here; the origin prints only for a client
+    this machine already runs."""
+    import gtme_lessons
+    i, o = plan["icp"], plan["offer"]
+    query = (f"first cold email campaign: build the list of {i['buyer']} at {i['company']}, "
+             f"find and verify their emails, write the sequence. {o['promise']}")
+    hits = gtme_lessons.rank(query, gtme_lessons.load_all(), client=plan["client"], limit=limit)
+    if not hits:
+        return
+    mine = {" ".join(c["name"].lower().split()) for c in load_config()["clients"]}
+    t.say("What earlier campaigns learned that applies here (chewbacca gtme lesson plan has more):")
+    for h in hits:
+        x = h["lesson"]
+        origin = x["client"] if " ".join(x["client"].lower().split()) in mine else "an earlier client"
+        t.say(f"  [{x['verdict']}] {x['title']} (from {origin}, {x['date']})")
+        t.say(f"     check: {x['check']}")
 
 
 def show_steps(t: Teacher, steps: list[dict]) -> None:
@@ -1028,6 +1056,7 @@ def cmd_list(a, t: Teacher) -> int:
     if not plan:
         t.say(f"There's no plan for {a.client} yet. Run `chewbacca gtme start --client \"{a.client}\"` first.")
         return 1
+    show_lessons(t, plan)
     build_list(t, plan)
     return 0
 
@@ -2393,6 +2422,9 @@ def main(argv=None) -> int:
     if argv and argv[0] == "presend":
         import gtme_presend
         return gtme_presend.main(argv[1:])
+    if argv and argv[0] == "lesson":
+        import gtme_lessons
+        return gtme_lessons.main(argv[1:])
     if argv and argv[0] == "recovery-preview":
         import gtme_recovery
         return gtme_recovery.main(argv[1:])

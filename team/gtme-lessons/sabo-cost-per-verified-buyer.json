@@ -1,0 +1,35 @@
+{
+  "id": "sabo-cost-per-verified-buyer",
+  "title": "Price the chain per verified buyer, and measure each field's fill rate first",
+  "client": "Sabo",
+  "date": "2026-10-16",
+  "stage": "enrich",
+  "applies_to": [
+    "cost",
+    "credits",
+    "enrichment",
+    "fill-rate",
+    "people-search"
+  ],
+  "hypothesis": "Professional posts were worth adding to every row.",
+  "change": "Measured fill rate and cost per field on the 3 proof rows, then priced the end-to-end chain per verified buyer.",
+  "oracle": {
+    "metric": "credits_per_verified",
+    "numerator": 3.3,
+    "denominator": 3,
+    "unit": "verified",
+    "source": "clay_credits",
+    "baseline": "posts field: 2.5 credits each, 1 of 3 filled",
+    "version": 1
+  },
+  "result": "People search filled 1 of 3, professional posts 1 of 3 at 2.5 credits each, Findymail plus ZeroBounce 2 of 2 at 0.6. The chain cost 1.1 credits per clean pick, up to about 1.6 with a fallback or retry.",
+  "verdict": "observed",
+  "next_decision": "Drop fields under 60% fill from the default chain; report cost per verified buyer, not per row.",
+  "check": "Before adding a paid field to a table, measure its fill rate on 3 to 5 rows and price it per verified result.",
+  "evidence": [
+    "skills/gtm-engineering/SKILL.md",
+    "team/memory/reference_clay_people_search_finds_buyers.md"
+  ],
+  "scope": "Sabo's Clay table, October 2026.",
+  "history": []
+}

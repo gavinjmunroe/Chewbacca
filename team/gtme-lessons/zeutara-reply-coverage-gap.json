@@ -1,0 +1,34 @@
+{
+  "id": "zeutara-reply-coverage-gap",
+  "title": "Measure reply coverage: the responder had read 27 of 78 people who replied",
+  "client": "Zeutara",
+  "date": "2026-10-11",
+  "stage": "reply",
+  "applies_to": [
+    "reply-handling",
+    "coverage",
+    "togari",
+    "opt-out"
+  ],
+  "hypothesis": "Togari was answering every reply.",
+  "change": "Reconciled people who replied in the last 7 days against the replies Togari had read, person by person.",
+  "oracle": {
+    "metric": "reply_rate",
+    "numerator": 78,
+    "denominator": 1077,
+    "unit": "people",
+    "source": "gtm_funnel",
+    "baseline": "Togari's own count of 27",
+    "version": 1
+  },
+  "result": "Togari read 27 of 78 repliers. The other 51 never reached it, 10 of them opt-outs that had to be blocklisted before Monday.",
+  "verdict": "observed",
+  "next_decision": "Report coverage (replies handled over people who replied) next to reply rate, and reconcile before any client sees a number.",
+  "check": "Two sources disagreeing on a reply count is a finding: reconcile person by person before reporting.",
+  "evidence": [
+    "~/code/work/zeutara-gtme/findings/2026-10-11-loop-baseline.md",
+    "skills/gtm-engineering/SKILL.md"
+  ],
+  "scope": "Any client whose replies go through a separate responder.",
+  "history": []
+}

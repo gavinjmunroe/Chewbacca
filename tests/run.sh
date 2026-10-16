@@ -494,6 +494,9 @@ if group "gtme"; then
   check "gtme-reply labels real replies, cleans HTML, refuses risky auto-sends" python3 "$ROOT/tests/test_gtme_reply.py"
   check "gtme-reply dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-reply intent --help
   check "gtme-rules audits rulings and refuses client text a ruling forbids" python3 "$ROOT/tests/test_gtme_rules.py"
+  # Oracle reject cases, the sealed held-out retrieval cases and the real ledger's audit; offline.
+  check "gtme lesson oracles refuse unsupported claims and retrieval passes the sealed cases" python3 "$ROOT/tests/test_gtme_lessons.py"
+  check "gtme lesson ledger in git audits clean" python3 "$ROOT/tools/gtme_lessons.py" audit
   expect "gtme-reply appears in help" "chewbacca gtme-reply" bash "$ROOT/bin/chewbacca" --help
   # Ported from togari-platform's dnc and scoring modules with their TypeScript cases; offline.
   check "gtme-dnc matches Togari's DNC check and calls an unreadable list unknown, never allowed" \

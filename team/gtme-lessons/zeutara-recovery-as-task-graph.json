@@ -1,0 +1,33 @@
+{
+  "id": "zeutara-recovery-as-task-graph",
+  "title": "Run a campaign recovery as a task graph: parallel reads, one writer",
+  "client": "Zeutara",
+  "date": "2026-10-16",
+  "stage": "ops",
+  "applies_to": [
+    "recovery",
+    "operations",
+    "task-graph",
+    "paused-campaign"
+  ],
+  "hypothesis": "A paused-campaign recovery is serial work.",
+  "change": "Fanned out the read-only reconciliation (investors in two halves, fresh replies, deliverability and copy) and kept every write with one owner.",
+  "oracle": {
+    "metric": "observation",
+    "numerator": 1,
+    "denominator": 1,
+    "unit": "cases",
+    "source": "run_log",
+    "baseline": "Codex's serial attempt on 2026-10-15",
+    "version": 1
+  },
+  "result": "Codex spent the night of 10-15 serially and left all three campaigns paused. As a graph it finished in about 90 minutes.",
+  "verdict": "observed",
+  "next_decision": "Start any multi-part recovery by drawing the graph: reads fan out, writes stay single.",
+  "check": "Before a recovery, list the reads that don't depend on each other and run them in parallel; one owner does every write.",
+  "evidence": [
+    "team/memory/feedback_campaign_recovery_graph_2026_10_16.md"
+  ],
+  "scope": "Multi-campaign repairs.",
+  "history": []
+}

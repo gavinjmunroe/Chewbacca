@@ -1,0 +1,34 @@
+{
+  "id": "zeutara-paused-campaign-orphans",
+  "title": "Fixing an audience doesn't reach leads a paused campaign already enrolled",
+  "client": "Zeutara",
+  "date": "2026-10-03",
+  "stage": "send",
+  "applies_to": [
+    "campaign",
+    "audience",
+    "enrollment",
+    "relaunch",
+    "resume"
+  ],
+  "hypothesis": "Resuming a paused campaign after fixing its audience sends the fixed lines.",
+  "change": "Checked each paused campaign's Activity tab and lead ids against Audiences.",
+  "oracle": {
+    "metric": "observation",
+    "numerator": 3,
+    "denominator": 3,
+    "unit": "cases",
+    "source": "ui_read",
+    "baseline": "",
+    "version": 1
+  },
+  "result": "Every enrolled lead showed as Unknown lead: 140 per campaign enrolled Sep 29 from since-deleted records. Resuming would have sent to 128 orphaned queued leads each, and none of the new lines reach them.",
+  "verdict": "observed",
+  "next_decision": "Relaunch as a new campaign on the fixed audience instead of resuming.",
+  "check": "Before resuming, read who is enrolled and whether their records still exist; a changed audience means relaunch.",
+  "evidence": [
+    "~/code/work/zeutara-gtme/findings/2026-10-03-copy-and-fit.md"
+  ],
+  "scope": "Clay Campaigns as of October 2026.",
+  "history": []
+}

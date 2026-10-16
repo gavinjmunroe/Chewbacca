@@ -85,7 +85,7 @@ COMMANDS=(
   "gtme-lookup|ZoomInfo's free company and person search, Fireflies meetings, keys from the keychain"
   "gtme-interview|drill GTM engineer interview cases from sourced Clay procedures"
   "gtm|every client's campaigns, sends, replies and meetings, from the local graph"
-  "gtme|a hired growth engineer: a plan from your business, first list, brief, next, report"
+  "gtme|a hired growth engineer: a plan from your business, first list, brief, next, report, lessons"
   "gtm-memory|accounts, contacts, jobs, commitments, Clay columns and credits per client"
   "jobs|one queue for long and heavy work: runs it when the Mac has room"
   "ig|read every Instagram post of an account with his signed-in session"

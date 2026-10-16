@@ -17,6 +17,7 @@ On 2026-10-12 an agent told Caleb the Zeutara launch was good "until Jonah respo
 - The Stop hook `.claude/hooks/ready-guard.sh` refuses such a claim without a signed READY under 2 hours old for an unchanged drafts file. Tests: `tests/ready_guard.sh`, `tests/test_gtme_ready.py`.
 - gtme-grade's render gate now fails firm names the copy prints that end in a legal form or carry an emoji; it used to warn and missed "L.P.".
 - Inputs gtme ready cannot find (a per-draft leads file for a signal split, a recipient read in `reviews/<campaign>.json`, senders, suppress) are named in its table. Put them beside the drafts file or in the client's `ready` block in clients.json.
+- In a GTM tab, ready-guard reads "we're good" as a launch claim even when it answers "is your task done?" (2026-10-16, a ledger-cleanup tab). Report the finished fact instead ("both commits are on main"), and when a client's last gtme ready was NOT READY, give its count in the same reply. Its drafts path is in `~/.chewbacca/state/gtme-ready/<client>.json` under `drafts.path`.
 
 - ready-guard also fires on an all-clear about something else. On 2026-10-16 a
   tab that only fixed launch-guard answered Caleb's "We good?" with "Yeah we're

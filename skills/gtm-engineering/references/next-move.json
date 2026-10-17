@@ -259,7 +259,7 @@
     "schema.org",
     "ogp.me"
   ],
-  "_infra_domains": "Infrastructure a site loads or links that is never the brand's owner: site builders and hosting, CDNs, analytics and ad tags, accessibility widgets, and SaaS tools (feedback, chat, reviews, email, payments, consent). Added 2026-10-17 after the Sabo batch spent a 0.5-credit people search each on website-files.com and marker.io (Runna) and acsbapp.com, shopifysvc.com and shopifycdn.com (Zico). This list is the cross-check, not the gate: org_hop already needs an ownership sentence or a company named on the brand's about page, and read_site keeps script, stylesheet and preconnect hosts out of links. Add a domain here when a replay shows it reaching a hop.",
+  "_infra_domains": "Infrastructure a site loads or links that is never the brand's owner: site builders and hosting, CDNs, analytics and ad tags, accessibility widgets, and SaaS tools (feedback, chat, reviews, email, payments, consent). Added 2026-10-17 after the Sabo batch spent a 0.5-credit people search each on website-files.com and marker.io (Runna) and acsbapp.com, shopifysvc.com and shopifycdn.com (Zico). This list is the cross-check, not the gate: org_hop already needs an ownership sentence on the brand's site or about page (or emails found at the domain), and read_site keeps script, stylesheet and preconnect hosts out of links. Add a domain here when a replay shows it reaching a hop.",
   "infra_domains": {
     "hosting": [
       "webflow.com",

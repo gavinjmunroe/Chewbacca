@@ -168,14 +168,32 @@ class JunkHops(unittest.TestCase):
         self.assertEqual(self.hops("Runna", "runna.com", ev), [])
 
     def test_ownership_still_hops(self):
-        """The bar drops junk, not parents: an ownership sentence or an about-page name still hops."""
+        """The bar drops junk, not parents: an ownership sentence, on the homepage or the about page, hops."""
         owned = {"site_text": "Runna is part of Strava.", "links": ["www.strava.com", "edge.marker.io"]}
         self.assertEqual(self.hops("Runna", "runna.com", owned), ["strava.com"])
-        named = {"site_text": "", "links": ["www.strava.com", "www.tomsguide.com"],
-                 "about_text": "Runna joined Strava in 2025 and keeps coaching every runner."}
-        self.assertEqual(self.hops("Runna", "runna.com", named), ["strava.com"])
-        b = {"account": {"brand": "Runna", "domain": "runna.com"}, "evidence": named}
-        self.assertEqual(N.related_orgs(b, N.load_data())["strava.com"]["trust"], "named_on_about")
+        home = RUNNA_HOME.replace("</body>", '<a href="https://www.strava.com/">Strava</a></body>')
+        about = "<html><body><p>Runna is now part of Strava, and still coaches every runner.</p></body></html>"
+        ev = N.read_site("runna.com", site_fetch({"https://runna.com/": home, "https://runna.com/about": about}))
+        self.assertEqual(self.hops("Runna", "runna.com", ev), ["strava.com"], "the about page's sentence counts")
+
+    def test_a_company_named_without_ownership_does_not_hop(self):
+        """Review, 2026-10-17: an about page names its integrations as readily as its parent."""
+        ev = {"site_text": "", "links": ["www.strava.com", "www.garmin.com"],
+              "about_text": "We sync with Strava and Garmin. On the road, a coach in your pocket."}
+        self.assertEqual(self.hops("Runna", "runna.com", ev), [])
+
+    def test_about_urls_are_about_pages(self):
+        raw = ('<a href="//cdn.shopify.com/s/about-hero.jpg">x</a><a href="/blogs/news/about-our-new-shoe">x</a>'
+               '<a href="/products/company-tee">x</a><a href="https://evil.com/about">x</a>'
+               '<a href="/pages/about-us">x</a><a href="https://www.zico.com/our-story?ref=nav">x</a>')
+        self.assertEqual(N.about_urls(raw, "zico.com"),
+                         ["https://zico.com/pages/about-us", "https://zico.com/our-story"])
+
+    def test_infra_label_spares_real_companies(self):
+        for d in ("shopifycdn.com", "shopifysvc.com", "website-files.com"):
+            self.assertTrue(N.infrastructure(d, set()), d)
+        for d in ("static.com", "pixel.com", "hoka.com", "nutrabolt.com", "deckers.com"):
+            self.assertFalse(N.infrastructure(d, set()), d)
 
 
 class Barebells(unittest.TestCase):

@@ -207,11 +207,10 @@ class ChainTest(_Base):
             SITES.pop("runna.com")
             SITES.pop("zico.com")
 
-    def test_about_page_name_hop_never_marks_its_email_ready(self):
-        """A company the about page names and the site links is searched, but without an ownership
-        sentence its emails stay off the allowlist."""
-        SITES["acme.com"] = {"site_text": "Shop our partners", "links": ["career.vitaminwell.com"],
-                             "about_text": "We started in a kitchen and grew up alongside Vitamin Well."}
+    def test_guessed_parent_hop_never_marks_its_email_ready(self):
+        """An ownership sentence whose company the site doesn't link is searched at a guessed domain,
+        but its emails stay off the allowlist."""
+        SITES["acme.com"] = {"site_text": "Acme is a brand of Vitamin Well.", "links": []}
         try:
             stranger = person("Pat Lee", "US Partnerships Lead")
             fake = FakeClay({"acme.com": [], "vitaminwell.com": [stranger]},

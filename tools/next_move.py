@@ -53,11 +53,11 @@ GENERIC = {"group", "ab", "inc", "llc", "ltd", "limited", "holdings", "holding",
            "corporation", "gmbh", "sa", "plc", "the", "brands", "international"}
 LINK = re.compile(r"https?://([a-z0-9.-]+\.[a-z]{2,})", re.I)
 ANCHOR = re.compile(r"<a\b[^>]*?\bhref\s*=\s*[\"']?\s*(?:https?:)?//([a-z0-9.-]+\.[a-z]{2,})", re.I)
-ABOUT_PATH = re.compile(r"<a\b[^>]*?\bhref\s*=\s*[\"']?((?:https?://[a-z0-9.-]+)?/[^\"'\s>#?]*"
-                        r"(?:about|our-story|ourstory|company|who-we-are)[^\"'\s>#?]*)", re.I)
+HREF = re.compile(r"<a\b[^>]*?\bhref\s*=\s*[\"']?([^\"'\s>]+)", re.I)
+ABOUT_SLUG = re.compile(r"^(?:about|our-?story|company|who-we-are)", re.I)
+NOT_ABOUT = {"products", "product", "collections", "blogs", "blog", "news", "shop", "files", "cdn", "s"}
 # A host label that names delivery plumbing, not a company: shopifycdn, shopifysvc, website-files.
-NOTICE = re.compile(r"(?:copyright\s*)?(?:©|&copy;|\(c\)).{0,120}?(?:all rights reserved\.?|$|(?=\|))", re.I)
-INFRA_LABEL = re.compile(r"(?:^|-)(?:cdn|svc|static|assets?|files|cache|pixel)$|cdn$|svc$")
+INFRA_LABEL = re.compile(r"cdn$|svc$|-(?:static|assets?|files|cache)$")
 TWO_LEVEL = {"co.uk", "com.au", "co.jp", "co.nz", "com.br", "co.za", "com.mx"}
 EXECUTABLE = {"read", "paid_write", "write"}
 
@@ -137,18 +137,9 @@ def related_orgs(blocker, data):
                 found.setdefault(f"{k}.com", {"why": f'the brand\'s own text says "{quote}"; '
                                                      f"{k}.com is guessed from that name, the site doesn't link it",
                                               "trust": "owned_guessed"})
-    about = " ".join((ev.get("about_text") or "").split())
     for d, hosts in domains.items():
-        if d in found:
-            continue
-        named = named_on_about(d, about)
-        if named:
-            found[d] = {"why": f'the brand\'s about page names "{named}" ("{sentence_around(about, *about_span(about, named), 80)}"), '
-                               f"and it links {', '.join(sorted(hosts))}",
-                        "trust": "named_on_about", "hosts": sorted(hosts)}
-        else:
-            found[d] = {"why": f"the brand's site links {', '.join(sorted(hosts))}, with no ownership sentence",
-                        "trust": "linked_only", "hosts": sorted(hosts)}
+        found.setdefault(d, {"why": f"the brand's site links {', '.join(sorted(hosts))}, with no ownership sentence",
+                             "trust": "linked_only", "hosts": sorted(hosts)})
 
     at = {}
     for p in ev.get("people") or []:
@@ -166,35 +157,6 @@ def infrastructure(domain, listed):
     return domain in listed or bool(INFRA_LABEL.search(domain.split(".")[0]))
 
 
-def about_span(text, name):
-    i = text.find(name)
-    return (i, i + len(name)) if i >= 0 else (0, 0)
-
-
-def named_on_about(domain, about):
-    """The company name on the brand's about page that this domain's label spells, or "".
-
-    A capitalized run of words whose letters, generic suffixes dropped, are the domain's label:
-    "Strava Inc" for strava.com. A blog it links (therunbuddy.co.uk on runna.com)
-    or a tool it embeds has no such sentence, so it stays linked_only.
-    """
-    if not about:
-        return ""
-    # Runna, 2026-10-17: "Copyright © 2025 Runna, The Run Buddy LTD" names the brand's own legal
-    # entity, and therunbuddy.co.uk is its blog. A copyright line that names another company is
-    # already read by COPYRIGHT above; here it only ever names the brand itself.
-    about = NOTICE.sub(" ", about)
-    label = domain.split(".")[0].replace("-", "")
-    for m in re.finditer(r"[A-Z][\w&'.-]*(?:\s+[A-Z][\w&'.-]*){0,4}", about):
-        words = m.group(0).split()
-        for i in range(len(words)):
-            for j in range(len(words), i, -1):
-                name = " ".join(words[i:j])
-                if label and label in (name_key(name), name_key(name, drop_generic=True)):
-                    return name
-    return ""
-
-
 # ---------------------------------------------------------------- generate
 
 def cost_of(data, step):
@@ -210,7 +172,7 @@ def minutes_of(data, step):
 # not (Gymshark, 2026-10-16). What they propose comes from the evidence alone.
 CORP_SUFFIX = re.compile(r"(group|holdings?|brands|inc|corp|co|international|global|hq)$")
 STAFF_HOST = re.compile(r"^(careers?|jobs|team|people|work|join)\.")
-TRUST_RANK = {"owned_and_linked": 3, "owned_guessed": 2, "named_on_about": 1, "email_domain": 1}
+TRUST_RANK = {"owned_and_linked": 3, "owned_guessed": 2, "email_domain": 1}
 
 
 def company_stem(domain):
@@ -229,8 +191,9 @@ def op_org_hop(blocker, data):
     for d, o in related_orgs(blocker, data).items():
         # First creator client, 2026-10-17: bare links hopped Runna to therunbuddy.co.uk, website-files.com and
         # marker.io and Zico to acsbapp.com, shopifysvc.com and shopifycdn.com, 0.5 credits each and
-        # nobody found. A link alone is a blog, a CDN or a widget far more often than an owner, so a
-        # paid search needs an ownership sentence, a company the about page names, or found emails.
+        # nobody found. A link alone is a blog, a CDN or a widget far more often than an owner, and a
+        # company merely named on the about page is as often an integration (Strava, Garmin) as a
+        # parent, so a paid search needs an ownership sentence on the site or about page, or emails.
         if o["trust"] not in TRUST_RANK:
             continue
         groups.setdefault(company_stem(d), []).append((d, o))
@@ -889,15 +852,24 @@ def page_text(raw):
 
 
 def about_urls(raw, domain, limit=2):
-    """Same-site about pages the homepage links, first found first."""
+    """Same-site about pages the homepage links: /about, /pages/about-us, /our-story, never a
+    product, post or asset whose name happens to hold the word."""
     site = registrable(domain)
     out = []
-    for m in ABOUT_PATH.finditer(raw):
+    for m in HREF.finditer(raw):
         href = html.unescape(m.group(1))
+        if href.startswith("//"):
+            continue
         host = LINK.match(href)
         if host and registrable(host.group(1)) != site:
             continue
-        url = href if host else f"https://{site}{href}"
+        path = href[host.end():] if host else href
+        if not path.startswith("/"):
+            continue
+        segs = [x for x in re.split(r"[/?#]", path.split("?")[0].split("#")[0]) if x]
+        if not segs or len(segs) > 2 or "." in segs[-1] or not ABOUT_SLUG.match(segs[-1]) or segs[0].lower() in NOT_ABOUT:
+            continue
+        url = f"https://{site}/{'/'.join(segs)}"
         if url not in out:
             out.append(url)
     return out[:limit]

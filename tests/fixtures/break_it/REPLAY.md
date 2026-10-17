@@ -15,29 +15,31 @@ is 29 episodes.
   (`false-done-cases.md` in the shared notes folder: Caleb or a later tab found
   more work or a break). Six came from the replay: the same session rewrote a
   code file it had already called done, or Caleb's next message pushed back.
-- 21 clean finishes: done, and the next human message was a new ask.
+- 20 clean finishes: done, and the next human message was a new ask.
 
-Two replay episodes were the same events as steering cases 1 and 6 with the
-opposite label. The hand label won and the duplicates were dropped.
+Three replay episodes were the same events as steering cases 1, 2b and 6 with
+the opposite label. The hand label won and the duplicates were dropped (2b was
+caught after the first write-up, when open-work-guard's two clean-side refusals
+were checked by hand).
 
 ## What the hook refused
 
 |                                                   | false-done refused | clean refused   |
 | ------------------------------------------------- | ------------------ | --------------- |
-| break-it-guard alone                              | 5 of 15 (33%)      | 2 of 21 (9.5%)  |
-| break-it-guard, cases that changed code in a repo | 5 of 7 (71%)       | 2 of 16 (12.5%) |
-| open-work-guard alone (451f6183)                  | 3 of 15            | 2 of 21         |
-| either hook                                       | 8 of 15 (53%)      | 4 of 21 (19%)   |
-| strict rule: no receipt means refuse              | 7 of 15 (47%)      | 16 of 21 (76%)  |
+| break-it-guard alone                              | 5 of 15 (33%)      | 2 of 20 (10%)   |
+| break-it-guard, cases that changed code in a repo | 5 of 7 (71%)       | 2 of 15 (13%)   |
+| open-work-guard alone (451f6183)                  | 3 of 15            | 1 of 20         |
+| either hook                                       | 8 of 15 (53%)      | 3 of 20 (15%)   |
+| strict rule: no receipt means refuse              | 7 of 15 (47%)      | 15 of 20 (75%)  |
 
 Against the falsifier set for it (refuse at least half the false-done, block
 at most 1 in 10 clean), break-it-guard alone fails the first bar and passes the
-second. Eight of the 15 false-done finishes changed no code: call prep docs, a
+second, at exactly 1 in 10. Eight of the 15 false-done finishes changed no code: call prep docs, a
 manager tab's "messages sent", a pitch nobody checked. A receipt bound to HEAD
 has nothing to attack there, and those are open-work-guard's cases.
 
 The strict rule the brief first described (no receipt for HEAD, refuse) was
-measured and rejected: no finish that day had a receipt, so it blocks 76% of
+measured and rejected: no finish that day had a receipt, so it blocks 75% of
 clean ones.
 
 ## What each refusal was

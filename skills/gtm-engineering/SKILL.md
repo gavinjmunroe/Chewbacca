@@ -443,6 +443,16 @@ memory `feedback_claims_match_the_mechanism`).
   (Zeutara's no-postal-address drops "add Jonah's office address"). A new rule
   is a new entry there, never an if-statement. Dropped moves print with the rule
   that dropped them, and `run` checks again right before any executor.
+- **Never hop on a bare link (2026-10-17).** An org_hop people search runs only
+  on an ownership sentence (footer or about page) or on emails already found at
+  that domain. Bare links hopped Runna to therunbuddy.co.uk, website-files.com
+  and marker.io, and hopped Zico to acsbapp.com, shopifysvc.com and
+  shopifycdn.com. That's six 0.5-credit searches and nobody found. The site read
+  keeps script, stylesheet and preconnect hosts out of `links`, and
+  `infra_domains` in `references/next-move.json` is the cross-check. A company
+  the about page only names doesn't count either, since integrations like
+  Strava and Garmin are named the same way. Caleb's rule for this work: every
+  step decided systematically, nothing brute forced.
 - **Jev ranks, code counts.** Jev gives each surviving move a probability of
   progress from the evidence. Code ranks on p / (credits + the credits the move
   still owes downstream + minutes x 0.02 + 0.25), halved when irreversible. A

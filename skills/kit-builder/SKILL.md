@@ -165,6 +165,20 @@ paths and only one gets exercised while you build. A real bug shipped this way: 
 `TEMPLATE: unfilled` check ran inside awk, but the marker sits at the bottom of the file,
 so awk had already processed every row above it. Empty templates hid it completely.
 
+## A kit built for someone else ships with its handoff
+
+When the kit is for another person, the handoff goes out in the same turn as the
+repo: a one-page PDF in `~/Downloads` (`chewbacca pdf`, check it reads 1 page),
+in the order they'll use it. Setup once, what to say every day, what the first
+session asks, the plan, the hard line, and the phrases that make it act. Then
+send it to them along with the repo invite. A repo link alone gives them no
+idea where to start. Caleb, 2026-10-17, after colin-kit shipped with only an
+invite and a text: "Give me a handoff pdf for colin to go ham w this repo".
+
+Also live-test it before you share it: `claude -p "yo"` inside the kit has to
+open with its Phase 0 question, and a "just write it for me" prompt has to hit
+the hard line.
+
 ## Write the marker, or it will get rebuilt
 
 Every kit carries a `.kit` file at its root. This is not optional. It is what makes the

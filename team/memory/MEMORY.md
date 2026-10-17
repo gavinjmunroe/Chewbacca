@@ -389,3 +389,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_help_flag_can_run_the_tool: `people distill --help` ran a real distill (10/16); check a tool parses --help before sending it blind
 - project_semyon_onramp_2026_10_17: Semyon (backend, installer and guard tasks) onboarding one pager to Chewbacca and the Clay bridge, in Downloads; written 10/17, not sent
 - feedback_launch_guard_reading_clay_files: launch-guard refuses shell reads that mention Clay plus echo, xargs or python -c; read those files with the Read tool or one plain grep
+- project_lock_in_for_everyone_2026_10_17: colin-kit lock-in moves (one block per session, loop dump, capacity math, rough cuts to a coach, coach not ghostwriter) become the default for every user (10/17)

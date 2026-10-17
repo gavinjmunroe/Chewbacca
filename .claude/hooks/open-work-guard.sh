@@ -82,6 +82,12 @@ LEFT = re.compile(
     re.I)
 OFFER = re.compile(r"(?:^|\n|[.!?] )\s*(?:Want (?:me to|the|a|it)\b|Should I\b|Shall I\b|Do you want me to\b)[^?\n]*\?", re.I)
 WAITING = re.compile(r"\bwaiting on\b|\b(?:another|the other|that) (?:tab|session)\b|\bits own (?:tab|session)\b", re.I)
+# A leftover with a written handover in the same paragraph is handed off, not
+# dropped. 2026-10-16 4:26pm, the provider-interface tab: "Still not built:
+# wiring treg itself ... I left a handover note in the shared notes folder."
+# Treg was out of its scope (Clay stays live until Sabo pays), and Caleb moved
+# on to a new ask. The break-it tab's replay counted this refusal as false.
+HANDOVER = re.compile(r"\bhand[- ]?(?:over|off) note\b|\bhanded (?:it |them )?(?:off|over) to\b|\bout of (?:this tab's |my |its )?scope\b", re.I)
 
 for pat in (LEFT, OFFER):
     for m in pat.finditer(text):
@@ -89,6 +95,10 @@ for pat in (LEFT, OFFER):
         ends = [i for i in (text.find(".", m.end()), text.find("\n", m.end())) if i != -1]
         sentence = text[start:min(ends) if ends else len(text)]
         if WAITING.search(sentence):
+            continue
+        p_start = text.rfind("\n\n", 0, m.start()) + 1
+        p_end = text.find("\n\n", m.end())
+        if pat is LEFT and HANDOVER.search(text[p_start:p_end if p_end != -1 else len(text)]):
             continue
         print("left:" + sentence.strip()[:160]); raise SystemExit
 print("ok")

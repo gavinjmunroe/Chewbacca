@@ -40,5 +40,9 @@ probe "named blocker" 0 "The send hasn't gone out.
 BLOCKED: Jonah has to sign the DocuSign as himself." "" ""
 probe "another tab owns it" 0 "The map is waiting on the Map the rest tab, which hasn't landed yet." "" ""
 probe "second stop never loops" 0 "They also list what's still open." "" "" true
+probe "12497a20 4:26pm, handed over in a note" 0 "Still not built: wiring treg itself and person_posts on any provider. I left a handover note in the shared notes folder." "" ""
+probe "a handover elsewhere in the reply doesn't cover it" 2 "The Friday numbers to Maggie haven't gone out.
+
+Unrelated: I left a handover note for the logo tab." "" ""
 
 [ "$fail" = 0 ] && echo "open-work-guard: all passed" || { echo "open-work-guard: $fail failed"; exit 1; }

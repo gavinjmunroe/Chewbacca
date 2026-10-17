@@ -327,6 +327,14 @@ being true.
 Leave `life` off for anything they will read or act on. A panel that vanishes
 mid-sentence is a bug they will blame on you.
 
+Something he asked to see on a schedule stays until he closes it, even when it
+is ambient. On 2026-10-16 the hourly verse card went out with `life=30`, and
+Caleb's next message was "Make them stay until I x them out, also make it every
+15 min", then "If I double click on them I want it to go into chat w the hud and
+chewbs". So for a recurring card he asked for (`bin/hud-verse` is the model):
+no `life`, the cadence he named and not one you picked, nothing in quiet hours,
+and a double-click that opens the HUD chat about the card (`ask=` on its Screen).
+
 ## Noticing without being asked
 
 `hud-watch` is the half that speaks first. It checks for things worth

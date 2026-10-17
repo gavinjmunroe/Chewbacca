@@ -229,6 +229,28 @@
       "ui": "clay-go column-settings --table {table}"
     },
     {
+      "name": "actions",
+      "kind": "read",
+      "gate": "read",
+      "summary": "every enrichment the workspace can run, with inputs, outputs and credit cost; feed it to tools/enrich_catalog.py build",
+      "args": ["ws"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "getActions",
+          "args": {
+            "ws": "ws"
+          }
+        },
+        {
+          "type": "cli",
+          "argv": ["workflows", "actions", "list"],
+          "extract": "data"
+        }
+      ],
+      "ui": "clay-go table --table {table}"
+    },
+    {
       "name": "views",
       "kind": "read",
       "gate": "read",

@@ -95,12 +95,16 @@ def decide(ranked):
     if not ranked or ranked[0].get("p_best") is None:
         return {"action": "none", "why": "no priced option"}
     lead = ranked[0]
-    if lead["p_best"] >= CONFIDENT:
+    # 2026-10-17, first run on the real catalog: every unmeasured option shares Beta(1, 1), so the
+    # cheapest one ("Scrape website", 0.1 credits) won 93% of draws on price alone. Never pick an
+    # option nobody has run; its P(best) is the prior talking.
+    unmeasured = any(a + b - PRIOR_A - PRIOR_B == 0 for a, b in lead["rates"])
+    if lead["p_best"] >= CONFIDENT and not unmeasured:
         return {"action": "pick", "name": lead["name"], "p_best": lead["p_best"]}
     # Test whichever of the top two has the wider 90% yield interval: that uncertainty is what's
     # holding the call. Within it, the least-counted step is the one to run.
     top = [r for r in ranked[:2] if r.get("p_best") is not None]
-    target = max(top, key=lambda r: r["yield"]["hi"] - r["yield"]["lo"])
+    target = lead if unmeasured else max(top, key=lambda r: r["yield"]["hi"] - r["yield"]["lo"])
     a, b = min(target["rates"], key=lambda ab: ab[0] + ab[1])
     n = rows_to_test(a / (a + b), a + b - PRIOR_A - PRIOR_B)
     what = target["name"] + (" (second step on the first step's misses)" if target.get("cascade") else "")

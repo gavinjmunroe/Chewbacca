@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 import enrich_catalog as C  # noqa: E402
 import enrich_math as M  # noqa: E402
 
-FM = "Find work email from profile URL"
+FM = "findymail-find-work-email-from-linkedin"
 
 
 def names(rows):
@@ -54,6 +54,20 @@ def test_enough_evidence_makes_a_pick():
            f"Work Email|after {FM} miss": {"tried": 180, "usable": 160}}
     _, d = C.rank("work email", catalog={}, observed=obs)
     assert d["action"] == "pick"
+
+
+def test_a_cheap_option_nobody_ran_is_tested_not_picked():
+    # Real catalog, 2026-10-17: "Scrape website" at 0.1 credits won 93% of draws on price alone.
+    cat = {"actions": [{"name": "Scrape website", "credits": 0.1, "outputs": ["email"]},
+                       {"name": "Find email", "credits": 0.5, "actionKey": "fe", "outputs": ["email"]}]}
+    _, d = C.rank("email", catalog=cat, observed={"fe": {"tried": 50, "usable": 30}})
+    assert d["action"] == "test" and d["name"] == "Scrape website"
+
+
+def test_an_unpriced_catalog_function_takes_the_panel_price():
+    cat = {"actions": [{"name": "Work Email", "type": "function", "functionId": "t_x", "credits": None, "outputs": []}]}
+    opt = C.options(cat)[0]
+    assert opt["credits"] == 1.1 and opt["waterfall"] and opt["price_source"].startswith("Clay Tools panel")
 
 
 def test_cascade_cost_and_yield_follow_the_formula():

@@ -444,7 +444,7 @@ const READ_POSTS = new Set(["listResources", "inboxReplies", "threadHistory", "b
 // cell alone ran past it on the Sabo table, 2026-10-16, and `row` came back
 // "incomplete"). When the engine cuts one, the same frozen request is sent once
 // more through the pinned sender and the whole body is shaped here instead.
-const FULL_READS = new Set(["getRow", "listRows", "listRowsAfter", "bulkFetchRecords", "getViewRecordIds", "getTableViews", "getTableColumns", "getWorkflowRunSteps"]);
+const FULL_READS = new Set(["getRow", "listRows", "listRowsAfter", "bulkFetchRecords", "getViewRecordIds", "getTableViews", "getTableColumns", "getWorkflowRunSteps", "getActions"]);
 function specWrites(specName) {
   const so = specOps.get(specName);
   if (!so) return true;

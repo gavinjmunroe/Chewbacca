@@ -50,7 +50,8 @@ PANEL_PRICES = {
     "Perform search": {"credits": 0.2, "note": "Google search results", "outputs": ["search results"]},
     # Not in the panel; the Sabo table's Findymail column, 0.5 per run on the 10/15-16 receipts.
     "Find work email from profile URL": {"credits": 0.5, "note": "Findymail, single provider, from a LinkedIn URL",
-                                         "outputs": ["work email"]},
+                                         "outputs": ["work email"],
+                                         "actionKey": "findymail-find-work-email-from-linkedin"},
 }
 
 CLIENTS = os.path.join(HOME, "clients")
@@ -125,7 +126,7 @@ def same_org(email_domain, domain):
 # usable only when the address exists, ZeroBounce says valid, and it sits at the brand or a
 # parent the chain hopped to. Archer, 2026-10-16: Sydney Wild's vitaminwell.com inbox was valid
 # and useless, because she'd left. Counting "found" would have scored that as a win.
-def learn(runs_path, out=OBSERVED, provider="Find work email from profile URL"):
+def learn(runs_path, out=OBSERVED, provider="findymail-find-work-email-from-linkedin"):
     tried = found = usable = 0
     with open(runs_path) as f:
         for line in f:
@@ -166,8 +167,19 @@ def options(catalog):
     """Catalog actions, else the panel prices, as one list of option dicts."""
     acts = (catalog or {}).get("actions") or []
     if acts:
-        return acts
+        out = []
+        for a in acts:
+            panel = PANEL_PRICES.get(a.get("name") or "")
+            # Clay's catalog leaves functions unpriced; "Work Email" is one. The Tools panel prints
+            # their per-row price, so a panel price fills the gap and says where it came from.
+            if a.get("credits") is None and panel and panel.get("credits") is not None:
+                a = {**a, "credits": panel["credits"], "price_source": "Clay Tools panel, 2026-10-17",
+                     "waterfall": a.get("waterfall") or panel.get("waterfall", False),
+                     "outputs": a.get("outputs") or panel.get("outputs", [])}
+            out.append(a)
+        return out
     return [{"name": n, "credits": p.get("credits"), "waterfall": p.get("waterfall", False),
+             "actionKey": p.get("actionKey"),
              "providers": p.get("providers"), "source": "Clay Tools panel, 2026-10-17", "outputs": p.get("outputs", []),
              "categories": [], "description": p.get("note", "")} for n, p in PANEL_PRICES.items()]
 
@@ -211,17 +223,22 @@ def jev_fit(capability, opts):
         return None
 
 
-def counts(observed, name):
-    o = observed.get(name) or {}
+def key(opt):
+    """Outcomes are filed by actionKey (stable across renames), else by name for functions."""
+    return opt.get("actionKey") or opt.get("functionId") or opt.get("name")
+
+
+def counts(observed, k):
+    o = observed.get(k) or {}
     return o.get("usable", 0), o.get("tried", 0)
 
 
 def with_cascades(opts, observed):
     """Each measured single option followed by each waterfall on its misses, as its own option."""
-    singles = [o for o in opts if not o.get("waterfall") and counts(observed, o["name"])[1] and o.get("credits") is not None]
+    singles = [o for o in opts if not o.get("waterfall") and counts(observed, key(o))[1] and o.get("credits") is not None]
     falls = [o for o in opts if o.get("waterfall") and o.get("credits") is not None]
     return opts + [{"name": f"{s['name']}, then {w['name']} on misses", "cascade": True,
-                    "credits": [s["credits"], w["credits"]], "steps": [s["name"], f"{w['name']}|after {s['name']} miss"]}
+                    "credits": [s["credits"], w["credits"]], "steps": [key(s), f"{key(w)}|after {key(s)} miss"]}
                    for s in singles for w in falls]
 
 
@@ -229,7 +246,11 @@ def candidates(capability, opts, use_jev, fit=jev_fit):
     """The options that deliver the capability: Jev over a loose prefilter, else every word must match."""
     words = [w for w in re.split(r"\W+", capability.lower()) if w]
     if use_jev:
-        pool = [o for o in opts if loose(o, words)][:JEV_MAX]
+        # Most capability words first, so a 739-action catalog doesn't hand Jev the first 40
+        # actions that merely say "email" (2026-10-17: Findymail never reached the pool).
+        hits = lambda o: sum(w in " ".join([o.get("name") or "", o.get("description") or "",
+                                            " ".join(o.get("outputs") or [])]).lower() for w in words)
+        pool = sorted((o for o in opts if loose(o, words)), key=hits, reverse=True)[:JEV_MAX]
         probs = fit(capability, pool) if pool else {}
         kept = [{**o, "fit": round(probs[i], 2)} for i, o in enumerate(pool) if probs and probs[i] >= JEV_FIT]
         # An empty answer falls through to keywords: "nothing fits" from a thin catalog entry is
@@ -246,7 +267,7 @@ def rank(capability, catalog=None, observed=None, value=None, use_jev=False, fit
     observed = load(OBSERVED, {}) if observed is None else observed
     opts = with_cascades(candidates(capability, options(catalog), use_jev, fit), observed)
     for o in opts:
-        names = o.get("steps") or [o["name"]]
+        names = o.get("steps") or [key(o)]
         o["rates"] = [M.posterior(*counts(observed, n)) for n in names]
         o["observed"] = [f"{counts(observed, n)[0]}/{counts(observed, n)[1]}" for n in names]
     return M.compare(opts, value=value)
@@ -256,7 +277,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     b = sub.add_parser("build"); b.add_argument("dump")
-    l = sub.add_parser("learn"); l.add_argument("runs"); l.add_argument("--provider", default="Find work email from profile URL")
+    l = sub.add_parser("learn"); l.add_argument("runs"); l.add_argument("--provider", default="findymail-find-work-email-from-linkedin")
     r = sub.add_parser("record"); r.add_argument("name"); r.add_argument("--tried", type=int, required=True)
     r.add_argument("--usable", type=int, required=True); r.add_argument("--note", default="")
     p = sub.add_parser("pick"); p.add_argument("capability"); p.add_argument("--json", action="store_true")
@@ -290,7 +311,8 @@ def main(argv=None):
                 continue
             y = o["yield"]
             cost = o["credits"] if not o.get("cascade") else "+".join(map(str, o["credits"]))
-            print(f"- {o['name']} [{cost} cr, observed {', '.join(o['observed'])}] usable yield "
+            by = f" ({o['package']})" if o.get("package") else ""
+            print(f"- {o['name']}{by} [{cost} cr, observed {', '.join(o['observed'])}] usable yield "
                   f"{y['mean']:.2f} (90%: {y['lo']:.2f} to {y['hi']:.2f}), P(best) {o['p_best']:.2f}")
         d = decision
         if d["action"] == "pick":

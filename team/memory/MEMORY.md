@@ -373,3 +373,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_docs_name_bin_tools_off_path: docs naming bin/ tools by bare name (gtm, decision-inbox) break off PATH; write chewbacca <verb> or bin/<tool>, check command -v (backlog 26, 10/16)
 - reference_skill_route_eval: the skill router is measured by tools/skill_route_eval.py on private held-out labels; 10/16 held precision 8.5, recall 21.1; hub correction failed held-out, label more positives before tuning (10/16)
 - reference_target_account_match: tools/target_accounts.py matches employers to a target list in code (domain, parent domain, exact normalized name) and computes tenure overlap; a model match is only a hint (10/16)
+- feedback_manager_tab_attacks_every_done: a manager tab attacks every done claim on a clean main copy, checks installed not just landed, and reuses idle tabs (2026-10-16)

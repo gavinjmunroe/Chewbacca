@@ -488,6 +488,12 @@ held out anymore. Grade it on the next 10 real blockers.
   old chain 1 of 2 at 1.67. Per credit rewards giving up cheaply. The old chain's
   miss cost nothing, so a higher cleared count can lose on that metric. Read the
   cleared count next to it.
+- **Never change what a provider step does on failure without running every test that
+  names it (2026-10-16).** 6b478168 turned NotWired into a blocker record and ran its own
+  tests only, so main sat red on `tests/test_gtm_provider.py` until 2851fade. Before
+  landing, `grep -rl <ExceptionName> tests/` and run each hit. Vendor calls in
+  `tools/creator_gtm/` go through `brand_buyer.prov()` (tools/creator_gtm/provider.py),
+  never a raw `clay()` call, so a provider swap stays one adapter.
 - **Every blocked creator GTM path asks next-move (2026-10-16).** brand_buyer on
   a provider that raises NotWired or hits the credit allowance, follow_buyers when a
   past buyer has no reachable email, spend_now when a brand has no dated evidence,

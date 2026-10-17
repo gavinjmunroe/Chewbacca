@@ -27,6 +27,12 @@ Pick, Jev ranking, retry, status, attribution and spend scoring never touch a ve
   fake and called real Clay from a test. A new adapter for any patched module does the same.
 - `tests/test_gtm_provider.py` runs the brand buyer chain end to end on a fake provider with
   `clay()` replaced by a tripwire.
+- Since 6b478168 a `NotWired` step lands as a blocker record (`result.blocked.step`
+  "provider_unwired") instead of raising. That commit ran its own tests, not this file, and
+  main sat red on the old "raises" test until 2851fade.
+- The Clay adapter writes the brand's domain on a row's first search in a run (2851fade): a
+  reused Barebells row still held vitaminwell.com from an old hop, so a rerun searched the
+  parent and its own pick came back off-domain.
 
 Why: Caleb, 2026-10-16, "removing clay from the equation is def the play after this phase".
 Gavin's ruling holds: stay on Clay until Sabo pays. Wiring treg means mapping

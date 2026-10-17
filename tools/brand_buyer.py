@@ -317,18 +317,27 @@ def remit(person):
     return " | ".join(p.strip() for p in parts if p and p.strip())
 
 
+RANK_BRAND = None  # set by finish() for the brand being ranked
+
+
 def jev_rank(people):
     """Score each candidate 0 to 2 on title and remit with one Jev call.
 
     Returns (ranked indexes best first, scores, buyer_gate) where buyer_gate is False when
     Jev's choice question answered "none". Returns (None, None, raw) when Jev failed.
     """
+    # Dove, 2026-10-17: at unilever.com Jev put "Influencer Marketing Manager, SheaMoisture" (1.99)
+    # over "Influencer Marketing Manager, Dove North America" (1.97), because the question said "this
+    # brand" without naming it. At a parent, the brand's own name in a title is the tiebreaker.
+    brand = RANK_BRAND or "the brand"
+    sibling = (f" At a parent company, a title naming {brand} outranks one naming a different brand or "
+               "product line, which scores one level lower." if RANK_BRAND else "")
     request = {
-        "state": "\n".join(f"{i}: {p.get('name')}: {remit(p)}" for i, p in enumerate(people)),
+        "state": f"Brand: {brand}\n" + "\n".join(f"{i}: {p.get('name')}: {remit(p)}" for i, p in enumerate(people)),
         "questions": {
             "buyer": {
                 "type": "choice",
-                "instructions": "Which numbered person most likely decides which outside creators a brand pays?",
+                "instructions": f"Which numbered person most likely decides which outside creators {brand} pays?",
                 "criteria": {str(i): f"{p.get('name')}" for i, p in enumerate(people)} | {"none": "No one listed"},
             },
         } | {f"fit_{i}": {
@@ -336,8 +345,8 @@ def jev_rank(people):
             # Gymshark, 2026-10-16: a "Social Media Ambassador" ranked first twice. Ambassadors,
             # athletes and creators are who the brand pays, not who decides the paying.
             "instructions": f"Person {i}, {p.get('name')}: how directly do their title and stated remit "
-                            "own choosing and paying outside creators for this brand? Someone the brand "
-                            "pays (an ambassador, athlete, creator or affiliate) scores the lowest level.",
+                            f"own choosing and paying outside creators for {brand}? Someone the brand "
+                            "pays (an ambassador, athlete, creator or affiliate) scores the lowest level." + sibling,
             "criteria": FIT_LEVELS,
         } for i, p in enumerate(people)},
     }
@@ -575,6 +584,8 @@ def finish(brand_domain, row, log, t0, before, cols):
                          "reason": f"no people at {brand_domain}; next-move tried {tried}"}
         return done(log, before, t0, cols)
 
+    global RANK_BRAND
+    RANK_BRAND = log.get("brand")
     ranked, scores, gate = jev_rank(people)
     if ranked is None:
         log["result"] = {"person": None, "row": row, "reason": f"Jev did not answer: {gate}"}

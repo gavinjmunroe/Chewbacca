@@ -531,6 +531,30 @@ class NoLookupTableTest(unittest.TestCase):
         self.assertNotIn('"vitaminwell.com"', src, "no parent domain written into the code")
 
 
+class RankNamesTheBrandTest(unittest.TestCase):
+    def test_jev_is_told_which_brand_it_ranks_for(self):
+        """Dove, 2026-10-17: a SheaMoisture influencer lead beat Dove's own at unilever.com."""
+        sent = {}
+
+        class Done:
+            stdout = json.dumps({"answers": {"buyer": {"choice": "0"}, "fit_0": {"score": 2}}})
+
+        def fake_run(argv, input=None, **kw):
+            sent["request"] = json.loads(input)
+            return Done()
+
+        saved = (L.subprocess.run, L.RANK_BRAND)
+        L.subprocess.run, L.RANK_BRAND = fake_run, "Dove Men+Care"
+        try:
+            L.jev_rank([{"name": "Sanchali", "title": "Influencer Marketing Manager, Dove North America"}])
+        finally:
+            L.subprocess.run, L.RANK_BRAND = saved
+        req = sent["request"]
+        self.assertIn("Dove Men+Care", req["state"])
+        self.assertIn("Dove Men+Care", req["questions"]["fit_0"]["instructions"])
+        self.assertIn("different brand", req["questions"]["fit_0"]["instructions"])
+
+
 class VerifiedParentsTest(unittest.TestCase):
     """C4 Energy and Hoka, 2026-10-17: a valid address at a sourced, verified parent is on-domain."""
 

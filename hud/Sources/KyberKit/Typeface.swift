@@ -62,6 +62,9 @@ extension View {
 enum HomeType {
     /// "Sunday".
     static let headline = Font.system(size: 26, weight: .bold)
+    /// "To-do", when it is the only list and so the panel's title: macOS's
+    /// Title 1 size.
+    static let panelTitle = Font.system(size: 22, weight: .bold)
     /// "October 11", beside the day.
     static let date = Font.system(size: 15)
     /// "Calendar", "To-do", "Projects", and the panel's name.

@@ -149,6 +149,16 @@ is drawn in holds 4.5:1 over the glass on a white wallpaper, hovered or not
 (`HomeTests.inkHoldsOnTheGlass`). The mark beside "Kyber" is a morphing orb
 run by Core Animation (`HomeMark.swift`).
 
+`defaults write dev.bobthebuilder.hud hud.home.todosOnly -bool true` shows the
+to-do list alone (asked for 2026-10-17: "i want just the to do panel on the
+creen, no extra kyber fluff"): "To-do" is the panel's title, with its count,
+its plus and the X beside it, and the mark, the name, the date, the calendar
+and the projects are gone. Its footer names a failed source only when the
+to-dos come from it (`HomeView.todoSources`), and its plus waits until the
+list is read. The key is per Mac and read when the panel opens, so it takes a
+relaunch, and a dragged size is kept apart in `hud.home.todosOnly.size`, so a
+panel dragged tall for three lists never opens on one.
+
 The daemon writes `~/.bob/home-panel.json` after every ingest
 (`bin/lib/home_feed.py`, walks `osgraph_walks.home*`); `kyber-surfaces home`
 prints the same body and `--write` writes it. When the file is missing or more

@@ -471,6 +471,46 @@ struct HomeTests {
             .frame(width: limit.width + 48).fixedSize(horizontal: false, vertical: true))
         pending.scale = 2
         try Self.keep(try #require(pending.nsImage), as: "home-adding.png")
+
+        // The to-dos alone, shorter than all three lists.
+        let todos = ImageRenderer(content: HomeView(
+            model: HomeModel(feed: feed, now: Self.now), width: limit.width, scrolls: false, todosOnly: true)
+            .environment(\.hudOffscreen, true).padding(24).background(Color(red: 0.3, green: 0.36, blue: 0.3))
+            .frame(width: limit.width + 48).fixedSize(horizontal: false, vertical: true))
+        todos.scale = 2
+        let alone = try #require(todos.nsImage)
+        #expect(alone.size.height > 100)
+        #expect(alone.size.height < image.size.height)
+        try Self.keep(alone, as: "home-todos.png")
+    }
+
+    /// With only the to-dos showing, the footer names a failed source only
+    /// when the to-dos come from it.
+    @Test func todosOnlyNamesOnlyTheirFailures() {
+        let failed = ["calendar", "mail", "reminders", "whatsapp"]
+        #expect(HomeView.shownFailures(failed, todosOnly: true) == ["reminders"])
+        #expect(HomeView.shownFailures(failed, todosOnly: false) == failed)
+        #expect(HomeView.todoSources == ["coursework", "reminders", "people", "meetings", "backlog"])
+    }
+
+    /// The default is read by name, so a renamed key would silently bring
+    /// every list back.
+    @Test func todosOnlyIsAPerMacDefault() {
+        #expect(HomeWindow.todosOnlyKey == "hud.home.todosOnly")
+        #expect(HomeView(model: HomeModel(feed: HomeFeed(), now: Self.now)).todosOnly == false)
+        // A size dragged for three lists never opens on one.
+        #expect(HomeWindow.sizeKey(todosOnly: false) == "hud.home.size")
+        #expect(HomeWindow.sizeKey(todosOnly: true) != HomeWindow.sizeKey(todosOnly: false))
+    }
+
+    /// The to-dos' plus is in the top strip, which is drawn before any feed
+    /// is read. Pressed then, it took the keys with no field to type in, so
+    /// it waits for the list.
+    @Test func thePlusWaitsForTheList() {
+        let reading = HomeView(model: HomeModel(path: URL(fileURLWithPath: "/dev/null/none"), refresher: nil),
+                               todosOnly: true)
+        #expect(reading.feed == nil)
+        #expect(HomeView(model: HomeModel(feed: HomeFeed(), now: Self.now), todosOnly: true).feed != nil)
     }
 
     static func keep(_ image: NSImage, as name: String) throws {

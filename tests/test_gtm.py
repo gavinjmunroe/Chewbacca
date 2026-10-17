@@ -678,6 +678,14 @@ def test_finished_send_days_come_from_the_cache(tmp: Path):
     raw = gi.fetch_clay(gi.ClayCLI(runner=once, sleep=lambda s: None), "111", today=today)
     ok(flaky["n"] == 1 and len(raw["campaigns"]) == 2, "a single server_error is retried")
 
+    # Searches are paced across workers: the sleeps asked for add up to about
+    # one gap per search after the first.
+    slept: list = []
+    paced = gi.ClayCLI(runner=fake_clay(world_a(), []), sleep=slept.append)
+    gi.fetch_clay(paced, "111", today=today)
+    ok(len(slept) == 8 and max(slept) >= 7 * gi.SEARCH_GAP_S * 0.9,
+       f"each of world_a's 9 searches after the first waits its slot: {slept}")
+
 
 def test_reply_text_cannot_drive_the_terminal():
     """Injection: C1 controls (U+009B is a one-byte CSI), ESC, line

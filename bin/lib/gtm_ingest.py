@@ -53,6 +53,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
@@ -111,6 +112,10 @@ RECORD_BATCH = 100
 # own retryAfter.
 WORKERS = 4
 MAX_TRIES = 6
+# Activity searches spaced to stay under 60 a minute a workspace. Unpaced, four
+# workers hit the limit within the first ~60 searches of a ~350-search Zeutara
+# sync on 2026-10-16, three runs in a row, and each skipped the snapshot.
+SEARCH_GAP_S = 1.1
 # A day's "Email sent" ids are reused from the last full sync only when that
 # day ended at least this many UTC days ago and Clay's daily count for it is
 # unchanged. On 2026-10-16 the Zeutara sync made ~400 searches for 38
@@ -276,6 +281,8 @@ class ClayCLI:
         self.runner = runner or _subprocess_runner
         self.sleep = sleep
         self.calls = 0
+        self._pace = threading.Lock()
+        self._next_search = 0.0
         self.workspace: dict | None = None
         # The workspace every answer must name while a fetch runs. The clay
         # CLI has no per-command workspace flag (it runs against `workspaces
@@ -293,6 +300,16 @@ class ClayCLI:
                 raise ReadOnlyViolation(f"clay {' '.join(args[:3])} carries {a[:40]!r}, not a read flag")
         wait = 2.0
         for _ in range(MAX_TRIES):
+            if args[:3] == ["audiences", "records", "search-ids"]:
+                # One search slot per SEARCH_GAP_S across every worker, so the
+                # four threads stay under the activities budget instead of
+                # burning their retries on it.
+                with self._pace:
+                    now = time.monotonic()
+                    delay = self._next_search - now
+                    self._next_search = max(now, self._next_search) + SEARCH_GAP_S
+                if delay > 0:
+                    self.sleep(delay)
             self.calls += 1
             code, out, err = self.runner([self.binary, *args])
             if code == 0:

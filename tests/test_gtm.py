@@ -604,6 +604,70 @@ def test_clay_flags_and_ids_are_refused(tmp: Path):
     graph.db.close()
 
 
+def test_finished_send_days_come_from_the_cache(tmp: Path):
+    """2026-10-16: one search per campaign per sent day kept the Zeutara sync
+    rate limited, so it skipped the snapshot and the Friday report went stale.
+    A day that ended two or more days ago, with Clay's count for it unchanged,
+    reuses the ids the last full sync read. Anything else searches again."""
+    from datetime import date
+    today = date(2026, 10, 9)
+    path = tmp / "sent-cache.json"
+    log: list = []
+    first = gi.fetch_clay(cli(world_a(), log), "111", cache_path=path, today=today)
+    searches = [a for a in log if a[:3] == ["audiences", "records", "search-ids"]]
+    ok(len(searches) == 9, f"first sync searches every day and kind: {len(searches)}")
+    ok("sent_cache" not in first, "the cache never rides along in the snapshot")
+    cached = json.loads(path.read_text())
+    # 10-05 and 10-07 have ended two days before 10-09; 10-08 has not.
+    days = sorted(k.split('activity_timestamp >= "')[1][:10] for k in cached)
+    ok(days == ["2026-10-05", "2026-10-07"], f"final days only: {days}")
+
+    log.clear()
+    second = gi.fetch_clay(cli(world_a(), log), "111", cache_path=path, today=today)
+    searches = [a for a in log if a[:3] == ["audiences", "records", "search-ids"]]
+    ok(len(searches) == 7, f"the two finished days come from the cache: {len(searches)}")
+    ok(second["sent_reused"] == 2, "it says how many days it reused")
+    ok(second["activity"] == first["activity"], "the same people read as emailed")
+
+    # Clay's count for a finished day changed: search it again, never trust ids.
+    world = world_a()
+    world["analytics"]["cam_a1"]["stats"]["daily"][0]["sent"] = 2
+    log.clear()
+    gi.fetch_clay(cli(world, log), "111", cache_path=path, today=today)
+    searches = [a for a in log if a[:3] == ["audiences", "records", "search-ids"]]
+    ok(len(searches) == 8, f"a changed day count searches again: {len(searches)}")
+
+    # A failed fetch leaves the last good cache alone.
+    before = path.read_text()
+    broken = world_a()
+    broken["analytics"]["cam_a2"]["stats"].pop("daily")
+    try:
+        gi.fetch_clay(cli(broken), "111", cache_path=path, today=today)
+        ok(False, "a fetch with no daily breakdown must refuse")
+    except gi.SourceUnavailable:
+        pass
+    ok(path.read_text() == before, "a fetch refused before any search changes no cache")
+
+    # Rate limited partway: the snapshot refuses, the finished days it did
+    # read are kept, so the retry starts further along.
+    path.unlink()
+    world = world_a()
+    stuck = gi.activity_query("cam_a2", "campaign_status", gi.STATUS_JOINED)
+    base = fake_clay(world, [])
+
+    def limited(argv):
+        if "--query" in argv and argv[argv.index("--query") + 1] == stuck:
+            return 4, "", json.dumps({"error": {"details": {"retryAfter": 0}}})
+        return base(argv)
+    try:
+        gi.fetch_clay(gi.ClayCLI(runner=limited, sleep=lambda s: None), "111", cache_path=path, today=today)
+        ok(False, "a search that stays rate limited must refuse the snapshot")
+    except gi.SourceUnavailable:
+        pass
+    kept = json.loads(path.read_text())
+    ok(len(kept) == 1 and all(v["ids"] for v in kept.values()), f"the day it read is kept: {kept}")
+
+
 def test_reply_text_cannot_drive_the_terminal():
     """Injection: C1 controls (U+009B is a one-byte CSI), ESC, line
     separators and bidi overrides are stripped from everything printed."""
@@ -1134,6 +1198,7 @@ def main():
         test_failed_reads_keep_the_snapshot(Path(d))
         test_suppression_covers_every_never_again(Path(d))
         test_clay_flags_and_ids_are_refused(Path(d))
+        test_finished_send_days_come_from_the_cache(Path(d))
         test_reply_text_cannot_drive_the_terminal()
         test_booking_patterns_are_linear()
         test_google_calendar_union(Path(d))

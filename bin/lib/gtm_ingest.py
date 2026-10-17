@@ -111,6 +111,13 @@ RECORD_BATCH = 100
 # own retryAfter.
 WORKERS = 4
 MAX_TRIES = 6
+# A day's "Email sent" ids are reused from the last full sync only when that
+# day ended at least this many UTC days ago and Clay's daily count for it is
+# unchanged. On 2026-10-16 the Zeutara sync made ~400 searches for 38
+# campaigns (one per campaign per sent day), stayed rate limited and skipped
+# the whole snapshot, so the Friday report read 117-hour-old numbers. Two days
+# leaves a full day for late activity writes; never measured how late they land.
+SENT_FINAL_DAYS = 2
 SNIPPET = 280
 # Own words only. The longest of 87 real Zeutara replies cleaned to under
 # 1,500 characters (2026-10-11); 2,000 keeps all of them whole.
@@ -428,7 +435,23 @@ def activity_query(campaign_id: str, kind: str, title: str, day: str | None = No
     return f"select from people where activities.exists({cond})"
 
 
-def fetch_clay(cli: ClayCLI, workspace_id: str, workers: int = WORKERS) -> dict:
+def sent_cache_path(workspace_id: str) -> Path:
+    base = os.environ.get("CHEWBACCA_STATE") or os.path.expanduser("~/.chewbacca/state")
+    return Path(base) / "gtm" / f"sent-ids-{workspace_id}.json"
+
+
+def load_sent_cache(path: Path | None) -> dict:
+    if not path:
+        return {}
+    try:
+        body = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+    return body if isinstance(body, dict) else {}
+
+
+def fetch_clay(cli: ClayCLI, workspace_id: str, workers: int = WORKERS,
+               cache_path: Path | None = None, today: date | None = None) -> dict:
     """Everything the clay snapshot needs, read through `cli`. Raises
     SourceUnavailable on a refused read, or when the CLI is signed in to a
     different workspace than the one asked for (writing client A's campaigns
@@ -441,13 +464,38 @@ def fetch_clay(cli: ClayCLI, workspace_id: str, workers: int = WORKERS) -> dict:
     (security review, 2026-10-09)."""
     cli.workspace = None
     cli.expect = str(workspace_id)
+    cache = load_sent_cache(cache_path)
+    next_cache: dict = {}
+    done = False
     try:
-        return _fetch_clay(cli, str(workspace_id), workers)
+        raw = _fetch_clay(cli, str(workspace_id), workers, cache, today or datetime.now(timezone.utc).date(),
+                          next_cache)
+        done = True
     finally:
         cli.expect = None
+        # A finished day's ids are final whether or not the rest of this fetch
+        # lands, and each entry carries the day count it was read at, so a
+        # rate-limited sync still saves the days it got and the retry starts
+        # further along. The snapshot itself stays all-or-nothing.
+        if cache_path:
+            read = {k: v for k, v in next_cache.items() if v.get("ids")}
+            keep = read if done else {**cache, **read}
+            try:
+                cache_path.parent.mkdir(parents=True, exist_ok=True)
+                tmp = cache_path.with_suffix(".tmp")
+                tmp.write_text(json.dumps(keep))
+                os.replace(tmp, cache_path)
+            except OSError:
+                pass  # the cache only saves calls
+    return raw
 
 
-def _fetch_clay(cli: ClayCLI, workspace_id: str, workers: int) -> dict:
+def _fetch_clay(cli: ClayCLI, workspace_id: str, workers: int, cache: dict | None = None,
+                today: date | None = None, next_cache: dict | None = None) -> dict:
+    cache = cache or {}
+    final_before = (today or datetime.now(timezone.utc).date()) - timedelta(days=SENT_FINAL_DAYS - 1)
+    next_cache = next_cache if next_cache is not None else {}
+    reused = 0
     campaigns = cli.paged(["campaigns", "list", "--with-analytics", "--limit", "100"])
     for c in campaigns:
         if not isinstance(c, dict) or not SAFE_ID.match(str(c.get("id") or "")):
@@ -467,9 +515,9 @@ def _fetch_clay(cli: ClayCLI, workspace_id: str, workers: int) -> dict:
         if not (a.get("leads") or a.get("sent")):
             continue
         cid = c["id"]
-        jobs.append((cid, "joined", None, activity_query(cid, "campaign_status", STATUS_JOINED)))
-        jobs.append((cid, "replied", None, activity_query(cid, "email", REPLIED_TITLE)))
-        jobs.append((cid, "bounced", None, activity_query(cid, "email", BOUNCED_TITLE)))
+        jobs.append((cid, "joined", None, activity_query(cid, "campaign_status", STATUS_JOINED), None))
+        jobs.append((cid, "replied", None, activity_query(cid, "email", REPLIED_TITLE), None))
+        jobs.append((cid, "bounced", None, activity_query(cid, "email", BOUNCED_TITLE), None))
         daily = (stats[cid].get("stats") or {}).get("daily")
         sent_total = a.get("sent") or ((stats[cid].get("stats") or {}).get("totals") or {}).get("sent") or 0
         if sent_total and not isinstance(daily, list):
@@ -480,21 +528,34 @@ def _fetch_clay(cli: ClayCLI, workspace_id: str, workers: int) -> dict:
         for d in daily or []:
             if d.get("sent"):
                 try:
-                    date.fromisoformat(str(d.get("date")))
+                    day = date.fromisoformat(str(d.get("date")))
                 except ValueError as e:
                     raise SourceUnavailable(f"clay analytics for {cid} has a malformed day {clip(d.get('date'), 30)!r}") from e
-                jobs.append((cid, "sent", d["date"], activity_query(cid, "email", SENT_TITLE, d["date"])))
+                query = activity_query(cid, "email", SENT_TITLE, d["date"])
+                hit = cache.get(query)
+                if (day < final_before and isinstance(hit, dict) and hit.get("sent") == d["sent"]
+                        and isinstance(hit.get("ids"), list) and hit["ids"]
+                        and all(isinstance(i, int) for i in hit["ids"])):
+                    jobs.append((cid, "sent", d["date"], None, hit["ids"]))
+                    reused += 1
+                else:
+                    jobs.append((cid, "sent", d["date"], query, None))
+                if day < final_before:
+                    next_cache[query] = {"sent": d["sent"]}
 
     def search(job):
-        cid, kind, day, query = job
-        return cid, kind, day, cli.ids(query)
+        cid, kind, day, query, known = job
+        return cid, kind, day, query, known if known is not None else cli.ids(query)
 
     activity: dict[str, dict] = {}
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        for cid, kind, day, found in pool.map(search, jobs):
+        for cid, kind, day, query, found in pool.map(search, jobs):
             slot = activity.setdefault(cid, {"joined": [], "replied": [], "bounced": [], "sent": {}})
             if kind == "sent":
                 slot["sent"][day] = found
+                key = query or activity_query(cid, "email", SENT_TITLE, day)
+                if key in next_cache:
+                    next_cache[key]["ids"] = found
             else:
                 slot[kind] = found
 
@@ -527,7 +588,7 @@ def _fetch_clay(cli: ClayCLI, workspace_id: str, workers: int) -> dict:
     return {"workspace": cli.workspace,
             "campaigns": campaigns, "analytics": stats, "activity": activity,
             "records": people, "tables": tables, "audiences": audiences,
-            "fetched_at": utc_now(), "calls": cli.calls}
+            "fetched_at": utc_now(), "calls": cli.calls, "sent_reused": reused}
 
 
 # ── building snapshots ───────────────────────────────────────────────────────
@@ -1609,7 +1670,10 @@ def sync(graph: Graph, sources: list[str], cfg: dict | None = None, ids: Identit
         if "clay" in sources:
             source = f"gtm-clay:{ws}"
             try:
-                raw = fetch_clay(cli, ws)
+                # Only the real CLI keeps a cache; a test's canned runner never
+                # reads or writes the home directory.
+                live = cli.runner is _subprocess_runner
+                raw = fetch_clay(cli, ws, cache_path=sent_cache_path(ws) if live else None)
                 refuse_empty(graph, source, "Campaign", len(raw.get("campaigns") or []), "clay campaigns list")
                 nodes, edges, report = build_clay(raw, cfg, ids)
                 graph.apply(source, nodes, edges)

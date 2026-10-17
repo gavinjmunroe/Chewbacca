@@ -46,3 +46,9 @@ being built Caleb corrected the build a dozen times. Every one of these is a rul
   (`--scale=0.4`, `nice -n 19`, low concurrency on a busy Mac) before any full render.
 - Read every tile for: tiny text a phone viewer can't read, empty frames between words,
   placeholders that dominate a composition, and anything the user already rejected.
+- What the v6 frame review actually caught, so check these first next time: captions and
+  labels at 11 to 22px (phone viewers can't read them; 30px captions, 18px labels is the
+  floor at 1080p), a cut-out figure covering the faces it sits in front of, the cut-out's
+  own rectangle edge showing once it moves, a watermark word nobody asked for, and a grid
+  scaled up until it ran over its own sentence. Fix what the review finds before asking
+  the user about it; ask only about taste calls.

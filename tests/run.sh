@@ -1085,6 +1085,10 @@ if group "installer"; then
     python3 "$ROOT/tests/test_steering_rate.py"
   check  "the three steering Stop hooks replay 10/16's real closing turns within their measured bounds" \
     python3 "$ROOT/tests/test_steering_stop_replay.py"
+  check  "draft-source-guard refuses a draft for Caleb whose numbers have no source" \
+    bash "$ROOT/tests/draft_source_guard.sh"
+  check  "draft-source-guard replays 10/16's blockquoted replies, firing only on the Zeutara drafts" \
+    python3 "$ROOT/tests/test_draft_source_guard_replay.py"
 
   check  "the full suite refuses its own repeat run on an unchanged tree" \
     bash "$ROOT/tests/suite_gate.sh"

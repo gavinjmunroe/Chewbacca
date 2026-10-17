@@ -6,6 +6,11 @@
     ".claude/hooks/brain-recall.sh": "router"
   },
   "evals": {
+    ".claude/hooks/draft-source-guard.sh": {
+      "type": "replay",
+      "test": "tests/test_draft_source_guard_replay.py",
+      "corpus": "tests/fixtures/steering/draft_replies_2026_10_16.json"
+    },
     ".claude/hooks/open-work-guard.sh": {
       "type": "replay",
       "test": "tests/test_steering_stop_replay.py",

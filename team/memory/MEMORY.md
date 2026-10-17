@@ -118,6 +118,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_evolve_target_and_queue: self-fix loop needs a real bug with a judge that fails first (10/10 target was a question); a paused heavy job holds the queue slot, kill stale ones; deliver.Failed is a SystemExit; scope "we're good" (10/17)
 - feedback_model_baseline_and_land_traps: codex exec needs stdin closed and its hook can eat the answer; claude -p shares the weekly cap; cherry-pick land conflict means land --paths, then commit local copies before merging (10/16)
 - reference_gtme_next_move: gtme next-move, the blocker loop that replaced parents.json: moves from evidence, boundaries as data, Jev ranks, attempts in the lesson ledger
+- feedback_org_hop_needs_ownership: org_hop searches only on an ownership sentence or found emails; bare links and about-page names hopped Runna and Zico to blogs, CDNs and widgets (10/17)
 - reference_gtme_lesson_ledger: GTME lesson ledger (team/gtme-lessons, `chewbacca gtme lesson plan`): experiments with oracles that refuse unsupported claims, handed to the next client
 - reference_gtme_lesson_ledger: GTME lesson ledger (team/gtme-lessons, `chewbacca gtme lesson plan`): experiments with oracles that refuse unsupported claims, handed to the next client; fit-share and split checks, how to turn PROSE into CHECKED
 - reference_treg_tool_registry: treg.to, pay-per-call data from 111 providers; optional engine behind gtme find --paid and gtme verify, numbers and terms limits

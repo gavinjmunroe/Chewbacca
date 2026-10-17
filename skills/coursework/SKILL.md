@@ -352,6 +352,14 @@ The ledger goes stale in exactly three ways, and all three are silent:
   thing was submitted and exactly when; `references/lms-ingest.md` has the D2L
   endpoint. Asking surfaces what they happen to remember, which is the big
   assignment, not the small one sitting on the same line of the syllabus.
+- **A date moves in an announcement or a class slide** and the ledger still
+  carries the syllabus or prompt-PDF date. Before calling anything due on a
+  day, read the last two weeks of announcements (`/le/1.67/<ou>/news/`, full
+  Body) and the newest class deck's agenda slide. On 2026-10-16 a Saturday
+  prep pass found three moves the ledger missed: WRIT 150 WP2 revised draft
+  Oct 19 to Oct 21 (Chappelow's 10/12 "Correction of Dates"), ACAD 324 Quiz 2
+  Oct 19 to Oct 21 and the P3 team eval Oct 14 to Oct 19 (Davina's 10/12 and
+  10/14 slide agendas). The plan would have pointed him at the wrong Monday.
 - **An absence happens** and `absences.used` never moves. Increment it when the
   user says they missed a class. This is the field that decides a grade step and
   nobody remembers it in November.

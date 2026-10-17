@@ -472,35 +472,49 @@ struct HomeTests {
         pending.scale = 2
         try Self.keep(try #require(pending.nsImage), as: "home-adding.png")
 
-        // The to-dos alone, shorter than all three lists.
-        let todos = ImageRenderer(content: HomeView(
-            model: HomeModel(feed: feed, now: Self.now), width: limit.width, scrolls: false, todosOnly: true)
-            .environment(\.hudOffscreen, true).padding(24).background(Color(red: 0.3, green: 0.36, blue: 0.3))
-            .frame(width: limit.width + 48).fixedSize(horizontal: false, vertical: true))
-        todos.scale = 2
-        let alone = try #require(todos.nsImage)
-        #expect(alone.size.height > 100)
-        #expect(alone.size.height < image.size.height)
-        try Self.keep(alone, as: "home-todos.png")
+        // Chosen lists, with nothing of Kyber's: shorter than all three.
+        for (lists, name) in [([HomeSection.todos], "home-todos.png"),
+                              ([HomeSection.todos, .projects], "home-todos-projects.png")] {
+            let chosen = ImageRenderer(content: HomeView(
+                model: HomeModel(feed: feed, now: Self.now), width: limit.width, scrolls: false, lists: lists)
+                .environment(\.hudOffscreen, true).padding(24).background(Color(red: 0.3, green: 0.36, blue: 0.3))
+                .frame(width: limit.width + 48).fixedSize(horizontal: false, vertical: true))
+            chosen.scale = 2
+            let drawn = try #require(chosen.nsImage)
+            #expect(drawn.size.height > 100)
+            #expect(drawn.size.height < image.size.height)
+            try Self.keep(drawn, as: name)
+        }
     }
 
-    /// With only the to-dos showing, the footer names a failed source only
-    /// when the to-dos come from it.
-    @Test func todosOnlyNamesOnlyTheirFailures() {
+    /// With some lists left off, the footer names a failed source only when
+    /// a shown list is read from it.
+    @Test func chosenListsNameOnlyTheirFailures() {
         let failed = ["calendar", "mail", "reminders", "whatsapp"]
-        #expect(HomeView.shownFailures(failed, todosOnly: true) == ["reminders"])
-        #expect(HomeView.shownFailures(failed, todosOnly: false) == failed)
-        #expect(HomeView.todoSources == ["coursework", "reminders", "people", "meetings", "backlog"])
+        #expect(HomeView.shownFailures(failed, lists: [.todos]) == ["reminders"])
+        #expect(HomeView.shownFailures(failed, lists: [.todos, .projects]) == ["reminders"])
+        #expect(HomeView.shownFailures(failed, lists: [.projects]) == [])
+        #expect(HomeView.shownFailures(failed, lists: [.calendar, .todos]) == ["calendar", "reminders"])
+        #expect(HomeView.shownFailures(failed, lists: nil) == failed)
     }
 
     /// The default is read by name, so a renamed key would silently bring
-    /// every list back.
-    @Test func todosOnlyIsAPerMacDefault() {
-        #expect(HomeWindow.todosOnlyKey == "hud.home.todosOnly")
-        #expect(HomeView(model: HomeModel(feed: HomeFeed(), now: Self.now)).todosOnly == false)
-        // A size dragged for three lists never opens on one.
-        #expect(HomeWindow.sizeKey(todosOnly: false) == "hud.home.size")
-        #expect(HomeWindow.sizeKey(todosOnly: true) != HomeWindow.sizeKey(todosOnly: false))
+    /// every list back; a misspelt or repeated name is left out.
+    @Test func chosenListsAreAPerMacDefault() {
+        #expect(HomeWindow.listsKey == "hud.home.lists")
+        #expect(HomeWindow.lists(from: ["todos", "projects"]) == [.todos, .projects])
+        #expect(HomeWindow.lists(from: ["projects", "todo", "projects", "todos"]) == [.projects, .todos])
+        #expect(HomeWindow.lists(from: ["todo"]) == nil)
+        #expect(HomeWindow.lists(from: []) == nil)
+        #expect(HomeWindow.lists(from: nil) == nil)
+        #expect(HomeView(model: HomeModel(feed: HomeFeed(), now: Self.now)).lists == nil)
+        #expect(HomeView(model: HomeModel(feed: HomeFeed(), now: Self.now), lists: []).lists == nil)
+        #expect(HomeView(model: HomeModel(feed: HomeFeed(), now: Self.now), lists: [.todos, .todos]).lists == [.todos])
+        // A size dragged for three lists never opens on one, nor one
+        // choice's size on another.
+        #expect(HomeWindow.sizeKey(lists: nil) == "hud.home.size")
+        #expect(HomeWindow.sizeKey(lists: [.todos]) == "hud.home.size.todos")
+        #expect(HomeWindow.sizeKey(lists: [.todos, .projects]) == "hud.home.size.todos.projects")
     }
 
     /// The to-dos' plus is in the top strip, which is drawn before any feed
@@ -508,9 +522,9 @@ struct HomeTests {
     /// it waits for the list.
     @Test func thePlusWaitsForTheList() {
         let reading = HomeView(model: HomeModel(path: URL(fileURLWithPath: "/dev/null/none"), refresher: nil),
-                               todosOnly: true)
+                               lists: [.todos, .projects])
         #expect(reading.feed == nil)
-        #expect(HomeView(model: HomeModel(feed: HomeFeed(), now: Self.now), todosOnly: true).feed != nil)
+        #expect(HomeView(model: HomeModel(feed: HomeFeed(), now: Self.now), lists: [.todos]).feed != nil)
     }
 
     static func keep(_ image: NSImage, as name: String) throws {

@@ -684,6 +684,18 @@ public enum HomeSection: String, CaseIterable, Sendable {
         case .projects: return "No projects pinned and no commits of yours this week."
         }
     }
+
+    /// The ingest sources the list is read from (`osgraph_ingest.INGESTERS`):
+    /// events from Calendar and meetings; assignments, Reminders and
+    /// people-store tasks, meeting promises and backlog rows for the to-dos.
+    /// Projects are read from git, never from an ingest.
+    var sources: Set<String> {
+        switch self {
+        case .calendar: return ["calendar", "meetings"]
+        case .todos: return ["coursework", "reminders", "people", "meetings", "backlog"]
+        case .projects: return []
+        }
+    }
 }
 
 /// A drag on the corner grip, in screen points from where it was pressed,
@@ -707,15 +719,15 @@ public struct HomeView: View {
     let onHeight: (CGFloat) -> Void
     let onClose: () -> Void
     let onResize: (HomeResize) -> Void
-    /// The to-do list and nothing else: no mark, no name, no date, no
-    /// calendar and no projects. Asked for 2026-10-17: "i want just the to
-    /// do panel on the creen, no extra kyber fluff". Set per Mac by the
-    /// `hud.home.todosOnly` default, so a panel on any other Mac keeps all
-    /// three lists.
-    let todosOnly: Bool
+    /// The lists to show, in order, and nothing of Kyber's: no mark, no
+    /// name, no date. Asked for 2026-10-17, first "i want just the to do
+    /// panel on the creen, no extra kyber fluff", then "i want to-do, and
+    /// current projects listed". Nil is the whole panel. Set per Mac by the
+    /// `hud.home.lists` default, so a panel on any other Mac keeps all three.
+    let lists: [HomeSection]?
 
     public init(model: HomeModel, width: CGFloat = HomeLayout.width, scrolls: Bool = true,
-                todosOnly: Bool = false,
+                lists: [HomeSection]? = nil,
                 onOpen: @escaping (HomeSection, HomeRow) -> Void = { _, _ in },
                 onHeight: @escaping (CGFloat) -> Void = { _ in },
                 onClose: @escaping () -> Void = {},
@@ -723,7 +735,9 @@ public struct HomeView: View {
         self.model = model
         self.width = width
         self.scrolls = scrolls
-        self.todosOnly = todosOnly
+        // Each list once: SwiftUI keys the lists by section.
+        let picked = lists?.reduce(into: [HomeSection]()) { if !$0.contains($1) { $0.append($1) } }
+        self.lists = picked?.isEmpty == true ? nil : picked
         self.onOpen = onOpen
         self.onHeight = onHeight
         self.onClose = onClose
@@ -732,28 +746,26 @@ public struct HomeView: View {
 
     /// The same panel at another width.
     func with(width: CGFloat) -> HomeView {
-        HomeView(model: model, width: width, scrolls: scrolls, todosOnly: todosOnly, onOpen: onOpen,
+        HomeView(model: model, width: width, scrolls: scrolls, lists: lists, onOpen: onOpen,
                  onHeight: onHeight, onClose: onClose, onResize: onResize)
     }
 
     /// The top strip, which the panel is dragged from. Taller when it holds
-    /// the to-do list's own title.
-    var stripHeight: CGFloat { todosOnly ? 48 : 36 }
+    /// the first list's own title.
+    var stripHeight: CGFloat { lists == nil ? 36 : 48 }
 
-    /// The sources a to-do can come from (`osgraph_walks.home_todos`:
-    /// assignments, Reminders and people-store tasks, meeting promises and
-    /// backlog rows). With only the to-dos showing, a failed calendar or
-    /// mailbox says nothing about them and is left off.
-    static let todoSources: Set<String> = ["coursework", "reminders", "people", "meetings", "backlog"]
-
-    /// The failed sources the footer names.
-    static func shownFailures(_ failed: [String], todosOnly: Bool) -> [String] {
-        todosOnly ? failed.filter(todoSources.contains) : failed
+    /// The failed sources the footer names. With some lists left off, a
+    /// failed mailbox or calendar that none of the shown lists is read from
+    /// says nothing about them.
+    static func shownFailures(_ failed: [String], lists: [HomeSection]?) -> [String] {
+        guard let lists else { return failed }
+        let read = lists.reduce(into: Set<String>()) { $0.formUnion($1.sources) }
+        return failed.filter(read.contains)
     }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if todosOnly { todoStrip } else { titleStrip }
+            if let first = lists?.first { listStrip(first) } else { titleStrip }
             // Past the display's limit the lists scroll, so the footer naming
             // a failed source is never the part cut off (hud/CLAUDE.md, motion
             // rule 7: as tall as its content, scrolling only past the cap).
@@ -777,11 +789,11 @@ public struct HomeView: View {
 
     private var measured: some View {
         VStack(alignment: .leading, spacing: 18) {
-            if !todosOnly { headline }
+            if lists == nil { headline }
             content
         }
         .padding(.horizontal, HomeGlass.inset)
-        .padding(.top, todosOnly ? 0 : 2)
+        .padding(.top, lists == nil ? 2 : 0)
         .padding(.bottom, HomeGlass.inset)
         .frame(width: width, alignment: .topLeading)
         .background(GeometryReader { proxy in
@@ -809,13 +821,14 @@ public struct HomeView: View {
     /// The feed, once one is read.
     var feed: HomeFeed? { if case .ready(let feed) = model.state { feed } else { nil } }
 
-    /// With only the to-dos: their title as the panel's, the count, the plus
-    /// and the close, and nothing of Kyber's. The plus waits for the list,
+    /// With chosen lists: the first one's title, count and plus beside the
+    /// close, and nothing of Kyber's. The to-dos' plus waits for the list,
     /// which holds the field it opens.
-    private var todoStrip: some View {
+    private func listStrip(_ section: HomeSection) -> some View {
         HStack(spacing: 4) {
-            HomeListHeader(section: .todos, rows: feed?.todos ?? [], total: feed?.todoCount,
-                           model: model, prominent: true, addable: feed != nil)
+            HomeListHeader(section: section, rows: feed.map { rows(section, in: $0) } ?? [],
+                           total: feed.flatMap { total(section, in: $0) }, model: model,
+                           prominent: true, besideClose: true, addable: feed != nil)
             HomeClose(action: onClose)
         }
         .padding(.leading, HomeGlass.inset)
@@ -845,23 +858,32 @@ public struct HomeView: View {
             note("Reading your day. The lists fill in after the next pass, about a minute.")
         case .unreadable:
             note("The home feed could not be read. It is rewritten on the next pass.")
-        case .ready(let feed) where todosOnly:
-            VStack(alignment: .leading, spacing: 20) {
-                HomeList(section: .todos, rows: feed.todos, total: feed.todoCount,
-                         now: model.now, model: model, onOpen: onOpen, titled: false)
-                footer(feed)
-            }
         case .ready(let feed):
+            // With chosen lists the first one's title is in the strip, and
+            // every title is the large one, so no list reads as under another.
             VStack(alignment: .leading, spacing: 20) {
-                HomeList(section: .calendar, rows: visibleEvents(feed.calendar), total: nil,
-                         now: model.now, model: model, onOpen: onOpen)
-                HomeList(section: .todos, rows: feed.todos, total: feed.todoCount,
-                         now: model.now, model: model, onOpen: onOpen)
-                HomeList(section: .projects, rows: feed.projects, total: nil,
-                         now: model.now, model: model, onOpen: onOpen)
+                ForEach(Array((lists ?? HomeSection.allCases).enumerated()), id: \.element) { index, section in
+                    HomeList(section: section, rows: rows(section, in: feed), total: total(section, in: feed),
+                             now: model.now, model: model, onOpen: onOpen,
+                             titled: lists == nil || index > 0, prominent: lists != nil)
+                }
                 footer(feed)
             }
         }
+    }
+
+    /// A list's rows as drawn.
+    private func rows(_ section: HomeSection, in feed: HomeFeed) -> [HomeRow] {
+        switch section {
+        case .calendar: return visibleEvents(feed.calendar)
+        case .todos: return feed.todos
+        case .projects: return feed.projects
+        }
+    }
+
+    /// How many are open in all, for the one list capped below its total.
+    private func total(_ section: HomeSection, in feed: HomeFeed) -> Int? {
+        section == .todos ? feed.todoCount : nil
     }
 
     /// Events that ended since the feed was written are dropped here rather
@@ -876,7 +898,7 @@ public struct HomeView: View {
     @ViewBuilder private func footer(_ feed: HomeFeed) -> some View {
         let written = HomeWords.date(feed.at)
         let stale = written.map { model.now.timeIntervalSince($0) > HomeModel.staleAfter } ?? false
-        let failed = Self.shownFailures(feed.failed, todosOnly: todosOnly)
+        let failed = Self.shownFailures(feed.failed, lists: lists)
         if !failed.isEmpty || stale || model.notice != nil {
             VStack(alignment: .leading, spacing: 3) {
                 if let notice = model.notice {
@@ -941,16 +963,19 @@ struct HomeListHeader: View {
     /// How many are still open in all, when that is more than are shown.
     let total: Int?
     @ObservedObject var model: HomeModel
-    /// The panel's own title, when this is the only list on it, rather than
-    /// one list's name among three.
+    /// A title as large as the panel's, when the panel shows chosen lists
+    /// without Kyber's own, rather than one list's name among three.
     var prominent = false
+    /// In the top strip, with the close beside it rather than the content's
+    /// edge.
+    var besideClose = false
     /// False until the list is drawn: the plus opens a field in the list, and
     /// pressed with no list it took the keys with nowhere to type.
     var addable = true
 
     var body: some View {
         // As a widget names a list: sentence case and no rule under it.
-        // Semibold and secondary among three, the panel's title alone.
+        // Semibold and secondary among three, large on chosen lists.
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(section.title)
                 .font(prominent ? HomeType.panelTitle : HomeType.section)
@@ -969,16 +994,16 @@ struct HomeListHeader: View {
                     model.compose()
                 }
                 // The press area hangs past the header without making it
-                // taller. Among three lists the plus sits on the content's
-                // edge; as the title, the close is beside it.
+                // taller. In a list the plus sits on the content's edge; in
+                // the strip, the close is beside it.
                 .padding(.vertical, -8)
-                .padding(.trailing, prominent ? 0 : -10)
+                .padding(.trailing, besideClose ? 0 : -10)
             }
         }
     }
 }
 
-/// One list, titled unless its name is already the panel's.
+/// One list, titled unless its name is already in the strip.
 struct HomeList: View {
     let section: HomeSection
     let rows: [HomeRow]
@@ -988,11 +1013,12 @@ struct HomeList: View {
     @ObservedObject var model: HomeModel
     let onOpen: (HomeSection, HomeRow) -> Void
     var titled = true
+    var prominent = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             if titled {
-                HomeListHeader(section: section, rows: rows, total: total, model: model)
+                HomeListHeader(section: section, rows: rows, total: total, model: model, prominent: prominent)
                     .padding(.bottom, 4)
             }
             if section == .todos, model.isComposing || model.adding != nil {
@@ -1646,22 +1672,34 @@ public final class HomeWindow: NSPanel {
     /// closes.
     private var keysFrom: NSRunningApplication?
     private static let placeKey = "hud.home.topLeft"
-    /// The size he dragged it to, kept apart for the to-dos alone: a panel
-    /// dragged tall for three lists would otherwise open on one list over
-    /// empty glass.
+    /// The size he dragged it to, kept apart for each choice of lists: a
+    /// panel dragged tall for three lists would otherwise open on one list
+    /// over empty glass.
     private let sizeKey: String
-    static func sizeKey(todosOnly: Bool) -> String { todosOnly ? "hud.home.todosOnly.size" : "hud.home.size" }
-    /// True shows the to-do list alone (`HomeView.todosOnly`). Read once,
+    static func sizeKey(lists: [HomeSection]?) -> String {
+        guard let lists else { return "hud.home.size" }
+        return (["hud.home.size"] + lists.map(\.rawValue)).joined(separator: ".")
+    }
+    /// The lists to show without Kyber's own title (`HomeView.lists`), by
+    /// `HomeSection` name in order, like ["todos", "projects"]. Read once,
     /// when the panel opens.
-    public static let todosOnlyKey = "hud.home.todosOnly"
+    public static let listsKey = "hud.home.lists"
+    /// Unknown names and repeats are left out; nothing left is the whole panel.
+    static func lists(from names: [String]?) -> [HomeSection]? {
+        var picked: [HomeSection] = []
+        for name in names ?? [] {
+            if let section = HomeSection(rawValue: name), !picked.contains(section) { picked.append(section) }
+        }
+        return picked.isEmpty ? nil : picked
+    }
     /// Just above the desktop icons, below every app window.
     public static let desktopLevel = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 1)
 
     public init(model: HomeModel, onClose: @escaping () -> Void = {},
                 onOpen: @escaping (HomeSection, HomeRow) -> Void) {
         self.model = model
-        let todosOnly = UserDefaults.standard.bool(forKey: Self.todosOnlyKey)
-        sizeKey = Self.sizeKey(todosOnly: todosOnly)
+        let lists = Self.lists(from: UserDefaults.standard.stringArray(forKey: Self.listsKey))
+        sizeKey = Self.sizeKey(lists: lists)
         super.init(
             contentRect: NSRect(x: 0, y: 0, width: HomeLayout.width, height: 200),
             styleMask: [.nonactivatingPanel, .borderless, .fullSizeContentView],
@@ -1682,7 +1720,7 @@ public final class HomeWindow: NSPanel {
 
         let view = HomeView(
             model: model, width: HomeLayout.width,
-            todosOnly: todosOnly, onOpen: onOpen,
+            lists: lists, onOpen: onOpen,
             onHeight: { [weak self] height in
                 MainActor.assumeIsolated { self?.fit(content: height) }
             },

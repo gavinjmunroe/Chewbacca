@@ -173,7 +173,7 @@ def test_ops_json_shape():
     ok(all(o["kind"] in ("read", "write") for o in out["ops"]), "kind is read or write")
     ok(out["untaught_writes"] == [], "no write is left untaught")
     derived = [o for o in out["ops"] if o["op"] in DERIVED]
-    ok(len(derived) == 16 and all(o["verified"] is False and o["evidence"] for o in derived), "derived writes list verified:false and evidence")
+    ok(len(derived) == len(DERIVED) and all(o["verified"] is False and o["evidence"] for o in derived), "derived writes list verified:false and evidence")
     ok(out["ui_only"] and all("route" in u for u in out["ui_only"]), "ui-only jobs carry a route")
 
 
@@ -496,6 +496,7 @@ def test_new_args_are_shape_checked():
         # An action without runAsButton would fill every row the moment it exists (2026-10-17).
         ("add-enrichment-column", ["table=t_ex1", 'spec={"name":"Find","type":"action","typeSettings":{"actionKey":"k"}}']),
         ("add-enrichment-column", ["table=t_ex1", 'spec={"name":"x","type":"text","typeSettings":{},"tableId":"t_2"}']),
+        ("add-enrichment-column", ["table=t_ex1", 'spec={"name":"x","type":"formula","typeSettings":{"formulaType":"waterfall","actionKey":"k"}}']),
         ("add-column", ["table=t_ex1", "name=a\nb", "data_type=text", "view=gv_ex1"]),
         ("add-column", ["table=t_ex1", "name=a", "data_type=formula", "view=gv_ex1"]),
         ("add-rows", ["table=t_ex1", 'records=[{"name":"x"}]']),
@@ -639,7 +640,7 @@ SAMPLES = {
     "campaign_id": "1", "lead_id": "2", "cursor": "abc", "after": "r_ex9", "limit": "5", "offset": "0", "days": "7",
     "ids": "p_1,p_2", "emailOrDomain": "blocked.example", "reply_data": '{"email_stats_id":"s1","email_body":"x"}',
     "forward_data": '{"message_id":"m","stats_id":"s","to_emails":"a@example.com"}', "field": "f_ex1",
-    "update": '{"name":"x"}', "on": "false", "mode": "all", "settings": '{"AUTO_RUN_ON":true}', "fields": "f_a",
+    "update": '{"name":"x"}', "spec": '{"name":"x","type":"text","typeSettings":{}}', "on": "false", "mode": "all", "settings": '{"AUTO_RUN_ON":true}', "fields": "f_a",
     "rows": "r_1", "records": json.dumps([{"f_a": "x"}]), "config": json.dumps(CONFIG), "filter": json.dumps(FILTER),
     "status": "PAUSED", "lead_map_id": "1", "category_id": "1", "read_status": "READ", "entry": "9",
     "emails": "a@example.com", "resource": "t_ex1", "resource_type": "TABLE", "name": "x", "data_type": "text",

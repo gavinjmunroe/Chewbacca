@@ -1106,8 +1106,11 @@
         }
       ],
       "evidence": {
-        "source": "bundle + live columns",
+        "source": "bundle",
+        "file": "app-pcUNqd80.js",
+        "sha256": "c7b1dab12c33ce0794c3e03039aa16c41082cdf6a8b4f699f9afafb243a65ead",
         "contract": "createField",
+        "contract_offset": 1940656,
         "body_schema": "EEt @1231987: {name, type, typeSettings, activeViewId?}",
         "observed": "action and waterfall typeSettings read from Zeutara table t_0tmju95pkBPQmMJvubE via getTableColumns, 2026-10-17"
       },

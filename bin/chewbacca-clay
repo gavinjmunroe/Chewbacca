@@ -710,6 +710,11 @@ const JSON_ARGS = {
     if (!["action", "formula", "text", "number", "email", "url", "date", "boolean"].includes(v.type)) return "type must be action, formula or a plain data type";
     if (!isObj(v.typeSettings)) return "typeSettings must be an object";
     if (v.type === "action" && v.typeSettings.runAsButton !== true) return "an action column needs typeSettings.runAsButton true, so it runs only on rows run-cells picks";
+    // Security review, 2026-10-17: the runAsButton check meant nothing if action keys could ride
+    // on another type. Only an action column may name a provider, inputs or credentials.
+    const ACTION_KEYS = ["actionKey", "actionPackageId", "actionVersion", "inputsBinding", "authAccountId", "conditionalRunFormulaText", "runAsButton"];
+    if (v.type !== "action" && ACTION_KEYS.some((k) => k in v.typeSettings)) return "only an action column may carry actionKey, inputs, credentials or run settings";
+    if (v.type === "formula" && !["text", "waterfall"].includes(v.typeSettings.formulaType)) return "a formula column needs formulaType text or waterfall";
     if (v.activeViewId !== undefined && !ID.test(String(v.activeViewId))) return "activeViewId must be a view id";
     return null;
   },

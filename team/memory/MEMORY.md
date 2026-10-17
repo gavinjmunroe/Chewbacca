@@ -402,3 +402,5 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_ff_video_in_outbound_2026_10_19: FF hero video goes in email 2 as a firmfoundation.tech/watch link; contact-sheet renders first (v21 had placeholder text), curl the link before a batch
 - feedback_guard_fix_replays_real_commands: replay a guard change over the 800 real commands in tests/fixtures/hookd-replay before landing; the 10/19 destructive-guard fix first refused npm cache clean --force
 - reference_landed_branches_look_unlanded: chewbacca land rebuilds commits, so git cherry calls landed branches unlanded; match subject and touched files before deleting or chasing one (10/19)
+- project_semyon_onramp_2026_10_17: Semyon (backend, installer and guard tasks) onboarding one pager to Chewbacca and the Clay bridge, in Downloads; written 10/17, not sent
+- feedback_launch_guard_reading_clay_files: launch-guard refuses shell reads that mention Clay plus echo, xargs or python -c; read those files with the Read tool or one plain grep

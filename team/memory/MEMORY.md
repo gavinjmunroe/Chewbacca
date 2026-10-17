@@ -366,3 +366,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_caleb_steering_2026_10_16: tools/steering_rate.py measures Caleb's steering per active agent hour; 10/16 baseline 2.59 (99 messages), top causes stopping early, handing him a click, not saving lessons, each now a Stop hook; falsifier command inside
 - reference_hud_card_ask: Screen ask= makes a HUD card double-click open the chat w that request (verse card, 10/16); live only after bundle + install
 - feedback_landing_a_railway_service: landing a Railway service from tools/: name it \*.Dockerfile (pre-push compiles tools/ as Python), rebuild on fresh main when run.sh conflicts, ready-guard matches the bare word, 3 HTTP checks before ship (10/16)
+- feedback_implemented_is_not_proven: "implemented, fixtures pending" hid 10 real installer merge failures (backlog 250, 10/16); test hand-written files by bytes, no-op rerun mtime, CRLF, symlink, read-only

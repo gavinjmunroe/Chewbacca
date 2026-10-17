@@ -133,7 +133,9 @@ class ClayProvider(Provider):
 
     def people_search(self, ref, domain, filters=None):
         # The search column reads the row's domain cell; filters live on the column (--setup).
-        if self.row_domain.get(ref, domain) != domain:
+        # A row this run didn't make may still hold the parent a past hop wrote (Barebells keeps
+        # vitaminwell.com), so its first search writes the domain asked for. The write is free.
+        if self.row_domain.get(ref) != domain:
             self.chain.clay("update-rows", True, ws=self.chain.WS, table=self.chain.TABLE,
                             records=json.dumps([{"id": ref, "cells": {self.chain.F_DOMAIN: domain}}]))
         self.row_domain[ref] = domain

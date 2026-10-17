@@ -147,6 +147,17 @@ class ClayAdapterTest(_ProviderBase):
         status_id = fake.added["Status"]
         self.assertEqual(fake.value(status_id), rec["contact"]["status"])
 
+    def test_reused_row_searches_the_brand_not_the_last_hop(self):
+        """A rerun on a row a past hop left at the parent searches the brand's own domain first."""
+        lead = person("Bea Brand", "Influencer Partnerships Lead")
+        fake = FakeClay({"barebells.com": [lead]}, email_by_url={lead["url"]: "bea@barebells.com"})
+        fake.cells[L.F_DOMAIN] = {"status": "success", "value": "vitaminwell.com"}
+        L.clay = fake
+        log = self.run_main(["Barebells", "barebells.com", "--live", "--row", ROW, "--client", self.client()],
+                            {"Bea Brand": 1.8})
+        self.assertEqual(log["result"]["email"], "bea@barebells.com")
+        self.assertEqual(log["result"]["status"], "Ready")
+
     def test_cents_stay_unknown_without_a_rate(self):
         lead = person("John Kevane", "Athlete & Community Partnerships")
         L.clay = FakeClay({"strava.com": [lead]}, email_by_url={lead["url"]: "jkevane@strava.com"})
@@ -155,11 +166,14 @@ class ClayAdapterTest(_ProviderBase):
 
 
 class TregStubTest(_ProviderBase):
-    def test_treg_raises_not_wired_before_any_spend(self):
+    def test_treg_run_lands_as_blocked_before_any_spend(self):
+        # Since 6b478168 a NotWired step becomes a blocker record and a next-move pick, not a raise.
         L.clay = no_clay
-        with self.assertRaises(P.NotWired) as e:
-            self.run_main(["Strava", "strava.com", "--live", "--client", self.client(provider="treg")], {})
-        self.assertIn("treg provider: people_search is not wired yet", str(e.exception))
+        log = self.run_main(["Strava", "strava.com", "--live", "--client", self.client(provider="treg")], {})
+        self.assertIsNone(log["result"]["person"])
+        self.assertEqual(log["result"]["blocked"]["step"], "provider_unwired")
+        self.assertIn("treg provider: people_search is not wired yet", json.dumps(log["result"]["blocked"]))
+        self.assertEqual(log["costs"], [])
 
     def test_every_paid_step_is_unwired_and_job_boards_still_read(self):
         t = P.for_client({"provider": "treg"})

@@ -30,9 +30,10 @@ tests/test_chewbacca_clay.py` runs. Don't hide test runs in scratch scripts:
   person at a terminal, a passing grade, a pre-send receipt) are what stop a
   Clay write from a test.
 - The hook that actually runs is the installed copy at
-  `~/.claude/hooks/launch-guard.sh`, not the repo's. Until setup syncs it, the
-  cd form still refuses there; check with `grep -c CDKIT
-~/.claude/hooks/launch-guard.sh` (0 means stale) and use `git -C` meanwhile.
+  `~/.claude/hooks/launch-guard.sh`, not the repo's. It syncs from main on its
+  own (the 77a491fa fix was live there by 17:30 on 2026-10-16, with no setup
+  run). If a new rule seems missing, `grep -c real_checkout` that file (0 means
+  stale) and use `git -C` until it catches up.
 - Grepping a file named for the chat approval (`*chat-approval*`) is refused too.
   Read it with the Read tool.
 - The word anywhere in the command text counts, not just paths. On 2026-10-16 the

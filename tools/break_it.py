@@ -398,7 +398,10 @@ def grep_diff(lines_by_file, repo=None):
             # that talks ABOUT the marker (in backticks or quotes, or code that
             # parses it) is not one: three of the 18 clean-finish hits on the
             # 2026-10-16 replay were gtme_lessons.py handling "[NEED".
-            if m and (code != m.group(0).startswith('[NEED')) and not re.search(r'[`"\']\[NEED', s):
+            # A line naming the patterns themselves ("TODO, [NEED, client names")
+            # is documentation of a check, which break-it flagged in its own hook.
+            describes = bool(re.search(r'[`"\'](TODO|\[NEED)|TODO,\s*\[NEED', s))
+            if m and (code != m.group(0).startswith('[NEED')) and not describes:
                 # A [NEED] blank in a draft is what context-discipline.md asks
                 # for in place of an invented number, so it is noted, never
                 # blocking: the one clean finish it blocked on the replay was an
@@ -427,17 +430,23 @@ def grep_diff(lines_by_file, repo=None):
 # ── running attacks ───────────────────────────────────────────────────────
 
 def touched_tests(repo, files):
-    tests = [f for f in files if (f.startswith('tests/') and (f.endswith('.py') or f.endswith('.sh'))
-                                  and 'fixtures' not in f)]
-    stems = {Path(f).stem.replace('-', '_') for f in files if not f.startswith('tests/')}
+    """Test files the change touched, plus tests named after a touched code file.
+    Two misses from running break-it on its own change: tests/run.sh is the suite
+    runner, not a test (it took the repo path as a group name), and on a
+    case-insensitive disk MEMORY.md matched tests/test_MEMORY.py by is_file()."""
+    runners = {'run.sh', 'lib.sh', 'helpers.sh', 'conftest.py'}
+    tests = [f for f in files if f.startswith('tests/') and f.endswith(('.py', '.sh'))
+             and 'fixtures' not in f and Path(f).name not in runners]
+    stems = {Path(f).stem.replace('-', '_') for f in files
+             if not f.startswith('tests/') and Path(f).suffix in CODE_SUFFIXES}
     tdir = repo / 'tests'
-    if tdir.is_dir():
-        for s in stems:
-            if len(s) < 4:
-                continue
-            for cand in (f'tests/test_{s}.py', f'tests/{s}.sh'):
-                if (repo / cand).is_file() and cand not in tests:
-                    tests.append(cand)
+    names = set(os.listdir(tdir)) if tdir.is_dir() else set()
+    for s in stems:
+        if len(s) < 4:
+            continue
+        for cand in (f'test_{s}.py', f'{s}.sh'):
+            if cand in names and cand not in runners and f'tests/{cand}' not in tests:
+                tests.append(f'tests/{cand}')
     return tests[:12]
 
 

@@ -100,6 +100,14 @@ class Diff(unittest.TestCase):
         kinds = sorted(b['kind'] for b in B.grep_diff(lines, ROOT))
         self.assertEqual(kinds, ['hard-coded-client', 'need-marker', 'swallowed-error', 'todo'])
 
+    def test_a_line_describing_the_patterns_is_not_a_todo(self):
+        lines = {'.claude/hooks/x.sh': ['#   grepped for TODO, [NEED, client names and swallowed errors']}
+        self.assertEqual(B.grep_diff(lines, ROOT), [])
+
+    def test_touched_tests_skip_the_runner_and_match_case_exactly(self):
+        got = B.touched_tests(ROOT, ['tests/run.sh', 'team/memory/MEMORY.md', 'tools/break_it.py'])
+        self.assertEqual(got, ['tests/test_break_it.py'])
+
     def test_need_markers_never_block(self):
         self.assertNotIn('need-marker', B.BLOCKING)
 

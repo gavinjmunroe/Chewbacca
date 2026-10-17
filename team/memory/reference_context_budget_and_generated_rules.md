@@ -58,3 +58,28 @@ description, so a long description crowds other skills down to a bare name.
   past it). The full routing text goes in a `triggers: >-` block, which
   skill_match and skill-route read instead, and Claude Code never loads.
 - context_cost now counts enabled plugin skills and commands too.
+
+## 2026-10-16: turn 1 was 151k, and what cut it
+
+Run `bin/context-budget` before building a measurer. On 10/16 a second one was
+half written, and its test overwrote `tests/test_context_budget.py` before
+anyone checked the name was taken. Check a path exists before writing to it.
+
+- **The kit loaded twice in its own repo.** The project CLAUDE.md and six
+  always-on rules are byte copies of what setup puts in ~/.claude: 14,624
+  tokens on every kit session's turn 1. Claude Code has `claudeMdExcludes`
+  (picomatch on absolute paths, User/Project/Local files only).
+  `tools/claude_md_dedupe.py excludes --apply`, run by setup.sh, excludes a
+  project file only when its global copy has the same bytes, so a rule the
+  global copy lacks keeps loading.
+- **The tab board was the biggest per-prompt cost**: 616 injections at about
+  800 tokens, 494k tokens that day. `tools/tabs.py context_delta` now sends a
+  prompt only the tabs that changed since that tab's last prompt; session start
+  and compaction get the full board. Replayed on 727 real injections: 594k to
+  264k.
+- Still unattributed: about 48k of system prompt and tool schemas.
+
+Two traps from the same evening. launch-guard refuses any shell command holding
+that GTM tool's name plus shell syntax, heredoc text included, so write such
+scripts with the Write or Edit tool and run the file. And `chewbacca land` exits
+0 when pre-push refuses the push; read its last line before calling it landed.

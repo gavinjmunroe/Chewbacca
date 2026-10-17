@@ -182,6 +182,8 @@ if group "chewbacca CLI"; then
   expect "help lists every verb" "chewbacca doctor" bash "$ROOT/bin/chewbacca" --help
   expect "help is generated, not hand-written" "chewbacca completion" bash "$ROOT/bin/chewbacca" --help
   exits  "unknown verb exits 1" 1 bash "$ROOT/bin/chewbacca" nonsense
+  # AGENTS.md documents `chewbacca skills <query>`; it used to print usage.
+  check  "skills <term> searches instead of printing usage" bash -c "! bash '$ROOT/bin/chewbacca' skills zzz-no-such-term 2>&1 | grep -q usage"
   expect "unknown verb suggests a real one" "did you mean" bash "$ROOT/bin/chewbacca" doc
   expect "where prints the repo" "$ROOT" bash "$ROOT/bin/chewbacca" where
   expect "version reports the repo version" "repo:" bash "$ROOT/bin/chewbacca" version

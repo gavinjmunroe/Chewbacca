@@ -73,8 +73,14 @@ show)
   done
   printf ']\n'
   ;;
-*)
-  echo "usage: chewbacca skills [list|search <term>|show <name>|--json]" >&2
+-*)
+  echo "usage: chewbacca skills [list|search <term>|show <name>|--json|<term>]" >&2
   exit 2
+  ;;
+*)
+  # AGENTS.md and agent-neutral.md tell every agent to run
+  # `chewbacca skills <query>`; that printed usage and exited 2 until
+  # 2026-10-16 (backlog 26 audit). A bare term is a search.
+  exec bash "${BASH_SOURCE[0]}" search "$*"
   ;;
 esac

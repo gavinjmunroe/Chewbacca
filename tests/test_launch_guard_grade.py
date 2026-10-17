@@ -567,6 +567,52 @@ for name, cmd in REFUSED:
 # The pieces after the cd are judged from the checkout, not the chat's cwd.
 code, err = e.hook("Bash", {"command": f"cd {KIT} && bin/chewbacca-clay ops"}, cwd=tempfile.mkdtemp())
 check("a relative front door after cd resolves in the checkout", code == 0, err)
+# The Tab manager's attack on 68a6f592: a registry file and a .git entry are two
+# lines to fake, so the cd target has to be a worktree this repo's git lists.
+fake = tempfile.mkdtemp()
+os.makedirs(os.path.join(fake, ".git"))
+os.makedirs(os.path.join(fake, "library", "clay-api"))
+os.makedirs(os.path.join(fake, "tests"))
+with open(os.path.join(fake, "library", "clay-api", "registry.json"), "w") as f:
+    f.write('{"ops": []}')
+with open(os.path.join(fake, "tests", "test_chewbacca_clay.py"), "w") as f:
+    f.write("print('anything')\n")
+other = tempfile.mkdtemp()
+subprocess.run(["git", "init", "-q", other], check=True)
+os.makedirs(os.path.join(other, "library", "clay-api"))
+os.makedirs(os.path.join(other, "tests"))
+with open(os.path.join(other, "library", "clay-api", "registry.json"), "w") as f:
+    f.write('{"ops": []}')
+with open(os.path.join(other, "tests", "test_chewbacca_clay.py"), "w") as f:
+    f.write("print('anything')\n")
+forged = tempfile.mkdtemp()
+shutil.copytree(os.path.join(fake, "library"), os.path.join(forged, "library"))
+shutil.copytree(os.path.join(fake, "tests"), os.path.join(forged, "tests"))
+real_gitdir = subprocess.run(["git", "-C", KIT, "rev-parse", "--path-format=absolute", "--git-dir"],
+                             capture_output=True, text=True).stdout.strip()
+with open(os.path.join(forged, ".git"), "w") as f:
+    f.write(f"gitdir: {real_gitdir}\n")
+link = os.path.join(tempfile.mkdtemp(), "kit")
+os.symlink(fake, link)
+# Named for Clay so the hook looks at it at all: a command that never names
+# Clay is not this hook's business, untracked or not.
+untracked = os.path.join(KIT, "tests", "test_zz_untracked_clay_probe.py")
+with open(untracked, "w") as f:
+    f.write("print('anything')\n")
+try:
+    for name, cmd in [
+        ("cd into a forged checkout then its test", f"cd {fake} && python3 tests/test_chewbacca_clay.py"),
+        ("cd into another repo shaped like the kit", f"cd {other} && python3 tests/test_chewbacca_clay.py"),
+        ("cd into a dir whose .git file points at the real repo", f"cd {forged} && python3 tests/test_chewbacca_clay.py"),
+        ("cd through a symlink to a forged checkout", f"cd {link} && python3 tests/test_chewbacca_clay.py"),
+        ("cd into the real worktree, then an untracked test", f"cd {KIT} && python3 tests/test_zz_untracked_clay_probe.py"),
+        ("cd - then a test", "cd - && python3 tests/test_chewbacca_clay.py"),
+        ("a relative cd then a test", "cd . && python3 tests/test_chewbacca_clay.py"),
+    ]:
+        code, err = e.hook("Bash", {"command": cmd}, cwd=tempfile.mkdtemp())
+        check(f"refused: {name}", code == 2, err)
+finally:
+    os.remove(untracked)
 for tool in ("Write", "Edit"):
     for p in ("~/.chewbacca/clay-allowances.json", "~/.chewbacca/state/clay-allowance-spend.json"):
         code, err = e.hook(tool, {"file_path": os.path.expanduser(p), "content": "{}"})

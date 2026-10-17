@@ -270,12 +270,38 @@ def test_runner(argv):
     return False
 
 
+# After a leading cd, a test runs only when every file it names is tracked in
+# that worktree: an untracked tests/x.py there is a script, not a kit test.
+after_cd = len(sys.argv) > 4 and sys.argv[4] == "cdkit"
+
+
+def tracked(argv):
+    files = [a.split("::")[0] for a in argv[1:] if re.match(r"(?:tests|src)/", a)]
+    for f in files:
+        try:
+            p = __import__("subprocess").run(
+                ["git", "-C", cwd, "ls-files", "--error-unmatch", "--", f], capture_output=True, timeout=5,
+                env={"PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin", "HOME": "/nonexistent",
+                     "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null"})
+        except (OSError, ValueError):
+            return False
+        if p.returncode != 0:
+            return False
+    return True
+
+
+def runner_ok(argv):
+    return test_runner(argv) and (not after_cd or tracked(argv))
+
+
 if no_send:
-    if test_runner(argv):
+    if runner_ok(argv):
         out("allow")
     out("refuse", "CHEWBACCA_NO_SEND=1 is allowed only in front of a test runner")
-if test_runner(argv):
+if runner_ok(argv):
     out("allow")
+if after_cd and test_runner(argv):
+    out("refuse", "after a cd, a test runs only if git tracks it in that worktree")
 
 name, args = argv[0], argv[1:]
 base = os.path.basename(name)
@@ -508,14 +534,35 @@ PY
 # this hook never sees, which is worse than letting the cd through.
 CDKIT=""
 IFS= read -r -d '' CDKIT <<'PY' || true
-import os, re, shlex, sys
+import os, re, shlex, subprocess, sys
+# A registry file and a .git entry take two lines to fake (Tab manager's attack
+# on 68a6f592, 2026-10-16), so the target must be a worktree the kit's own git
+# lists, sharing the kit's common dir.
+kit = sys.argv[1]
+ENV = {"PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin", "HOME": "/nonexistent",
+       "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null"}
+
+
+def git(*a):
+    try:
+        p = subprocess.run(["git", *a], capture_output=True, text=True, timeout=5, env=ENV)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return p.stdout.strip() if p.returncode == 0 else None
+
+
 m = re.match(r"\s*(cd\s+[A-Za-z0-9_./@+,:-]+)\s*&&", sys.stdin.read())
 if m:
     argv = shlex.split(m.group(1))
     if len(argv) == 2 and os.path.isabs(argv[1]):
         d = os.path.realpath(argv[1])
-        if (os.path.isfile(os.path.join(d, "library", "clay-api", "registry.json"))
-                and os.path.exists(os.path.join(d, ".git"))):
+        listed = git("-C", kit, "worktree", "list", "--porcelain") or ""
+        trees = {os.path.realpath(line[9:]) for line in listed.splitlines() if line.startswith("worktree ")}
+        common = git("-C", kit, "rev-parse", "--path-format=absolute", "--git-common-dir")
+        theirs = git("-C", d, "rev-parse", "--path-format=absolute", "--git-common-dir")
+        if (d in trees and common and theirs
+                and os.path.realpath(common) == os.path.realpath(theirs)
+                and os.path.isfile(os.path.join(d, "library", "clay-api", "registry.json"))):
             print(d)
 PY
 
@@ -575,16 +622,16 @@ case "$tool" in
     # classify as a known read on its own, mention of Clay or not.
     segments="$(printf '%s' "$cmd" | python3 -I -c "$SPLIT" 2>/dev/null)" || segments=""
     if [ -n "$segments" ]; then
-      cdkit="$(printf '%s' "$cmd" | python3 -I -c "$CDKIT" 2>/dev/null)" || cdkit=""
-      seg_cwd="$cwd"
+      cdkit="$(printf '%s' "$cmd" | python3 -I -c "$CDKIT" "${kit:-/nonexistent}" 2>/dev/null)" || cdkit=""
+      seg_cwd="$cwd"; seg_mode=""
       # `|| [ -n "$seg" ]`: the substitution strips the last newline, and
       # without it the final piece was never read, so `grep clay x | sh` passed
       # on the grep alone (caught by tests/test_launch_guard_grade.py).
       while IFS= read -r seg || [ -n "$seg" ]; do
         if [ -n "$cdkit" ]; then
-          seg_cwd="$cdkit"; cdkit=""; verdict="allow"; continue
+          seg_cwd="$cdkit"; seg_mode="cdkit"; cdkit=""; verdict="allow"; continue
         fi
-        v="$(printf '%s' "$seg" | python3 -I -c "$CLASSIFY" "${kit:-/nonexistent}" "$seg_cwd" force 2>/dev/null)" ||
+        v="$(printf '%s' "$seg" | python3 -I -c "$CLASSIFY" "${kit:-/nonexistent}" "$seg_cwd" force "$seg_mode" 2>/dev/null)" ||
           refuse "the command classifier failed, so a command that mentions Clay is refused."
         case "$v" in
           allow*) ;;

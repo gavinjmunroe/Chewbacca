@@ -1903,7 +1903,11 @@ async function verifyEmails(kv, flags) {
   const all = [...new Set(source.map((r) => String(r.email || "").trim().toLowerCase()).filter(Boolean))];
   const notEmail = all.filter((e) => !ARG_SHAPES.email.test(e));
   let prior = [];
-  try { prior = parseCsv(fs.readFileSync(outFile, "utf8")); } catch {}
+  // No out file yet is a first run. Any other read failure would make every
+  // paid-for verdict look unpaid, so it refuses instead.
+  try { prior = parseCsv(fs.readFileSync(outFile, "utf8")); } catch (e) {
+    if (e.code !== "ENOENT") out({ ok: false, op: name, class: "input", reason: `out could not be read: ${e.message}` }, EXIT.usage);
+  }
   const done = new Map(prior.filter((r) => r.email && !RETRY_VERDICTS.has(String(r.verification || "").trim())).map((r) => [r.email.trim().toLowerCase(), r]));
   // A verified=valid column (monday_wave.py's tier files carry one) is a
   // verdict already paid for: 42 of the 141 Monday rows on 2026-10-17.

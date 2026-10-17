@@ -1293,6 +1293,10 @@ def test_verify_emails_prices_gates_and_skips_paid_rows():
         code, out, _ = run({"api-anything/createWorkflowTestRun.json": SENT}, {}, "workflow-test-run", "ws=1372623",
                            "workflow=wf_0tmevkaRdsp2XHUwD8X", "email=ada@example.com", "--allow-writes", env_extra=aenv)
         ok(code == 3 and "did not approve" in out["reason"], "workflow-test-run never runs on an allowance")
+        unreadable = Path(d) / "dir.csv"
+        unreadable.mkdir()
+        code, out, _ = run(VERIFY_FIXTURES, {}, "verify-emails", "workflow=wf_ex1", f"csv={VERIFY_CSV}", f"out={unreadable}", "--dry-run")
+        ok(code == 2 and "out could not be read" in out["reason"], "an unreadable out file never reads as no verdicts paid for")
         tiers = Path(d) / "tier.csv"
         tiers.write_text("email,verified\nada@example.com,valid\nbo@example.com,\n")
         code, out, _ = run(VERIFY_FIXTURES, {}, "verify-emails", "workflow=wf_ex1", f"csv={tiers}", "out=/tmp/x.csv", "--dry-run")

@@ -53,3 +53,10 @@ A managed policy at `/Library/Application Support/ClaudeCode/managed-settings.js
 Shipped generally in `Chewbacca` (commits `6c752df`, `569fea5`): `settings/vscode-settings.json`
 is the template, `setup.sh` writes all three surfaces, and `doctor.sh` reports each one plus the
 managed policy and the misplaced-tier mistake. See [[project_chewbacca]].
+
+## Ruling: on by default for every install (Caleb, 2026-10-17)
+
+A security review on 2026-10-16 flagged `setup.sh` (`BYPASS_PERMS="yes"` by default) and
+`tools/no_prompts.py` as a permission bypass and suggested making it opt-in. Caleb ruled on
+2026-10-17: "Yes turn them off for everyone". Prompts stay off by default; `--ask-permissions`
+is the opt-out. Don't flip the default on a reviewer's suggestion. The deny rules are the brake.

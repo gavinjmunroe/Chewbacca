@@ -114,6 +114,62 @@ with tempfile.TemporaryDirectory() as d:
     p = run("--client", "Acme", "--inbox", inbox, "--slack", slack, "--answered-offline", "D9", "--how", "call")
     check("an unknown conversation is refused", p.returncode == 2)
 
+    # Togari's follow-up queue (2026-10-16: done said "nobody is waiting" and
+    # the next digest listed 26). Each queued investor is an open item.
+    json.dump({"D1": dm}, open(slack, "w"))
+    togari = os.path.join(d, "stuck.json")
+    json.dump([{"email": "vc@fund.example", "company": "Qube", "hours": 40, "reason": "asked for a call"},
+               {"email": "lp@fund.example", "company": "Vertocol", "hours": 26, "reason": None}], open(togari, "w"))
+    p = run("--client", "Acme", "--inbox", inbox, "--slack", slack, "--togari", togari)
+    check("togari: each queued investor is an open item named togari", p.returncode == 1
+          and p.stdout.count("togari   ") == 2 and "vc@fund.example" in p.stdout and "Not done: 2 open." in p.stdout)
+    r = json.load(open(os.path.join(d, "gtme-done", "acme.json")))
+    check("togari: the receipt counts the queue as open", r["open"] == 2)
+    json.dump([], open(togari, "w"))
+    p = run("--client", "Acme", "--inbox", inbox, "--slack", slack, "--togari", togari)
+    check("togari: an empty queue is clean", p.returncode == 0 and "Done:" in p.stdout)
+    json.dump({"error": "no Clay workspace for this client"}, open(togari, "w"))
+    p = run("--client", "Acme", "--inbox", inbox, "--slack", slack, "--togari", togari)
+    check("togari: a non-list answer is not run (exit 2)", p.returncode == 2 and "not run  togari" in p.stdout)
+    p = run("--client", "Acme", "--inbox", inbox, "--slack", slack, "--togari", os.path.join(d, "nope.json"))
+    check("togari: an unreadable file is not run (exit 2)", p.returncode == 2 and "Done:" not in p.stdout)
+
+    # Live path from clients.json: a 503 is not run, a list is read, and the
+    # URL's token never reaches the output.
+    import http.server
+    import threading
+    answers = {"code": 503, "body": b'{"error":"down"}'}
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(answers["code"])
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(answers["body"])
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    secret = "f" * 40
+    url = f"http://127.0.0.1:{srv.server_port}/dash/{secret}/stuck.json"
+    c = json.load(open(cfg))
+    c["clients"][0]["togari_stuck_url"] = url
+    json.dump(c, open(cfg, "w"))
+    p = run("--client", "Acme", "--inbox", inbox, "--slack", slack)
+    check("togari url: a 503 is not run, never clean", p.returncode == 2 and "HTTP 503" in p.stdout)
+    check("togari url: the token is never printed", secret not in p.stdout + p.stderr)
+    answers.update(code=200, body=json.dumps([{"email": "vc@fund.example", "company": "Qube", "hours": 40}]).encode())
+    p = run("--client", "Acme", "--inbox", inbox, "--slack", slack, "--json")
+    check("togari url: a live queue is read", p.returncode == 1 and json.loads(p.stdout)["togari"][0][0] == "vc@fund.example"
+          and secret not in p.stdout)
+    srv.shutdown()
+    c["clients"][0]["togari_stuck_url"] = f"http://127.0.0.1:1/dash/{secret}/stuck.json"
+    json.dump(c, open(cfg, "w"))
+    p = run("--client", "Acme", "--inbox", inbox, "--slack", slack)
+    check("togari url: an unreachable queue is not run and hides the token", p.returncode == 2 and secret not in p.stdout + p.stderr)
+
 # The inbox reader: the API path is the default (no browser tab, 2026-10-11),
 # and a thread missing the newest reply its row reports is marked incomplete.
 import importlib.machinery, importlib.util

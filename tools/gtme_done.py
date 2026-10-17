@@ -10,13 +10,15 @@ form answers in a Slack DM on 10/10, a to-do post asked him for them again on
     chewbacca gtme done --client Zeutara
     chewbacca gtme done --client Zeutara --inbox inbox.json --slack slack.json
 
-Two checks, each from the source and never from notes:
+Three checks, each from the source and never from notes:
   replies   every inbox thread whose last word is the lead's and whose reply
             needs a person (a question, interest, a deck or form ask, unclear).
             Passes, opt-outs, bounces, out of office and referrals are handled
             by the reply autopilot and are not owed.
   client    every message or file the client sent in their Slack DM or channel
             after our last message there. Nothing they sent sits unread.
+  togari    every investor in Togari's follow-up queue (the daily digest),
+            read from the client's togari_stuck_url in clients.json.
 
 Prints what is still open, one line each. Exit 0 when nothing is, 1 when
 something is, 2 when a source could not be read (a check that did not run is
@@ -172,11 +174,41 @@ def fetch_slack(channel):
     return data.get("messages") or []
 
 
+def parse_togari(data):
+    """Togari's /dash/<token>/stuck.json: [{email, company, hours, reason}].
+    Anything else is a check that did not run, never an empty queue."""
+    if not isinstance(data, list):
+        raise RuntimeError("Togari's follow-up queue was not a list")
+    out = []
+    for item in data:
+        if not isinstance(item, dict) or not item.get("email"):
+            raise RuntimeError("Togari's follow-up queue had an item with no email")
+        out.append((item["email"], item.get("company") or "", item.get("hours"), item.get("reason") or ""))
+    return out
+
+
+def fetch_togari(url):
+    """Read the queue. Errors name what failed and never the URL, whose path is the token."""
+    import urllib.error
+    import urllib.request
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, headers={"Accept": "application/json"}),
+                                    timeout=60) as r:
+            return json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"Togari's follow-up queue answered HTTP {e.code}") from None
+    except (urllib.error.URLError, OSError) as e:
+        raise RuntimeError(f"Togari's follow-up queue could not be reached ({type(e).__name__})") from None
+    except ValueError:
+        raise RuntimeError("Togari's follow-up queue was not JSON") from None
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="chewbacca gtme done", description=__doc__.splitlines()[0])
     ap.add_argument("--client", required=True)
     ap.add_argument("--inbox", help="a saved clay-inbox JSON instead of reading it live")
     ap.add_argument("--slack", help="a saved {channel_id: [messages]} JSON instead of reading Slack")
+    ap.add_argument("--togari", help="a saved Togari stuck.json instead of reading togari_stuck_url")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--ack", metavar="EMAIL", action="append",
                     help="mark this lead's latest reply as read and needing no answer")
@@ -188,7 +220,20 @@ def main(argv=None):
     a = ap.parse_args(argv)
     cfg = client_config(a.client)
     slack_cfg = cfg.get("client_slack") or {}
-    report = {"client": a.client, "replies_owed": None, "client_unanswered": None, "not_run": []}
+    report = {"client": a.client, "replies_owed": None, "client_unanswered": None, "togari": None, "not_run": []}
+
+    # 2026-10-16: this printed "nobody is waiting on us" and the next morning
+    # Togari's digest listed 26 investors needing follow-through. Its queue is
+    # a source like the inbox, so it is read every run it is configured.
+    if a.togari or cfg.get("togari_stuck_url"):
+        try:
+            data = json.load(open(a.togari)) if a.togari else fetch_togari(cfg["togari_stuck_url"])
+            report["togari"] = parse_togari(data)
+        except Exception as e:
+            why = str(e)
+            if cfg.get("togari_stuck_url"):
+                why = why.replace(cfg["togari_stuck_url"], "<togari_stuck_url>")
+            report["not_run"].append(f"togari: {why}")
 
     try:
         if a.inbox or cfg.get("workspaces"):
@@ -244,7 +289,8 @@ def main(argv=None):
         # Not set up is said out loud, but it is not a failed check.
         report["skipped"] = ["client messages: no client_slack {user, me, conversations} for this client in clients.json"]
 
-    open_items = len(report["replies_owed"] or []) + len(report["client_unanswered"] or [])
+    open_items = (len(report["replies_owed"] or []) + len(report["client_unanswered"] or [])
+                  + len(report["togari"] or []))
     write_receipt(a.client, report, open_items)
     if a.json:
         print(json.dumps(report, indent=1))
@@ -255,6 +301,11 @@ def main(argv=None):
         for ch, ts, n, files, words in report["client_unanswered"] or []:
             sent = f", files: {', '.join(files)}" if files else ""
             print(f"client   {principal} sent {n} message(s) in {ch} that nobody answered{sent}. Starts: \"{words}\"")
+        for email, company, hours, reason in report["togari"] or []:
+            at = f" at {company}" if company else ""
+            waited = f", waiting {hours}h" if isinstance(hours, (int, float)) else ""
+            why = f": {reason}" if reason else ""
+            print(f"togari   {email}{at} is in Togari's follow-up queue{waited}{why}")
         for why in report["not_run"]:
             print(f"not run  {why}")
         for why in report.get("skipped") or []:

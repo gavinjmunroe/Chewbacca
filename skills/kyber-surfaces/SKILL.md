@@ -32,7 +32,7 @@ and the newest receipts with proof. "We good?" and "progress?" to the bar open
 it. A call with no take is never drawn, so an agent that hands him a call
 writes it as `Ur call: <the question>. My take: <what you'd do>.` on one line,
 and a click only he can make as `BLOCKED: <the step> (<how>)`. The feed's one
-owner is bin/lib/decision_inbox.py; `decision-inbox digest` is the same feed as
+owner is bin/lib/decision_inbox.py; `bin/decision-inbox digest` is the same feed as
 one phone text, a draft that is never sent. See
 [docs/reference/DECISION-INBOX.md](../../docs/reference/DECISION-INBOX.md).
 

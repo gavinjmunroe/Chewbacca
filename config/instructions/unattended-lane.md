@@ -30,4 +30,5 @@ BLOCKED: loading the extension is a click only u can make (chrome://extensions, 
 "My take: ..." on that line or the one right under it is held back: the
 decision inbox never shows it, and the jobs runner lists it at the end of your
 job's log. A BLOCKED click carries its how-to in brackets instead. Before you
-end, run `decision-inbox check <your report>` and fix every line it prints.
+end, run `bin/decision-inbox check <your report>` from the Chewbacca checkout
+(it isn't on PATH) and fix every line it prints.

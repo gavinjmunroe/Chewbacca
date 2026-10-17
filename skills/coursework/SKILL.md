@@ -295,6 +295,29 @@ To ingest a new one, `~/Chewbacca/apps/texts/ingest/ingest.py scan <pdf>` prints
 chapter plan and writes nothing. Read the plan before `apply` files 500 pages
 under the wrong headings.
 
+## "Make me a ux to crank through the work": a work-session page
+
+When he wants to grind through a day of school, build one local page in
+~/Downloads (`Lock in <Day Mon DD>.html`), never a list in chat. It's a
+Practice session in the interface taxonomy: one task on screen at a time with
+a timer, 2 to 7 steps that say what done looks like, links to the guide or
+file that task needs, Done/next and Push to later, a projected finish time,
+and the full queue and a "not today, on purpose" list folded into one
+`<details>`. Build it from `coursework due --json` and each item's ledger
+notes, plus the study guides already in ~/Downloads. Order it quick wins
+first, then whichever deadline closes soonest, and put breaks in. Name what's
+sunk and why so it stops hanging over him. Save state in localStorage, and
+test Done, skip, undo and reload headless at 1440 and 390 before you say
+it's ready. 2026-10-17: "Make me a ux to crank through the work today,
+guitar is tmr everything else is today".
+
+A Brightspace 403 doesn't stop this or a practice drill. Build from the
+ledger, say once that submissions aren't verified, and keep going. On
+2026-10-17 the first reply stopped to offer "want me to build a practice
+set?" while the 185 guide already existed and only lacked a short-answer
+drill for an all-short-answer exam. Check the guide against the exam format
+(W8S15 p13: short answer, no notes) and fix that gap instead of asking.
+
 ## Planning a lock-in when he names only some courses
 
 When he says "lock in on X and Y tonight", the plan still has to account for

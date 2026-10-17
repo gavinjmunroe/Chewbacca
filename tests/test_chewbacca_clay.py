@@ -1275,6 +1275,24 @@ def test_verify_emails_prices_gates_and_skips_paid_rows():
         nocol.write_text("name\nAda\n")
         code, out, _ = run(VERIFY_FIXTURES, {}, "verify-emails", "workflow=wf_ex1", f"csv={nocol}", "out=/tmp/x.csv", "--dry-run")
         ok(code == 2 and "no email column" in out["reason"], "a csv without an email column is refused")
+        # A standing allowance covers only the workspace's listed verify workflow.
+        allow, spend = Path(d) / "allow.json", Path(d) / "spend.json"
+        allow.write_text(json.dumps({"v": 1, "workspaces": {"1372623": {"daily_credits": 100}, "1000001": {"daily_credits": 100}}}))
+        aenv = {"CHEWBACCA_CLAY_ALLOWANCES": str(allow), "CHEWBACCA_CLAY_ALLOWANCE_SPEND": str(spend)}
+        code, out, _ = run(VERIFY_FIXTURES, {}, "verify-emails", "ws=1000001", "workflow=wf_ex1", f"csv={VERIFY_CSV}",
+                           f"out={Path(d) / 'a.csv'}", "--allow-writes", env_extra=aenv)
+        ok(code == 3 and "did not approve" in out["reason"], "an allowance never covers a workflow= that isn't the listed one")
+        code, out, _ = run(VERIFY_FIXTURES, {}, "verify-emails", "ws=1372623", f"csv={VERIFY_CSV}",
+                           f"out={Path(d) / 'b.csv'}", "--allow-writes", env_extra=aenv)
+        ok(code == 0 and out["ran"] == 3, f"the listed verify workflow runs inside the allowance: {out}")
+        (Path(d) / "small.json").write_text(json.dumps({"v": 1, "workspaces": {"1372623": {"daily_credits": 2}}}))
+        code, out, _ = run(VERIFY_FIXTURES, {}, "verify-emails", "ws=1372623", f"csv={VERIFY_CSV}",
+                           f"out={Path(d) / 'c.csv'}", "--allow-writes",
+                           env_extra={**aenv, "CHEWBACCA_CLAY_ALLOWANCES": str(Path(d) / "small.json")})
+        ok(code == 3 and "don't fit" in out["reason"], "a batch bigger than what's left of the allowance is refused")
+        code, out, _ = run({"api-anything/createWorkflowTestRun.json": SENT}, {}, "workflow-test-run", "ws=1372623",
+                           "workflow=wf_0tmevkaRdsp2XHUwD8X", "email=ada@example.com", "--allow-writes", env_extra=aenv)
+        ok(code == 3 and "did not approve" in out["reason"], "workflow-test-run never runs on an allowance")
         tiers = Path(d) / "tier.csv"
         tiers.write_text("email,verified\nada@example.com,valid\nbo@example.com,\n")
         code, out, _ = run(VERIFY_FIXTURES, {}, "verify-emails", "workflow=wf_ex1", f"csv={tiers}", "out=/tmp/x.csv", "--dry-run")

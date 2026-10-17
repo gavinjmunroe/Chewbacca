@@ -1325,7 +1325,10 @@ function unfinishedReply(args) {
 // so one run-cells (five rows at most) can finish past the cap; the next write
 // is refused.
 const ALLOWANCE_GATES = new Set(["write:table-data", "write:schema", "write:spends-credits"]);
-const ALLOWANCE_NEVER = new Set(["table-auto-run"]);
+// workflow-test-run runs any workflow it is pointed at, so an allowance never
+// covers it; verify-emails takes the allowance only for the workspace's own
+// verify workflow (VERIFY_WORKFLOWS), never a workflow= by name.
+const ALLOWANCE_NEVER = new Set(["table-auto-run", "workflow-test-run"]);
 const ALLOWANCE_FILE = FIXTURES
   ? process.env.CHEWBACCA_CLAY_ALLOWANCES || ""
   : path.join(os.userInfo().homedir, ".chewbacca", "clay-allowances.json");
@@ -1942,8 +1945,11 @@ async function verifyEmails(kv, flags) {
   const wfName = String(wf.data?.workflow?.name ?? "");
   if (!wf.ok || !/verif/i.test(wfName)) refuse(`${workflow} is ${wfName ? `"${wfName}"` : "unreadable"}, not an email verify workflow; nothing was sent`);
 
-  // The allowance covers the batch only when the whole estimate fits what is left today.
-  const allowance = allowanceCheck(op, args);
+  // The allowance covers the batch only for the workspace's listed verify
+  // workflow, and only when the whole estimate fits what is left today. Any
+  // other workflow= needs Caleb's ok: a name is set by whoever made it.
+  const listed = VERIFY_WORKFLOWS[ws] === workflow;
+  const allowance = listed ? allowanceCheck(op, args) : null;
   if (allowance && !allowance.ok) refuse(allowance.reason);
   if (allowance) {
     const a = allowanceFor(ws);

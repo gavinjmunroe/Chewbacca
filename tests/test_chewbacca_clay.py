@@ -17,7 +17,8 @@ TOOL = ROOT / "bin" / "chewbacca-clay"
 LIB = ROOT / "library" / "clay-api"
 
 OK_BALANCE = {"ok": True, "class": "ok", "tier": 1, "ms": 120, "data": {"balance": 1234.5, "actionExecutionBalance": 0}}
-CLI_BALANCE = {"exit": 0, "stdout": json.dumps({"balance": 1234.5, "workspace": {"id": "1", "name": "Example"}}), "stderr": ""}
+# The workspace the CLI names is the one the op runs in (WS below); any other is refused.
+CLI_BALANCE = {"exit": 0, "stdout": json.dumps({"balance": 1234.5, "workspace": {"id": "1000001", "name": "Example"}}), "stderr": ""}
 AUTH_FAIL = {"ok": False, "class": "auth", "reason": "not logged in", "next": "api-anything login clay", "ms": 90}
 INPUT_FAIL = {"ok": False, "class": "input", "reason": "param tableId must be a table id", "ms": 3}
 CUT = {"ok": True, "class": "ok", "tier": 1, "ms": 300, "data": [{"id": "f_1"}], "truncated": "showing 1 of 40 items"}
@@ -1054,6 +1055,132 @@ def test_cli_never_answers_for_another_workspace():
         del os.environ["CHEWBACCA_CLAY_CLI_WS"]
 
 
+# A stand-in for the clay CLI: it reads its config the way the real one does
+# (CLAY_CONFIG_HOME/clay/config.json, the active profile, else the only one),
+# refreshes the token it used as the real one can, logs the workspace each call
+# ran in, and names that workspace in its JSON like the real one.
+FAKE_CLI = r'''#!/usr/bin/env python3
+import json, os, sys, time
+cfgf = os.path.join(os.environ["CLAY_CONFIG_HOME"], "clay", "config.json")
+cfg = json.load(open(cfgf))
+args = sys.argv[1:]
+def save():
+    # by rename, as the real CLI writes it
+    tmp = "%s.%d.tmp" % (cfgf, os.getpid())
+    with open(tmp, "w") as f:
+        json.dump(cfg, f)
+    os.replace(tmp, cfgf)
+if args[:2] == ["workspaces", "switch"]:
+    cfg["activeProfile"] = args[2]
+    save()
+    print(json.dumps({"ok": True}))
+    sys.exit(0)
+profiles = cfg["profiles"]
+ws = cfg.get("activeProfile") if cfg.get("activeProfile") in profiles else (list(profiles)[0] if len(profiles) == 1 else None)
+profiles[ws]["oauth"]["accessToken"] += "+"
+save()
+time.sleep(float(os.environ.get("FAKE_CLI_SLEEP", "0")))
+with open(os.environ["FAKE_CLI_LOG"], "a") as f:
+    f.write(json.dumps({"ws": ws, "argv": args, "home": os.environ["CLAY_CONFIG_HOME"]}) + "\n")
+print(json.dumps({"workspace": {"id": os.environ.get("FAKE_CLI_CLAIM") or ws}, "data": [{"id": "wfn_ex1"}]}))
+'''
+
+
+def test_every_cli_call_runs_in_its_own_workspace():
+    # 2026-10-17 12:43: the Sabo tab's CLI calls left the one shared CLI on
+    # Sabo's workspace, and the Zeutara tab's csv-upload and workflow-graph then
+    # ran against it ("Trigger not found", "does not belong to this workspace").
+    sabo, zeu, nobody = "1000001", "2000002", "3000003"
+    with tempfile.TemporaryDirectory() as d:
+        base = Path(d)
+        fake = base / "clay"
+        fake.write_text(FAKE_CLI)
+        fake.chmod(0o755)
+        shared = base / "shared" / "clay" / "config.json"
+        shared.parent.mkdir(parents=True)
+        shared.write_text(json.dumps({"version": 2, "activeProfile": sabo, "profiles": {
+            sabo: {"oauth": {"accessToken": "a1", "refreshToken": "r1"}},
+            zeu: {"oauth": {"accessToken": "a2", "refreshToken": "r2"}}}}))
+        log = base / "cli.log"
+        (base / "fx").mkdir()
+        (base / "m.json").write_text("{}")
+        csv = base / "load.csv"
+        csv.write_text("email\nlead@example.com\n")
+        env = dict(os.environ, CHEWBACCA_CLAY_FIXTURES=str(base / "fx"), CHEWBACCA_CLAY_MEASURED=str(base / "m.json"),
+                   CHEWBACCA_CLAY_LIB=str(LIB), API_ANYTHING_HOME=str(base / "engine-home"),
+                   GTM_CONFIG=str(base / "no-clients.json"), CHEWBACCA_CLAY_TEST_CLI=str(fake),
+                   CLAY_CONFIG_HOME=str(base / "shared"), FAKE_CLI_LOG=str(log), FAKE_CLI_SLEEP="0.6")
+        env.pop("CHEWBACCA_NO_SEND", None)
+        env.pop("CLAY_WORKSPACE_ID", None)
+
+        def start(*args, **extra):
+            return subprocess.Popen(["node", str(TOOL), *args], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                    text=True, env=dict(env, **extra))
+
+        def finish(p):
+            so, se = p.communicate(timeout=60)
+            try:
+                return p.returncode, json.loads(so)
+            except json.JSONDecodeError:
+                return p.returncode, {"stdout": so, "stderr": se}
+
+        def calls():
+            return [json.loads(x) for x in log.read_text().splitlines()] if log.exists() else []
+
+        def switch(ws):
+            subprocess.run([str(fake), "workspaces", "switch", ws], check=True, capture_output=True, env=env)
+
+        # Two tabs interleave, and a third switches the shared CLI mid-flight.
+        import time as _time
+        for round_ in range(3):
+            a = start("workflow-graph", f"workflow=wf_sabo{round_}", f"ws={sabo}")
+            b = start("workflow-graph", f"workflow=wf_zeu{round_}", f"ws={zeu}")
+            _time.sleep(0.3)
+            switch([zeu, sabo, zeu][round_])
+            for p in (a, b):
+                code, out = finish(p)
+                ok(code == 0 and out["surface"] == "cli", f"a pinned CLI read answered: {out}")
+        ran = calls()
+        ok(len(ran) == 6, f"each read ran once: {ran}")
+        for c in ran:
+            want = sabo if c["argv"][3].startswith("wf_sabo") else zeu
+            ok(c["ws"] == want, f"{c['argv'][3]} ran in {c['ws']}, not {want}")
+            ok(not Path(c["home"]).exists(), "the private CLI config is removed after the call")
+        cfg = json.loads(shared.read_text())
+        ok(cfg["activeProfile"] == zeu, "only the other tab's switch moved the shared workspace, never a pinned call")
+        ok(cfg["profiles"][sabo]["oauth"]["accessToken"] == "a1+++" and cfg["profiles"][zeu]["oauth"]["accessToken"] == "a2+++",
+           f"each refreshed token was written back to its own workspace: {cfg['profiles']}")
+
+        # Back to back, the way the Sabo and Zeutara tabs ran at 12:43.
+        for ws in (sabo, zeu):
+            code, out = finish(start("workflow-graph", "workflow=wf_b2b", f"ws={ws}", FAKE_CLI_SLEEP="0"))
+            ok(code == 0 and calls()[-1]["ws"] == ws, f"a back-to-back call in {ws} ran in {calls()[-1]['ws']}")
+
+        # A write is pinned to the workspace shown at approval, whatever the CLI is switched to.
+        trig = "15a2668a-07fd-4844-be50-37981ebb971a"
+        code, out = finish(start("csv-upload", f"trigger={trig}", f"csv={csv}", f"ws={zeu}", "--dry-run"))
+        ok(code == 0 and out["request"]["workspace"] == zeu, f"the approved request names its workspace: {out}")
+        switch(sabo)
+        before = len(calls())
+        code, out = finish(start("csv-upload", f"trigger={trig}", f"csv={csv}", f"ws={zeu}", "--allow-writes",
+                                 FAKE_CLI_SLEEP="0", CHEWBACCA_CLAY_TTY_ANSWER="csv-upload"))
+        ok(code == 0 and out["ok"] is True, f"an approved csv-upload went out: {out}")
+        ok(len(calls()) == before + 1 and calls()[-1]["ws"] == zeu and calls()[-1]["argv"][:4] == ["workflows", "triggers", "csv", "upload"],
+           f"the upload ran in {zeu} while the CLI was switched to {sabo}: {calls()[-1]}")
+
+        # Refused before anything runs: a workspace the CLI isn't signed in to, or none at all.
+        before = len(calls())
+        code, out = finish(start("workflow-graph", "workflow=wf_x", f"ws={nobody}"))
+        ok(code != 0 and "not signed in" in json.dumps(out), f"an unsigned workspace is refused: {out}")
+        code, out = finish(start("csv-upload", f"trigger={trig}", f"csv={csv}", "--allow-writes", CHEWBACCA_CLAY_TTY_ANSWER="csv-upload"))
+        ok(code != 0 and out["ok"] is False and "workspace" in json.dumps(out), f"a write with no workspace is refused: {out}")
+        ok(len(calls()) == before, "nothing reached the CLI")
+
+        # A CLI that answers for another workspace is a failure, never data.
+        code, out = finish(start("workflow-graph", "workflow=wf_x", f"ws={sabo}", FAKE_CLI_SLEEP="0", FAKE_CLI_CLAIM=zeu))
+        ok(code != 0 and f"answered for workspace {zeu}" in json.dumps(out), f"a wrong-workspace answer is refused: {out}")
+
+
 def test_sabo_table_reads_without_clay_open():
     """The three reads that sent people into the Clay UI before the 2026-10-16
     Sabo call: a people cell over the engine's 20,000-char cap, rows after= that
@@ -1331,6 +1458,7 @@ def main():
                test_ui_only_prints_route, test_chat_approval_stands_in_for_the_terminal, test_campaign_build_ops_touch_drafts_only, test_a_relabelled_write_is_still_gated, test_refuses_an_unpinned_engine, test_inbox_adapter_keeps_clay_inbox_shape,
                test_query_slot_reads_build, test_new_reads_are_reads_with_a_measured_surface,
                test_second_session_reads_through_its_own_login, test_cli_never_answers_for_another_workspace,
+               test_every_cli_call_runs_in_its_own_workspace,
                test_sabo_table_reads_without_clay_open, test_contract_inventory_covers_the_registry,
                test_inventory_reads_build_and_stay_reads, test_verify_emails_prices_gates_and_skips_paid_rows,
                test_fixtures_are_scrubbed):

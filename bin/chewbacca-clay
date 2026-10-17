@@ -167,13 +167,21 @@ function resolveWorkspace() {
   return { error: `no Clay workspace chosen: pass ws=<id> or set CLAY_WORKSPACE_ID${found}. chewbacca clay workspaces lists them` };
 }
 
+// An op with a CLI or kit-bin surface takes ws= even when its API surface
+// needs none: the CLI call is pinned to it (pinCli). Unresolved, the CLI is
+// skipped and the reason is kept for the "no surface" answer.
+const usesCli = (op) => op.surfaces.some((s) => s.type !== "api-anything");
+const takesWs = (op) => op.args.some((a) => a.replace("?", "") === "ws") || usesCli(op);
+let WS_UNRESOLVED = "";
+
 function withDefaults(op, kv) {
   const args = { ...kv };
   const wantsWs = op.args.some((a) => a.replace("?", "") === "ws");
-  if (wantsWs && args.ws === undefined) {
+  if ((wantsWs || usesCli(op)) && args.ws === undefined) {
     const r = resolveWorkspace();
-    if (r.error) out({ ok: false, op: op.name, class: "input", reason: r.error }, EXIT.usage);
-    args.ws = r.ws;
+    if (r.error && wantsWs) out({ ok: false, op: op.name, class: "input", reason: r.error }, EXIT.usage);
+    if (r.error) WS_UNRESOLVED = r.error;
+    else args.ws = r.ws;
   }
   return args;
 }
@@ -211,29 +219,123 @@ function bind(s, args) {
   return argv;
 }
 
-// The clay CLI answers for the one workspace it is signed in to and takes no
-// workspace argument. 2026-10-11: `folders ws=1149025` (BMA) came back from
-// the CLI with Jonah's workspace's folders under BMA's id, so anything built
-// on it would have landed in the wrong client. The CLI only answers when it
-// is signed in to the workspace asked for.
-let cliWs;
-function cliWorkspace() {
-  if (cliWs !== undefined) return cliWs;
-  if (FIXTURES) return (cliWs = process.env.CHEWBACCA_CLAY_CLI_WS || "any");
-  const r = spawnSync("clay", ["whoami"], { encoding: "utf8", timeout: 15000 });
-  cliWs = r.status === 0 ? String(parseOr(r.stdout, {})?.workspace?.id ?? "") || null : null;
-  return cliWs;
+// The clay CLI keeps one current workspace for every process on the Mac
+// (activeProfile in its config.json, moved by `clay workspaces switch`) and
+// takes no workspace argument. 2026-10-11: `folders ws=1149025` (BMA) came back
+// with Jonah's folders under BMA's id. 2026-10-17 12:43: the Sabo tab left it
+// on 1149025, and the Zeutara tab's csv-upload answered "Trigger not found"
+// and workflow-graph "does not belong to this workspace" for ids in 1372623.
+// So no call here reads that setting. Each CLI call runs with CLAY_CONFIG_HOME
+// pointed at a private config holding only the op's own workspace's sign-in,
+// the one profile the CLI can pick, and the shared active workspace is never
+// changed. A token the CLI refreshes in the private copy is written back.
+// Fixture mode reads only an explicit $CLAY_CONFIG_HOME, never the real one,
+// and spawns a CLI only when a test names one in CHEWBACCA_CLAY_TEST_CLI.
+const TEST_CLI = testEnv("CHEWBACCA_CLAY_TEST_CLI") || "";
+const fixtureSurface = (type) => FIXTURES && !(TEST_CLI && type === "cli");
+
+function sharedCliConfig() {
+  if (process.env.CLAY_CONFIG_HOME) return path.join(process.env.CLAY_CONFIG_HOME, "clay", "config.json");
+  if (FIXTURES) return null;
+  const base = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
+  return path.join(base, "clay", "config.json");
+}
+
+function cliProfile(ws) {
+  const file = sharedCliConfig();
+  const cfg = file ? parseOr(readText(file), null) : null;
+  const prof = cfg?.profiles?.[String(ws)];
+  return prof && (prof.oauth || prof.apiKey) ? { file, cfg, prof } : null;
+}
+
+function cliSignedIn(ws) {
+  if (ws === undefined) return false;
+  if (fixtureSurface("cli")) {
+    const list = process.env.CHEWBACCA_CLAY_CLI_WS || "any";
+    return list === "any" || list.split(",").includes(String(ws));
+  }
+  return !!cliProfile(ws);
+}
+
+function cliExe() {
+  return TEST_CLI || whichAbs("clay");
+}
+
+// One writer of the shared config at a time among these processes. The CLI
+// itself writes it by rename without a lock, so the write-back below is a
+// compare-and-swap on the token it started from, as the CLI's own refresh is.
+function withCliLock(file, fn) {
+  const lock = `${file}.chewbacca.lock`;
+  for (let i = 0; i < 200; i++) {
+    let fd;
+    try {
+      fd = fs.openSync(lock, "wx", 0o600);
+    } catch (e) {
+      if (e.code !== "EEXIST") throw e;
+      // A lock left by a killed process is stale after 30 s; a write-back takes milliseconds.
+      try { if (Date.now() - fs.statSync(lock).mtimeMs > 30000) fs.rmSync(lock, { force: true }); } catch {}
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+      continue;
+    }
+    try { return fn(); } finally { fs.closeSync(fd); fs.rmSync(lock, { force: true }); }
+  }
+  throw new Error(`could not lock ${file}`);
+}
+
+// { env, done } for one CLI call in workspace ws, or { error } and nothing runs.
+function pinCli(ws) {
+  ws = String(ws ?? "");
+  if (!/^[0-9]{1,12}$/.test(ws)) return { error: `no Clay workspace for the CLI call: ${WS_UNRESOLVED || "pass ws=<id> or set CLAY_WORKSPACE_ID"}` };
+  const found = cliProfile(ws);
+  if (!found) return { error: `the clay CLI is not signed in to workspace ${ws}; nothing was sent` };
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "chewbacca-clay-cli-"));
+  const file = path.join(dir, "clay", "config.json");
+  const remove = () => fs.rmSync(dir, { recursive: true, force: true });
+  try {
+    fs.mkdirSync(path.dirname(file), { mode: 0o700 });
+    fs.writeFileSync(file, `${JSON.stringify({ version: found.cfg.version, activeProfile: ws, profiles: { [ws]: found.prof } }, null, 2)}\n`, { mode: 0o600 });
+    const back = parseOr(readText(file), null);
+    if (back?.activeProfile !== ws || Object.keys(back?.profiles || {}).join(",") !== ws) throw new Error("read back as another workspace");
+  } catch (e) {
+    remove();
+    return { error: `could not pin the clay CLI to workspace ${ws} (${e.message}); nothing was sent` };
+  }
+  const started = JSON.stringify(found.prof);
+  const done = () => {
+    try {
+      const now = parseOr(readText(file), null)?.profiles?.[ws];
+      if (now && JSON.stringify(now) !== started) {
+        withCliLock(found.file, () => {
+          const cur = parseOr(readText(found.file), null);
+          if (!cur?.profiles || JSON.stringify(cur.profiles[ws]) !== started) return;
+          cur.profiles[ws] = now;
+          const tmp = `${found.file}.${process.pid}.tmp`;
+          fs.writeFileSync(tmp, `${JSON.stringify(cur, null, 2)}\n`, { mode: 0o600 });
+          fs.renameSync(tmp, found.file);
+        });
+      }
+    } finally {
+      remove();
+    }
+  };
+  return { ws, env: { ...process.env, CLAY_CONFIG_HOME: dir }, done };
+}
+
+// The CLI names the workspace it answered for; any other one is a failure.
+function answeredElsewhere(data, ws) {
+  const got = data && typeof data === "object" && !Array.isArray(data) ? data.workspace?.id : undefined;
+  return got !== undefined && got !== null && String(got) !== String(ws) ? String(got) : null;
 }
 
 function plan(op, args, only) {
   const cands = [];
   op.surfaces.forEach((s, i) => {
     if (only && s.type !== only) return;
-    if (s.type === "cli" && args.ws !== undefined && cliWorkspace() !== "any" && cliWorkspace() !== String(args.ws)) return;
+    if (s.type === "cli" && !cliSignedIn(args.ws)) return;
     const bound = bind(s, args);
     if (bound === null) return;
     const m = measured[op.name]?.[surfaceKey(op, s)];
-    cands.push({ s, bound, i, ms: m?.ms ?? Number.POSITIVE_INFINITY, verified: m?.at ?? null });
+    cands.push({ s, bound, i, ws: args.ws, ms: m?.ms ?? Number.POSITIVE_INFINITY, verified: m?.at ?? null });
   });
   // Fastest measured first; an unmeasured surface keeps the registry's order behind measured ones.
   // "order": "fixed" is for an op whose surfaces answer with different detail (the CLI's
@@ -307,7 +409,7 @@ function logSent(entry) {
 // body differs from it, so a redirect can't replay the body elsewhere.
 
 const sha256 = (s) => crypto.createHash("sha256").update(s).digest("hex");
-const ENV_PINNED = ["CLAY_WORKSPACE_ID", "GTM_CONFIG", "CHEWBACCA_NO_SEND", "API_ANYTHING_HOME", "API_ANYTHING_DIST", "PATH", "CHEWBACCA_CLAY_LIB", "CHEWBACCA_ROOT"];
+const ENV_PINNED = ["CLAY_WORKSPACE_ID", "GTM_CONFIG", "CHEWBACCA_NO_SEND", "API_ANYTHING_HOME", "API_ANYTHING_DIST", "PATH", "CHEWBACCA_CLAY_LIB", "CHEWBACCA_ROOT", "CLAY_CONFIG_HOME", "XDG_CONFIG_HOME"];
 
 // Everything a write depends on, hashed: the registry and spec as read at
 // startup and as on disk, the pinned env, and the files prepareWrite resolved
@@ -331,7 +433,7 @@ function whichAbs(name) {
 }
 
 async function prepareWrite(op, s, frozen) {
-  if (FIXTURES) return { files: [], send: async () => {
+  if (fixtureSurface(s.type)) return { files: [], send: async () => {
     logSent({ surface: s.type, op: op.name, request: frozen });
     if (s.type === "api-anything") return fixture("api-anything", s.op) ?? { ok: false, class: "error", reason: `no fixture for ${s.op}` };
     const f = fixture(s.type, op.name);
@@ -339,13 +441,24 @@ async function prepareWrite(op, s, frozen) {
     return f.exit === 0 ? { ok: true, data: parseOr(f.stdout, null) } : { ok: false, class: "error", reason: f.stderr || `exit ${f.exit}` };
   } };
   if (s.type !== "api-anything") {
-    const exe = s.type === "cli" ? whichAbs("clay") : path.join(ROOT, "bin", frozen.argv[0]);
+    const exe = s.type === "cli" ? cliExe() : path.join(ROOT, "bin", frozen.argv[0]);
     if (!exe || !fs.existsSync(exe)) return { error: `${s.type === "cli" ? "the clay CLI" : frozen.argv[0]} is not installed` };
+    if (frozen.workspace === undefined) return { error: `no Clay workspace for the CLI call: ${WS_UNRESOLVED || "pass ws=<id> or set CLAY_WORKSPACE_ID"}` };
     const argv = frozen.argv.slice(1);
     return { files: [exe], send: async () => {
-      const r = spawnSync(exe, argv, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, timeout: 180000 });
+      const pin = pinCli(frozen.workspace);
+      if (pin.error) return { ok: false, class: "refused", reason: pin.error };
+      let r;
+      try {
+        r = spawnSync(exe, argv, { env: pin.env, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, timeout: 180000 });
+      } finally {
+        pin.done();
+      }
       if (r.status !== 0) return { ok: false, class: "error", reason: (r.stderr || String(r.error || `exit ${r.status}`)).trim().slice(0, 400) };
-      return { ok: true, data: parseOr(r.stdout, r.stdout) };
+      const data = parseOr(r.stdout, r.stdout);
+      const other = answeredElsewhere(data, frozen.workspace);
+      if (other) return { ok: false, class: "workspace", reason: `the CLI answered for workspace ${other}, not ${frozen.workspace}` };
+      return { ok: true, data };
     } };
   }
   const dist = engineDist();
@@ -416,14 +529,22 @@ async function callEngine(opName, bound, flags, write) {
   return call(registry.engine.site, opName, bound, opts);
 }
 
-function runProcess(kind, opName, file, argv) {
-  if (FIXTURES) {
+function runProcess(kind, opName, file, argv, ws) {
+  if (fixtureSurface(kind)) {
     const f = fixture(kind, opName);
     if (!f) return { exit: 127, stdout: "", stderr: `no fixture for ${kind} ${opName}` };
     return f;
   }
-  const r = spawnSync(file, argv, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024, timeout: 180000 });
-  return { exit: r.status ?? 1, stdout: r.stdout || "", stderr: r.stderr || String(r.error || "") };
+  const exe = kind === "cli" ? cliExe() : file;
+  if (!exe) return { exit: 127, stdout: "", stderr: "the clay CLI is not installed" };
+  const pin = pinCli(ws);
+  if (pin.error) return { exit: 1, stdout: "", stderr: pin.error };
+  try {
+    const r = spawnSync(exe, argv, { env: pin.env, encoding: "utf8", maxBuffer: 256 * 1024 * 1024, timeout: 180000 });
+    return { exit: r.status ?? 1, stdout: r.stdout || "", stderr: r.stderr || String(r.error || "") };
+  } finally {
+    pin.done();
+  }
 }
 
 function pluck(data, dotted) {
@@ -594,7 +715,7 @@ async function attempt(op, cand, flags) {
   }
   const file = s.type === "cli" ? "clay" : path.join(ROOT, "bin", bound[0]);
   const argv = s.type === "cli" ? bound : bound.slice(1);
-  const r = runProcess(s.type, op.name, file, argv);
+  const r = runProcess(s.type, op.name, file, argv, cand.ws);
   const res = { surface: s.type, call: `${s.type === "cli" ? "clay" : bound[0]} ${argv.join(" ")}`.trim(), ms: Date.now() - t0 };
   if (r.exit !== 0) {
     let reason = r.stderr.trim().slice(0, 400);
@@ -609,6 +730,8 @@ async function attempt(op, cand, flags) {
   } catch {
     return { ...res, ok: false, class: "error", reason: "surface printed something that is not JSON" };
   }
+  const other = answeredElsewhere(data, cand.ws);
+  if (other) return { ...res, ok: false, class: "workspace", reason: `the CLI answered for workspace ${other}, not ${cand.ws}` };
   const result = { ...res, ok: true, data: where(pluck(data, s.extract), s.where) };
   if (data && typeof data === "object" && data.cursor) result.cursor = data.cursor;
   return result;
@@ -1038,7 +1161,9 @@ function dryRequest(s, bound, validated, args) {
     const got = s.type === "cli" ? bound : bound.slice(1);
     const wantArgs = s.type === "cli" ? want : want.slice(1);
     if (JSON.stringify(got) !== JSON.stringify(wantArgs)) throw new Error("the built argv differs from the validated one");
-    return { argv: [s.type === "cli" ? "clay" : bound[0], ...got] };
+    // The workspace the call is pinned to is part of what gets approved.
+    if (args.ws !== undefined && !validated.has(args.ws)) throw new Error("ws is not a validated value");
+    return { argv: [s.type === "cli" ? "clay" : bound[0], ...got], ...(args.ws !== undefined ? { workspace: String(args.ws) } : {}) };
   }
   const sop = specOps.get(s.op);
   let req = { method: sop.request.method.toUpperCase(), url: sop.request.url, headers: { ...sop.request.headers }, body: sop.request.body };
@@ -1296,11 +1421,20 @@ function draftOnly(op, args) {
   if (FIXTURES) {
     status = process.env.CHEWBACCA_CLAY_TEST_CAMPAIGN_STATUS || "draft";
   } else {
-    const exe = whichAbs("clay");
+    const exe = cliExe();
     if (!exe) return "the clay CLI is not installed, so the campaign's status can't be read";
-    const r = spawnSync(exe, ["campaigns", "get", String(args.campaign)], { encoding: "utf8", timeout: 60000 });
+    const pin = pinCli(args.ws);
+    if (pin.error) return pin.error;
+    let r;
     try {
-      status = JSON.parse(r.stdout).status;
+      r = spawnSync(exe, ["campaigns", "get", String(args.campaign)], { env: pin.env, encoding: "utf8", timeout: 60000 });
+    } finally {
+      pin.done();
+    }
+    try {
+      const got = JSON.parse(r.stdout);
+      if (answeredElsewhere(got, args.ws)) return "the campaign's status came back from another workspace";
+      status = got.status;
     } catch {
       return "could not read the campaign's status";
     }
@@ -1589,6 +1723,7 @@ async function runOp(name, kv, flags) {
   }
   const args = withDefaults(op, kv);
   const known = new Set(op.args.map((a) => a.replace("?", "")));
+  if (takesWs(op)) known.add("ws");
   const stray = Object.keys(kv).filter((k) => !known.has(k));
   if (stray.length) {
     out({ ok: false, op: name, class: "usage", reason: `unknown arg ${stray.join(", ")}; ${name} takes ${op.args.join(", ") || "no args"}` }, EXIT.usage);
@@ -1658,7 +1793,8 @@ async function runOp(name, kv, flags) {
   const validated = validatedSet(sendArgs);
   const cands = plan(op, sendArgs, flags.surface);
   if (!cands.length) {
-    out({ ok: false, op: name, class: "input", reason: `no surface has every arg it needs; ${name} takes ${op.args.join(", ")}`, ui: uiRoute(op, args) }, EXIT.usage);
+    const cliWhy = usesCli(op) && !flags.surface?.startsWith("api") ? (WS_UNRESOLVED ? `; the CLI needs a workspace: ${WS_UNRESOLVED}` : args.ws !== undefined && !cliSignedIn(args.ws) ? `; the clay CLI is not signed in to workspace ${args.ws}` : "") : "";
+    out({ ok: false, op: name, class: "input", reason: `no surface has every arg it needs; ${name} takes ${op.args.join(", ")}${cliWhy}`, ui: uiRoute(op, args) }, EXIT.usage);
   }
   // --dry-run: the exact request the first surface would send. Nothing is sent.
   // campaign-restrict first reads a complete snapshot to derive its protective
@@ -2130,7 +2266,9 @@ const HELP = `chewbacca clay: Clay without opening Clay
                                          chewbacca clay --session NAME session-login "Profile N"
 
 ws is ws=<id>, else $CLAY_WORKSPACE_ID, else the one workspace in
-~/.chewbacca/gtm/clients.json; with none or several it refuses. Output is one line of JSON.`;
+~/.chewbacca/gtm/clients.json; with none or several it refuses. Every clay CLI
+call runs in that workspace alone, whatever workspace the CLI is switched to,
+so an op that runs through the CLI takes ws= too. Output is one line of JSON.`;
 
 (async () => {
   const { pos, kv, flags } = parseArgv(process.argv.slice(2));

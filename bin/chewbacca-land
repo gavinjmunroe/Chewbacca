@@ -164,6 +164,16 @@ def main():
 
     src = repo_root(os.getcwd())
     target = f"{a.remote}/{a.branch}"
+    # Resolve refs here, in the caller's checkout. Inside the temp worktree
+    # HEAD is origin/main, so on 2026-10-16 `land HEAD` cherry-picked main onto
+    # itself and failed as an empty pick.
+    resolved = []
+    for c in a.commits:
+        p = run(["git", "rev-parse", "--verify", "--quiet", f"{c}^{{commit}}"], src, check=False)
+        if p.returncode != 0 or not p.stdout.strip():
+            raise SystemExit(f"land: {c} isn't a commit in {src}")
+        resolved.append(p.stdout.strip())
+    a.commits = resolved
     with Lock(src):
         run(["git", "fetch", "-q", a.remote, a.branch], src)
         tmp = tempfile.mkdtemp(prefix="land-")

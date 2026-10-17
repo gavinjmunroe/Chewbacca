@@ -118,4 +118,12 @@ python3 tools/checksums.py && git diff --quiet SHA256SUMS.txt || fail "manifest 
 cd "$T/tabA" && sync && echo w > w.txt && git add w.txt && git commit -qm "wip: half done"
 out=$(python3 -I "$LAND" "$(git rev-parse HEAD)" 2>&1) && fail "a wip commit landed: $out"
 echo "$out" | grep -q "reword it" || fail "wip refusal said: $out"
+
+# A ref like HEAD means the caller's commit, not the temp worktree's. On
+# 2026-10-16 `land HEAD` cherry-picked origin/main onto itself and failed empty.
+cd "$T/tabA" && sync && echo h > h.txt && git add h.txt && git commit -qm "feat: head ref"
+out=$(python3 -I "$LAND" HEAD 2>&1) || fail "land HEAD: $out"
+cd "$T/check" && git pull -q && [ -f h.txt ] || fail "land HEAD didn't land the caller's commit: $out"
+out=$(cd "$T/tabA" && python3 -I "$LAND" no-such-ref 2>&1) && fail "an unknown ref landed: $out"
+echo "$out" | grep -q "no-such-ref" || fail "unknown ref said: $out"
 echo ok

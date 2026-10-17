@@ -367,3 +367,5 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - reference_hud_card_ask: Screen ask= makes a HUD card double-click open the chat w that request (verse card, 10/16); live only after bundle + install
 - feedback_landing_a_railway_service: landing a Railway service from tools/: name it \*.Dockerfile (pre-push compiles tools/ as Python), rebuild on fresh main when run.sh conflicts, ready-guard matches the bare word, 3 HTTP checks before ship (10/16)
 - feedback_implemented_is_not_proven: "implemented, fixtures pending" hid 10 real installer merge failures (backlog 250, 10/16); test hand-written files by bytes, no-op rerun mtime, CRLF, symlink, read-only
+- feedback_landing_a_railway_service: landing a Railway service from tools/: name it *.Dockerfile (pre-push compiles tools/ as Python), rebuild on fresh main when run.sh conflicts, ready-guard matches the bare word, 3 HTTP checks before ship (10/16)
+- feedback_attack_before_done: chewbacca break-it is step one of finishing, attack the change before saying done; the break-it Stop hook refuses a done claim over a change it can still break (Caleb, 10/16)

@@ -2189,6 +2189,7 @@ if group "reasoning backends"; then
   check "higgsfield-shot prices before it spends, caps a job, never pays twice for a name and leaves refunds out of the spend" bash "$ROOT/tests/higgsfield_shot.sh"
   check "the drawn extent never walks backwards" bash "$ROOT/tests/sweep_monotonic.sh"
   check "the vibe guard refuses claims with no evidence" bash "$ROOT/tests/vibe_guard.sh"
+  check "break-it refuses real false-done finishes and passes clean ones" python3 "$ROOT/tests/test_break_it.py"
   check  "closeout streams, answers fast, reuses gates only for this commit" bash "$ROOT/tests/closeout.sh"
   check "stage 8 is enforced: a first-name collision is refused" bash "$ROOT/tests/fusion_guard.sh"
   check "the installer ships everything it registers" bash "$ROOT/tests/setup_ships_what_it_registers.sh"

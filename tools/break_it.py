@@ -58,7 +58,7 @@ DONE_RE = re.compile(r"\b(done|landed|shipped|complete|completed|finished|all se
 # word list and are the honest reports this must never punish.
 NEGATED_RE = re.compile(
     r"\b(not|n't|never|no(t)? yet|isn'?t|aren'?t|wasn'?t|haven'?t|hasn'?t|won'?t|"
-    r"until|when|once|after|before|if|till)\b[^.!?\n]{0,40}$", re.I)
+    r"until|when|once|after|before|if|till|will|'ll|gonna|going to|would)\b[^.!?\n]{0,40}$", re.I)
 
 STOP = set('''a an and the of to in on for with without from by at as is are was were be
 been being it its it's this that these those there their them they we you u ur i
@@ -470,6 +470,25 @@ def entrypoints(repo, files):
     return out[:8]
 
 
+def probe_env(home):
+    """No inherited secrets: a probe is code the agent just wrote, fed garbage.
+    The security review of 2a86fede flagged the full environment, API keys
+    included, reaching it from a Stop hook nobody invoked."""
+    keep = {k: os.environ[k] for k in ('PATH', 'LANG', 'LC_ALL', 'TERM') if k in os.environ}
+    return dict(keep, HOME=home, TMPDIR=home, CHEWBACCA_BREAK_IT_PROBE='1', JEV_OFF='1')
+
+
+def trusted_repo(repo):
+    """The Stop hook runs probes only in this kit's own checkout or one of its
+    worktrees: the same git common dir as the checkout break_it.py lives in. A
+    turn that wrote into some other clone gets the read-only checks."""
+    def common(path):
+        out = git(Path(path), 'rev-parse', '--path-format=absolute', '--git-common-dir')
+        return Path(out.strip()).resolve() if out else None
+    mine = common(ROOT)
+    return mine is not None and common(repo) == mine
+
+
 def edge_attacks(repo, files, timeout=20, budget=None):
     """Help, then each subcommand fed garbage, a wrong-shaped JSON and a missing
     path. Exit codes are free to be nonzero; a Python traceback or a bash
@@ -482,7 +501,7 @@ def edge_attacks(repo, files, timeout=20, budget=None):
         p = repo / f
         base = [sys.executable, str(p)] if f.endswith('.py') else [str(p)]
         home = tempfile.mkdtemp(prefix='break-it-home-')
-        env = dict(os.environ, HOME=home, CHEWBACCA_BREAK_IT_PROBE='1', JEV_OFF='1')
+        env = probe_env(home)
 
         def probe(label, extra, stdin=''):
             if budget and time.time() - started > budget:
@@ -1055,7 +1074,7 @@ def stop_verdict(events, reply, live=True, check_disk=True, probe_budget=8):
         base = base_ref(Path(repo), None) if live else None
         found = fast_findings(turn, full, ask_texts, Path(repo), base, check_disk)
         found += uncommitted(turn, repo, paths, live)
-        if live and probe_budget:
+        if live and probe_budget and trusted_repo(repo):
             rel = []
             for p in paths:
                 try:
@@ -1087,13 +1106,15 @@ def cmd_stop(args):
         repo = repo_root(cwd)
         if repo is not None and payload.get('codex_wrote'):
             status = git(repo, 'status', '--porcelain') or ''
+            # These paths come from git status, so they may include files the
+            # agent never wrote: read them, never run them (probe budget 0).
             for line in status.splitlines():
                 events.append({'kind': 'tool', 'name': 'Edit', 'id': None, 'error': False, 'ts': '',
                                'input': {'file_path': str(repo / line[3:].strip())}})
             if payload.get('codex_evidence_after_write'):
                 events.append({'kind': 'tool', 'name': 'Bash', 'id': None, 'error': False, 'ts': '',
                                'input': {'command': 'codex verified run'}})
-    breaks = stop_verdict(events, reply)
+    breaks = stop_verdict(events, reply, probe_budget=0 if payload.get('agent') == 'codex' else 8)
     if not breaks:
         return 0
     lines = ['', 'break-it: this reply says the work is done, and attacking it found what the reply',

@@ -94,6 +94,18 @@ Use `ai-scan` and `slop-check` for prose and `code-slop` for code when installed
 Read back generated files and verify the edit landed. Report observed outcomes,
 failures, and skipped checks accurately.
 
+Attack before done is step one of finishing. Caleb, 2026-10-16: "When they build
+something and say it's done, chewbs should attack it from every angle trying to
+break it before it concludes anything". Before saying done, landed, shipped or
+complete, record attacks with `chewbacca break-it attack -m "<what>" -- <command>`:
+the real example behind the work, garbage and empty input, the failure path, and a
+second client or config if it claims to be reusable. Then `chewbacca break-it run
+--transcript <path>` (Codex: `--ask "<prompt>"`) checks the ask clause by clause,
+reruns touched tests (on origin/main too once landed), probes touched commands,
+matches each claim to what ran, greps the diff and writes a receipt bound to HEAD.
+Fix what broke and name what stays open. The break-it Stop hook refuses a done claim
+over a change it can still break.
+
 Own routine code review without requiring the user to inspect diffs. Before
 claiming a code change complete, use reviewing-changes and an independent reviewer,
 repair substantiated findings, and rerun affected checks. Local review-gate receipts

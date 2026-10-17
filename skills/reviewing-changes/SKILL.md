@@ -17,6 +17,39 @@ findings within scope, rerun affected checks, and review the changed result.
 Ask the user only for a genuine unresolved product decision or required authority.
 Independent automated review reduces risk; it does not guarantee bug-free code.
 
+## Step one: attack it before calling it done
+
+Caleb, 2026-10-16, 4:47pm: "I need you to see when a session is complete, bc
+often times it is a false positive there's more stuff to do and things that were
+broken that were missed". Then: "When they build something and say it's done,
+chewbs should attack it from every angle trying to break it before it concludes
+anything!!!!!!!!!".
+
+Reading the diff is step two. Step one is trying to break it:
+
+```bash
+chewbacca break-it attack -m "the real Sabo row" -- python3 tools/x.py run rows.json
+chewbacca break-it attack -m "garbage stdin is refused" --expect fail -- sh -c 'echo nope | python3 tools/x.py plan -'
+chewbacca break-it attack -m "a second client file" -- python3 tools/x.py run clients/other.json
+chewbacca break-it run --transcript "$TRANSCRIPT"     # Codex: --ask "<the prompt>"
+```
+
+`run` splits the ask into clauses and marks each delivered, partly or missing,
+reruns the touched tests (and again on a fresh origin/main once landed), feeds
+every touched command `--help`, garbage, a wrong-shaped JSON and a missing path,
+matches each claim in the draft recap to something that ran, greps added lines
+for TODO, client names and swallowed errors, flags files another tab changed
+after you, and writes a receipt bound to HEAD. Fix what broke, rerun, and put
+the receipt's open list in the reply.
+
+What it catches that green tests did not, from that day: next_move.py landed as
+done with 20 passing tests and crashed on `plan -` fed "not json" (2f97a007);
+a launch-guard fix passed its tests while the installed hook still refused the
+same `cd`; "Saved today's Sabo lessons" went out with none of it committed.
+The break-it Stop hook refuses a done claim over a change it can still break.
+
+## Step two: independent review
+
 For a local Git checkout, run independent review BEFORE composing the final reply.
 Use `review-gate run --repo PATH --session-id ID` for a natively observed Codex
 task, then `review-gate preflight --session-id ID`. Read the private review result,

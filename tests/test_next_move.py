@@ -99,6 +99,85 @@ class Generate(unittest.TestCase):
         self.assertNotIn("next_person:Brenna Tanner", sigs, "people already tried are skipped")
 
 
+# Trimmed from runna.com and zico.com as fetched 2026-10-17: every host the Sabo batch hopped to
+# and found nobody at, in the tag it really sits in.
+RUNNA_HOME = """<html><head>
+<link href="https://cdn.prod.website-files.com" rel="preconnect" crossorigin="anonymous"/>
+<link href="https://cdn.prod.website-files.com/6241c8c95eb4fa2f8a36e792/css/runna.css" rel="stylesheet"/>
+<script>var s=r.createElement("script");s.async=1,s.src="https://edge.marker.io/latest/shim.js";</script>
+</head><body>
+<a rel="noopener" href="https://www.therunbuddy.co.uk/blog/9-tips-to-improve-your-post-run-recovery">9 tips</a>
+<a href="https://www.strava.com/athletes/benrunbuddy" target="_blank">Strava</a>
+<a href="/about">About</a>
+<p>Copyright © 2025 Runna, The Run Buddy LTD. All rights reserved.</p></body></html>"""
+RUNNA_ABOUT = """<html><body><h1>Our story</h1><p>Runna gives every runner a coach.</p>
+<p>Copyright © 2025 Runna, The Run Buddy LTD. All rights reserved.</p></body></html>"""
+ZICO_HOME = """<html><head>
+<link rel='preconnect' href='https://fonts.shopifycdn.com' crossorigin>
+<link href="https://monorail-edge.shopifysvc.com" rel="dns-prefetch">
+<script>var s = document.createElement('script'); s.src = 'https://acsbapp.com/apps/app/dist/js/app.js';</script>
+<script>extensionsBaseUrl: "https://extensions.shopifycdn.com/cdn/shopifycloud/web-pixels-manager"</script>
+</head><body><a href='/pages/about' aria-label='About'>About</a>
+<a href="https://www.instagram.com/zico">Instagram</a>
+<p>2026 © ZICO Rising, Inc. All rights Reserved.</p></body></html>"""
+ZICO_ABOUT = """<html><body><p>What water wished it was.</p><p>2026 © ZICO Rising, Inc. All rights Reserved.</p></body></html>"""
+JUNK = {"therunbuddy.co.uk", "website-files.com", "marker.io", "acsbapp.com", "shopifysvc.com", "shopifycdn.com"}
+
+
+def site_fetch(pages):
+    def fetch(url):
+        if url not in pages:
+            raise OSError(f"no page {url}")
+        return pages[url]
+    return fetch
+
+
+class JunkHops(unittest.TestCase):
+    """Sabo, 2026-10-17: Runna hopped to therunbuddy.co.uk, website-files.com and marker.io, and Zico
+    to acsbapp.com, shopifysvc.com and shopifycdn.com, a 0.5-credit people search each."""
+
+    def hops(self, brand, domain, ev):
+        b = {"step": "people_search", "account": {"brand": brand, "domain": domain}, "evidence": ev,
+             "tried": [f"org_hop:{domain}"]}
+        return [c["target"] for c in N.generate(b, N.load_data()) if c["kind"] == "org_hop"]
+
+    def test_runna_and_zico_sites_propose_no_hop(self):
+        for brand, domain, pages in (
+                ("Runna", "runna.com", {"https://runna.com/": RUNNA_HOME, "https://runna.com/about": RUNNA_ABOUT}),
+                ("Zico", "zico.com", {"https://zico.com/": ZICO_HOME, "https://zico.com/pages/about": ZICO_ABOUT})):
+            ev = N.read_site(domain, site_fetch(pages))
+            self.assertTrue(ev["about_text"], f"{brand}: the about page is read")
+            link_doms = {N.registrable(h) for h in ev["links"]}
+            asset_doms = {N.registrable(h) for h in ev["asset_hosts"]}
+            self.assertFalse(link_doms & (JUNK - {"therunbuddy.co.uk"}), f"{brand}: script and CDN hosts aren't links")
+            self.assertTrue(asset_doms & JUNK, f"{brand}: they're kept as asset hosts for the record")
+            self.assertEqual(self.hops(brand, domain, ev), [], brand)
+
+    def test_junk_domains_never_hop_even_handed_in_as_links(self):
+        """Evidence from an older read lists everything as links: the infra list and the ownership bar
+        still keep every one of them out of a paid search."""
+        ev = {"site_text": "Copyright © 2025 Runna, The Run Buddy LTD. All rights reserved.",
+              "links": ["www.therunbuddy.co.uk", "cdn.prod.website-files.com", "edge.marker.io", "acsbapp.com",
+                        "monorail-edge.shopifysvc.com", "fonts.shopifycdn.com"],
+              "about_text": "Copyright © 2025 Runna, The Run Buddy LTD. All rights reserved."}
+        orgs = N.related_orgs({"account": {"brand": "Runna", "domain": "runna.com"}, "evidence": ev}, N.load_data())
+        for d in JUNK - {"therunbuddy.co.uk"}:
+            self.assertNotIn(d, orgs, f"{d} is infrastructure, not a company")
+        self.assertEqual(orgs["therunbuddy.co.uk"]["trust"], "linked_only",
+                         "the copyright line names Runna's own legal entity, not an owner")
+        self.assertEqual(self.hops("Runna", "runna.com", ev), [])
+
+    def test_ownership_still_hops(self):
+        """The bar drops junk, not parents: an ownership sentence or an about-page name still hops."""
+        owned = {"site_text": "Runna is part of Strava.", "links": ["www.strava.com", "edge.marker.io"]}
+        self.assertEqual(self.hops("Runna", "runna.com", owned), ["strava.com"])
+        named = {"site_text": "", "links": ["www.strava.com", "www.tomsguide.com"],
+                 "about_text": "Runna joined Strava in 2025 and keeps coaching every runner."}
+        self.assertEqual(self.hops("Runna", "runna.com", named), ["strava.com"])
+        b = {"account": {"brand": "Runna", "domain": "runna.com"}, "evidence": named}
+        self.assertEqual(N.related_orgs(b, N.load_data())["strava.com"]["trust"], "named_on_about")
+
+
 class Barebells(unittest.TestCase):
     def test_loop_finds_the_parent_with_no_table(self):
         """parents.json gone: the loop reads the site, derives the parent and searches it."""

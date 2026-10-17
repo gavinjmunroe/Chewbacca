@@ -189,9 +189,29 @@ class ChainTest(_Base):
         self.assertIn("parent vitaminwell.com, after barebells.com returned no one", fake.value(WHY))
         self.assertAlmostEqual(log["credits_observed"], 1.6)
 
-    def test_bare_link_hop_never_marks_its_email_ready(self):
-        """A domain the site only links, with no ownership sentence, is searched but not trusted."""
-        SITES["acme.com"] = {"site_text": "Shop our partners", "links": ["career.vitaminwell.com"]}
+    def test_bare_link_is_never_searched(self):
+        """Sabo, 2026-10-17: links with no ownership sentence hopped Runna and Zico to a blog, CDNs and
+        widgets, a 0.5-credit people search each. None of those domains reaches a search now."""
+        SITES["runna.com"] = {"site_text": "Copyright © 2025 Runna, The Run Buddy LTD. All rights reserved.",
+                              "links": ["www.therunbuddy.co.uk", "cdn.prod.website-files.com", "edge.marker.io"]}
+        SITES["zico.com"] = {"site_text": "2026 © ZICO Rising, Inc. All rights Reserved.",
+                             "links": ["acsbapp.com", "monorail-edge.shopifysvc.com", "fonts.shopifycdn.com"]}
+        try:
+            for brand, domain in (("Runna", "runna.com"), ("Zico", "zico.com")):
+                fake = FakeClay({domain: []})
+                log = self.run_chain(fake, brand, domain, {})
+                self.assertFalse([s for s in log["steps"] if s["step"] == "parent fallback"], brand)
+                self.assertEqual(len([c for c in fake.ops("run-cells") if c[2]["fields"] == L.F_PEOPLE]), 1, brand)
+                self.assertIsNone(log["result"]["person"])
+        finally:
+            SITES.pop("runna.com")
+            SITES.pop("zico.com")
+
+    def test_about_page_name_hop_never_marks_its_email_ready(self):
+        """A company the about page names and the site links is searched, but without an ownership
+        sentence its emails stay off the allowlist."""
+        SITES["acme.com"] = {"site_text": "Shop our partners", "links": ["career.vitaminwell.com"],
+                             "about_text": "We started in a kitchen and grew up alongside Vitamin Well."}
         try:
             stranger = person("Pat Lee", "US Partnerships Lead")
             fake = FakeClay({"acme.com": [], "vitaminwell.com": [stranger]},

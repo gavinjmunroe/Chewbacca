@@ -52,6 +52,12 @@ COPYRIGHT = re.compile(r"(?:©|&copy;|\(c\))\s*(?:\d{4}(?:\s*[-–]\s*\d{4})?\s*
 GENERIC = {"group", "ab", "inc", "llc", "ltd", "limited", "holdings", "holding", "co", "company", "corp",
            "corporation", "gmbh", "sa", "plc", "the", "brands", "international"}
 LINK = re.compile(r"https?://([a-z0-9.-]+\.[a-z]{2,})", re.I)
+ANCHOR = re.compile(r"<a\b[^>]*?\bhref\s*=\s*[\"']?\s*(?:https?:)?//([a-z0-9.-]+\.[a-z]{2,})", re.I)
+ABOUT_PATH = re.compile(r"<a\b[^>]*?\bhref\s*=\s*[\"']?((?:https?://[a-z0-9.-]+)?/[^\"'\s>#?]*"
+                        r"(?:about|our-story|ourstory|company|who-we-are)[^\"'\s>#?]*)", re.I)
+# A host label that names delivery plumbing, not a company: shopifycdn, shopifysvc, website-files.
+NOTICE = re.compile(r"(?:copyright\s*)?(?:©|&copy;|\(c\)).{0,120}?(?:all rights reserved\.?|$|(?=\|))", re.I)
+INFRA_LABEL = re.compile(r"(?:^|-)(?:cdn|svc|static|assets?|files|cache|pixel)$|cdn$|svc$")
 TWO_LEVEL = {"co.uk", "com.au", "co.jp", "co.nz", "com.br", "co.za", "com.mx"}
 EXECUTABLE = {"read", "paid_write", "write"}
 
@@ -98,7 +104,7 @@ def related_orgs(blocker, data):
     brand_dom = registrable(account.get("domain", ""))
     brand_label = brand_dom.split(".")[0]
     brand_key = name_key(account.get("brand"))
-    not_orgs = set(data.get("not_orgs", []))
+    not_orgs = set(data.get("not_orgs", [])) | {d for ds in (data.get("infra_domains") or {}).values() for d in ds}
     texts = [ev.get(k) or "" for k in ("site_text", "linkedin_text", "research_text", "error")]
     text = "\n".join(t for t in texts if t)
 
@@ -113,7 +119,7 @@ def related_orgs(blocker, data):
     domains = {}
     for host in links:
         d = registrable(host)
-        if not d or d == brand_dom or d.split(".")[0] == brand_label or d in not_orgs:
+        if not d or d == brand_dom or d.split(".")[0] == brand_label or infrastructure(d, not_orgs):
             continue
         domains.setdefault(d, set()).add(host.lower())
 
@@ -131,9 +137,18 @@ def related_orgs(blocker, data):
                 found.setdefault(f"{k}.com", {"why": f'the brand\'s own text says "{quote}"; '
                                                      f"{k}.com is guessed from that name, the site doesn't link it",
                                               "trust": "owned_guessed"})
+    about = " ".join((ev.get("about_text") or "").split())
     for d, hosts in domains.items():
-        found.setdefault(d, {"why": f"the brand's site links {', '.join(sorted(hosts))}, with no ownership sentence",
-                             "trust": "linked_only", "hosts": sorted(hosts)})
+        if d in found:
+            continue
+        named = named_on_about(d, about)
+        if named:
+            found[d] = {"why": f'the brand\'s about page names "{named}" ("{sentence_around(about, *about_span(about, named), 80)}"), '
+                               f"and it links {', '.join(sorted(hosts))}",
+                        "trust": "named_on_about", "hosts": sorted(hosts)}
+        else:
+            found[d] = {"why": f"the brand's site links {', '.join(sorted(hosts))}, with no ownership sentence",
+                        "trust": "linked_only", "hosts": sorted(hosts)}
 
     at = {}
     for p in ev.get("people") or []:
@@ -144,6 +159,40 @@ def related_orgs(blocker, data):
         found.setdefault(d, {"why": f"{len(who)} of the people found at this account have email at {d}",
                              "trust": "email_domain"})
     return found
+
+
+def infrastructure(domain, listed):
+    """True for a domain that hosts, serves, measures or widgets a site and so owns nothing."""
+    return domain in listed or bool(INFRA_LABEL.search(domain.split(".")[0]))
+
+
+def about_span(text, name):
+    i = text.find(name)
+    return (i, i + len(name)) if i >= 0 else (0, 0)
+
+
+def named_on_about(domain, about):
+    """The company name on the brand's about page that this domain's label spells, or "".
+
+    A capitalized run of words whose letters, generic suffixes dropped, are the domain's label:
+    "Strava Inc" for strava.com. A blog it links (therunbuddy.co.uk on runna.com)
+    or a tool it embeds has no such sentence, so it stays linked_only.
+    """
+    if not about:
+        return ""
+    # Runna, 2026-10-17: "Copyright © 2025 Runna, The Run Buddy LTD" names the brand's own legal
+    # entity, and therunbuddy.co.uk is its blog. A copyright line that names another company is
+    # already read by COPYRIGHT above; here it only ever names the brand itself.
+    about = NOTICE.sub(" ", about)
+    label = domain.split(".")[0].replace("-", "")
+    for m in re.finditer(r"[A-Z][\w&'.-]*(?:\s+[A-Z][\w&'.-]*){0,4}", about):
+        words = m.group(0).split()
+        for i in range(len(words)):
+            for j in range(len(words), i, -1):
+                name = " ".join(words[i:j])
+                if label and label in (name_key(name), name_key(name, drop_generic=True)):
+                    return name
+    return ""
 
 
 # ---------------------------------------------------------------- generate
@@ -161,7 +210,7 @@ def minutes_of(data, step):
 # not (Gymshark, 2026-10-16). What they propose comes from the evidence alone.
 CORP_SUFFIX = re.compile(r"(group|holdings?|brands|inc|corp|co|international|global|hq)$")
 STAFF_HOST = re.compile(r"^(careers?|jobs|team|people|work|join)\.")
-TRUST_RANK = {"owned_and_linked": 3, "owned_guessed": 2, "linked_only": 1, "email_domain": 1}
+TRUST_RANK = {"owned_and_linked": 3, "owned_guessed": 2, "named_on_about": 1, "email_domain": 1}
 
 
 def company_stem(domain):
@@ -178,6 +227,12 @@ def op_org_hop(blocker, data):
     tried = set(blocker.get("tried") or [])
     groups = {}
     for d, o in related_orgs(blocker, data).items():
+        # First creator client, 2026-10-17: bare links hopped Runna to therunbuddy.co.uk, website-files.com and
+        # marker.io and Zico to acsbapp.com, shopifysvc.com and shopifycdn.com, 0.5 credits each and
+        # nobody found. A link alone is a blog, a CDN or a widget far more often than an owner, so a
+        # paid search needs an ownership sentence, a company the about page names, or found emails.
+        if o["trust"] not in TRUST_RANK:
+            continue
         groups.setdefault(company_stem(d), []).append((d, o))
     out = []
     for members in groups.values():
@@ -828,8 +883,34 @@ def run(blocker, executors, data=None, evaluate=None, use_jev=True, max_steps=4,
 
 # ---------------------------------------------------------------- free reads
 
+def page_text(raw):
+    text = html.unescape(re.sub(r"<script.*?</script>|<style.*?</style>", " ", raw, flags=re.S | re.I))
+    return " ".join(re.sub(r"<[^>]+>", " ", text).split())
+
+
+def about_urls(raw, domain, limit=2):
+    """Same-site about pages the homepage links, first found first."""
+    site = registrable(domain)
+    out = []
+    for m in ABOUT_PATH.finditer(raw):
+        href = html.unescape(m.group(1))
+        host = LINK.match(href)
+        if host and registrable(host.group(1)) != site:
+            continue
+        url = href if host else f"https://{site}{href}"
+        if url not in out:
+            out.append(url)
+    return out[:limit]
+
+
 def read_site(domain, fetch=None):
-    """The brand's homepage as text plus the hosts it links: the footer is where ownership lives."""
+    """The brand's homepage and about page as text, plus the hosts their anchors link.
+
+    links holds only <a href> hosts. Runna and Zico, 2026-10-17: every hop target that found
+    nobody (website-files.com, marker.io, acsbapp.com, shopifysvc.com, shopifycdn.com) came from a
+    stylesheet, preconnect or script URL, which says what the site is built on, not who owns it.
+    Those hosts go in asset_hosts for the record and never reach a hop.
+    """
     url = f"https://{registrable(domain)}/"
     if fetch is None:
         def fetch(u):
@@ -837,11 +918,21 @@ def read_site(domain, fetch=None):
             with urllib.request.urlopen(req, timeout=15) as r:
                 return r.read(2_000_000).decode("utf-8", "ignore")
     raw = fetch(url)
-    hosts = sorted({m.group(1).lower() for m in LINK.finditer(raw)})
-    text = html.unescape(re.sub(r"<script.*?</script>|<style.*?</style>", " ", raw, flags=re.S | re.I))
-    text = " ".join(re.sub(r"<[^>]+>", " ", text).split())
-    keep = [sentence_around(text, m.start(), m.end()) for rx in (OWNER_PHRASE, COPYRIGHT) for m in rx.finditer(text)]
-    return {"site_text": " | ".join(dict.fromkeys(keep)) or text[-1500:], "links": hosts}
+    pages, about = [raw], []
+    for u in about_urls(raw, domain):
+        try:
+            page = fetch(u)
+        except Exception:
+            continue
+        pages.append(page)
+        about.append(page_text(page))
+    anchors = sorted({m.group(1).lower() for p in pages for m in ANCHOR.finditer(p)})
+    every = {m.group(1).lower() for p in pages for m in LINK.finditer(p)}
+    keep = []
+    for text in [page_text(p) for p in pages]:
+        keep += [sentence_around(text, m.start(), m.end()) for rx in (OWNER_PHRASE, COPYRIGHT) for m in rx.finditer(text)]
+    return {"site_text": " | ".join(dict.fromkeys(keep)) or page_text(raw)[-1500:], "links": anchors,
+            "asset_hosts": sorted(every - set(anchors)), "about_text": " ".join(about)[:20000]}
 
 
 def site_executor(move, blocker):

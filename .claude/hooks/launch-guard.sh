@@ -252,8 +252,8 @@ def real_checkout(root):
     to be enough, and on 2026-10-16 the Tab manager forged both in two lines
     (an empty .git dir, a {} registry) to run arbitrary code as the front door."""
     root = os.path.realpath(root)
-    listed = git_out("-C", kit, "worktree", "list", "--porcelain") or ""
-    trees = {os.path.realpath(line[9:]) for line in listed.splitlines() if line.startswith("worktree ")}
+    listed = git_out("-C", kit, "worktree", "list", "--porcelain", "-z") or ""
+    trees = {os.path.realpath(rec[9:]) for rec in listed.split("\0") if rec.startswith("worktree ")}
     common = git_out("-C", kit, "rev-parse", "--path-format=absolute", "--git-common-dir")
     theirs = git_out("-C", root, "rev-parse", "--path-format=absolute", "--git-common-dir")
     return bool(root in trees and common and theirs
@@ -402,7 +402,9 @@ if name == "chewbacca" or (base == "chewbacca" and kit_file(name, "bin/chewbacca
                 rel = os.path.relpath(path, root)
                 valid = re.fullmatch(r"tests/[A-Za-z0-9_.-]+\.(py|sh)", rel)
                 checkout = real_checkout(root)
-                if valid and checkout and os.path.isfile(path) and test_runner([runner[0], rel, *runner[2:]]):
+                # Tracked, as after a cd: an untracked tests/x.py is a script.
+                tracked_here = checkout and git_out("-C", root, "ls-files", "--error-unmatch", "--", rel) is not None
+                if valid and tracked_here and os.path.isfile(path) and test_runner([runner[0], rel, *runner[2:]]):
                     out("allow")
         out("refuse", "only direct kit test runners are allowed in queued Clay jobs")
     out("refuse", f"chewbacca {args[0]} is not a known Clay read")
@@ -581,8 +583,8 @@ if m:
     argv = shlex.split(m.group(1))
     if len(argv) == 2 and os.path.isabs(argv[1]):
         d = os.path.realpath(argv[1])
-        listed = git("-C", kit, "worktree", "list", "--porcelain") or ""
-        trees = {os.path.realpath(line[9:]) for line in listed.splitlines() if line.startswith("worktree ")}
+        listed = git("-C", kit, "worktree", "list", "--porcelain", "-z") or ""
+        trees = {os.path.realpath(rec[9:]) for rec in listed.split("\0") if rec.startswith("worktree ")}
         common = git("-C", kit, "rev-parse", "--path-format=absolute", "--git-common-dir")
         theirs = git("-C", d, "rev-parse", "--path-format=absolute", "--git-common-dir")
         if (d in trees and common and theirs

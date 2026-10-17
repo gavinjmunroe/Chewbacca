@@ -614,6 +614,7 @@ try:
         ("cd into the real worktree, then an untracked test", f"cd {KIT} && python3 tests/test_zz_untracked_clay_probe.py"),
         ("cd - then a test", "cd - && python3 tests/test_chewbacca_clay.py"),
         ("a relative cd then a test", "cd . && python3 tests/test_chewbacca_clay.py"),
+        ("a queued untracked test in the real worktree", f"chewbacca jobs submit --build -- python3 {untracked}"),
         # The same forgeries aimed at the front door and the queued-test path,
         # which trusted registry+.git the same way until 2026-10-16.
         *[(f"a forged front door ({kind})", f"{root}/bin/chewbacca-clay campaign-status campaign=cam_x status=START")

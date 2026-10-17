@@ -114,6 +114,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - reference_chewbacca_gtm_arsenal: Where Chewbacca's GTM tooling lives after the 2026-10-09 scavenge: repo atlas, 5...
 - feedback_say_which_work_is_good: An all-clear names the work it covers and any open launch's gtme ready state; Zeutara's gtme ready has no drafts path set (2026-10-16)
 - feedback_rule_on_clear_gtm_calls: A GTM call with a clear best answer gets made and reported with its reason, never asked of Caleb in jargon (catch-all, 2026-10-16)
+- feedback_evolve_target_and_queue: self-fix loop needs a real bug with a judge that fails first (10/10 target was a question); a paused heavy job holds the queue slot, kill stale ones; deliver.Failed is a SystemExit; scope "we're good" (10/17)
 - feedback_model_baseline_and_land_traps: codex exec needs stdin closed and its hook can eat the answer; claude -p shares the weekly cap; cherry-pick land conflict means land --paths, then commit local copies before merging (10/16)
 - reference_gtme_next_move: gtme next-move, the blocker loop that replaced parents.json: moves from evidence, boundaries as data, Jev ranks, attempts in the lesson ledger
 - reference_gtme_lesson_ledger: GTME lesson ledger (team/gtme-lessons, `chewbacca gtme lesson plan`): experiments with oracles that refuse unsupported claims, handed to the next client

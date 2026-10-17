@@ -2221,6 +2221,7 @@ if group "reasoning backends"; then
   check "run_plan calls only functions that exist" python3 "$ROOT/tests/test_run_plan_names.py"
   check "Codex shared instructions and optional health" python3 "$ROOT/tests/test_codex.py"
   check "Codex personal context startup" python3 "$ROOT/tests/test_codex_context.py"
+  check "Codex start briefing fits its limit by naming files, never by losing rules" python3 "$ROOT/tests/test_codex_briefing_budget.py"
   check "Codex native lifecycle hooks" python3 "$ROOT/tests/test_codex_hooks.py"
   check "Codex native exit evidence never trusts stdout" python3 "$ROOT/tests/test_codex_execution_evidence.py"
   check "Codex desktop final reply keeps prayer visible" python3 "$ROOT/tests/test_codex_app_prayer.py"

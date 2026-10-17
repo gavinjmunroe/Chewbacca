@@ -457,15 +457,7 @@ def dispatch_event_body(payload):
         parts.append(tabs.handle(payload, 'codex'))
     if event == 'SessionStart':
         root = context.brain_root(context.codex_home())
-        with contextlib.redirect_stdout(io.StringIO()) as output:
-            print('Chewbacca startup briefing loaded by a native Codex hook. '
-                  'Use this briefing without running the fallback reader again.\n')
-            print((ROOT / 'config/instructions/agent-neutral.md').read_text())
-            context.read_sources(root)
-            standing = context.standing_instructions(root)
-            if standing:
-                print('\n## Standing instructions (the same text Claude Code loads)\n\n' + standing)
-        parts.append(output.getvalue())
+        parts.append(context.startup_briefing(root))
         checker = root / 'brain-check.sh'
         if checker.is_file():
             try:

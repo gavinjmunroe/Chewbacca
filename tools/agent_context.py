@@ -259,7 +259,7 @@ permission to access credentials, publish or bypass safeguards.
     return merge_block(home / 'CLAUDE.md', block, CLAUDE_BEGIN, CLAUDE_END)
 
 
-def standing_instructions(root=None):
+def standing_instructions(root=None, pointers=()):
     """The user's Claude Code instructions, compiled for hosts that cannot read them.
 
     Claude Code loads ~/.claude/CLAUDE.md, resolves its @imports and adds every
@@ -268,6 +268,7 @@ def standing_instructions(root=None):
     user's standing rules: no voice, no git identity, no never-ask-permission.
     This returns the same text Claude reads, once. Imports of the personal
     context sources are skipped because read_sources() prints them already.
+    A file whose path ends with one of `pointers` is named, not inlined.
     """
     home = claude_home()
     main_file = home / 'CLAUDE.md'
@@ -290,7 +291,8 @@ def standing_instructions(root=None):
                     target = target.resolve()
                     if target not in loaded:
                         loaded.add(target)
-                        out.append(f'<!-- {target} -->\n' + target.read_text(encoding='utf-8').strip())
+                        out.append(f'<!-- {target} -->\n' + (pointer_line(target) if _named(target, pointers)
+                                                              else target.read_text(encoding='utf-8').strip()))
                     continue
             out.append(line)
         return '\n'.join(out)
@@ -302,8 +304,59 @@ def standing_instructions(root=None):
         if rule.resolve() in loaded or scoped or rule.name == 'agent-neutral.md':
             continue
         loaded.add(rule.resolve())
-        parts.append(f'<!-- {rule} -->\n' + body.strip())
+        parts.append(f'<!-- {rule} -->\n' + (pointer_line(rule) if _named(rule, pointers) else body.strip()))
     return '\n\n'.join(parts)
+
+
+def _named(path, pointers):
+    return any(str(path).endswith(p) for p in pointers)
+
+
+def pointer_line(path):
+    return f"(Not loaded at start, to stay inside the host's limit. Read {path} before work it covers.)"
+
+
+# Codex caps a hook's added context near 32k tokens and cuts the MIDDLE of
+# anything longer. On 2026-10-16 the start briefing was 41,986 tokens and Codex
+# dropped 10,028 of them: the end of memory/MEMORY.md and the start of the
+# standing rules, git, security and most of writing, em dash ban included.
+# 26k tokens at about 4 characters a token leaves room for the ledger, the tab
+# board and the checks that ride in the same output.
+BRIEFING_BUDGET_CHARS = 104_000
+# What becomes a pointer first when the briefing runs over: the memory index
+# (brain-recall and a direct read reach it), code-only rules, then the two
+# long personal files. Voice, identity and every rule Caleb wrote stay whole.
+POINTER_ORDER = ('memory/MEMORY.md', 'rules/typescript.md', 'rules/naming.md',
+                 'core/people.md', 'core/now.md', 'PEOPLE.md', 'NOW.md')
+
+
+def startup_briefing(root, budget_chars=BRIEFING_BUDGET_CHARS, order=POINTER_ORDER):
+    """The Codex start briefing, fitted under the host's limit by naming files instead of inlining them."""
+    def build(pointers):
+        out = ['Chewbacca startup briefing loaded by a native Codex hook. '
+               'Use this briefing without running the fallback reader again.\n',
+               (REPO / 'config/instructions/agent-neutral.md').read_text()]
+        for relative in source_names(root):
+            path = root / relative
+            if not path.is_file():
+                continue
+            body = path.read_text(encoding='utf-8')
+            if _named(path, pointers) and len(body) > len(pointer_line(path)):
+                body = pointer_line(path)
+            out.append(f'\n## Personal context source: {path}\n\n{body}')
+        standing = standing_instructions(root, pointers)
+        if standing:
+            out.append('\n## Standing instructions (the same text Claude Code loads)\n\n' + standing)
+        return '\n'.join(out)
+
+    pointers = []
+    text = build(pointers)
+    for name in order:
+        if len(text) <= budget_chars:
+            break
+        pointers.append(name)
+        text = build(pointers)
+    return text
 
 
 def read_sources(root, manifest=False):

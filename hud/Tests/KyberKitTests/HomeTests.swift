@@ -365,35 +365,69 @@ struct HomeTests {
         #expect(line.date.contains("11"))
     }
 
-    /// The faces HomeType names are the ones in Fonts/, by PostScript name:
-    /// a renamed instance would quietly draw the system sans.
-    @Test func fontsAreTheOnesShipped() {
-        HomeType.register(from: Self.fonts)
-        #expect(HomeType.isAvailable)
-        for name in [HomeType.pixelName, HomeType.lightName] {
-            #expect(NSFont(name: name, size: 13) != nil, "\(name)")
+    /// The worst ground behind the panel's words, as sRGB: the tint over
+    /// the blur of a white wallpaper. The blur alone over white is about
+    /// 0.66, worked back from the glass's own measurement (Glass.swift,
+    /// `wash(over:)`: this material under a 0.34 black wash over a white
+    /// page came to L 0.12 to 0.16). Modelled from that, never measured on
+    /// the panel itself.
+    static let worstGround: Double = {
+        let blurOverWhite = 0.66
+        let tint = 26.0 / 255
+        return HomeGlass.tintOpacity * tint + (1 - HomeGlass.tintOpacity) * blurOverWhite
+    }()
+
+    typealias RGB = (r: Double, g: Double, b: Double)
+
+    /// A colour laid over a ground, alpha and all. A colour that will not
+    /// convert is an issue, never a stand-in that passes.
+    static func over(_ color: Color, _ ground: RGB) -> RGB {
+        guard let c = NSColor(color).usingColorSpace(.sRGB) else {
+            Issue.record("\(color) has no sRGB form")
+            return ground
         }
+        let a = Double(c.alphaComponent)
+        return (a * Double(c.redComponent) + (1 - a) * ground.r,
+                a * Double(c.greenComponent) + (1 - a) * ground.g,
+                a * Double(c.blueComponent) + (1 - a) * ground.b)
     }
 
-    /// The tall-pixel face keeps Departure's widths and is half again as
-    /// tall, so at 16.5 points a pixel is 1 by 1.5 points: whole device
-    /// pixels on a 2x screen. A rebuilt font with another em would grey every
-    /// edge.
-    @Test func pixelsAreTwoByThree() throws {
-        HomeType.register(from: Self.fonts)
-        let tall = try #require(NSFont(name: HomeType.pixelName, size: HomeType.text))
-        // A 7-pixel cell and an 8-pixel cap, as Departure's at 11 points,
-        // read from the outline as well as the metrics, which the script sets
-        // separately.
-        let glyph = tall.glyph(withName: "H")
-        #expect(tall.advancement(forGlyph: glyph).width == 7)
-        #expect(abs(tall.capHeight - 12) < 0.01)
-        #expect(abs(tall.boundingRect(forGlyph: glyph).height - 12) < 0.01)
+    static func contrast(_ ink: Color, on ground: RGB) -> Double {
+        let drawn = over(ink, ground)
+        let text = AgentPalette.luminance(drawn.r, drawn.g, drawn.b)
+        let back = AgentPalette.luminance(ground.r, ground.g, ground.b)
+        return (max(text, back) + 0.05) / (min(text, back) + 0.05)
     }
 
-    static let fonts = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        .appendingPathComponent("Fonts")
+    /// Every colour a word is drawn in holds 4.5:1 on the glass over a white
+    /// wallpaper, at rest and on a hovered row, a word on a prominent
+    /// capsule holds it on the capsule, and the ring and grip hold the 3:1 a
+    /// control needs.
+    @Test func inkHoldsOnTheGlass() {
+        let ground: RGB = (Self.worstGround, Self.worstGround, Self.worstGround)
+        let hovered = Self.over(HomeInk.hover, ground)
+        let words: [(String, Color)] = [
+            ("primary", HomeInk.primary), ("secondary", HomeInk.secondary), ("bad", HomeInk.bad),
+            ("warn", HUD.warn), ("good", HUD.good), ("accent", HUD.accent), ("running", HUD.running),
+            ("needs you", HUD.needsYou),
+        ]
+        for (name, ink) in words {
+            for (state, back) in [("at rest", ground), ("hovered", hovered)] {
+                let ratio = Self.contrast(ink, on: back)
+                #expect(ratio >= 4.5, "\(name) \(state): \(ratio)")
+            }
+        }
+        for ink in [HUD.needsYou, HUD.accent] {
+            let capsule = Self.over(ink.opacity(HomeVerb.tint), ground)
+            let ratio = Self.contrast(ink, on: capsule)
+            #expect(ratio >= 4.5, "\(ink) on its capsule: \(ratio)")
+        }
+        #expect(Self.contrast(HomeInk.control, on: ground) >= 3)
+        // The opacity survives the trip to NSColor, or every ratio above is
+        // for a word drawn opaque.
+        let alpha = NSColor(HomeInk.secondary).usingColorSpace(.sRGB)?.alphaComponent ?? 1
+        #expect(abs(alpha - 0.7) < 0.01)
+    }
 
     /// On the desktop, under every app window, and it stays there.
     @Test func sitsOnTheDesktop() {
@@ -408,7 +442,6 @@ struct HomeTests {
     /// Drawn with a full feed, it is a real panel. Kept as a PNG when
     /// HUD_SNAPSHOT_DIR is set.
     @Test func renders() throws {
-        HomeType.register(from: Self.fonts)
         let feed = try HomeFeed.decode(Data(Self.feedJSON.utf8))
         let limit = HomeLayout.limit(screen: Self.laptop.frame, visible: Self.laptop.visible)
         let view = HomeView(model: HomeModel(feed: feed, now: Self.now), width: limit.width, scrolls: false)

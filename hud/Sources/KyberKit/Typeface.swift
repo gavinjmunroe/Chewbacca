@@ -50,73 +50,26 @@ extension View {
     }
 }
 
-/// The home panel's type, TypeSafe's (typesafe.ai's stylesheet, read
-/// 2026-10-11): nearly every word there is LisaTerminal Paper 2X3Y, a pixel
-/// mono whose pixels are 2 wide by 3 tall, and the smallest labels are
-/// JetBrains Mono Light tracked 0.05em. LisaTerminal's file names no licence,
-/// so the pixel face here is Departure Mono redrawn with the same tall pixels
-/// by `hud/scripts/make-tall-pixel.py`. JetBrains Mono, the one TypeSafe
-/// uses, is under the OFL. Both are in `Fonts/`.
+/// The home panel's type: SF Pro, the system face, and nothing else (the
+/// ios27-design deny list: one family; Regular, Semibold and Bold only; no
+/// all-caps). Sizes are macOS's own text styles, the Large Title for the day
+/// and Body plus a point for a row, which a desktop panel is read from
+/// further away than a window. Fixed, because macOS has no Dynamic Type.
 ///
-/// Asked for that day, after Instrument Serif and Inter Tight: "the
-/// typography sucks, go on the typesafe font style".
+/// Asked for on 2026-10-17, "use it to redo the kyber home panel", with
+/// Apple's font chosen over keeping TypeSafe's pixel mono, which this
+/// replaced (it was asked for 2026-10-11, "go on the typesafe font style").
 enum HomeType {
-    static let pixelName = "DepartureMono2X3Y-Regular"
-    static let lightName = "JetBrainsMono-Light"
-    static let files = ["DepartureMono2X3Y-Regular.otf", "JetBrainsMono-Light.ttf"]
-
-    /// A pixel is 1 point wide at 16.5 and 2 at 33: 2 by 3 and 4 by 6 device
-    /// pixels on a 2x screen. Any other size puts pixel edges between device
-    /// pixels and greys them.
-    static let text: CGFloat = 16.5
-    static let headline: CGFloat = 33
-    /// TypeSafe's label size.
-    static let label: CGFloat = 11
-
-    /// `ATSApplicationFontsPath` registers the bundle's faces at launch;
-    /// this covers a build that drops the key. Tests register from the
-    /// source tree with `register(from:)`.
-    private static let fromBundle: Void = register(from: Bundle.main.resourceURL?.appendingPathComponent("Fonts"))
-
-    static func register(from directory: URL?) {
-        guard let directory else { return }
-        for file in files {
-            let url = directory.appendingPathComponent(file)
-            guard FileManager.default.fileExists(atPath: url.path) else { continue }
-            CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
-        }
-    }
-
-    /// Asked each time rather than cached, so faces registered after the
-    /// first draw (a test's) are used from then on.
-    static var isAvailable: Bool {
-        _ = fromBundle
-        return NSFont(name: pixelName, size: text) != nil && NSFont(name: lightName, size: label) != nil
-    }
-
-    /// Words, times and titles. Falls back to the system mono when the
-    /// faces are missing, never to a sans.
-    static func pixel(_ size: CGFloat = text) -> Font {
-        isAvailable ? .custom(pixelName, fixedSize: size) : .system(size: size * 0.8, design: .monospaced)
-    }
-
-    /// One pixel of letterspacing: Departure's cell is 7 pixels wide and
-    /// LisaTerminal's is 8.
-    static func pixelTracking(_ size: CGFloat = text) -> CGFloat { size / text }
-
-    /// Counts, details and notes.
-    static func light(_ size: CGFloat = label) -> Font {
-        isAvailable ? .custom(lightName, fixedSize: size) : .system(size: size, weight: .light, design: .monospaced)
-    }
-}
-
-extension View {
-    func homePixel(_ size: CGFloat = HomeType.text) -> some View {
-        font(HomeType.pixel(size)).tracking(HomeType.pixelTracking(size))
-    }
-
-    /// TypeSafe tracks its small labels 0.05em.
-    func homeLight(_ size: CGFloat = HomeType.label) -> some View {
-        font(HomeType.light(size)).tracking(size * 0.05)
-    }
+    /// "Sunday".
+    static let headline = Font.system(size: 26, weight: .bold)
+    /// "October 11", beside the day.
+    static let date = Font.system(size: 15)
+    /// "Calendar", "To-do", "Projects", and the panel's name.
+    static let section = Font.system(size: 13, weight: .semibold)
+    /// A row's words, and the field a to-do is typed into.
+    static let title = Font.system(size: 14)
+    /// Times, counts, details and notes.
+    static let detail = Font.system(size: 12)
+    /// "Tomorrow", over its events, and a pressable word.
+    static let label = Font.system(size: 12, weight: .semibold)
 }

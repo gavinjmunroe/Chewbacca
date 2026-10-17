@@ -241,6 +241,13 @@ public enum HomeWords {
         return dayName(date, now: now, calendar: calendar).lowercased()
     }
 
+    /// "late" as "Late": a word drawn alone on the panel starts with a
+    /// capital, as Apple sets a label. Only the first letter, so "in 25m"
+    /// stays "In 25m" where `capitalized` would touch every word.
+    public static func sentence(_ word: String) -> String {
+        word.prefix(1).uppercased() + word.dropFirst()
+    }
+
     /// "Sunday" and "October 11", the panel's headline.
     public static func dateLine(_ now: Date, calendar: Calendar = .current) -> (day: String, date: String) {
         let format = DateFormatter()
@@ -260,9 +267,9 @@ public enum HomeWords {
 /// width and a third of the area, whichever is tighter, however it is
 /// resized.
 public enum HomeLayout {
-    /// The column until he resizes it. In the pixel face a letter is 8
-    /// points, so about 25 fit beside a to-do's due word and longer titles
-    /// take a second line. Guessed, never measured against use.
+    /// The column until he resizes it. At 14-point SF Pro about 35 letters
+    /// fit beside a to-do's due word and longer titles take a second line.
+    /// Guessed, never measured against use.
     public static let width: CGFloat = 340
     /// The smallest it can be dragged to: a short title with its due word on
     /// one line, and the top of two lists. Guessed.
@@ -742,56 +749,52 @@ public struct HomeView: View {
         .overlay(alignment: .bottomTrailing) { HomeGrip(onResize: onResize) }
         .clipShape(RoundedRectangle(cornerRadius: HomeGlass.radius, style: .continuous))
         .overlay(HomeGlass.Rim())
-        .overlay(HomeGlass.Brackets())
         .onPreferenceChange(HomeHeight.self) { onHeight($0 + Self.stripHeight) }
         .environment(\.colorScheme, .dark)
     }
 
     private var measured: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 18) {
             headline
             content
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 12)
-        .padding(.bottom, 18)
+        .padding(.horizontal, HomeGlass.inset)
+        .padding(.top, 2)
+        .padding(.bottom, HomeGlass.inset)
         .frame(width: width, alignment: .topLeading)
         .background(GeometryReader { proxy in
             Color.clear.preference(key: HomeHeight.self, value: proxy.size.height)
         })
     }
 
-    /// The mark and the name on the left, the close on the right. The strip
-    /// is where the panel is dragged from.
+    /// The mark and the name on the left, the close on the right, on the
+    /// glass itself: no bar and no rule under it. The strip is where the
+    /// panel is dragged from.
     private var titleStrip: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 7) {
             HomeMark(size: 16)
             Text("Kyber")
-                .homePixel()
-                .foregroundStyle(HUD.ink)
+                .font(HomeType.section)
+                .foregroundStyle(HomeInk.secondary)
             Spacer(minLength: 8)
             HomeClose(action: onClose)
         }
-        .padding(.leading, 14)
-        .padding(.trailing, 2)
+        .padding(.leading, HomeGlass.inset)
+        .padding(.trailing, 4)
         .frame(height: Self.stripHeight)
-        .background(Color.black.opacity(0.18))
-        .overlay(alignment: .bottom) {
-            Color.white.opacity(0.14).frame(height: 1)
-        }
     }
 
-    /// "Sunday  october 11": the big word and its small lowercase gloss,
-    /// as typesafe.ai sets "LLM" over "pre-trained models".
-    /// "Wednesday  november 11" is 244 points, wider than the content at the
-    /// smallest panel, so there the date goes under the day.
+    /// "Sunday  October 11": the day as a large title, the date beside it
+    /// in the secondary label colour. When the pair is wider than the
+    /// content, as a long weekday is at the smallest panel, the date goes
+    /// under the day.
     private var headline: some View {
         let line = HomeWords.dateLine(model.now)
-        let day = Text(line.day).homePixel(HomeType.headline).foregroundStyle(HUD.ink)
-        let date = Text(line.date.lowercased()).homePixel().foregroundStyle(HUD.faint)
+        let day = Text(line.day).font(HomeType.headline).foregroundStyle(HomeInk.primary)
+        let date = Text(line.date).font(HomeType.date).foregroundStyle(HomeInk.secondary)
         return ViewThatFits(in: .horizontal) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) { day; date }
-            VStack(alignment: .leading, spacing: 2) { day; date }
+            HStack(alignment: .firstTextBaseline, spacing: 8) { day; date }
+            VStack(alignment: .leading, spacing: 0) { day; date }
         }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
@@ -804,7 +807,7 @@ public struct HomeView: View {
         case .unreadable:
             note("The home feed could not be read. It is rewritten on the next pass.")
         case .ready(let feed):
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 20) {
                 HomeList(section: .calendar, rows: visibleEvents(feed.calendar), total: nil,
                          now: model.now, model: model, onOpen: onOpen)
                 HomeList(section: .todos, rows: feed.todos, total: feed.todoCount,
@@ -840,15 +843,15 @@ public struct HomeView: View {
                     Text("Updated \(HomeWords.age(written, now: model.now)) ago")
                 }
             }
-            .homeLight()
-            .foregroundStyle(HUD.faint)
+            .font(HomeType.detail)
+            .foregroundStyle(HomeInk.secondary)
         }
     }
 
     private func note(_ text: String) -> some View {
         Text(text)
-            .homePixel()
-            .foregroundStyle(HUD.dim)
+            .font(HomeType.title)
+            .foregroundStyle(HomeInk.secondary)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.vertical, 4)
     }
@@ -860,8 +863,9 @@ private struct HomeHeight: PreferenceKey {
 }
 
 /// The strip's X: hides the panel, which the menu's "Home on the desktop"
-/// brings back. Faint until hovered and never invisible, and it names what
-/// it closes (hud/CLAUDE.md: a close button stays faintly visible).
+/// brings back. A close in a filled disc, as Apple draws a sheet's, always
+/// there and brighter under the pointer (hud/CLAUDE.md: a close button stays
+/// faintly visible).
 struct HomeClose: View {
     let action: () -> Void
     @State private var hovered = false
@@ -869,10 +873,10 @@ struct HomeClose: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: "xmark")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(hovered ? HUD.ink : HUD.faint)
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(hovered ? HomeInk.primary : HomeInk.secondary)
                 .frame(width: 22, height: 22)
-                .background(Circle().fill(Color.white.opacity(hovered ? 0.14 : 0)))
+                .background(Circle().fill(hovered ? HomeInk.fillLit : HomeInk.fill))
                 .frame(width: 36, height: 36)
                 .contentShape(Rectangle())
         }
@@ -894,31 +898,31 @@ struct HomeList: View {
     let onOpen: (HomeSection, HomeRow) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            // The list's name in lowercase, as typesafe.ai labels its lists,
-            // over a hairline; the rows under it are in ink.
+        VStack(alignment: .leading, spacing: 2) {
+            // The list's name as a widget names it: semibold, secondary,
+            // sentence case, and no rule under it.
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(section.title.lowercased())
-                    .homePixel()
-                    .foregroundStyle(HUD.faint)
-                    .accessibilityLabel(section.title)
+                Text(section.title)
+                    .font(HomeType.section)
+                    .foregroundStyle(HomeInk.secondary)
                     .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 4)
                 let shown = rows.filter { !$0.done }.count
                 if let total, total > shown {
                     Text("\(shown) of \(total)")
-                        .homeLight()
-                        .foregroundStyle(HUD.faint)
+                        .font(HomeType.detail)
+                        .monospacedDigit()
+                        .foregroundStyle(HomeInk.secondary)
                 }
                 if section == .todos, !model.isComposing, model.adding == nil {
-                    HomeVerb(word: "add", tone: HUD.dim, help: "Add a to-do to Reminders") { model.compose() }
-                        .padding(.vertical, -9)
-                        .padding(.trailing, -6)
+                    HomeVerb(word: "Add", symbol: "plus", tone: HUD.accent, help: "Add a to-do to Reminders") {
+                        model.compose()
+                    }
+                    // The press area hangs past the header without making
+                    // it taller, and the plus sits on the content's edge.
+                    .padding(.vertical, -8)
+                    .padding(.trailing, -10)
                 }
-            }
-            .padding(.bottom, 5)
-            .overlay(alignment: .bottom) {
-                Color.white.opacity(0.16).frame(height: 1)
             }
             .padding(.bottom, 4)
             if section == .todos, model.isComposing || model.adding != nil {
@@ -926,18 +930,18 @@ struct HomeList: View {
             }
             if rows.isEmpty, !(section == .todos && (model.isComposing || model.adding != nil)) {
                 Text(section.empty)
-                    .homeLight()
-                    .foregroundStyle(HUD.faint)
+                    .font(HomeType.detail)
+                    .foregroundStyle(HomeInk.secondary)
                     .padding(.vertical, 3)
             } else {
                 // By position, not id: nothing here animates, and two rows
                 // sharing an id would otherwise confuse the list.
                 ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
                     if section == .calendar, let header = dayHeader(index) {
-                        Text(header.lowercased())
-                            .homeLight()
-                            .foregroundStyle(HUD.dim)
-                            .padding(.top, 8)
+                        Text(header)
+                            .font(HomeType.label)
+                            .foregroundStyle(HomeInk.secondary)
+                            .padding(.top, 10)
                             .padding(.bottom, 2)
                     }
                     HomeRowView(section: section, row: row, now: now, model: model) { onOpen(section, row) }
@@ -962,8 +966,9 @@ struct HomeList: View {
     }
 }
 
-/// One row: a to-do's box or a dot, the words, and a time on the right. The
-/// words are the press; the box crosses a to-do off.
+/// One row: a to-do's ring, an event's bar or a project's folder, the words,
+/// and a time on the right. The words are the press; the ring crosses a
+/// to-do off.
 struct HomeRowView: View {
     let section: HomeSection
     let row: HomeRow
@@ -985,10 +990,10 @@ struct HomeRowView: View {
             line
             if section == .todos, !isDone, model.agentPress[row.id] != nil || row.agent != nil {
                 HomeAgentLine(row: row, model: model)
-                    // Under the title: past the box and the press's padding.
-                    .padding(.leading, 30)
+                    // Under the title: past the ring and the press's padding.
+                    .padding(.leading, HomeCheck.width + 6)
                     .padding(.trailing, 6)
-                    .padding(.bottom, 4)
+                    .padding(.bottom, 6)
             }
         }
         .padding(.horizontal, -6)
@@ -998,78 +1003,95 @@ struct HomeRowView: View {
         HStack(alignment: .firstTextBaseline, spacing: 0) {
             if section == .todos {
                 HomeCheck(done: isDone, enabled: model.canToggle(row), title: row.title) { model.toggle(row) }
-                    // The ring's middle at the middle of a 9-point x-height.
+                    // The ring's middle level with the middle of the first
+                    // line's lowercase letters.
                     .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4.5 }
             }
             Button(action: press) {
-                HStack(alignment: .firstTextBaseline, spacing: 9) {
-                    if section != .todos {
-                        dot.alignmentGuide(.firstTextBaseline) { $0[.bottom] }
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    if section == .projects {
+                        Image(systemName: "folder")
+                            .font(.system(size: 13))
+                            .foregroundStyle(HomeInk.secondary)
+                            .frame(width: 18)
                     }
-                    if section == .calendar {
-                        // "12:00 PM" is 8 cells of 8 points.
-                        Text(leading)
-                            .homePixel()
-                            .foregroundStyle(HUD.dim)
-                            .lineLimit(1)
-                            .fixedSize()
-                            .frame(width: 66, alignment: .leading)
-                    }
-                    VStack(alignment: .leading, spacing: 3) {
-                        // Two lines: at 8 points a letter, one line of the
-                        // panel holds about 28, and an assignment's name
-                        // runs past that.
-                        Text(row.title)
-                            .homePixel()
-                            .strikethrough(isDone, color: HUD.faint)
-                            .foregroundStyle(isDone ? HUD.faint : HUD.ink)
-                            .lineLimit(section == .projects ? 1 : 2)
-                            .fixedSize(horizontal: false, vertical: true)
-                        if !row.detail.isEmpty {
-                            Text(row.detail)
-                                .homeLight()
-                                .foregroundStyle(HUD.faint)
-                                .lineLimit(1)
-                        }
-                    }
+                    words
                     Spacer(minLength: 6)
                     if let trailing, !isDone {
-                        Text(trailing)
-                            .homeLight()
-                            .foregroundStyle(tone ?? HUD.dim)
+                        Text(HomeWords.sentence(trailing))
+                            .font(tone == nil ? HomeType.detail : HomeType.label)
+                            .monospacedDigit()
+                            .foregroundStyle(tone ?? HomeInk.secondary)
                     }
                 }
-                .padding(.vertical, 5)
+                .padding(.vertical, 6)
                 .padding(.horizontal, 6)
                 .contentShape(Rectangle())
                 .background {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(Color.white.opacity(hovered ? 0.08 : 0))
+                    RoundedRectangle(cornerRadius: HomeGlass.rowRadius, style: .continuous)
+                        .fill(hovered ? HomeInk.hover : .clear)
                 }
             }
             .buttonStyle(HomePress())
             .onHover { hovered = $0 }
             .help(help)
-            .accessibilityLabel([row.title, row.detail, trailing ?? ""].filter { !$0.isEmpty }.joined(separator: ", "))
+            .accessibilityLabel([row.title, subtitle ?? "", trailing ?? ""].filter { !$0.isEmpty }.joined(separator: ", "))
             if offersHandle {
-                HomeVerb(word: "handle", tone: HUD.running,
+                HomeVerb(word: "Handle", tone: HUD.accent,
                          help: "Have the agent draft what to send. Nothing goes out until you press send.") {
                     model.handle(row)
                 }
+                // The word ends on the content's edge, as the due words do.
+                .padding(.trailing, -4)
+            }
+        }
+    }
+
+    /// The title, and under it the time and detail. An event carries a bar
+    /// down its leading edge, as Apple's Up Next widget does, in its tone
+    /// when it is on or close and quiet otherwise.
+    private var words: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            // Two lines: an assignment's name runs past one at this width.
+            Text(row.title)
+                .font(HomeType.title)
+                .strikethrough(isDone, color: HomeInk.secondary)
+                .foregroundStyle(isDone ? HomeInk.secondary : HomeInk.primary)
+                .lineLimit(section == .projects ? 1 : 2)
+                .fixedSize(horizontal: false, vertical: true)
+            if let subtitle {
+                Text(subtitle)
+                    .font(HomeType.detail)
+                    .monospacedDigit()
+                    .foregroundStyle(HomeInk.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.leading, section == .calendar ? 11 : 0)
+        .overlay(alignment: .leading) {
+            if section == .calendar {
+                Capsule()
+                    .fill(tone ?? HomeInk.tertiary)
+                    .frame(width: 3)
+                    .padding(.vertical, 1)
             }
         }
     }
 
     private var start: Date? { HomeWords.date(row.at) }
 
-    /// The calendar's left column: its time, or "All day". The formatter puts
-    /// a narrow no-break space before "PM", which the pixel face lacks: drawn
-    /// from Menlo it pushed "PM" 0.93 points off the pixel grid.
-    private var leading: String {
-        if row.allDay { return "All day" }
-        return start.map { HomeWords.clock($0) }?
-            .replacingOccurrences(of: "\u{202F}", with: " ")
-            .replacingOccurrences(of: "\u{00A0}", with: " ") ?? ""
+    /// An event's time, or "All day", then the row's detail.
+    private var subtitle: String? {
+        var parts: [String] = []
+        if section == .calendar {
+            if row.allDay {
+                parts.append("All day")
+            } else if let start {
+                parts.append(HomeWords.clock(start))
+            }
+        }
+        if !row.detail.isEmpty { parts.append(row.detail) }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private var trailing: String? {
@@ -1099,19 +1121,11 @@ struct HomeRowView: View {
             return start.timeIntervalSince(now) <= Self.soon ? HUD.warn : nil
         case .todos:
             let word = HomeWords.due(row, now: now)
-            if word == "late" { return HUD.bad }
+            if word == "late" { return HomeInk.bad }
             return word == "today" ? HUD.warn : nil
         case .projects:
             return nil
         }
-    }
-
-    /// A small dot in the row's tone, or quiet white when nothing is wrong.
-    private var dot: some View {
-        Circle()
-            .fill(tone ?? Color.white.opacity(0.45))
-            .frame(width: 5, height: 5)
-            .padding(.bottom, 2)
     }
 
     private var help: String {
@@ -1123,9 +1137,9 @@ struct HomeRowView: View {
     }
 }
 
-/// A new to-do: a dashed ring where its box will be and the words being
+/// A new to-do: a dashed ring where its ring will be and the words being
 /// typed. Return adds it, Escape leaves it. While Reminders is written the
-/// words stay, faint, where the row will appear.
+/// words stay, dimmed, where the row will appear.
 struct HomeAddRow: View {
     @ObservedObject var model: HomeModel
     @FocusState private var focused: Bool
@@ -1133,35 +1147,35 @@ struct HomeAddRow: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 0) {
             Circle()
-                .strokeBorder(Color.white.opacity(0.45), style: StrokeStyle(lineWidth: 1.25, dash: [2, 2]))
-                .frame(width: 15, height: 15)
+                .strokeBorder(HomeInk.control, style: StrokeStyle(lineWidth: 1.5, dash: [2, 2.5]))
+                .frame(width: HomeCheck.ring, height: HomeCheck.ring)
                 .padding(.leading, 6)
-                .frame(width: 24, height: 36, alignment: .leading)
+                .frame(width: HomeCheck.width, height: 36, alignment: .leading)
                 .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4.5 }
                 .accessibilityHidden(true)
             if let adding = model.adding {
                 Text(adding)
-                    .homePixel()
-                    .foregroundStyle(HUD.faint)
+                    .font(HomeType.title)
+                    .foregroundStyle(HomeInk.secondary)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 6)
                 Spacer(minLength: 6)
-                Text("adding")
-                    .homeLight()
+                Text("Adding")
+                    .font(HomeType.label)
                     .foregroundStyle(HUD.running)
                     .padding(.trailing, 6)
             } else {
-                TextField("New to-do", text: $model.draft, prompt: Text("new to-do").foregroundStyle(HUD.faint))
+                TextField("New to-do", text: $model.draft, prompt: Text("New to-do").foregroundStyle(HomeInk.secondary))
                     .textFieldStyle(.plain)
-                    .homePixel()
-                    .foregroundStyle(HUD.ink)
+                    .font(HomeType.title)
+                    .foregroundStyle(HomeInk.primary)
                     .focused($focused)
                     .onSubmit { model.add() }
                     .onExitCommand { model.cancelCompose() }
                     .padding(.horizontal, 6)
                 if !model.draft.trimmingCharacters(in: .whitespaces).isEmpty {
-                    HomeVerb(word: "add", tone: HUD.running, help: "Add it to Reminders") { model.add() }
+                    HomeVerb(word: "Add", tone: HUD.accent, prominent: true, help: "Add it to Reminders") { model.add() }
                 }
             }
         }
@@ -1189,50 +1203,50 @@ struct HomeAgentLine: View {
             case .working:
                 status("Drafting a text", tone: HUD.running)
             case .drafted:
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 4) {
                     // The row already says "for Reagan Popoff" when the run
                     // is for the same person, and a second line saying it
                     // again is noise; it shows only when the two differ.
                     if row.detail != "for \(who(agent))" {
-                        Text("to \(who(agent))")
-                            .homeLight()
-                            .foregroundStyle(HUD.faint)
+                        Text("To \(who(agent))")
+                            .font(HomeType.detail)
+                            .foregroundStyle(HomeInk.secondary)
                     }
                     // Whole, never truncated: send approves every word of
                     // it, so every word is on the panel (600 characters at
                     // most, home_agent.MOST_TEXT_CHARS).
                     Text(agent.text)
-                        .homeLight()
-                        .foregroundStyle(HUD.ink)
+                        .font(HomeType.title)
+                        .foregroundStyle(HomeInk.primary)
                         .fixedSize(horizontal: false, vertical: true)
                         .textSelection(.enabled)
-                        .padding(.leading, 8)
-                        // One lit line on its leading edge, in the colour of
-                        // a thing waiting on him.
-                        .overlay(alignment: .leading) { HUD.needsYou.frame(width: 1) }
+                        .padding(.leading, 10)
+                        // A bar on its leading edge, in the colour of a thing
+                        // waiting on him.
+                        .overlay(alignment: .leading) { Capsule().fill(HUD.needsYou).frame(width: 2) }
                         .padding(.top, 2)
-                    HStack(spacing: 4) {
-                        HomeVerb(word: agent.finishes ? "send and cross off" : "send", tone: HUD.needsYou,
+                    HStack(spacing: 2) {
+                        HomeVerb(word: agent.finishes ? "Send and cross off" : "Send", tone: HUD.needsYou,
+                                 prominent: true,
                                  help: agent.finishes ? "Send this text to \(who(agent)) and cross the to-do off"
                                                       : "Send this text to \(who(agent))") {
                             model.send(row)
                         }
-                        HomeVerb(word: "drop", tone: HUD.faint, help: "Throw this draft away") { model.drop(row) }
+                        HomeVerb(word: "Drop", tone: HomeInk.secondary, help: "Throw this draft away") { model.drop(row) }
                     }
-                    .padding(.leading, -6)
                 }
                 .accessibilityElement(children: .contain)
                 .accessibilityLabel("Draft to \(who(agent)): \(agent.text)")
             case .yours:
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    note(agent.why.isEmpty ? "This one is yours." : agent.why, tone: HUD.dim)
-                    HomeVerb(word: "clear", tone: HUD.faint, help: "Clear the agent's answer") { model.drop(row) }
+                    note(agent.why.isEmpty ? "This one is yours." : agent.why, tone: HomeInk.secondary)
+                    HomeVerb(word: "Clear", tone: HomeInk.secondary, help: "Clear the agent's answer") { model.drop(row) }
                 }
             case .failed:
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    note(agent.why.isEmpty ? "The agent stopped." : agent.why, tone: HUD.bad)
-                    HomeVerb(word: "retry", tone: HUD.running, help: "Ask the agent again") { model.handle(row) }
-                    HomeVerb(word: "clear", tone: HUD.faint, help: "Clear the failure") { model.drop(row) }
+                    note(agent.why.isEmpty ? "The agent stopped." : agent.why, tone: HomeInk.bad)
+                    HomeVerb(word: "Retry", tone: HUD.accent, help: "Ask the agent again") { model.handle(row) }
+                    HomeVerb(word: "Clear", tone: HomeInk.secondary, help: "Clear the failure") { model.drop(row) }
                 }
             }
         }
@@ -1247,9 +1261,9 @@ struct HomeAgentLine: View {
     /// panel moves while a run is out (motion rule 6).
     private func status(_ text: String, tone: Color) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Circle().fill(tone).frame(width: 5, height: 5)
+            Circle().fill(tone).frame(width: 6, height: 6)
                 .alignmentGuide(.firstTextBaseline) { $0[.bottom] + 1 }
-            Text(text).homeLight().foregroundStyle(tone)
+            Text(text).font(HomeType.detail).foregroundStyle(tone)
         }
         .frame(minHeight: 20, alignment: .leading)
         .accessibilityElement(children: .combine)
@@ -1257,7 +1271,7 @@ struct HomeAgentLine: View {
 
     private func note(_ text: String, tone: Color) -> some View {
         Text(text)
-            .homeLight()
+            .font(HomeType.detail)
             .foregroundStyle(tone)
             .lineLimit(3)
             .fixedSize(horizontal: false, vertical: true)
@@ -1265,25 +1279,42 @@ struct HomeAgentLine: View {
     }
 }
 
-/// A verb as a lit word, no capsule (hud/CLAUDE.md, past the window, rule
-/// 3): underlined on hover, and a press area of 44 by 28 points around it.
-/// 28 is under the 44 the HIG asks for, kept so a draft's send and drop sit
-/// under it without a gap the height of a row; the box beside every to-do
-/// already took 36 for the same reason.
+/// A button as Apple draws one on glass: a capsule. Plain, the word or
+/// symbol in its tone with a capsule only under the pointer; prominent, the
+/// capsule always there in its tone, faint enough that the word on it still
+/// holds 4.5:1 (`HomeTests.inkHoldsOnTheGlass`), and outlined under the
+/// pointer rather than filled deeper, which would cost the word its
+/// contrast. The press area is at least
+/// 44 by 28 points. 28 is under the 44 the HIG asks for, kept so a draft's
+/// send and drop sit under it without a gap the height of a row; the ring
+/// beside every to-do already took 36 for the same reason.
 struct HomeVerb: View {
     let word: String
+    /// An SF Symbol drawn in place of the word, which stays as its name.
+    var symbol: String?
     let tone: Color
+    var prominent = false
     let help: String
     let action: () -> Void
     @State private var hovered = false
 
+    /// The prominent capsule's tint. On the worst ground, under the kit's
+    /// 0.7 glass, a cyan word on its own capsule measured 4.57:1 at 0.12 and
+    /// fell to 4.39 at 0.14.
+    static let tint: Double = 0.12
+
     var body: some View {
         Button(action: action) {
-            Text(word)
-                .homeLight()
+            label
                 .foregroundStyle(tone)
-                .underline(hovered, color: tone)
-                .padding(.horizontal, 6)
+                .padding(.horizontal, symbol == nil ? 10 : 6)
+                .frame(minHeight: 24)
+                .background(Capsule().fill(fill))
+                .overlay {
+                    if prominent && hovered {
+                        Capsule().strokeBorder(tone.opacity(0.5), lineWidth: 1)
+                    }
+                }
                 .frame(minWidth: 44, minHeight: 28)
                 .contentShape(Rectangle())
         }
@@ -1292,14 +1323,32 @@ struct HomeVerb: View {
         .help(help)
         .accessibilityLabel(help)
     }
+
+    @ViewBuilder private var label: some View {
+        if let symbol {
+            Image(systemName: symbol).font(.system(size: 13, weight: .semibold))
+        } else {
+            Text(word).font(HomeType.label)
+        }
+    }
+
+    private var fill: Color {
+        if prominent { return tone.opacity(Self.tint) }
+        return hovered ? HomeInk.hover : .clear
+    }
 }
 
-/// A to-do's box: an open ring, or a filled green disc with a tick once
-/// crossed off. The press area runs from the panel's padding to the words,
-/// 36 points tall, around a 15-point drawing whose ring starts where the
-/// other lists' dots do: a near miss to the left still crosses it off rather
-/// than opening the tasks walk.
+/// A to-do's ring: open, or a filled green disc with a tick once crossed
+/// off. The press area runs from the panel's padding to the words, 36
+/// points tall, around the ring: a near miss to the left still crosses it
+/// off rather than opening the tasks walk.
 struct HomeCheck: View {
+    /// Apple's Reminders ring beside a 14-point line.
+    static let ring: CGFloat = 18
+    /// The ring and the gap after it. A to-do's words start here, and the
+    /// line under a row handed to the agent lines up with them.
+    static let width: CGFloat = 28
+
     let done: Bool
     let enabled: Bool
     let title: String
@@ -1310,19 +1359,22 @@ struct HomeCheck: View {
         Button(action: toggle) {
             ZStack {
                 Circle()
-                    .strokeBorder(Color.white.opacity(hovered && !done ? 0.9 : 0.5), lineWidth: 1.25)
+                    .strokeBorder(hovered && !done ? HomeInk.primary : HomeInk.control, lineWidth: 1.5)
                     .opacity(done ? 0 : 1)
                 Circle()
-                    .fill(HUD.good)
+                    .fill(HUD.done)
                     .opacity(done ? 1 : 0)
+                // Dark on the green rather than Apple's white: white on a
+                // green light enough to read as text on the glass is under
+                // 2:1.
                 Image(systemName: "checkmark")
-                    .font(.system(size: 8, weight: .bold))
-                    .foregroundStyle(Color.black.opacity(0.78))
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(Color.black.opacity(0.8))
                     .opacity(done ? 1 : 0)
             }
-            .frame(width: 15, height: 15)
+            .frame(width: Self.ring, height: Self.ring)
             .padding(.leading, 6)
-            .frame(width: 24, height: 36, alignment: .leading)
+            .frame(width: Self.width, height: 36, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(HomePress())
@@ -1336,14 +1388,15 @@ struct HomeCheck: View {
 }
 
 /// A press answers on the way down (hud/CLAUDE.md, motion rule 8), and
-/// faster than it comes back.
+/// faster than it comes back, on a spring with no bounce: the deny list's
+/// `snappy` for anything pressed often.
 private struct HomePress: ButtonStyle {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed && !reduceMotion ? 0.96 : 1)
-            .animation(.easeOut(duration: configuration.isPressed ? 0.1 : 0.16), value: configuration.isPressed)
+            .animation(.snappy(duration: configuration.isPressed ? 0.1 : 0.16), value: configuration.isPressed)
     }
 }
 
@@ -1363,7 +1416,7 @@ struct HomeGrip: View {
                 path.move(to: CGPoint(x: 11, y: 8.5))
                 path.addLine(to: CGPoint(x: 8.5, y: 11))
             }
-            .stroke(Color.white.opacity(0.4), style: StrokeStyle(lineWidth: 1, lineCap: .round))
+            .stroke(HomeInk.control, style: StrokeStyle(lineWidth: 1, lineCap: .round))
             .frame(width: 14, height: 14)
             if !offscreen {
                 HomeGripArea(onResize: onResize)
@@ -1433,68 +1486,80 @@ final class HomeGripView: NSView {
 
 // MARK: - The glass
 
-/// The panel's material: the desktop behind it, blurred by the window server,
-/// under a light smoke so white type holds against a bright patch of
-/// wallpaper. The Clay HUD's window chrome (OverlayView `window(_:)`) is the
-/// same recipe at a heavier wash and a hard drop; this one is lighter and
-/// drops the drop, because it lives on the wallpaper and is meant to look
-/// like part of it, not a window over it.
+/// The panel's material: Apple's dark regular glass as the iOS 27 kit
+/// measures it (the ios27-design tokens, materials.json), the desktop behind
+/// it blurred by the window server under #1a1a1a at 0.73, inside a 0.5-point
+/// #a6a6a6 rim. macOS 15 has no `glassEffect`, so this is the kit's recipe
+/// laid over AppKit's blur rather than the system material.
+///
+/// No sheen, no halftone, no corner brackets and no drop shadow: glass is a
+/// material, not a gradient, and a panel on the wallpaper is under every
+/// window, so it has nothing to float over.
 struct HomeGlass: View {
-    static let radius: CGFloat = 14
-    /// Black over the blur, lighter than the window chrome's so the wallpaper
-    /// shows through. Guessed; checked only by eye, on his forest wallpaper
-    /// on 2026-10-11, never measured against others.
-    static let smoke: Double = 0.2
+    /// A large widget's corner (the kit's components.md: 26 for medium and
+    /// large widgets).
+    static let radius: CGFloat = 26
+    /// How far the content sits from the edge: a widget's margin.
+    static let inset: CGFloat = 16
+    /// A row's hover fill reaches 6 points past the content, so its corner
+    /// is the panel's less the 10 points between them, and the two curves
+    /// stay concentric.
+    static let rowRadius: CGFloat = radius - (inset - 6)
+    /// materials.json, regular glass, dark: #1a1a1a at 0.7, held at 0.73,
+    /// the veil the design system's probe solved a native SwiftUI
+    /// `.glassEffect(.regular)` to (0.729). At the kit's 0.7 a secondary
+    /// word on a hovered row measured 4.42:1 on the worst ground; at 0.73 it
+    /// is 4.62 (`HomeTests.inkHoldsOnTheGlass`).
+    static let tint = Color(red: 26 / 255, green: 26 / 255, blue: 26 / 255)
+    static let tintOpacity: Double = 0.73
 
     var body: some View {
         ZStack {
             VisualEffect(material: .hudWindow, blending: .behindWindow)
-            Color.black.opacity(Self.smoke)
-            // The sheen across the upper left, where the light is.
-            LinearGradient(
-                colors: [.white.opacity(0.10), .white.opacity(0)],
-                startPoint: .topLeading, endPoint: UnitPoint(x: 0.6, y: 0.5))
-            Halftone().opacity(0.5)
+            Self.tint.opacity(Self.tintOpacity)
         }
     }
 
-    /// Bright along the top, dim down the sides, back along the bottom: an
-    /// edge with thickness, not a printed line (the card's recipe).
+    /// materials.json's rim, dark: a 0.5-point ring of #a6a6a6, one device
+    /// pixel on a 2x screen.
     struct Rim: View {
         var body: some View {
-            let shape = RoundedRectangle(cornerRadius: HomeGlass.radius, style: .continuous)
-            shape
-                .strokeBorder(
-                    LinearGradient(
-                        colors: [.white.opacity(0.45), .white.opacity(0.12), .white.opacity(0.24)],
-                        startPoint: .top, endPoint: .bottom),
-                    lineWidth: 1)
-                .overlay { shape.stroke(Color.black.opacity(0.25), lineWidth: 1).padding(-1) }
+            RoundedRectangle(cornerRadius: HomeGlass.radius, style: .continuous)
+                .strokeBorder(Color(white: 166 / 255), lineWidth: 0.5)
                 .allowsHitTesting(false)
         }
     }
+}
 
-    /// The Clay HUD's corner brackets, drawn just inside the rim.
-    struct Brackets: View {
-        static let arm: CGFloat = 9
-        static let inset: CGFloat = 5
-
-        var body: some View {
-            GeometryReader { proxy in
-                Path { path in
-                    let w = proxy.size.width, h = proxy.size.height
-                    let i = Self.inset, a = Self.arm
-                    for (x, y, dx, dy) in [(i, i, 1.0, 1.0), (w - i, i, -1.0, 1.0), (i, h - i, 1.0, -1.0)] {
-                        path.move(to: CGPoint(x: x + dx * a, y: y))
-                        path.addLine(to: CGPoint(x: x, y: y))
-                        path.addLine(to: CGPoint(x: x, y: y + dy * a))
-                    }
-                }
-                .stroke(Color.white.opacity(0.4), lineWidth: 1)
-            }
-            .allowsHitTesting(false)
-        }
-    }
+/// The panel's ink: Apple's dark label and fill colours (colors.json in the
+/// design system's tokens), and for state the HUD's meaning hues, which are
+/// Apple's system hues lifted until they read as text on glass. Every colour
+/// a word is drawn in holds 4.5:1 over the panel's worst ground, at rest
+/// and under the pointer (`HomeTests.inkHoldsOnTheGlass`).
+enum HomeInk {
+    static let primary = Color.white
+    /// labels.secondary, dark: #ebebf5 at 0.7.
+    static let secondary = Color(red: 235 / 255, green: 235 / 255, blue: 245 / 255).opacity(0.7)
+    /// labels.tertiary, dark: #ebebf5 at 0.3. Never for words, which it
+    /// would draw at about 2:1; only for an idle event's bar.
+    static let tertiary = Color(red: 235 / 255, green: 235 / 255, blue: 245 / 255).opacity(0.3)
+    /// A control's outline: the to-do's ring and the resize grip. White at
+    /// 0.5 holds the 3:1 WCAG asks of a control, where Apple's own grey ring
+    /// would not on a light wallpaper.
+    static let control = Color.white.opacity(0.5)
+    /// fills.tertiary, dark: #767680 at 0.24. The close button's disc.
+    static let fill = Color(red: 118 / 255, green: 118 / 255, blue: 128 / 255).opacity(0.24)
+    /// fills.primary, dark: #787880 at 0.36. The disc under the pointer.
+    static let fillLit = Color(red: 120 / 255, green: 120 / 255, blue: 128 / 255).opacity(0.36)
+    /// fills.quaternary, dark: #767680 at 0.18. A row or a word under the
+    /// pointer.
+    static let hover = Color(red: 118 / 255, green: 118 / 255, blue: 128 / 255).opacity(0.18)
+    /// Something wrong: a to-do past its day, an agent that stopped. On the
+    /// worst ground, under a hovered row, Apple's dark red (#ff4245)
+    /// measures 2.57:1, its increased-contrast red 3.01 and `HUD.bad` 3.33.
+    /// This is the same red lifted until it holds 4.5 there (4.62);
+    /// (1.0, 0.6, 0.57) held at rest and fell to 4.3 under the pointer.
+    static let bad = Color(red: 1.0, green: 0.64, blue: 0.61)
 }
 
 // MARK: - The window

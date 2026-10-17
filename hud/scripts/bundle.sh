@@ -57,13 +57,11 @@ else
   cp "$BIN/Kyber" "$APP/Contents/MacOS/Kyber"
 fi
 
-# The window chrome's display face, the home panel's two (its tall-pixel
-# Departure Mono is made by make-tall-pixel.py and shares Departure's licence),
-# and their licences, which the OFL requires to travel with them. See
-# `Typeface` and `HomeType`.
+# The window chrome's display face and its licence, which the OFL requires to
+# travel with it. See `Typeface`. The home panel is set in SF Pro and ships no
+# face of its own.
 mkdir -p "$APP/Contents/Resources/Fonts"
-cp Fonts/DepartureMono-Regular.otf Fonts/DepartureMono2X3Y-Regular.otf Fonts/DepartureMono-OFL.txt \
-   Fonts/JetBrainsMono-Light.ttf Fonts/JetBrainsMono-OFL.txt "$APP/Contents/Resources/Fonts/"
+cp Fonts/DepartureMono-Regular.otf Fonts/DepartureMono-OFL.txt "$APP/Contents/Resources/Fonts/"
 
 # The commit count, so two builds of different code never share a version
 # and a bundle can be matched back to the commit it came from.

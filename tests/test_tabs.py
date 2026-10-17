@@ -56,6 +56,29 @@ class TabsTests(unittest.TestCase):
         self.assertIn('started on: "Fix the Slack linker"', seen)
         self.assertIn('latest ask: "Do it all thanks"', seen)
 
+    def test_a_prompt_sees_only_what_changed_since_its_last_one(self):
+        # 2026-10-16: the full board rode every prompt, 494k tokens in a day.
+        self.hook({'hook_event_name': 'UserPromptSubmit', 'session_id': 'b', 'prompt': 'Fix the Slack linker'})
+        self.hook({'hook_event_name': 'UserPromptSubmit', 'session_id': 'c', 'prompt': 'Map the people tables'})
+        first = self.hook({'hook_event_name': 'UserPromptSubmit', 'session_id': 'a', 'prompt': 'one'})
+        self.assertIn('Fix the Slack linker', first)
+        self.assertIn('Map the people tables', first)
+        self.assertEqual(self.hook({'hook_event_name': 'UserPromptSubmit', 'session_id': 'a', 'prompt': 'two'}), '')
+        self.hook({'hook_event_name': 'UserPromptSubmit', 'session_id': 'b', 'prompt': 'Now ship it'})
+        third = self.hook({'hook_event_name': 'UserPromptSubmit', 'session_id': 'a', 'prompt': 'three'})
+        self.assertIn('Now ship it', third)
+        self.assertNotIn('Map the people tables', third)
+        self.assertIn('1 other tab unchanged', third)
+        self.assertIn('never stage or commit', third, 'the rules ride with any change')
+        self.hook({'hook_event_name': 'SessionEnd', 'session_id': 'c'})
+        self.assertIn('1 left the board', self.hook({'hook_event_name': 'UserPromptSubmit', 'session_id': 'a', 'prompt': 'four'}))
+
+    def test_session_start_shows_the_whole_board_again(self):
+        self.hook({'hook_event_name': 'UserPromptSubmit', 'session_id': 'b', 'prompt': 'Fix the Slack linker'})
+        self.hook({'hook_event_name': 'UserPromptSubmit', 'session_id': 'a', 'prompt': 'one'})
+        again = self.hook({'hook_event_name': 'SessionStart', 'session_id': 'a'})
+        self.assertIn('Fix the Slack linker', again)
+
     def test_ended_and_stale_tabs_drop_off(self):
         self.hook({'hook_event_name': 'SessionStart', 'session_id': 'gone'})
         self.hook({'hook_event_name': 'SessionEnd', 'session_id': 'gone'})

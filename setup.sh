@@ -2732,6 +2732,10 @@ mkdir -p "$GLOBAL_CLAUDE/commands" "$GLOBAL_CLAUDE/rules"
 cp "$SCRIPT_DIR/.claude/commands/"*.md "$GLOBAL_CLAUDE/commands/" 2>/dev/null || true
 cp "$SCRIPT_DIR/.claude/rules/"*.md    "$GLOBAL_CLAUDE/rules/"    2>/dev/null || true
 install_agent_neutral_rule
+# Inside the kit's own checkout the project CLAUDE.md and rules duplicate what
+# was just copied to ~/.claude: 14,624 tokens loaded twice on a kit
+# session's first turn (2026-10-16). Skip the project copies whose bytes match.
+python3 "$SCRIPT_DIR/tools/claude_md_dedupe.py" excludes --apply --root "$SCRIPT_DIR" >/dev/null 2>&1 || true
 mkdir -p "$GLOBAL_CLAUDE/agents"
 cp "$SCRIPT_DIR/.claude/agents/"*.md   "$GLOBAL_CLAUDE/agents/"   2>/dev/null || true
 

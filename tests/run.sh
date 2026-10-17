@@ -1088,6 +1088,8 @@ if group "installer"; then
     python3 "$ROOT/tests/test_steering_rate.py"
   check  "the three steering Stop hooks replay 10/16's real closing turns within their measured bounds" \
     python3 "$ROOT/tests/test_steering_stop_replay.py"
+  check  "claude_md_dedupe excludes only kit files ~/.claude already loads, and keeps other excludes" \
+    python3 "$ROOT/tests/test_claude_md_dedupe.py"
   check  "draft-source-guard refuses a draft for Caleb whose numbers have no source" \
     bash "$ROOT/tests/draft_source_guard.sh"
   check  "draft-source-guard replays 10/16's blockquoted replies, firing only on the Zeutara drafts" \

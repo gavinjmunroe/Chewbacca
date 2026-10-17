@@ -231,9 +231,34 @@ def kit_file(p, rel):
     r = resolve(p)
     if not r or not r.endswith(os.sep + rel) or not os.path.isfile(r):
         return False
-    root = r[: -len(rel) - 1]
-    return (os.path.isfile(os.path.join(root, "library", "clay-api", "registry.json"))
-            and os.path.exists(os.path.join(root, ".git")))
+    return real_checkout(r[: -len(rel) - 1])
+
+
+GIT_ENV = {"PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin", "HOME": "/nonexistent",
+           "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null"}
+
+
+def git_out(*a):
+    try:
+        p = __import__("subprocess").run(["git", *a], capture_output=True, text=True, timeout=5, env=GIT_ENV)
+    except (OSError, ValueError):
+        return None
+    return p.stdout.strip() if p.returncode == 0 else None
+
+
+def real_checkout(root):
+    """True when root is a worktree the kit's own git lists, sharing its common
+    dir, with the Clay op registry in it. A registry file and a .git entry used
+    to be enough, and on 2026-10-16 the Tab manager forged both in two lines
+    (an empty .git dir, a {} registry) to run arbitrary code as the front door."""
+    root = os.path.realpath(root)
+    listed = git_out("-C", kit, "worktree", "list", "--porcelain") or ""
+    trees = {os.path.realpath(line[9:]) for line in listed.splitlines() if line.startswith("worktree ")}
+    common = git_out("-C", kit, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    theirs = git_out("-C", root, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    return bool(root in trees and common and theirs
+                and os.path.realpath(common) == os.path.realpath(theirs)
+                and os.path.isfile(os.path.join(root, "library", "clay-api", "registry.json")))
 
 
 def test_runner(argv):
@@ -376,7 +401,7 @@ if name == "chewbacca" or (base == "chewbacca" and kit_file(name, "bin/chewbacca
                 root = os.path.dirname(os.path.dirname(path))
                 rel = os.path.relpath(path, root)
                 valid = re.fullmatch(r"tests/[A-Za-z0-9_.-]+\.(py|sh)", rel)
-                checkout = os.path.isfile(os.path.join(root, "library", "clay-api", "registry.json")) and os.path.exists(os.path.join(root, ".git"))
+                checkout = real_checkout(root)
                 if valid and checkout and os.path.isfile(path) and test_runner([runner[0], rel, *runner[2:]]):
                     out("allow")
         out("refuse", "only direct kit test runners are allowed in queued Clay jobs")

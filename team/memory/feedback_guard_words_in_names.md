@@ -16,12 +16,19 @@ How to apply:
 - Name the worktree, test file and scratch scripts without clay, sequencer or
   campaign (`wt-spend-allowance`, `tests/test_spend_allowance.py`).
 - Use `git -C <dir>` for git work in a worktree. It's always a known read.
-- Since 68a6f592 (2026-10-16) a leading `cd <absolute path> && <reads>` passes
-  when the path is a real Chewbacca checkout (`library/clay-api/registry.json`
-  and `.git` there), and the later pieces are judged from that directory. So
-  `cd <worktree> && python3 tests/test_chewbacca_clay.py` runs. A fake dir, a
-  second cd, `||` after the cd, or curl after it still refuse. Don't hide test
-  runs in scratch scripts anymore: the guard never sees those.
+- A leading `cd <absolute path> && <reads>` passes when the path is a worktree
+  `git worktree list` shows for this repo (44dd24aa, after 68a6f592 trusted any
+  dir with a registry file and a `.git`, which the Tab manager forged in two
+  lines). Later pieces are judged from that dir, and a test after the cd runs
+  only if git tracks it there. So `cd <worktree> && python3
+tests/test_chewbacca_clay.py` runs. Don't hide test runs in scratch scripts:
+  the guard never sees those. An absolute `bin/chewbacca-clay`, `bin/chewbacca`
+  or a queued kit test passes the same worktree check since the follow-up fix.
+- Known gap, left open on purpose: an agent can edit a TRACKED test in a real
+  worktree and run it. That was allowed before any of this through the payload
+  cwd, so the guard doesn't claim to stop it. The send path's own gates (a
+  person at a terminal, a passing grade, a pre-send receipt) are what stop a
+  Clay write from a test.
 - The hook that actually runs is the installed copy at
   `~/.claude/hooks/launch-guard.sh`, not the repo's. Until setup syncs it, the
   cd form still refuses there; check with `grep -c CDKIT

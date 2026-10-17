@@ -592,6 +592,12 @@ real_gitdir = subprocess.run(["git", "-C", KIT, "rev-parse", "--path-format=abso
                              capture_output=True, text=True).stdout.strip()
 with open(os.path.join(forged, ".git"), "w") as f:
     f.write(f"gitdir: {real_gitdir}\n")
+for root in (fake, other, forged):
+    os.makedirs(os.path.join(root, "bin"))
+    for tool in ("chewbacca-clay", "chewbacca"):
+        with open(os.path.join(root, "bin", tool), "w") as f:
+            f.write("#!/bin/sh\necho anything\n")
+        os.chmod(os.path.join(root, "bin", tool), 0o755)
 link = os.path.join(tempfile.mkdtemp(), "kit")
 os.symlink(fake, link)
 # Named for Clay so the hook looks at it at all: a command that never names
@@ -608,6 +614,19 @@ try:
         ("cd into the real worktree, then an untracked test", f"cd {KIT} && python3 tests/test_zz_untracked_clay_probe.py"),
         ("cd - then a test", "cd - && python3 tests/test_chewbacca_clay.py"),
         ("a relative cd then a test", "cd . && python3 tests/test_chewbacca_clay.py"),
+        # The same forgeries aimed at the front door and the queued-test path,
+        # which trusted registry+.git the same way until 2026-10-16.
+        *[(f"a forged front door ({kind})", f"{root}/bin/chewbacca-clay campaign-status campaign=cam_x status=START")
+          for kind, root in (("empty .git", fake), ("other repo", other), (".git file at the real gitdir", forged),
+                             ("symlink", link))],
+        *[(f"node on a forged front door ({kind})", f"node {root}/bin/chewbacca-clay ops")
+          for kind, root in (("empty .git", fake), (".git file at the real gitdir", forged))],
+        *[(f"a forged chewbacca ({kind})", f"{root}/bin/chewbacca clay ops")
+          for kind, root in (("empty .git", fake), (".git file at the real gitdir", forged))],
+        *[(f"a queued test in a forged checkout ({kind})",
+           f"chewbacca jobs submit --build -- python3 {root}/tests/test_chewbacca_clay.py")
+          for kind, root in (("empty .git", fake), ("other repo", other), (".git file at the real gitdir", forged),
+                             ("symlink", link))],
     ]:
         code, err = e.hook("Bash", {"command": cmd}, cwd=tempfile.mkdtemp())
         check(f"refused: {name}", code == 2, err)

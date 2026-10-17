@@ -124,6 +124,9 @@ class Diff(unittest.TestCase):
         got = B.touched_tests(ROOT, ['tests/run.sh', 'team/memory/MEMORY.md', 'tools/break_it.py'])
         self.assertEqual(got, ['tests/test_break_it.py'])
 
+    def test_shared_generated_files_are_not_another_tab(self):
+        self.assertEqual(B.others_after(ROOT, 'origin/main', ['SHA256SUMS.txt', 'team/memory/MEMORY.md']), [])
+
     def test_need_markers_never_block(self):
         self.assertNotIn('need-marker', B.BLOCKING)
 
@@ -249,6 +252,22 @@ class LiveHook(unittest.TestCase):
     def test_check_outside_a_repo_certifies_nothing(self):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(B.main(['check', '--repo', tmp]), 1)
+
+    def test_installed_copy_finds_the_kit_runtime(self):
+        # An installed hook lives in ~/.claude/hooks, away from any checkout.
+        home = Path(self.env['HOME'])
+        (home / '.claude/hooks').mkdir(parents=True)
+        installed = home / '.claude/hooks/break-it-guard.sh'
+        installed.write_text(HOOK.read_text())
+        tool = home / '.chewbacca/kit/current/tools/break_it.py'
+        tool.parent.mkdir(parents=True)
+        tool.write_text('import sys\nsys.stdin.read()\nprint("kit runtime ran", file=sys.stderr)\nsys.exit(2)\n')
+        env = dict(self.env)
+        env.pop('CHEWBACCA_REPO_DIR', None)
+        r = subprocess.run(['bash', str(installed)], input=json.dumps({'last_assistant_message': 'Done.',
+                           'prompt_id': 'k1'}), capture_output=True, text=True, env=env, timeout=60)
+        self.assertEqual(r.returncode, 2, r.stderr)
+        self.assertIn('kit runtime ran', r.stderr)
 
     def test_foreign_repo_is_never_probed(self):
         self.assertFalse(B.trusted_repo(self.repo))

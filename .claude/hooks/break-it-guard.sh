@@ -48,8 +48,12 @@ REPO="${CHEWBACCA_REPO_DIR:-}"
 if [ -z "$REPO" ] && [ -f "$HOME/.claude/d1-config.sh" ]; then
   REPO="$(. "$HOME/.claude/d1-config.sh" 2>/dev/null; printf '%s' "${CHEWBACCA_REPO_DIR:-}")"
 fi
+# The kit runtime first: it tracks origin/main, while the shared checkout can
+# sit days behind. On 2026-10-17, before install, ~/code/chewbacca had no
+# tools/break_it.py at all, so an installed copy would have exited 0 on every turn.
 TOOL=""
 for c in "$(dirname "${BASH_SOURCE[0]}")/../../tools/break_it.py" \
+         "$HOME/.chewbacca/kit/current/tools/break_it.py" \
          ${REPO:+"$REPO/tools/break_it.py"} \
          "$HOME/code/chewbacca/tools/break_it.py"; do
   [ -f "$c" ] && { TOOL="$c"; break; }

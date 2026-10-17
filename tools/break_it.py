@@ -569,9 +569,14 @@ def on_base_tests(repo, base, tests, timeout):
 
 
 def others_after(repo, base, files):
-    """Commits on the base that touched our files after our HEAD: another tab on the same file."""
+    """Commits on the base that touched our files after our HEAD: another tab on the same file.
+    Generated and shared-index files are left out: every land rewrites
+    SHA256SUMS.txt and README counts, and every lesson adds a MEMORY.md line, so
+    on 2026-10-16 they made this fire on four unrelated commits in an hour."""
     if not base:
         return []
+    shared = {'SHA256SUMS.txt', 'README.md', 'team/memory/MEMORY.md', 'AGENTS.md'}
+    files = [f for f in files if f not in shared]
     out = git(repo, 'log', '--format=%h %s', f'HEAD..{base}', '--', *files[:50]) if files else ''
     return [l for l in (out or '').splitlines() if l][:10]
 

@@ -91,3 +91,17 @@ Lead with the real ones, list the slop ones under their own line with the
 reason, and let him decide whether to drop them. Never finish a slop one
 without his yes. Check the remote owner too: a co-founder's or an org's repo
 gets a branch and a PR, never a push to their main.
+
+## Parking a finish-the-old-repos run
+
+On 2026-10-10 Caleb trimmed the list himself: "Maia/echo I am no longer a part
+of", and asked what Just-A-Rock, Nalana web and PeopleRank v2 even were. So
+before listing a repo, check the remote owner and his notes for whether he's
+still on it, and say in one plain line what each repo is.
+
+Two finishing agents died mid-edit on a weekly usage limit, leaving
+uncommitted work in Playcall and OpenVision. When he says "save this all todo
+a diff day", the work-ledger entry (`--scope ~`) names every repo's state:
+pushed with its commit, PR open with its URL, died mid-run with what it was
+on, not started, and dropped with the reason. A list that only says "resume"
+makes the next tab redo the scan.

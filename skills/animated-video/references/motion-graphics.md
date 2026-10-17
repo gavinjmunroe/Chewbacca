@@ -87,3 +87,10 @@ Sourcing for this build:
 **Fan out the parts that don't share files.** Caleb: "Graph engineer bruh". Skill lessons and a
 separate-context judge that compares rendered frames to the reference's frames run in parallel.
 The one CPU-heavy render stays serial.
+
+### Tempo, repeats and cutouts (Firm Foundation hero, later on 2026-10-17)
+
+- Measure the reference's cut rhythm with ffmpeg scene detection before pacing anything. Gav's reel cut 8 times in 1.6 s (every 3 to 4 frames) and then held one shot for 4.4 s; Base44 bursts 8 cuts at 0.12 s and holds 5 s with motion inside. An even 0.5 to 1.5 s rhythm reads flat. Caleb: "We need to match their ability and quality to make the most of the space on screen and how that changes so rapidly and tastefully at different speeds". Alternate bursts and holds, and fill the frame during a burst (a tile mosaic, a word split with an image opening in the gap).
+- One slot per image. Caleb: "Don't repeat things unless it is the best decision". Before rendering, list every staticFile in the composition with a count; anything above 1 is either a deliberate callback named in the storyboard or a bug. Need more images, fetch more public domain art; a drawn sequence (years racing on a flash) spends none.
+- On-screen text stays at reel scale: captions, not 100 px headlines. "It cannot be a fat wall of text!"
+- Apple Vision's subject lift fills the gaps between fingers with background. Caleb: "the hand on the left is so lazily done there's supposed to be a gap between fingers". Re-trace hands on a plaster or wall ground by saturation (wall under s=0.2, skin above), fill only holes enclosed by skin, then key out enclosed plaster. Check pale skin first: the same trace erased God's index finger. Look at the matte zoomed on a dark ground every time.

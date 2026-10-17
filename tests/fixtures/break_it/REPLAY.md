@@ -20,7 +20,9 @@ is 29 episodes.
 Three replay episodes were the same events as steering cases 1, 2b and 6 with
 the opposite label. The hand label won and the duplicates were dropped (2b was
 caught after the first write-up, when open-work-guard's two clean-side refusals
-were checked by hand).
+were checked by hand). The other one, the provider-interface tab at 4:26pm,
+was a false refusal; 6af94242 fixed it and it is a pass case in
+tests/open_work_guard.sh.
 
 ## What the hook refused
 
@@ -28,8 +30,8 @@ were checked by hand).
 | ------------------------------------------------- | ------------------ | --------------- |
 | break-it-guard alone                              | 5 of 15 (33%)      | 2 of 20 (10%)   |
 | break-it-guard, cases that changed code in a repo | 5 of 7 (71%)       | 2 of 15 (13%)   |
-| open-work-guard alone (451f6183)                  | 3 of 15            | 1 of 20         |
-| either hook                                       | 8 of 15 (53%)      | 3 of 20 (15%)   |
+| open-work-guard alone (6af94242)                  | 3 of 15            | 0 of 20         |
+| either hook                                       | 8 of 15 (53%)      | 2 of 20 (10%)   |
 | strict rule: no receipt means refuse              | 7 of 15 (47%)      | 15 of 20 (75%)  |
 
 Against the falsifier set for it (refuse at least half the false-done, block

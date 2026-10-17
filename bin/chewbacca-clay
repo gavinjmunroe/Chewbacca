@@ -275,7 +275,8 @@ function withCliLock(file, fn) {
       fd = fs.openSync(lock, "wx", 0o600);
     } catch (e) {
       if (e.code !== "EEXIST") throw e;
-      try { if (Date.now() - fs.statSync(lock).mtimeMs > 10000) fs.rmSync(lock, { force: true }); } catch {}
+      // The holder can release the lock between open and stat: ENOENT is the retry.
+      try { if (Date.now() - fs.statSync(lock).mtimeMs > 10000) fs.rmSync(lock, { force: true }); } catch (err) { if (err.code !== "ENOENT") throw err; }
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
       continue;
     }
@@ -298,7 +299,10 @@ function pinCli(ws) {
       const p = path.join(os.tmpdir(), name);
       if (Date.now() - fs.statSync(p).mtimeMs > 3600000) fs.rmSync(p, { recursive: true, force: true });
     }
-  } catch {}
+  } catch (e) {
+    // Another call can remove a copy mid-sweep; the new call still runs either way.
+    if (e.code !== "ENOENT") process.stderr.write(`chewbacca clay: could not sweep old CLI configs (${e.message})\n`);
+  }
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "chewbacca-clay-cli-"));
   const file = path.join(dir, "clay", "config.json");
   const remove = () => fs.rmSync(dir, { recursive: true, force: true });

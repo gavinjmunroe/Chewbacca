@@ -99,7 +99,12 @@ def extract(days, out):
 def route_once(text, env):
     payload = json.dumps({"prompt": text, "session_id": "routeeval", "cwd": ROOT})
     t0 = time.perf_counter()
-    out = subprocess.run(["bash", HOOK], input=payload, capture_output=True, text=True, env=env, timeout=30)
+    try:
+        out = subprocess.run(["bash", HOOK], input=payload, capture_output=True, text=True, env=env, timeout=30)
+    except subprocess.TimeoutExpired:
+        # A stalled run is counted as silent and slow, never dropped: the hook's own watchdog
+        # kills it at 5s in real use, so it said nothing there either.
+        out = subprocess.CompletedProcess([], 124, "", "")
     ms = (time.perf_counter() - t0) * 1000
     try:
         context = json.loads(out.stdout)["hookSpecificOutput"]["additionalContext"]
@@ -122,7 +127,7 @@ def route_once(text, env):
         os.remove(env["ROUTE_SHADOW_LOG"])
     except (OSError, ValueError):
         pass
-    return {"shown": shown, "required": required, "ms": ms, "candidates": shadow.get("candidates") or [],
+    return {"shown": shown, "required": required, "ms": ms, "chars": len(context), "candidates": shadow.get("candidates") or [],
             "bigwork_p": shadow.get("bigwork_p"), "gate": shadow.get("gate"), "method": shadow.get("method")}
 
 
@@ -131,23 +136,35 @@ def pct(n, d):
 
 
 def score(rows):
-    shown = [r for r in rows if r["got"]["shown"]]
-    positives = [r for r in rows if r["label"] != "NONE"]
+    """Precision, false fires, nudge tokens and latency come from the random sample only, the real
+    mix of traffic; rows sampled because they looked skill-shaped ("sample": "targeted") would
+    inflate them. Recall uses every positive, random and targeted."""
+    rand = [r for r in rows if r.get("sample", "random") == "random"]
+    shown = [r for r in rand if r["got"]["shown"]]
     correct = [r for r in shown if r["got"]["shown"][0] == r["label"]]
-    typed_none = [r for r in rows if r["label"] == "NONE" and r["kind"] != "notification"]
+    positives = [r for r in rows if r["label"] != "NONE"]
+    found = [r for r in positives if r["got"]["shown"] and r["got"]["shown"][0] == r["label"]]
+    typed_none = [r for r in rand if r["label"] == "NONE" and r["kind"] not in ("notification", "machine")]
     # Machine traffic: harness notifications, cross-session messages, and prompts a tool sends
     # (commit security review, sidebar titles), none of which anyone typed.
-    notes = [r for r in rows if r["kind"] in ("notification", "machine")]
-    gated = [r for r in rows if r["got"]["required"]]
-    ms = sorted(r["got"]["ms"] for r in rows)
+    notes = [r for r in rand if r["kind"] in ("notification", "machine")]
+    gated = [r for r in rand if r["got"]["required"]]
+    big = [r for r in rand if r.get("big")]
+    ms = sorted(r["got"]["ms"] for r in rand)
     return {
-        "n": len(rows), "positives": len(positives), "shown": len(shown), "correct": len(correct),
-        "precision": pct(len(correct), len(shown)), "recall": pct(len(correct), len(positives)),
+        "n": len(rows), "random": len(rand), "positives": len(positives), "shown": len(shown),
+        "correct": len(correct), "precision": pct(len(correct), len(shown)),
+        "recall": pct(len(found), len(positives)),
         "false_fire_none_typed": pct(len([r for r in typed_none if r["got"]["shown"]]), len(typed_none)),
         "false_fire_notification": pct(len([r for r in notes if r["got"]["shown"] or r["got"]["required"]]),
                                        len(notes)),
+        # Characters of injected nudge text / 4, a rough token count, per 100 random prompts.
+        "nudge_tokens_per_100": round(sum(r["got"].get("chars", 0) for r in rand) / 4 * 100 / len(rand))
+        if rand else None,
         "gate_armed": len(gated),
-        "gate_justified": len([r for r in gated if r["label"] == "graph-engineering" or r.get("big")]),
+        "gate_big": len([r for r in gated if r.get("big")]),
+        "gate_precision": pct(len([r for r in gated if r.get("big")]), len(gated)),
+        "gate_recall": pct(len([r for r in big if r["got"]["required"]]), len(big)),
         "p50_ms": round(statistics.median(ms)) if ms else None,
         "p95_ms": round(ms[int(0.95 * (len(ms) - 1))]) if ms else None,
     }

@@ -183,7 +183,11 @@ MACHINE_OPENERS = ("<cross-session-message", "<side-sessions-event", "<task-noti
                    # The tools' exact wording, so a typed "review this change for
                    # security vulnerabilities in X" still routes.
                    "Review this change for security vulnerabilities.\n\nChanged files",
-                   "Write a short sidebar title for a coding session that opens with this request:")
+                   "Write a short sidebar title for a coding session that opens with this request:",
+                   # Kit tools that drive claude -p (the people extractor, Realm, the runtime
+                   # check); each got a keyword nudge on 2026-10-16's held-out run.
+                   "### EPISODE ", "The user opened with: ",
+                   "This is an explicitly authorized bounded Chewbacca native runtime check")
 body = re.sub(r"^(?:\s*<(system-reminder|ide_opened_file|ide_selection)>.*?</\1>)+\s*", "", prompt, flags=re.S)
 if any(marker in prompt for marker in NOISE) or body.startswith(MACHINE_OPENERS):
     SHADOW["gate"] = "machine"
@@ -218,7 +222,7 @@ if any(marker in prompt for marker in NOISE) or body.startswith(MACHINE_OPENERS)
 # false 5/107 to 3/107; on the 21 new: big 2/7 to 6/7, false 13/14 to 5/14.
 PROBE_W = "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"
 PROBE_B = -0.524564
-PROBE_CUTOFF = 0.5
+PROBE_CUTOFF = float(os.environ.get("SKILL_ROUTE_PROBE_CUTOFF", "0.5"))
 low = prompt.lower()
 question = low.endswith("?") and re.match(r"(how|what|why|when|where|which|who|is|are|does|do|can|should)\b", low)
 sid_early = re.sub(r"[^A-Za-z0-9_-]", "", str(payload.get("session_id") or ""))
@@ -476,8 +480,42 @@ def vector_route():
     SHADOW["candidates"] = [{"name": skills[i][0], "score": round(c, 4)} for c, i in scored[:3]]
     return [(c, skills[i][0], skills[i][2]) for c, i in scored[:2] if c >= VEC_MIN][:1]
 
-vec = None if os.environ.get("SKILL_ROUTE_NO_VECTOR") else vector_route()
-SHADOW["method"] = "stem" if vec is None else "vector"
+def named_skills(text):
+    """Skills the prompt names on purpose: a hyphenated skill name as a word ("gtm-engineering"),
+    or a one-word name next to load/use/run/open or followed by "skill" ("use the texts skill").
+    A bare common word like "texts" or "team" is not a name; that is the meaning router's job."""
+    # A name inside a path ("~/second-brain/...", "skills/jev/SKILL.md") is a file, not a request:
+    # on 2026-10-16 that alone named second-brain on 3 of 4 held-out briefs.
+    low = re.sub(r"\S*/\S*", " ", text.lower())
+    words = set(re.findall(r"[a-z0-9][a-z0-9-]*[a-z0-9]", low))
+    found = []
+    for name, _d, path in skills:
+        n = name.lower()
+        if n not in words:
+            continue
+        if "-" in n or re.search(rf"\b(?:load|use|run|open)\s+(?:the\s+)?{re.escape(n)}\b|\b{re.escape(n)}\s+skill\b", low):
+            found.append((name, path))
+    return found[:2]
+
+
+NAMED = named_skills(prompt)
+# The meaning (embedding) nudge is off unless SKILL_ROUTE_MEANING=on. Measured 2026-10-16 with
+# tools/skill_route_eval.py on 284 held-out prompts (126 random, 71 positives, labels private):
+#   meaning on (as shipped before)  precision 10.9% (5 of 46)  recall 40.8%  p95 1337ms
+#   keyword + named, meaning off    precision 11.9% (5 of 42)  recall 25.4%  p95 577ms
+#   strict cutoff 0.46              precision 7.7%  (1 of 13)  recall 11.3%
+#   named only                      precision 25%   (1 of 4)   recall 4.2%
+# No cutoff reached 50% precision on train. The rule fixed before the run was: ship the arm with
+# higher precision than today and recall no more than 5 points below the no-meaning control, and
+# no arm beat the control. It costs 15 points of recall on skill-shaped prompts; on the random
+# traffic the right nudges were 5 either way.
+if NAMED:
+    vec = []
+elif os.environ.get("SKILL_ROUTE_NO_VECTOR") or os.environ.get("SKILL_ROUTE_MEANING", "off") != "on":
+    vec = None
+else:
+    vec = vector_route()
+SHADOW["method"] = "named" if NAMED else ("stem" if vec is None else "vector")
 SHADOW["threshold"] = None if vec is None else VEC_MIN
 
 prompt_stems = stems(prompt)
@@ -490,10 +528,10 @@ for _n, desc, _p in skills:
     for s in stems(desc):
         claims[s] = claims.get(s, 0) + 1
 
-best = []
-if vec is not None:
+best = [(100.0, name, path, ["named in the prompt"]) for name, path in NAMED]
+if vec:
     best = [(c, name, path, [f"meaning {c:.2f}"]) for c, name, path in vec]
-for name, desc, path in ([] if vec is not None else skills):
+for name, desc, path in ([] if vec is not None or os.environ.get("SKILL_ROUTE_NO_STEM") else skills):
     d_stems = stems(desc)
     hits = prompt_stems & d_stems
     if not hits:

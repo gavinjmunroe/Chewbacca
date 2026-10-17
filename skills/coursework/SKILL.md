@@ -360,6 +360,13 @@ The ledger goes stale in exactly three ways, and all three are silent:
   Oct 19 to Oct 21 (Chappelow's 10/12 "Correction of Dates"), ACAD 324 Quiz 2
   Oct 19 to Oct 21 and the P3 team eval Oct 14 to Oct 19 (Davina's 10/12 and
   10/14 slide agendas). The plan would have pointed him at the wrong Monday.
+- **An empty dropbox is not a missing assignment.** `brightspace due` says
+  NOT SUBMITTED for any dropbox with no file, but some courses collect work
+  somewhere else. Read the dropbox's CustomInstructions first
+  (`/le/1.75/<ou>/dropbox/folders/`). On 2026-10-16 ACAD 185 A13 and A14
+  showed NOT SUBMITTED, and both specs said "Post your link to Master
+  Spreadsheet". His team row, his 3 hooks and his video were all there. Only
+  the A14 engagement-metrics cell was blank.
 - **A sign-up sheet is not the whole record.** Before calling a conference,
   meeting or extension missed, search his school inbox for the instructor
   (`GOOGLE_WORKSPACE_CLI_CONFIG_DIR=~/.chewbacca/email/<address> gws gmail

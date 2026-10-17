@@ -386,3 +386,5 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_launch_guard_committing_clay_code: commit Clay code with -F msgfile and directory pathspecs, export not env prefix, land by sha, then kit_runtime update (10/17)
 - reference_clay_cli_one_workspace: the clay CLI has one current workspace for every tab; chewbacca clay pins each call via a private CLAY_CONFIG_HOME, so pass ws= and never switch it (10/17)
 - feedback_help_flag_can_run_the_tool: `people distill --help` ran a real distill (10/16); check a tool parses --help before sending it blind
+- project_semyon_onramp_2026_10_17: Semyon (backend, installer and guard tasks) onboarding one pager to Chewbacca and the Clay bridge, in Downloads; written 10/17, not sent
+- feedback_launch_guard_reading_clay_files: launch-guard refuses shell reads that mention Clay plus echo, xargs or python -c; read those files with the Read tool or one plain grep

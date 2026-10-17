@@ -456,6 +456,9 @@ if group "decision-learning"; then
   check "hybrid skill route: code, Jev, model fallback, budgets, verifier and resume" python3 "$ROOT/tests/test_hybrid_route.py"
   check  "shadow skill routing logs Jev and keyword picks side by side, never raises" python3 "$ROOT/tests/test_skill_route_shadow.py"
   check  "a match inside a third-party pack routes to the kit skill that owns it" python3 "$ROOT/tests/test_skill_route_pack_parent.py"
+  # 2026-10-16: 8 of 35 held-out machine prompts got a skill or armed the graph
+  # gate; cross-session messages sit behind a <system-reminder> block.
+  check  "machine traffic (cross-session, side-session, stop-hook, tool prompts) never routes or gates" python3 "$ROOT/tests/test_skill_route_machine.py"
   check  "outcomes join from transcripts and calibrate a floor per decision" python3 "$ROOT/tests/test_outcome_join.py"
   check "shared instruction export stays current" python3 "$ROOT/tools/agents_md.py" --check
 fi

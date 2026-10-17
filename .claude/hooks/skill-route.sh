@@ -169,7 +169,23 @@ if len(prompt) < 12 or prompt.startswith("/"):
 # and it will match something almost every time. Nobody asked it anything.
 NOISE = ("SYSTEM NOTIFICATION", "task-notification", "<task-id>",
          "exited with code", "hookSpecificOutput", "task notification")
-if any(marker in prompt for marker in NOISE):
+# Messages from other sessions and the harness, and prompts a tool sends through
+# claude -p. Measured 2026-10-16 (tools/skill_route_eval.py, 238 hand-labeled
+# prompts): 8 of 35 held-out machine prompts still got a skill or armed the
+# graph-engineering gate, because the app prepends a <system-reminder> block to a
+# <cross-session-message>, so the tag was not where a marker check looked, and the
+# commit security review ("Review this change...") armed the big-work gate 5
+# times. The route-shadow log held 59 routed cross-session messages and 165
+# routed prompts that opened with a Linked-sessions reminder in the week before.
+# None of them is a request anyone typed, so none of them gets a nudge.
+MACHINE_OPENERS = ("<cross-session-message", "<side-sessions-event", "<task-notification", "<heartbeat",
+                   "<agent-message", "<send_user_message", "<ci-monitor-event", "Stop hook feedback",
+                   # The tools' exact wording, so a typed "review this change for
+                   # security vulnerabilities in X" still routes.
+                   "Review this change for security vulnerabilities.\n\nChanged files",
+                   "Write a short sidebar title for a coding session that opens with this request:")
+body = re.sub(r"^(?:\s*<(system-reminder|ide_opened_file|ide_selection)>.*?</\1>)+\s*", "", prompt, flags=re.S)
+if any(marker in prompt for marker in NOISE) or body.startswith(MACHINE_OPENERS):
     SHADOW["gate"] = "machine"
     raise SystemExit(0)
 

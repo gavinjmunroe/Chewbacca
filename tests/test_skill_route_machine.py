@@ -28,6 +28,9 @@ def check(name, ok):
 tmp = Path(tempfile.mkdtemp())
 kit = tmp / "kit"
 (kit / "texts").mkdir(parents=True)
+(kit / "second-brain").mkdir(parents=True)
+(kit / "second-brain" / "SKILL.md").write_text("---\nname: second-brain\ndescription: Read and write the "
+                                             "private notes vault.\n---\nbody\n")
 (kit / "texts" / "SKILL.md").write_text(
     "---\nname: texts\ndescription: Read, search and reply to iMessage and WhatsApp texts, draft a reply "
     "text, who I owe a reply.\n---\nbody\n")
@@ -68,6 +71,10 @@ for name, prompt in MACHINE.items():
     out = run(prompt)
     check(f"{name}: no nudge", out == "")
     check(f"{name}: no gate marker", not MARKER.exists())
+check("named: 'use the texts skill' routes to texts", "texts" in run("use the texts skill for this one ok"))
+check("named: a hyphenated skill name routes", "second-brain" in run("load second-brain before u answer"))
+check("named: a skill name inside a path is not a request",
+      "second-brain" not in run("I opened ~/second-brain/core/now.md just now, it's fine"))
 rows = [json.loads(line) for line in open(tmp / "shadow.jsonl")]
 check("every machine prompt is logged with gate=machine",
       sum(r.get("gate") == "machine" for r in rows) == len(MACHINE))

@@ -31,3 +31,11 @@ Rules for the next attempt:
 - The big-work probe armed skill-gate on 30 of 126 held-out prompts, about a third of them
   big by hand count. Moving PROBE_CUTOFF needs big-work labels, and the gate exists because
   Caleb said graph engineering got skipped. A missed nudge has cost more than a false one.
+
+2026-10-17, subtraction as the control: 540 labeled prompts (302 skill-shaped ones count for
+recall only), 71 held-out positives. Meaning router 10.9% precision and 40.8% recall; keyword
+plus named skills 11.9% and 25.4%; named only 25% and 4.2%; no meaning cutoff reached 50% on
+train. The no-meaning control won the pre-set rule, so the meaning nudge is opt-in
+(`SKILL_ROUTE_MEANING=on`) and the confirmed held numbers are 12.8% and 23.9%, machine 0%. The
+cost is texting-register recall: "wats due tmr" and "who do i owe a text back" now get nothing.
+A next attempt measures against these floors, not against the old router.

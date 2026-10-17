@@ -373,5 +373,6 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_attack_before_done: chewbacca break-it is step one of finishing, attack the change before saying done; the break-it Stop hook refuses a done claim over a change it can still break (Caleb, 10/16)
 - feedback_docs_name_bin_tools_off_path: docs naming bin/ tools by bare name (gtm, decision-inbox) break off PATH; write chewbacca <verb> or bin/<tool>, check command -v (backlog 26, 10/16)
 - reference_skill_route_eval: the skill router is measured by tools/skill_route_eval.py on private held-out labels; 10/16 held precision 8.5, recall 21.1; hub correction failed held-out, label more positives before tuning (10/16)
+- reference_skill_route_eval: the skill router is measured by tools/skill_route_eval.py on private held-out labels; 10/17 the meaning nudge went opt-in (held precision 10.9 to 12.8, recall 40.8 to 23.9); texting-register recall is the open gap (10/17)
 - reference_target_account_match: tools/target_accounts.py matches employers to a target list in code (domain, parent domain, exact normalized name) and computes tenure overlap; a model match is only a hint (10/16)
 - feedback_manager_tab_attacks_every_done: a manager tab attacks every done claim on a clean main copy, checks installed not just landed, and reuses idle tabs (2026-10-16)

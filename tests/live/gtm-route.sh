@@ -16,6 +16,10 @@ need ollama "— run: chewbacca setup"
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 HOOK="$REPO/.claude/hooks/skill-route.sh"
+# The meaning matcher is opt-in since 2026-10-17 (SKILL_ROUTE_MEANING=on; held-out
+# precision 10.9% on, 12.8% off, tests/live/skill-route-eval.sh). These cases test that
+# matcher, so they turn it on.
+export SKILL_ROUTE_MEANING=on
 
 # Prints the routed skill name, or "-" when the router stays silent.
 route() {

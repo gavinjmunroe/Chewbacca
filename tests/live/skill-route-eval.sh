@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Live: the skill router on held-out real prompts does not get worse.
 #
+# 2026-10-17, re-measured on 284 held-out prompts (126 random, 71 positives) after the
+# meaning nudge went opt-in: precision 12.8% (5 of 39), recall 23.9%, typed no-skill 34.7%,
+# machine traffic 0%. Today's floors are that run; the 10-16 history follows.
+#
 # 2026-10-16: backlog 3 said "implemented" while its acceptance (held-out
 # precision, misses, latency) had never been measured. tools/skill_route_eval.py
 # ran 238 hand-labeled prompts from the week's transcripts (Caleb's typed
@@ -29,10 +33,10 @@ metric() { python3 -c "import json,sys; v=json.load(open(sys.argv[1]))[sys.argv[
 at_least() { python3 -c "import sys; sys.exit(0 if float(sys.argv[1]) >= float(sys.argv[2]) else 1)" "$(metric "$1")" "$2"; }
 at_most() { python3 -c "import sys; sys.exit(0 if 0 <= float(sys.argv[1]) <= float(sys.argv[2]) else 1)" "$(metric "$1")" "$2"; }
 
-ok "held-out precision at least 8.5% (measured 2026-10-16)"          at_least precision 8.5
-ok "held-out recall at least 21.1% (measured 2026-10-16)"            at_least recall 21.1
-ok "typed no-skill prompts get a skill at most 38.6% of the time"     at_most false_fire_none_typed 38.6
-ok "machine traffic gets a nudge or gate at most 5.7% of the time"    at_most false_fire_notification 5.7
-ok "p95 hook time at most 1500ms"                                     at_most p95_ms 1500
+ok "held-out precision at least 12.8% (measured 2026-10-17)"         at_least precision 12.8
+ok "held-out recall at least 23.9% (measured 2026-10-17)"            at_least recall 23.9
+ok "typed no-skill prompts get a skill at most 34.7% of the time"     at_most false_fire_none_typed 34.7
+ok "machine traffic never gets a nudge or gate"                       at_most false_fire_notification 0
+ok "p95 hook time at most 2500ms (the Mac runs at load 30 to 100)"    at_most p95_ms 2500
 cat "$LIVE_SCRATCH/held.json"
 finish

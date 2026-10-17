@@ -57,7 +57,7 @@ c7594c3df7370c62ba76e046daf1e17843dbf24972438206496b28098c4128ee  .claude/hooks/
 8009c976f2122796c1b0a206e891e6a22a02c0ba9bad9d00fac598c8be2f13a0  .claude/hooks/prayer-remind.sh
 baff09b097b67758927ae5ea8ed991dc855687ccd34face005381a4fb432ab42  .claude/hooks/prose-guard.sh
 50c4395b2af9aad5e34b94694b06cdd850a8ae42ef92421d60533becefaa9539  .claude/hooks/railway-domain-guard.sh
-848d709e83ada3b924896bcb68f5061c4939abd4e034d056c0a67e55f26e1eee  .claude/hooks/ready-guard.sh
+ed2341ba7652d41e97a051ba89889b46a51eeaafed4a099e10aec28d29b5fcb8  .claude/hooks/ready-guard.sh
 a5198d0a99e19e1ff5b34452a93aaa1b62ad03a7d20c706343a83a3187fe439d  .claude/hooks/reply-lessons.sh
 cc50c2a07f59b11f165690ad20f5103c45f3150f6faa47bec4663f3027666e71  .claude/hooks/repo-overlap-guard.sh
 08907294967c936a2663c3a86763bf534fa067ee13186cfc2f2ba4f4e3bab892  .claude/hooks/scope-guard.sh

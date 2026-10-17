@@ -81,22 +81,6 @@ LAUNCH = re.compile(r"\b(launch\w*|start\w*|send\w*|campaigns?|drafts?|sequences
                     r"go live|clay|outbound|tier [ab])\b")
 NEG = re.compile(r"(\bnot\b|n't\b|\bnever\b|\bno\b|\bnothing is\b)[^.]{0,30}$")
 
-claim = None
-for m in re.finditer(r"[^.!?\n]+[.!?]?", low):
-    sent = m.group(0)
-    if sent.rstrip().endswith("?"):
-        continue
-    pats = STRONG + (WEAK if LAUNCH.search(sent) else [])
-    for p in pats:
-        hit = re.search(p, sent)
-        if hit and not NEG.search(sent[:hit.start()]):
-            claim = sent.strip()[:80]
-            break
-    if claim:
-        break
-if not claim:
-    print("ok"); raise SystemExit
-
 # Clients and the words that name them.
 cf = os.path.expanduser(os.environ.get("GTME_CLIENTS") or os.environ.get("CHEWBACCA_GTM_CLIENTS")
                         or "~/.chewbacca/gtm/clients.json")
@@ -123,6 +107,32 @@ def mentioned(text):
     return [c["name"] for c in clients if c.get("name")
             and any(re.search(r"\b" + re.escape(n) + r"\b", text) for n in names_for(c))]
 
+
+# "Only needs", "good until", "nothing left" are how anyone reports progress.
+# On 2026-10-16 the manager tab's "A13 is done, and A14 only needs ur
+# engagement-metrics cell" (school assignments, no launch in it) was refused
+# because the session had touched campaigns earlier. These generic shapes count
+# only when the reply itself is about a launch or names a client.
+GENERIC = set(STRONG[1:5])
+LAUNCH_CTX = re.compile(r"\b(launch\w*|campaigns?|sequences?|drafts?|outbound|clay|cold[- ]emails?|"
+                        r"tier [ab]|wave|sends?|go live|footer|pre[-_ ]send)\b")
+claim = None
+for m in re.finditer(r"[^.!?\n]+[.!?]?", low):
+    sent = m.group(0)
+    if sent.rstrip().endswith("?"):
+        continue
+    pats = STRONG + (WEAK if LAUNCH.search(sent) else [])
+    if not (LAUNCH_CTX.search(low) or mentioned(low)):
+        pats = [p for p in pats if p not in GENERIC]
+    for p in pats:
+        hit = re.search(p, sent)
+        if hit and not NEG.search(sent[:hit.start()]):
+            claim = sent.strip()[:80]
+            break
+    if claim:
+        break
+if not claim:
+    print("ok"); raise SystemExit
 
 # What the session actually did: his prompts, tool calls and replies. Hook and
 # skill-list injections ride in user rows that start with a tag and are not

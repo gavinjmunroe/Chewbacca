@@ -87,6 +87,10 @@ probe "a negated claim" 0 "Tier A is not ready to launch: the pre-send receipt e
 probe "a question" 0 "Is the launch ready to go?" "$GTM_T"
 probe "no readiness claim" 0 "Pushed the copy to all 14 drafts and graded them." "$GTM_T"
 probe "a claim in a session with no GTM work" 0 "The build is good to go." "$PLAIN_T"
+probe "school progress in a GTM session (manager tab, 2026-10-16)" 0 \
+  "A13 is done, and A14 only needs ur engagement-metrics cell." "$GTM_T"
+probe "the same shape about a launch still refuses" 2 \
+  "Ivy A is done, and the launch only needs the footer." "$GTM_T"
 # Once per turn: a second Stop in the same turn never loops.
 jq -cn --arg m "We're good to go on the launch." --arg t "$GTM_T" '{last_assistant_message:$m,transcript_path:$t,prompt_id:"probe1"}' \
   | bash "$HOOK" >/dev/null 2>&1 && echo "  ok    fires once per turn" || { echo "  FAIL  fired twice in one turn"; fail=$((fail+1)); }

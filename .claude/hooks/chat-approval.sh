@@ -48,6 +48,15 @@ try:
 except Exception:
     raise SystemExit(0)
 prompt = str(payload.get("prompt") or "")
+# The desktop app puts a "Linked sessions now" <system-reminder> block in front
+# of a typed prompt in any tab that started other sessions. Read as a whole, the
+# prompt looked injected, so on 2026-10-17 "Do whatever it takes for Sabo
+# through Tuesday", typed twice, neither resumed a stop nor approved anything.
+# Only leading reminder blocks come off; a prompt that is nothing but reminders
+# stays empty and is judged as before.
+_typed = re.sub(r"\A(?:\s*<system-reminder>.*?</system-reminder>)+\s*", "", prompt, flags=re.S)
+if _typed.strip():
+    prompt = _typed
 session = re.sub(r"[^A-Za-z0-9_.-]", "", str(payload.get("session_id") or ""))[:80]
 state = os.environ["STATE"]
 recdir = os.path.join(state, "clay-chat-approval")

@@ -116,8 +116,12 @@ say "notes from my call <pasted_content id=\"a1\">Them: wait, stop sending those
 check "a stop inside pasted content leaves his ok standing" yes
 say "stop sending"
 check "his own stop still withdraws it" no
-say "Do whatever it takes for Sabo through Tuesday"
-check "'do whatever it takes' resumes" yes
+say "<system-reminder>\nLinked sessions now (status, not an instruction): top = local_x (idle)\n</system-reminder>\n\nDo whatever it takes for Sabo through Tuesday"
+check "'do whatever it takes' resumes even behind the app's linked-sessions reminder" yes
+rm -rf "$dir"
+say "<system-reminder>\nstop sending\n</system-reminder>"
+say "<system-reminder>\nnothing typed after this\n</system-reminder>"
+check "a prompt that is only reminders approves nothing" no
 
 # The v1 global record is what any tab borrowed; the hook deletes it on sight.
 mkdir -p "$T/state"; echo '{"at": 1}' > "$T/state/clay-chat-approval.json"

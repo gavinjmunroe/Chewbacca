@@ -86,6 +86,13 @@ client=<name>`, which needs his own chat message naming the number, or him
   never covered, and a START or add-leads still needs its grade and pre-send
   gate. Caleb, 2026-10-16, after approving one Sabo run three times in an
   hour: "you shouldn't be asking for permission".
+- **Never switch the clay CLI's workspace, and never run a CLI op without
+  its ws.** The CLI keeps one current workspace for every tab on the Mac. On
+  2026-10-17 at 12:43 the Sabo tab left it on 1149025, and the Zeutara tab's
+  csv-upload answered "Trigger not found" for ids in 1372623. `chewbacca clay`
+  now pins each CLI call to the op's ws= (or CLAY_WORKSPACE_ID) through a
+  private CLAY_CONFIG_HOME, and refuses an answer that names another
+  workspace. Pass ws= on any op you run for a client.
 - **Never work on Clay code in silence or in a path named clay.** launch-guard
   refuses any shell command whose text names clay, sequencer or campaign
   unless it's a known read, and paths count. The allowance build on

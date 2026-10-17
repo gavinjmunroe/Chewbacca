@@ -553,11 +553,12 @@ def dispatch_event_body(payload):
             translated = dict(payload, prompt_id=hashlib.sha256(identity.encode()).hexdigest(),
                               user_message=state.get('prompt', ''),
                               agent='codex', durable_since=state.get('prompt_started_at'), codex_evidence_after_write=(
-                                  state.get('last_success', -1) > state.get('last_write', 0)))
+                                  state.get('last_success', -1) > state.get('last_write', 0)),
+                              codex_wrote=bool(state.get('last_write', 0)))
             feedback = '\n\n'.join(filter(None, (
                 shared_hook(name, translated, cwd)
                 for name in ('slop-guard.sh', 'handoff-guard.sh',
-                             'durable-guard.sh', 'vibe-guard.sh'))))
+                             'durable-guard.sh', 'vibe-guard.sh', 'break-it-guard.sh'))))
             if feedback:
                 return stop_feedback(payload, feedback)
         notice = git_notice(cwd)

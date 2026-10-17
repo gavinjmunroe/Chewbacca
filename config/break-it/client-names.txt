@@ -1,0 +1,13 @@
+# Names that should live in a client file, never in code. break-it flags an
+# added line in bin/, tools/, hooks or skills code that names one of these.
+# 2026-10-16: the Sabo parent-company lookup was pitched as reasoning while
+# tools read a hand-filled parents.json of Sabo's brands. One name per line.
+Sabo
+Zeutara
+Vertocol
+Strava
+Klarna
+Gymshark
+Barebells
+Vitamin Well
+ASICS

@@ -1797,6 +1797,17 @@ h["Stop"] = [{"hooks": [{
     "timeout": 15,
     "statusMessage": "Checking claims of doneness against evidence...",
 }]}, {"hooks": [{
+    # Caleb, 2026-10-16: "When they build something and say it's done, chewbs
+    # should attack it from every angle trying to break it before it concludes
+    # anything". A done claim over a change in a repo is attacked on the spot
+    # (garbage input to the touched commands, uncommitted files, the copy that
+    # runs, unbacked claims) unless a full break-it receipt for this exact tree
+    # names every open break. Replay numbers: tests/fixtures/break_it/REPLAY.md.
+    "type": "command",
+    "command": hooks_dir + "/break-it-guard.sh",
+    "timeout": 30,
+    "statusMessage": "Attacking the change before it is called done...",
+}]}, {"hooks": [{
     # A closing message that hands over a command is a confession of stopping
     # early. The shell was right there.
     "type": "command",

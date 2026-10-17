@@ -341,6 +341,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_agent_starts_the_campaign: nobody is told to press anything in Clay; the agent sends status=START itself, draft only, launch grade + pre-send gate + chat ok (10/12)
 - feedback_big_json_edit_reflows: an Edit to clay.json came back as a 6,537-line formatter reflow; patch big JSON specs by script and check diff --stat (10/12)
 - feedback_gtme_done_misses_forwards: gtme done called 2 replies owed that were a founder-meeting yes and a Togari-forwarded OOO; read the thread first, fix done to count forwards (10/12)
+- feedback_blocker_count_is_cells_not_causes: gtme ready's count is gate cells, so "41" hid a grader crash and week-old pinned files on 10/17; it now prints causes (3f3200ae)
 - reference_togari_repair_loop: Togari's LLM redrafts a refused reply and the gates decide; investor text is untrusted, parked rows clear when the thread moves (repair.ts, 10/17)
 - feedback_vantage_refuses_founder_next_to_call: Vantage refuses "founder" beside a call word; Togari's own OOO note did that, so every follow-up parked as a handoff (fixed 48fe0e2, 10/17)
 - feedback_gtme_done_misses_togari_followups: gtme done never reads Togari's follow-up queue; "nobody waiting" on 10/16 met a 26-investor digest on 10/17. Read findStuck and close settled threads first

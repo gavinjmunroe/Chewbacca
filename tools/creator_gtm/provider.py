@@ -1,7 +1,7 @@
 """The data steps of the creator GTM tools, behind one contract, so the vendor under them can change.
 
 Caleb, 2026-10-16: "removing clay from the equation is def the play after this phase". Gavin's
-ruling holds until Sabo pays: Clay stays the live provider. This file makes the later swap a new
+ruling holds until the first client pays: Clay stays the live provider. This file makes the later swap a new
 adapter plus one line in the client file, with pick, ranking, status, attribution and spend logic
 untouched.
 

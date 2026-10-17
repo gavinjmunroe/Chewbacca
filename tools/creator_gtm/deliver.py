@@ -1,12 +1,17 @@
-"""Record every Ready row of a client's Clay table in the intro ledger, then stamp the row.
+"""Record every handed contact of a client in the intro ledger, then stamp where it came from.
 
-    python3 tools/creator_gtm/deliver.py ~/.chewbacca/gtm/clients/sabo.json          dry run: prints what it would record
-    python3 tools/creator_gtm/deliver.py ~/.chewbacca/gtm/clients/sabo.json --live   records, then writes Delivered On/For
+    python3 tools/creator_gtm/deliver.py ~/.chewbacca/gtm/clients/<slug>.json          dry run: prints what it would record
+    python3 tools/creator_gtm/deliver.py ~/.chewbacca/gtm/clients/<slug>.json --live   records, then writes Delivered On/For
+    python3 tools/creator_gtm/deliver.py <client.json> --from-records [--live]          reads the client's record file instead
 
 The ledger is the proof and Clay is the view. A row is recorded first and stamped second, so a
 Clay write that fails leaves the ledger right and the next run fills the row from it. A row
 that already carries Delivered On is skipped. Every Clay call goes through `chewbacca clay`,
 which owns the write gate.
+
+A client on a provider with no table (see tools/creator_gtm/provider.py) has only its record
+file, so --from-records reads that and stamps each record's "delivered" field instead of a row.
+A handed contact is one whose status is the client's ready_value or follow_buyers' warm status.
 
 Needs LEDGER_URL and LEDGER_TOKEN, from the environment or ~/.config/intro-ledger/env.
 """
@@ -18,6 +23,11 @@ import sys
 import urllib.request
 
 STAMP_COLUMNS = ("Delivered On", "Delivered For", "Ledger Record")
+# The columns brand_buyer writes when the client file doesn't rename them (its DEFAULT_PICK_COLUMNS).
+PICK_DEFAULTS = {"person": "Person", "title": "Title", "why": "Why this person", "status": "Status",
+                 "contact": "Contact"}
+# follow_buyers.WARM with no "; needs work" tail: a past buyer at a new brand with a verified email.
+WARM = "Warm: past buyer moved"
 ENV_FILE = os.path.expanduser("~/.config/intro-ledger/env")
 
 
@@ -111,6 +121,72 @@ def payload_for(cfg, row, ids):
     }
 
 
+def handed(cfg, status):
+    return status in (cfg.get("ready_value", "Ready"), WARM)
+
+
+def column_names(cfg):
+    """Role -> column name: the client file's names, brand_buyer's pick columns where it names none,
+    and the email column under either role name ("email" or brand_buyer's "findymail")."""
+    names = {**PICK_DEFAULTS, **cfg["columns"]}
+    if "email" not in names and names.get("findymail"):
+        names["email"] = names["findymail"]
+    return names
+
+
+def payload_from_record(cfg, key, rec, records_path):
+    """The ledger payload for one brand in the client's record file (provider.save_record's shape)."""
+    c = rec.get("contact") or {}
+    return {
+        "client": cfg["client_slug"],
+        "brand": rec.get("brand") or key,
+        "brand_domain": c.get("domain") or rec.get("domain") or "",
+        "person": c.get("person") or "",
+        "title": c.get("title") or "",
+        "email": (c.get("email") or "").lower(),
+        "email_verdict": verdict_of(c.get("zerobounce") or ""),
+        "profile": c.get("profile") or "",
+        "why": c.get("why") or "",
+        "evidence": {"profile": c.get("profile"), "email_check": c.get("zerobounce"), "lane": rec.get("lane")},
+        "delivered_for": rec.get("creator") or cfg.get("creator", ""),
+        "source": {"system": rec.get("provider") or "records", "records": os.path.basename(records_path),
+                   "key": key},
+    }
+
+
+def records_path(cfg, client_file):
+    p = os.path.expanduser(cfg.get("records") or f"{cfg['client_slug']}.records.json")
+    return p if os.path.isabs(p) else os.path.join(os.path.dirname(os.path.abspath(client_file)), p)
+
+
+def deliver_records(cfg, path, live, post_fn):
+    """Record each handed contact in the client's record file, then stamp the record. Returns the report."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from provider import load_records, save_record  # noqa: E402  (stdlib-only; no vendor import)
+    report = {"client": cfg["client_slug"], "live": live, "recorded": [], "already": [], "skipped": []}
+    for key, rec in sorted(load_records(path).get("brands", {}).items()):
+        if not handed(cfg, (rec.get("contact") or {}).get("status")):
+            continue
+        p = payload_from_record(cfg, key, rec, path)
+        if rec.get("delivered"):
+            report["already"].append(p["brand"])
+            continue
+        bad = problems(p)
+        if bad:
+            report["skipped"].append({"brand": p["brand"], "key": key, "why": bad})
+            continue
+        if not live:
+            report["recorded"].append({"brand": p["brand"], "person": p["person"], "email": p["email"],
+                                       "for": p["delivered_for"], "dry_run": True})
+            continue
+        record, created = post_fn(p)
+        save_record(path, key, {"delivered": {"on": record["delivered_on"], "for": record["delivered_for"],
+                                              "ledger": f"#{record['seq']} {record['hash'][:16]}"}})
+        report["recorded"].append({"brand": p["brand"], "person": p["person"], "seq": record["seq"],
+                                   "delivered_on": record["delivered_on"], "new": created})
+    return report
+
+
 def problems(p):
     """A Ready row still has to hold what an intro is: a person, an email and a valid check."""
     out = [k for k in ("brand", "person", "email", "delivered_for") if not p[k]]
@@ -135,25 +211,31 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("client_file")
     ap.add_argument("--live", action="store_true")
+    ap.add_argument("--from-records", action="store_true", help="read the client's record file, not a table")
     a = ap.parse_args(argv)
     with open(a.client_file) as f:
         cfg = json.load(f)
     env = load_env()
     if a.live and not {"LEDGER_URL", "LEDGER_TOKEN"} <= set(env):
         raise Failed(f"set LEDGER_URL and LEDGER_TOKEN, or write them to {ENV_FILE}")
+    if a.from_records:
+        report = deliver_records(cfg, records_path(cfg, a.client_file), a.live, lambda p: post(env, p))
+        print(json.dumps(report, indent=1))
+        return report
 
     cols = ensure_stamp_columns(cfg, columns(cfg), a.live)
-    names = {**cfg["columns"], "delivered_on": "Delivered On", "delivered_for": "Delivered For",
+    own = column_names(cfg)
+    names = {**own, "delivered_on": "Delivered On", "delivered_for": "Delivered For",
              "ledger": "Ledger Record"}
     # A dry run adds no columns, so only the client's own columns have to exist yet.
-    missing = [n for n in (names.values() if a.live else cfg["columns"].values()) if n not in cols]
+    missing = [n for n in (names.values() if a.live else own.values()) if n not in cols]
     if missing:
         raise Failed(f"table {cfg['table']} has no column named {missing}")
     ids = {role: cols.get(name) for role, name in names.items()}
 
     report = {"client": cfg["client_slug"], "live": a.live, "recorded": [], "already": [], "skipped": []}
     for row in read_rows(cfg, ids):
-        if text(row["cells"].get(ids["status"])) != cfg.get("ready_value", "Ready"):
+        if not handed(cfg, text(row["cells"].get(ids["status"]))):
             continue
         p = payload_for(cfg, row, ids)
         if ids.get("delivered_on") and text(row["cells"].get(ids["delivered_on"])):

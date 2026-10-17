@@ -3,7 +3,7 @@
 Usage: python3 tools/brand_buyer.py --client <client.json> --setup [--live]
        python3 tools/brand_buyer.py --client <client.json> "<Brand>" <domain> [--live]
 The client file names the table, its columns, the creator and the parents file; see
-library/gtm/brand-buyer/client.example.json. Sabo (2026-10-16) was the first client.
+library/gtm/brand-buyer/client.example.json. Nothing in this file names a client.
 
 Chewbacca picks the domain to search, Clay's native people search finds candidates, and when
 the brand domain has nobody, gtme next-move (tools/next_move.py) reads the brand's own site,
@@ -37,7 +37,14 @@ from creator_gtm import provider as gtm_provider  # noqa: E402
 WS = TABLE = VIEW = None
 F_BRAND = F_DOMAIN = F_CREATOR = F_PEOPLE = F_PROFILE = F_FINDYMAIL = F_VERIFY = None
 WHY_COLUMN = "Why this person"
-PICK_COLUMNS = {"person": "Person", "title": "Title", "why": WHY_COLUMN, "status": "Status", "contact": "Contact"}
+# The columns the chain writes, by role. A client file's "columns" block can rename any of them
+# (the same roles deliver.py reads), so a table whose pick column is "Decision maker" works.
+DEFAULT_PICK_COLUMNS = {"person": "Person", "title": "Title", "why": WHY_COLUMN, "status": "Status",
+                        "contact": "Contact"}
+PICK_COLUMNS = dict(DEFAULT_PICK_COLUMNS)
+# The status a usable pick gets; deliver.py records rows carrying it. The client file's "ready_value".
+READY = "Ready"
+CLIENT_SLUG = None
 ROWS_FILE = None
 # The data provider (clay, treg, ...) and the canonical record file, both from the client file.
 PROVIDER = RECORDS_FILE = None
@@ -97,6 +104,7 @@ class ClayFailed(SystemExit):
 def configure(cfg, strict=True):
     """Point the chain at one client's table: ids, views, creator, parents, people search."""
     global WS, TABLE, VIEW, CLIENT_VIEW, CREATOR, RUN_LOG, ROWS_FILE, PEOPLE_SEARCH, PROVIDER, RECORDS_FILE
+    global PICK_COLUMNS, WHY_COLUMN, READY, CLIENT_SLUG
     PROVIDER = gtm_provider.for_client(cfg, chain=sys.modules[__name__])
     WS, TABLE = str(cfg.get("ws", WS)), cfg.get("table", TABLE)
     VIEW = cfg.get("view", VIEW)
@@ -104,12 +112,20 @@ def configure(cfg, strict=True):
     CREATOR = cfg.get("creator", CREATOR)
     base = os.path.dirname(os.path.abspath(cfg["_path"])) if cfg.get("_path") else HERE
     here = lambda key, default: os.path.join(base, os.path.expanduser(cfg.get(key, default)))
-    RUN_LOG, ROWS_FILE = here("run_log", "runs.jsonl"), here("rows", "rows.json")
-    RECORDS_FILE = here("records", f"{cfg.get('client_slug') or 'client'}.records.json")
+    CLIENT_SLUG = cfg.get("client_slug") or CLIENT_SLUG
+    slug = CLIENT_SLUG or "client"
+    # Per-client defaults: two client files in ~/.chewbacca/gtm/clients must not share a rows
+    # file, or one client's brand row gets reused for the other's table.
+    RUN_LOG, ROWS_FILE = here("run_log", f"{slug}.runs.jsonl"), here("rows", f"{slug}.rows.json")
+    RECORDS_FILE = here("records", f"{slug}.records.json")
     PEOPLE_SEARCH = {**PEOPLE_SEARCH, **cfg.get("people_search", {})}
-    # The client file is shared with other Sabo tools (watcher, ledger), so it can name
-    # columns this chain never reads; only the roles below are looked up.
-    names = {role: name for role, name in (cfg.get("columns") or {}).items() if role in ROLES}
+    READY = cfg.get("ready_value") or READY
+    given = cfg.get("columns") or {}
+    PICK_COLUMNS = {role: given.get(role, name) for role, name in DEFAULT_PICK_COLUMNS.items()}
+    WHY_COLUMN = PICK_COLUMNS["why"]
+    # The client file is shared with the other client tools (spend_now, deliver, follow_buyers),
+    # so it can name columns this chain never reads; only the roles below are looked up.
+    names = {role: name for role, name in given.items() if role in ROLES}
     if names and PROVIDER.has_table:
         by_name = {c.get("name"): c["id"] for c in columns()}
         missing = [n for n in names.values() if n not in by_name]
@@ -124,7 +140,7 @@ CLIENTS_DIR = os.path.expanduser("~/.chewbacca/gtm/clients")
 
 
 def load_client(path):
-    """A client file path, or a client slug like "sabo" for ~/.chewbacca/gtm/clients/sabo.json."""
+    """A client file path, or a client slug like "acme" for ~/.chewbacca/gtm/clients/acme.json."""
     if path and os.sep not in path and not path.endswith(".json"):
         path = os.path.join(CLIENTS_DIR, path + ".json")
     if not path or not os.path.exists(path):
@@ -245,7 +261,7 @@ def blocked_search(brand, brand_domain, row, log):
             found.update(people=people, domain=domain, trusted=move.get("trust") == "owned_and_linked")
         return {"cleared": bool(people), "credits": 0.5}
 
-    blocker = {"client": CREATOR or "brand-buyer", "step": "people_search",
+    blocker = {"client": CLIENT_SLUG or CREATOR or "brand-buyer", "step": "people_search",
                "goal": f"the person who decides which outside creators {brand} pays, with a verified email "
                        f"at {brand} or its parent",
                "persona": [k.strip() for k in PEOPLE_SEARCH.get("keywords", "").split(",") if k.strip()],
@@ -357,8 +373,9 @@ def ensure_why_column(live):
 
 
 def ensure_pick_columns(live):
-    """Person, Title and Why: what Sabo reads. Caleb, 2026-10-16, on the table: "We're not as
-    goated as we pitched yet". The email showed and the person it belonged to did not.
+    """Person, Title and Why: what the client reads. Caleb, 2026-10-16, on the first client's
+    table: "We're not as goated as we pitched yet". The email showed and the person it belonged
+    to did not. Names come from PICK_COLUMNS, so the client file can rename them.
     A provider with no table has no view to set up; the record file holds everything."""
     if not prov().has_table:
         return {}
@@ -387,7 +404,7 @@ def setup(live, hide=()):
     """Make a client table ready: people search settings, pick columns, the client view.
 
     Each setting here was paid for on 2026-10-16: identifiers_only beat the 20k read cap,
-    buyer keywords stopped the search returning athletes and ambassadors, and Sabo's table
+    buyer keywords stopped the search returning athletes and ambassadors, and the first client's table
     showed emails with no name or reason next to them.
     """
     if not prov().has_table:
@@ -471,8 +488,8 @@ def email_problem(email, verdict, allowed):
     brand, *parents = [d for d in allowed if d] or [""]
     if not any(same_org(at, d) for d in (brand, *parents)):
         return f"off-domain {at}"
-    # Caleb, 2026-10-16 ("do wtv is best"): a catch-all or unknown verdict is not verified. Sabo
-    # worries about sending too many emails, and a bounce from his domain costs more than one
+    # Caleb, 2026-10-16 ("do wtv is best"): a catch-all or unknown verdict is not verified. The
+    # first client worried about sending too many emails, and a bounce from his domain costs more than one
     # missing contact. The same oracle grades the GTME lesson ledger, so the two can't drift.
     counts, _ = verified_email(at, verdict, brand, parents)
     return None if counts else "catch-all"
@@ -481,14 +498,14 @@ def email_problem(email, verdict, allowed):
 def status_for(email, problem, why):
     """Ready only with a usable email at the brand or parent and a reason; else Needs work: why."""
     if email and not problem and why:
-        return "Ready"
+        return READY
     if problem == "catch-all":
         return "catch-all, unverified, send after the valid ones"
     return f"Needs work: {problem or 'no email'}"
 
 
 def contact_line(name, title, email, why):
-    """The one column Sabo reads, the way a waterfall collapses into one email."""
+    """The one column the client reads, the way a waterfall collapses into one email."""
     return f"{name}, {title or 'no title listed'}, {email or 'no email'}. {why}"
 
 
@@ -619,7 +636,7 @@ def main(argv=None):
     ap.add_argument("brand", nargs="?")
     ap.add_argument("domain", nargs="?", help="the brand's own domain; an empty search goes to gtme next-move")
     ap.add_argument("--live", action="store_true")
-    ap.add_argument("--client", default=CLIENT_FILE, help="client slug (sabo) or client.json: table, columns by name, creator")
+    ap.add_argument("--client", default=CLIENT_FILE, help="client slug or client.json: table, columns by name, creator")
     ap.add_argument("--setup", action="store_true", help="set up the client table, then stop")
     ap.add_argument("--row", help="rerun on this row (default: the brand's row in rows.json)")
     ap.add_argument("--new-row", action="store_true", help="add a fresh row even if the brand has one")

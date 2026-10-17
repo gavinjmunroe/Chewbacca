@@ -135,11 +135,11 @@ def to_csv(records):
 
 
 def read_tokens():
-    """LEDGER_READ_TOKENS="sabo:abc,acme:def" gives one client a read-only key to its own rows."""
+    """LEDGER_READ_TOKENS="acme:abc,globex:def" gives one client a read-only key to its own rows."""
     tokens = {}
     for entry in filter(None, (p.strip() for p in os.environ.get("LEDGER_READ_TOKENS", "").split(","))):
         client, _, tok = entry.partition(":")
-        # "sabo:" would map the empty bearer to Sabo's rows, so a short token is refused at start.
+        # "acme:" would map the empty bearer to acme's rows, so a short token is refused at start.
         if len(tok.strip()) < 24 or not client.strip():
             raise SystemExit("each LEDGER_READ_TOKENS entry is client:<token of 24+ characters>")
         tokens[tok.strip()] = client.strip().lower()

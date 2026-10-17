@@ -375,6 +375,10 @@ Reply counts that disagree across sources, and replies read from a snippet: `che
   day so the weights, questions and windows live in `spend_now.signals` and the
   sponsors are plain evidence lines (6bd465d6, `reference_spend_now_score`).
 
+## A new creator-manager client in 10 minutes
+
+Copy `library/gtm/brand-buyer/clients/hearthside.json` (a made-up second client) to `~/.chewbacca/gtm/clients/<slug>.json` and fill in `client_slug`, `creator`, `ws`, `table`, `view`, `client_view`, `provider`, `ready_value`, `people_search` (keywords, excludes, limit), `columns` (the table's own names for the roles brand, domain, creator, people, profile, findymail, email, verify, person, title, why, status, contact), `hide`, `buyers` (the past-buyer seed file) and the `spend_now` block (signals with weight, label and Jev question, window, budget_reset, brands, ats); `records`, `rows` and `run_log` default to `<slug>.*` next to the file. Then run, in order: `python3 tools/brand_buyer.py --client <slug> --setup --live`, `python3 tools/brand_buyer.py --client <slug> "<Brand>" <domain> --live` per brand, `python3 tools/creator_gtm/spend_now.py <file> columns --live`, then `collect`, `check` and `write --live`, then `python3 tools/creator_gtm/follow_buyers.py --client <slug> --live`, then `python3 tools/creator_gtm/deliver.py <file> --live` (add `--from-records` on a provider with no table). `tests/test_creator_gtm_second_client.py` proves no step needs code: it runs that whole chain for Hearthside through a fake provider (two direct finds, one empty search that next-move resolves to the parent, spend ranked by Hearthside's own weights, one job change turned warm, every handed contact in the intro ledger as `hearthside`), and fails if any tool file names the first client or its ids.
+
 ## When a step comes back empty or blocked: `gtme next-move` (2026-10-16)
 
 On the Sabo call we said Chewbacca "found a way around a blocker" by looking up

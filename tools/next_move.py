@@ -6,7 +6,7 @@
     chewbacca gtme next-move replay DIR [--no-jev] [--json]                   the falsifier, on recorded blockers
     chewbacca gtme next-move record --client X --kind K --step S --cleared yes|no --credits N
 
-Built 2026-10-16 after a Sabo call credited Chewbacca with "finding a way around a
+Built 2026-10-16 after the first client's call credited Chewbacca with "finding a way around a
 blocker" when the parent domain came from parents.json, filled by hand after
 barebells.com returned nobody. The loop has four parts:
 

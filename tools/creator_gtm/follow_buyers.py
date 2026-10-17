@@ -85,8 +85,9 @@ def prefer_seed(rank, seed_name):
 def why_line(seed, chain_result, seed_in_search, email=None, problem=None):
     cur = seed["current"]
     since = f" since {cur['since']}" if cur.get("since") else ""
-    found = (f"Clay's people search at {cur['domain']} lists {seed['name']} there" if seed_in_search
-             else f"Clay's people search at {cur['domain']} did not return {seed['name']}; "
+    who = L.prov().label
+    found = (f"{who}'s people search at {cur['domain']} lists {seed['name']} there" if seed_in_search
+             else f"{who}'s people search at {cur['domain']} did not return {seed['name']}; "
                   f"current role is from {cur['source']}")
     line = (f"{seed['name']} {seed['history']} (paid from {', '.join(seed['paid_from']['brands'])}), "
             f"now {cur['title']} at {cur['employer']}{since}. {found}.")

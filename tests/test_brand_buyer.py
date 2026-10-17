@@ -146,7 +146,7 @@ class _Base(unittest.TestCase):
         self.saved_rows_file = L.ROWS_FILE
         self.saved_globals = {k: getattr(L, k) for k in list(L.ROLES.values()) + [
             "WS", "TABLE", "VIEW", "CLIENT_VIEW", "CREATOR", "PEOPLE_SEARCH", "CLIENT_FILE", "RUN_LOG",
-            "PROVIDER", "RECORDS_FILE"]}
+            "PROVIDER", "RECORDS_FILE", "PICK_COLUMNS", "WHY_COLUMN", "READY", "CLIENT_SLUG"]}
         L.CLIENT_FILE = os.path.join(self.tmp.name, "minimal-client.json")
         with open(L.CLIENT_FILE, "w") as f:
             json.dump({}, f)

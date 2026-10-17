@@ -333,9 +333,13 @@ def ensure_columns(cfg, live):
     if live:
         cols = table_columns(cfg)
     ids = {role: cols.get(name) for role, (name, _) in plan.items()}
+    # The table's own column names come from the client file only; a guessed name would write
+    # into the wrong column on a table laid out differently. Status falls back to the column
+    # brand_buyer adds, which is the same default in both tools.
     names = cfg.get("columns") or {}
-    for role, default in (("brand", "Brand"), ("domain", "Brand Domain"), ("status", "Status")):
-        ids[role] = cols.get(names.get(role, default))
+    for role in ("brand", "domain"):
+        ids[role] = cols.get(names[role]) if names.get(role) else None
+    ids["status"] = cols.get(names.get("status", "Status"))
     if live:
         lost = [plan[r][0] for r in plan if not ids[r]]
         if lost:
@@ -399,7 +403,7 @@ def write(cfg, today, live):
 
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("client", help="client file, e.g. ~/.chewbacca/gtm/clients/sabo.json")
+    p.add_argument("client", help="client file, e.g. ~/.chewbacca/gtm/clients/<slug>.json")
     p.add_argument("cmd", choices=["columns", "collect", "add", "check", "score", "write"])
     p.add_argument("--live", action="store_true", help="send writes (default is a dry run)")
     p.add_argument("--file", help="add: a JSONL file of evidence items")

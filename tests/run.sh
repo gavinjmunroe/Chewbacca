@@ -558,6 +558,11 @@ if group "gtme"; then
   # chain runs on a fake provider with clay() as a tripwire, so the swap is an adapter, not a rewrite.
   check "gtm provider: brand buyer end to end with no Clay, cost per call, record file first, treg not wired" \
     python3 "$ROOT/tests/test_gtm_provider.py"
+  # 2026-10-16: Caleb, "Make sure everythign we do for sabo is repeatable and productizable!".
+  # A made-up second client runs brand buyer, spend_now, follow_buyers and the intro ledger end
+  # to end; fixed column names, a fixed "Ready" and a Clay-only deliver each failed it.
+  check "creator gtm second client: the whole chain runs from a different client file, no client named in tools" \
+    python3 "$ROOT/tests/test_creator_gtm_second_client.py"
   # 2026-10-13: 97 executable lines hard-coded one client and its rulings had
   # two homes; the clients.json entry is the contract a second client fills in.
   check "gtme config checks a client entry, resolves its one workspace, keeps rulings in one file" \

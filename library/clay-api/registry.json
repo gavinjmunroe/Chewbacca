@@ -1089,6 +1089,39 @@
       "verified": false
     },
     {
+      "name": "add-enrichment-column",
+      "kind": "write",
+      "gate": "write:schema",
+      "args": ["ws", "table", "field"],
+      "summary": "Add any column from a whole body field={name, type, typeSettings, activeViewId}: an action (actionKey, actionPackageId, inputsBinding, conditionalRunFormulaText, runAsButton) or a waterfall formula (formulaType waterfall, formulaWaterfall). tools/waterfall_copy.py builds these from an existing waterfall. Never run it without runAsButton:true on an action, or the new column fills every row.",
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "createFieldRaw",
+          "args": {
+            "ws": "ws",
+            "tableId": "table",
+            "field": "field"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle + live columns",
+        "contract": "createField",
+        "body_schema": "EEt @1231987: {name, type, typeSettings, activeViewId?}",
+        "observed": "action and waterfall typeSettings read from Zeutara table t_0tmju95pkBPQmMJvubE via getTableColumns, 2026-10-17"
+      },
+      "readback": {
+        "op": "columns",
+        "args": {
+          "table": "table"
+        },
+        "expect": "manual"
+      },
+      "confidence": "medium: the body is the shape Clay stores and the UI builder sends; first live use reads it back",
+      "verified": false
+    },
+    {
       "name": "update-column",
       "kind": "write",
       "gate": "write:schema",

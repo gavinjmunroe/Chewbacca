@@ -366,7 +366,7 @@ Reply counts that disagree across sources, and replies read from a snippet: `che
   experiment: two Findymail columns, two Email formulas, two Verify columns,
   nine hand-typed leftovers. Before adding any column: run
   `table_graph.py <table>` and reuse a column that already does the step; write
-  the client file's `client_view` (or let `table_tidy` derive it from
+  the client file's `view_spec` (`client_view` is a view id) (or let `table_tidy` derive it from
   `columns`); add the new column into that plan, not beside it.
 - **Weigh every enrichment before wiring one.** Same day: "I need chewbs to
   have a perfect memory of all the diff clay tools you are yet to use a built

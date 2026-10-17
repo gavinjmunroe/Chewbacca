@@ -527,7 +527,9 @@ CLAY_READS = [("whoami",), ("credits", "balance"), ("campaigns", "list"), ("camp
               ("workflows", "actions", "list"), ("workflows", "actions", "search"),
               ("workflows", "actions", "schema"), ("--version",)]
 if name == "clay":
-    if any(tuple(args[:len(p)]) == p for p in CLAY_READS):
+    # A flag-only entry matches exactly: as a prefix, ("--version",) would pass
+    # `clay --version <any write>` (security review, 2026-10-17).
+    if any(tuple(args) == p if p[0].startswith("-") else tuple(args[:len(p)]) == p for p in CLAY_READS):
         out("allow")
     out("refuse", "that clay subcommand is not a known read")
 

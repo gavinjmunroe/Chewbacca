@@ -19,8 +19,8 @@ def test_spec_is_derived_when_the_client_file_has_none():
     assert sort == [("Status", "DESC"), ("Spending now", "DESC")]
 
 
-def test_an_explicit_client_view_wins():
-    names, sort = T.spec({**SABO, "client_view": {"columns": ["Brand", "Contact"], "sort": [["Brand", "ASC"]]}})
+def test_an_explicit_view_spec_wins():
+    names, sort = T.spec({**SABO, "view_spec": {"columns": ["Brand", "Contact"], "sort": [["Brand", "ASC"]]}})
     assert names == ["Brand", "Contact"] and sort == [("Brand", "ASC")]
 
 

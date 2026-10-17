@@ -7,7 +7,7 @@ make it infinitely easier to iterate and build off of and learn from workflows".
 leftovers, all visible, sorted by last update. The lesson had been written down on 10/16 and the
 view was still never set, because setting it was a step someone had to remember.
 
-The client file's "client_view" is the spec: the columns the client reads, in order, and the
+The client file's "view_spec" is the spec: the columns the client reads, in order, and the
 sort. With no spec, it is derived from the client file's "columns" mapping, so a new client gets
 the same shape without anyone writing one. `table_graph.lint` runs first, so a duplicate
 enrichment column is reported before anyone builds on it.
@@ -40,8 +40,8 @@ def load_client(name):
 
 
 def spec(client):
-    """(ordered column names, [(name, direction)]) from client_view, else derived."""
-    view = client.get("client_view") or {}
+    """(ordered column names, [(name, direction)]) from view_spec, else derived."""
+    view = client.get("view_spec") or {}
     if view.get("columns"):
         return view["columns"], [tuple(s) for s in view.get("sort") or []]
     cols = dict(client.get("columns") or {})

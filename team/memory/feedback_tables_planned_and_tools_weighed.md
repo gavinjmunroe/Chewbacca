@@ -12,7 +12,7 @@ Why: the Sabo table grew to 38 columns, one per experiment, with Findymail, Emai
 How to apply:
 
 - Before any column: `python3 -I tools/table_graph.py <table>` and reuse what's there.
-- After any row batch: `python3 -I tools/table_tidy.py --client <slug> --apply` (client file `client_view`, else derived from `columns`).
+- After any row batch: `python3 -I tools/table_tidy.py --client <slug> --apply` (client file `view_spec`, else derived from `columns`).
 - Before any enrichment: `tools/enrich_catalog.py pick "<capability>"` after `build` from `clay workflows actions list` and `learn` from the run log. A near tie gets a cheap head-to-head test.
 - No hand-set rates or values. Caleb, same day: "Nothing in this process should be based on vibes/rough association! There needs to be substantial factors all taken mathematically into account for a robust process". `enrich_math` uses Beta posteriors over usable results, prices cascades, takes value from the client file, and returns a sized test when P(best) is under 0.9.
 - Measured 2026-10-17 on Sabo brands: Findymail found 22 of 33 tries but only 12 were valid and at the right company (36%). The waterfall is unmeasured, so the pick is a 68-row test of it on Findymail's misses.

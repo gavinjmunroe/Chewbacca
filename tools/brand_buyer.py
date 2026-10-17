@@ -105,7 +105,7 @@ class ClayFailed(SystemExit):
 def configure(cfg, strict=True):
     """Point the chain at one client's table: ids, views, creator, parents, people search."""
     global WS, TABLE, VIEW, CLIENT_VIEW, CREATOR, RUN_LOG, ROWS_FILE, PEOPLE_SEARCH, PROVIDER, RECORDS_FILE, BLOCKERS_FILE
-    global PICK_COLUMNS, WHY_COLUMN, READY, CLIENT_SLUG
+    global PICK_COLUMNS, WHY_COLUMN, READY, CLIENT_SLUG, PARENT_DOMAINS
     PROVIDER = gtm_provider.for_client(cfg, chain=sys.modules[__name__])
     WS, TABLE = str(cfg.get("ws", WS)), cfg.get("table", TABLE)
     VIEW = cfg.get("view", VIEW)
@@ -121,6 +121,7 @@ def configure(cfg, strict=True):
     BLOCKERS_FILE = here("blockers", f"{slug}.blockers.jsonl")
     RECORDS_FILE = here("records", f"{slug}.records.json")
     PEOPLE_SEARCH = {**PEOPLE_SEARCH, **cfg.get("people_search", {})}
+    PARENT_DOMAINS = verified_parents(here("parents", "")) if cfg.get("parents") else {}
     READY = cfg.get("ready_value") or READY
     given = cfg.get("columns") or {}
     PICK_COLUMNS = {role: given.get(role, name) for role, name in DEFAULT_PICK_COLUMNS.items()}
@@ -136,6 +137,30 @@ def configure(cfg, strict=True):
         for role, name in names.items():
             if name in by_name:
                 globals()[ROLES[role]] = by_name[name]
+
+
+PARENT_DOMAINS = {}
+
+
+# C4 Energy and Hoka, 2026-10-17: the search at c4energy.com and hoka.com returned staff who
+# list their parent, and their valid @nutrabolt.com and @deckers.com addresses landed as
+# "off-domain", though parents.json had both owners verified with a source link. A parent counts
+# only when its row is "verified" and cites a source, the same bar as the security review's
+# ownership sentence plus a link; an unverified guess stays off the allowlist.
+def verified_parents(path):
+    try:
+        with open(os.path.expanduser(path)) as f:
+            rows = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    out = {}
+    for r in rows if isinstance(rows, list) else []:
+        if r.get("parent_status") != "verified" or not r.get("parent_source_url"):
+            continue
+        domains = re.findall(r"[a-z0-9-]+(?:\.[a-z0-9-]+)+", (r.get("search_domain") or "").lower())
+        if domains:
+            out[_norm(r.get("brand"))] = domains
+    return out
 
 
 CLIENTS_DIR = os.path.expanduser("~/.chewbacca/gtm/clients")
@@ -560,7 +585,7 @@ def finish(brand_domain, row, log, t0, before, cols):
 
     # Security review, 2026-10-16: a hop domain from a bare link or a guessed name could put a
     # stranger's email on the allowlist. Only an ownership sentence plus a link earns it.
-    allowed = [brand_domain] + ([domain] if trusted else [])
+    allowed = [brand_domain] + ([domain] if trusted else []) + PARENT_DOMAINS.get(_norm(log["brand"]), [])
     pick, first_try = ranked[0], None
     url, email, verdict = email_for(row, people[pick], log)
     problem = email_problem(email, verdict, allowed)

@@ -491,5 +491,25 @@ class NoLookupTableTest(unittest.TestCase):
         self.assertNotIn('"vitaminwell.com"', src, "no parent domain written into the code")
 
 
+class VerifiedParentsTest(unittest.TestCase):
+    """C4 Energy and Hoka, 2026-10-17: a valid address at a sourced, verified parent is on-domain."""
+
+    def test_only_sourced_verified_parents_count(self):
+        rows = [
+            {"brand": "C4 Energy", "parent_status": "verified", "parent_source_url": "https://x", "search_domain": "nutrabolt.com"},
+            {"brand": "Hoka", "parent_status": "verified", "parent_source_url": "https://y", "search_domain": "hoka.com, fallback deckers.com"},
+            {"brand": "YoungLA", "parent_status": "unverified", "parent_source_url": None, "search_domain": "youngla.com"},
+            {"brand": "NoSource", "parent_status": "verified", "parent_source_url": None, "search_domain": "guess.com"},
+        ]
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            json.dump(rows, f)
+        try:
+            got = L.verified_parents(f.name)
+        finally:
+            os.unlink(f.name)
+        self.assertEqual(got, {"c4energy": ["nutrabolt.com"], "hoka": ["hoka.com", "deckers.com"]})
+        self.assertIsNone(L.email_problem("x@nutrabolt.com", "valid", ["c4energy.com"] + got["c4energy"]))
+
+
 if __name__ == "__main__":
     unittest.main()

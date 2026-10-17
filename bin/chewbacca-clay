@@ -444,7 +444,7 @@ const READ_POSTS = new Set(["listResources", "inboxReplies", "threadHistory", "b
 // cell alone ran past it on the Sabo table, 2026-10-16, and `row` came back
 // "incomplete"). When the engine cuts one, the same frozen request is sent once
 // more through the pinned sender and the whole body is shaped here instead.
-const FULL_READS = new Set(["getRow", "listRows", "listRowsAfter", "bulkFetchRecords", "getViewRecordIds", "getTableViews", "getTableColumns"]);
+const FULL_READS = new Set(["getRow", "listRows", "listRowsAfter", "bulkFetchRecords", "getViewRecordIds", "getTableViews", "getTableColumns", "getWorkflowRunSteps"]);
 function specWrites(specName) {
   const so = specOps.get(specName);
   if (!so) return true;
@@ -674,6 +674,9 @@ const ARG_SHAPES = {
   // An absolute path to a .csv with no "..": the CLI uploads whatever file it is
   // handed, so a path that wanders is refused before it is read.
   csv: /^\/(?!.*\/\.\.?(\/|$))[A-Za-z0-9 ._\/-]{1,400}\.csv$/,
+  out: /^\/(?!.*\/\.\.?(\/|$))[A-Za-z0-9 ._\/-]{1,400}\.csv$/,
+  email: /^[A-Za-z0-9._%+'-]{1,64}@[A-Za-z0-9.-]{1,190}\.[A-Za-z]{2,}$/,
+  max_credits: /^\d{1,6}$/,
 };
 // Comma lists, or a JSON array: each item must have the item shape. The cap is
 // the op's `limits` entry, else 200.
@@ -775,6 +778,13 @@ function badArg(args, op) {
       let real;
       try { real = fs.realpathSync(String(v)); } catch { real = null; }
       if (!FIXTURES && (!real || !real.startsWith(root))) return `csv must be a file under ${root}`;
+    }
+    // out= is written, so its folder must already exist under the same root.
+    if (k === "out") {
+      const root = path.join(os.homedir(), "code", "work") + path.sep;
+      let real;
+      try { real = fs.realpathSync(path.dirname(String(v))) + path.sep; } catch { real = null; }
+      if (!FIXTURES && (!real || !real.startsWith(root))) return `out must be in a folder under ${root}`;
     }
   }
   return null;
@@ -1803,6 +1813,203 @@ async function runOp(name, kv, flags) {
   out({ ok: false, op: name, class: last.class, reason: last.reason, ...(last.next ? { next: last.next } : {}), tried, ui: uiRoute(op, args) }, EXIT.failed);
 }
 
+// ── verify-emails: one workflow test run per address ────────────────────────
+// Replaces zeutara-gtme scripts/zb_verify.py, which called the clay CLI from a
+// loop no guard could price or gate (2026-10-16: launch-guard and
+// clay-native-guard each refused it, so Monday's 141 addresses sat unverified).
+// Every run is a frozen workflow-test-run request built before approval, the
+// batch is priced with workflow-cost, and the ok covers the whole list shown.
+const VERIFY_WORKFLOWS = { 1372623: "wf_0tmevkaRdsp2XHUwD8X" };
+// zb_verify.py polled 40 times 3s apart and its 2026-10-10 runs finished inside
+// that; never measured closer.
+const VERIFY_POLL_MS = Number(testEnv("CHEWBACCA_CLAY_POLL_MS")) || 3000;
+const VERIFY_POLL_TRIES = 40;
+// Guessed, never measured: zb_verify ran 8 CLI processes, but here every run
+// shares one Clay session file, so fewer at once.
+const VERIFY_WORKERS = 4;
+const VERDICT_FIELDS = ["email", "verification", "sub_status"];
+const RETRY_VERDICTS = new Set(["", "error", "timeout"]);
+
+function parseCsv(text) {
+  const rows = [];
+  let row = [], cell = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"' && text[i + 1] === '"') { cell += '"'; i++; }
+      else if (c === '"') q = false;
+      else cell += c;
+    } else if (c === '"') q = true;
+    else if (c === ",") { row.push(cell); cell = ""; }
+    else if (c === "\n" || c === "\r") {
+      if (c === "\r" && text[i + 1] === "\n") i++;
+      row.push(cell); rows.push(row); row = []; cell = "";
+    } else cell += c;
+  }
+  if (cell !== "" || row.length) { row.push(cell); rows.push(row); }
+  const [head = [], ...body] = rows.filter((r) => r.some((x) => x.trim() !== ""));
+  const keys = head.map((h) => h.trim().toLowerCase());
+  return body.map((r) => Object.fromEntries(keys.map((k, i) => [k, r[i] ?? ""])));
+}
+
+const csvCell = (v) => (/[",\r\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v));
+
+function writeVerdicts(file, rows) {
+  const text = [VERDICT_FIELDS.join(","), ...rows.map((r) => VERDICT_FIELDS.map((k) => csvCell(r[k] ?? "")).join(","))].join("\n");
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, `${text}\n`);
+  fs.renameSync(tmp, file);
+}
+
+async function readOp(opName, args) {
+  const op = opByName.get(opName);
+  const cand = plan(op, args, "api-anything")[0];
+  if (!cand) return { ok: false, class: "input", reason: `${opName} has no surface for these args` };
+  return attempt(op, cand, {});
+}
+
+async function verifyEmails(kv, flags) {
+  const name = "verify-emails";
+  const op = opByName.get(name);
+  const unit = opByName.get("workflow-test-run");
+  const args = withDefaults(op, kv);
+  if (args.workflow === undefined && VERIFY_WORKFLOWS[args.ws]) args.workflow = VERIFY_WORKFLOWS[args.ws];
+  const known = new Set(op.args.map((a) => a.replace("?", "")));
+  const stray = Object.keys(kv).filter((k) => !known.has(k));
+  if (stray.length) out({ ok: false, op: name, class: "usage", reason: `unknown arg ${stray.join(", ")}; ${name} takes ${op.args.join(", ")}` }, EXIT.usage);
+  const missing = ["csv", "out", "workflow"].filter((k) => args[k] === undefined);
+  if (missing.length) out({ ok: false, op: name, class: "input", reason: `${name} needs ${missing.map((k) => `${k}=`).join(", ")}${missing.includes("workflow") ? ` (no default verify workflow for ws ${args.ws})` : ""}` }, EXIT.usage);
+  const norm = normalizeArgs(args);
+  if (norm.error) out({ ok: false, op: name, class: "input", reason: norm.error }, EXIT.usage);
+  const bad = badArg(norm.values, op);
+  if (bad) out({ ok: false, op: name, class: "input", reason: bad }, EXIT.usage);
+  const { ws, workflow, csv, out: outFile } = norm.values;
+  const verdict = (decision, reason) => { try { verdictLog.record("send", `clay ${name}`, decision, 0, reason, `clay ${name}`); } catch { /* a missing row, never a failed write */ } };
+  let request = null;
+  const refuse = (reason) => {
+    verdict(process.env.CHEWBACCA_NO_SEND === "1" ? "held" : "refuse", reason);
+    out({ ok: false, op: name, class: "refused", gate: op.gate, reason, payload: { op: name, args }, ...(request ? { request } : {}) }, EXIT.refused);
+  };
+  // Refused before any read, the way every other write is; --dry-run still prices it.
+  if (!flags.dryRun && process.env.CHEWBACCA_NO_SEND === "1") refuse("CHEWBACCA_NO_SEND=1 is set");
+  if (!flags.dryRun && !flags.allowWrites) refuse("a write needs --allow-writes");
+
+  let source;
+  try { source = parseCsv(fs.readFileSync(csv, "utf8")); } catch (e) { out({ ok: false, op: name, class: "input", reason: `csv could not be read: ${e.message}` }, EXIT.usage); }
+  if (source.length && !("email" in source[0])) out({ ok: false, op: name, class: "input", reason: "csv has no email column" }, EXIT.usage);
+  const all = [...new Set(source.map((r) => String(r.email || "").trim().toLowerCase()).filter(Boolean))];
+  const notEmail = all.filter((e) => !ARG_SHAPES.email.test(e));
+  let prior = [];
+  try { prior = parseCsv(fs.readFileSync(outFile, "utf8")); } catch {}
+  const done = new Map(prior.filter((r) => r.email && !RETRY_VERDICTS.has(String(r.verification || "").trim())).map((r) => [r.email.trim().toLowerCase(), r]));
+  // A verified=valid column (monday_wave.py's tier files carry one) is a
+  // verdict already paid for: 42 of the 141 Monday rows on 2026-10-17.
+  const markedValid = new Set(source.filter((r) => String(r.verified || "").trim().toLowerCase() === "valid").map((r) => String(r.email || "").trim().toLowerCase()));
+  const todo = all.filter((e) => !notEmail.includes(e) && !done.has(e) && !markedValid.has(e)).sort();
+  const summary = { op: name, ws, workflow, in_csv: all.length, already_verified: all.filter((e) => done.has(e)).length,
+    marked_valid_in_csv: all.filter((e) => markedValid.has(e) && !done.has(e)).length, not_an_email: notEmail };
+  if (!todo.length) out({ ok: true, ...summary, ran: 0, out: outFile, sent: false }, EXIT.ok);
+
+  // Every request built and frozen before anything is priced or approved.
+  const s = unit.surfaces[0];
+  const frozen = todo.map((email) => {
+    const vals = { ws, workflow, email };
+    const bound = bind(s, vals);
+    if (!bound) out({ ok: false, op: name, class: "input", reason: `no request could be built for ${email}` }, EXIT.usage);
+    try { return deepFreeze(dryRequest(s, bound, validatedSet(vals), vals)); } catch (e) { out({ ok: false, op: name, class: "input", reason: `${email}: ${e.message}` }, EXIT.usage); }
+  });
+
+  // The price check: Clay's own per-run estimate, times the runs.
+  const cost = await readOp("workflow-cost", { ws, workflow });
+  const est = cost.ok ? cost.data?.creditEstimate : null;
+  if (!est || !Number.isFinite(Number(est.dataCreditCost)) || !Number.isFinite(Number(est.actionExecutionCost))) {
+    out({ ok: false, op: name, class: "refused", reason: `the workflow's price could not be read (${cost.reason || "no creditEstimate"}); nothing was sent`, ...summary }, EXIT.refused);
+  }
+  const perRun = { data: Number(est.dataCreditCost), action: Number(est.actionExecutionCost) };
+  const total = { data: Math.round(perRun.data * todo.length * 100) / 100, action: Math.round(perRun.action * todo.length * 100) / 100 };
+  request = { workflow, ws, runs: todo.length, per_run_credits: perRun, estimated_credits: total, out: outFile, emails: todo };
+  if (flags.dryRun) out({ ok: true, ...summary, dry_run: true, sent: false, kind: "write", gate: op.gate, request }, EXIT.ok);
+  if (showable({ op: name, request }).length > SHOW_MAX) out({ ok: false, op: name, class: "input", reason: `${todo.length} addresses is too long a list to read before approving; split the csv` }, EXIT.usage);
+
+  const maxCredits = norm.values.max_credits === undefined ? null : Number(norm.values.max_credits);
+  if (maxCredits !== null && total.data + total.action > maxCredits) refuse(`${todo.length} runs cost about ${total.data} data + ${total.action} action credits, over max_credits=${maxCredits}; nothing was sent`);
+  const bal = await readOp("credits", { ws });
+  if (bal.ok && Number.isFinite(Number(bal.data?.balance)) && Number(bal.data.balance) < total.data) refuse(`the workspace has ${bal.data.balance} data credits, under the ${total.data} this needs; nothing was sent`);
+  if (bal.ok && Number.isFinite(Number(bal.data?.actionExecutionBalance)) && Number(bal.data.actionExecutionBalance) < total.action) refuse(`the workspace has ${bal.data.actionExecutionBalance} action credits, under the ${total.action} this needs; nothing was sent`);
+  // Only a verify workflow: the default is one, and a workflow= pointed at
+  // anything else (a sender, an enrichment) is refused before it runs.
+  const wf = await readOp("workflow", { ws, workflow });
+  const wfName = String(wf.data?.workflow?.name ?? "");
+  if (!wf.ok || !/verif/i.test(wfName)) refuse(`${workflow} is ${wfName ? `"${wfName}"` : "unreadable"}, not an email verify workflow; nothing was sent`);
+
+  // The allowance covers the batch only when the whole estimate fits what is left today.
+  const allowance = allowanceCheck(op, args);
+  if (allowance && !allowance.ok) refuse(allowance.reason);
+  if (allowance) {
+    const a = allowanceFor(ws);
+    const spent = Number(((ALLOWANCE_SPEND && readJson(ALLOWANCE_SPEND, {})) || {})[ws]?.spent) || 0;
+    if (spent + total.data + total.action > a.daily_credits) refuse(`BLOCKED: ${todo.length} runs at about ${total.data + total.action} credits don't fit the ${a.daily_credits}-credit allowance with ${spent} spent today; nothing was sent`);
+    process.stderr.write(allowance.note);
+  }
+  const prep0 = await prepareWrite(unit, s, frozen[0]);
+  if (prep0.error) refuse(prep0.error);
+  // Every read and send refreshes the session file, so the recheck covers
+  // everything but it: registry, spec, environment, engine and executable.
+  const sessionFiles = new Set((prep0.files || []).filter((f) => !f.startsWith(ROOT + path.sep)));
+  const stable = (p) => fingerprint({ ...p, files: (p.files || []).filter((f) => !sessionFiles.has(f)) });
+  const before = stable(prep0);
+  const shownHash = sha256(showable({ op: name, request }));
+  const yes = allowance ? true : personApproves(name, request, args);
+  if (yes === null) refuse("a write needs Caleb's ok: him typing the op name at a terminal, or a prompt from him in chat within the last 2 hours (his standing \"do everything yourself\")");
+  if (!yes) refuse("the person at the terminal did not approve this payload");
+  afterApprovalTestHook();
+  if (stable(prep0) !== before) refuse("the registry, spec, environment, engine or executable changed after approval; nothing was sent");
+  if (sha256(showable({ op: name, request })) !== shownHash) refuse("the request changed after approval; nothing was sent");
+  verdict("sent", "");
+
+  const results = [...done.values()].map((r) => ({ email: r.email.trim().toLowerCase(), verification: r.verification, sub_status: r.sub_status ?? "" }));
+  // Retried rows are replaced, never duplicated.
+  const retried = new Set(todo);
+  const keep = prior.filter((r) => r.email && !done.has(r.email.trim().toLowerCase()) && !retried.has(r.email.trim().toLowerCase()))
+    .map((r) => ({ email: r.email.trim().toLowerCase(), verification: r.verification, sub_status: r.sub_status ?? "" }));
+  results.push(...keep);
+  const verifyOne = async (email, req) => {
+    const prep = await prepareWrite(unit, s, req);
+    if (prep.error) return { verification: "error", sub_status: prep.error.slice(0, 120) };
+    if (stable(prep) !== before) return { verification: "error", sub_status: "dependencies changed after approval; not sent" };
+    const sent = await prep.send();
+    const runId = sent.ok ? sent.data?.workflowRun?.id : null;
+    if (!runId || !ID.test(String(runId))) return { verification: "error", sub_status: String(sent.reason || "no run id came back").slice(0, 120) };
+    for (let i = 0; i < VERIFY_POLL_TRIES; i++) {
+      await new Promise((r) => setTimeout(r, VERIFY_POLL_MS));
+      const got = await readOp("workflow-run-detail", { ws, workflow, run: runId });
+      const steps = got.ok ? (Array.isArray(got.data) ? got.data : got.data?.workflowRunSteps || []) : [];
+      const step = steps.find((x) => String(x?.nodeName || "").startsWith("Verify") && ["completed", "failed"].includes(x?.status));
+      if (step) {
+        const res = step.stepOutputs?.result || {};
+        return { verification: String(res.status || "error"), sub_status: String(res.sub_status || "") };
+      }
+    }
+    return { verification: "timeout", sub_status: "" };
+  };
+  let next = 0;
+  const worker = async () => {
+    while (next < todo.length) {
+      const i = next++;
+      let r;
+      try { r = await verifyOne(todo[i], frozen[i]); } catch (e) { r = { verification: "error", sub_status: String(e.message || e).slice(0, 120) }; }
+      results.push({ email: todo[i], ...r });
+      writeVerdicts(outFile, results);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(VERIFY_WORKERS, todo.length) }, worker));
+  const counts = {};
+  for (const r of results) counts[r.verification] = (counts[r.verification] || 0) + 1;
+  const failed = results.filter((r) => RETRY_VERDICTS.has(r.verification)).length;
+  out({ ok: failed === 0, ...summary, ran: todo.length, sha256: shownHash, estimated_credits: total, counts, out: outFile,
+    ...(failed ? { next: `${failed} came back error or timeout; rerun the same command to retry only those` } : {}) }, failed ? EXIT.failed : EXIT.ok);
+}
+
 async function measure(name, kv) {
   const op = opByName.get(name);
   if (!op) out({ ok: false, class: "usage", reason: `unknown op ${name}` }, EXIT.usage);
@@ -1919,5 +2126,6 @@ ws is ws=<id>, else $CLAY_WORKSPACE_ID, else the one workspace in
     out({ ok: true, op: op.name, kind: op.kind, gate: op.gate, order, ui: uiRoute(op, args) }, EXIT.ok);
   }
   if (cmd === "measure") await measure(rest[0], kv);
+  if (cmd === "verify-emails") await verifyEmails(kv, flags);
   await runOp(cmd, kv, flags);
 })().catch((e) => out({ ok: false, class: "error", reason: String(e && e.message ? e.message : e) }, EXIT.failed));

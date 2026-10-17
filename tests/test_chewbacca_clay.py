@@ -643,6 +643,21 @@ SAMPLES = {
     "sort": '[{"fieldId":"f_updated_at","direction":"DESC"}]',
     "view_filter": '{"combinationMode":"AND","items":[{"fieldId":"f_a","type":"NOT_EMPTY"}]}',
     "columns": '{"f_a":{"isVisible":false}}', "after_field": "f_brand",
+    "email": "person@example.com", "out": "/tmp/chewbacca-clay-test-verdicts.csv", "max_credits": "200",
+}
+
+# verify-emails reads its csv and prices the batch before it asks for an ok.
+VERIFY_CSV = Path(tempfile.mkdtemp()) / "leads.csv"
+VERIFY_CSV.write_text("name,email\nAda,ada@example.com\nBo,BO@example.com\nAda again,ada@example.com\nNope,not-an-email\nCy,cy@example.com\n")
+VERIFY_STEPS = [{"id": "s1", "nodeName": "Trigger", "status": "completed"},
+                {"id": "s2", "nodeName": "Verify email (ZeroBounce)", "status": "completed",
+                 "stepOutputs": {"result": {"status": "valid", "sub_status": ""}}}]
+VERIFY_FIXTURES = {
+    "api-anything/workflowCreditEstimate.json": {"ok": True, "data": {"creditEstimate": {"dataCreditCost": 0.1, "actionExecutionCost": 1, "isEstimate": False}}},
+    "api-anything/getWorkflow.json": {"ok": True, "data": {"workflow": {"id": "wf_ex1", "name": "Example | Verify emails (ZeroBounce)"}}},
+    "api-anything/creditBalance.json": {"ok": True, "data": {"balance": 500, "actionExecutionBalance": 500}},
+    "api-anything/createWorkflowTestRun.json": {"ok": True, "data": {"workflowRun": {"id": "wfr_ex1"}}},
+    "api-anything/getWorkflowRunSteps.json": {"ok": True, "data": VERIFY_STEPS},
 }
 
 # Synthetic terminal-page evidence lets the restrictive write reach the same
@@ -763,10 +778,12 @@ def walk_gate(reg_path=None):
     for op in reg["ops"]:
         own = {"update-rows": {"records": json.dumps(REC_UPD)},
                "campaign-sender-isolate": {"ws": "1372623", "campaign": SENDER_ISOLATION_CAMPAIGN["id"]},
-               "campaign-sequence": {"input": '{"ops":[{"op":"deleteStep"}]}'}}.get(op["name"], {})
+               "campaign-sequence": {"input": '{"ops":[{"op":"deleteStep"}]}'},
+               "verify-emails": {"csv": str(VERIFY_CSV)}}.get(op["name"], {})
         argv = [f"{a.rstrip('?')}={own.get(a.rstrip('?'), SAMPLES[a.rstrip('?')])}" for a in op["args"]]
         fixtures = (RESTRICTION_GATE_FIXTURES if op["name"] == "campaign-restrict" else
-                    SENDER_ISOLATION_FIXTURES if op["name"] == "campaign-sender-isolate" else {})
+                    SENDER_ISOLATION_FIXTURES if op["name"] == "campaign-sender-isolate" else
+                    VERIFY_FIXTURES if op["name"] == "verify-emails" else {})
         for s in op["surfaces"]:
             if s.get("unless"):
                 continue
@@ -1205,6 +1222,66 @@ def test_inventory_reads_build_and_stay_reads():
        "signal-list picks fields: the whole list was 857,619 chars on 2026-10-16")
 
 
+def test_verify_emails_prices_gates_and_skips_paid_rows():
+    # 2026-10-16: Monday's 141 Zeutara addresses sat unverified because
+    # zb_verify.py looped the clay CLI where no guard could price or gate it.
+    with tempfile.TemporaryDirectory() as d:
+        verdicts = Path(d) / "verdicts.csv"
+        sent = Path(d) / "sent.jsonl"
+        base = ["ws=1000001", "workflow=wf_ex1", f"csv={VERIFY_CSV}", f"out={verdicts}"]
+        approve = {"CHEWBACCA_CLAY_TTY_ANSWER": "verify-emails", "CHEWBACCA_CLAY_SENT_LOG": str(sent)}
+        code, out, p = run(VERIFY_FIXTURES, {}, "verify-emails", *base, "--dry-run")
+        req = out and out.get("request") or {}
+        ok(code == 0 and out["sent"] is False and req["emails"] == ["ada@example.com", "bo@example.com", "cy@example.com"],
+           f"dry run lists each address once, lowercased: {p.stdout[:300]}")
+        ok(req["estimated_credits"] == {"data": 0.3, "action": 3} and out["not_an_email"] == ["not-an-email"], "the batch is priced from workflow-cost")
+        code, out, _ = run(VERIFY_FIXTURES, {}, "verify-emails", *base)
+        ok(code == 3 and "allow-writes" in out["reason"], "verify-emails needs --allow-writes")
+        code, out, _ = run(VERIFY_FIXTURES, {}, "verify-emails", *base, "--allow-writes")
+        ok(code == 3 and "did not approve" in out["reason"] and not verdicts.exists(), "nobody approving sends nothing")
+        code, out, _ = run(VERIFY_FIXTURES, {}, "verify-emails", *base, "--allow-writes", env_extra={**approve, "CHEWBACCA_NO_SEND": "1"})
+        ok(code == 3 and "NO_SEND" in out["reason"], "CHEWBACCA_NO_SEND=1 refuses an approved batch")
+        code, out, _ = run(VERIFY_FIXTURES, {}, "verify-emails", *base, "max_credits=2", "--allow-writes", env_extra=approve)
+        ok(code == 3 and "over max_credits" in out["reason"] and not sent.exists(), "a batch over max_credits is refused before sending")
+        other = {**VERIFY_FIXTURES, "api-anything/getWorkflow.json": {"ok": True, "data": {"workflow": {"name": "Example | Send emails"}}}}
+        code, out, _ = run(other, {}, "verify-emails", *base, "--allow-writes", env_extra=approve)
+        ok(code == 3 and "not an email verify workflow" in out["reason"] and not sent.exists(), "only a verify workflow is run")
+        code, out, p = run(VERIFY_FIXTURES, {}, "verify-emails", *base, "--allow-writes", env_extra=approve)
+        ok(code == 0 and out["ran"] == 3 and out["counts"] == {"valid": 3}, f"an approved batch verifies each address: {p.stdout[:300]}")
+        handed = [json.loads(x)["request"] for x in sent.read_text().splitlines()]
+        ok([h["body"] for h in handed] == [{"inputs": {"email": e}} for e in ("ada@example.com", "bo@example.com", "cy@example.com")],
+           "one test run per address, its email the only input")
+        ok(all(h["method"] == "POST" and h["url"] == f"{V3}/tc-workflows/wf_ex1/runs" for h in handed), "each run goes to the workflow's runs endpoint")
+        ok(verdicts.read_text().splitlines()[0] == "email,verification,sub_status" and len(verdicts.read_text().splitlines()) == 4, "verdicts in pre_send_gate's shape")
+        sent.unlink()
+        code, out, _ = run(VERIFY_FIXTURES, {}, "verify-emails", *base, "--allow-writes", env_extra=approve)
+        ok(code == 0 and out["ran"] == 0 and not sent.exists(), "a rerun pays for nothing already verified")
+        verdicts.write_text("email,verification,sub_status\nada@example.com,valid,\nbo@example.com,timeout,\ncy@example.com,error,boom\n")
+        code, out, _ = run(VERIFY_FIXTURES, {}, "verify-emails", *base, "--allow-writes", env_extra=approve)
+        ok(code == 0 and out["ran"] == 2 and len(sent.read_text().splitlines()) == 2, "only error and timeout rows run again")
+        ok(sorted(verdicts.read_text().splitlines()[1:]) == ["ada@example.com,valid,", "bo@example.com,valid,", "cy@example.com,valid,"],
+           "a retried row is replaced, never duplicated")
+        stuck = {**VERIFY_FIXTURES, "api-anything/getWorkflowRunSteps.json": {"ok": True, "data": VERIFY_STEPS[:1]}}
+        stuck_out = Path(d) / "stuck.csv"
+        code, out, _ = run(stuck, {}, "verify-emails", "ws=1000001", "workflow=wf_ex1", f"csv={VERIFY_CSV}", f"out={stuck_out}",
+                           "--allow-writes", env_extra={**approve, "CHEWBACCA_CLAY_POLL_MS": "1"})
+        ok(code == 1 and out["counts"] == {"timeout": 3} and "rerun" in out["next"], "a run whose Verify node never finishes is a timeout to retry")
+    code, out, _ = run(VERIFY_FIXTURES, {}, "verify-emails", "ws=1372623", f"csv={VERIFY_CSV}", "out=/tmp/x.csv", "--dry-run")
+    ok(code == 0 and out["request"]["workflow"] == "wf_0tmevkaRdsp2XHUwD8X", "Zeutara's workspace defaults to its verify workflow")
+    code, out, _ = run(VERIFY_FIXTURES, {}, "verify-emails", f"csv={VERIFY_CSV}", "out=/tmp/x.csv", "--dry-run")
+    ok(code == 2 and "no default verify workflow" in out["reason"], "another workspace has to name its workflow")
+    with tempfile.TemporaryDirectory() as d:
+        nocol = Path(d) / "x.csv"
+        nocol.write_text("name\nAda\n")
+        code, out, _ = run(VERIFY_FIXTURES, {}, "verify-emails", "workflow=wf_ex1", f"csv={nocol}", "out=/tmp/x.csv", "--dry-run")
+        ok(code == 2 and "no email column" in out["reason"], "a csv without an email column is refused")
+        tiers = Path(d) / "tier.csv"
+        tiers.write_text("email,verified\nada@example.com,valid\nbo@example.com,\n")
+        code, out, _ = run(VERIFY_FIXTURES, {}, "verify-emails", "workflow=wf_ex1", f"csv={tiers}", "out=/tmp/x.csv", "--dry-run")
+        ok(code == 0 and out["request"]["emails"] == ["bo@example.com"] and out["marked_valid_in_csv"] == 1,
+           "a row the csv already marks verified=valid is never paid for again")
+
+
 def test_fixtures_are_scrubbed():
     text = Path(__file__).read_text()
     import re
@@ -1226,7 +1303,8 @@ def main():
                test_query_slot_reads_build, test_new_reads_are_reads_with_a_measured_surface,
                test_second_session_reads_through_its_own_login, test_cli_never_answers_for_another_workspace,
                test_sabo_table_reads_without_clay_open, test_contract_inventory_covers_the_registry,
-               test_inventory_reads_build_and_stay_reads, test_fixtures_are_scrubbed):
+               test_inventory_reads_build_and_stay_reads, test_verify_emails_prices_gates_and_skips_paid_rows,
+               test_fixtures_are_scrubbed):
         fn()
     print(f"chewbacca clay: {checks} checks passed")
 

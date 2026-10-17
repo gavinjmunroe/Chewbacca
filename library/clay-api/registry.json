@@ -2221,6 +2221,110 @@
       "ui": "clay-go workflow --workflow {workflow}"
     },
     {
+      "name": "workflow-run-detail",
+      "kind": "read",
+      "gate": "read",
+      "summary": "one workflow run's steps over the frontend API: node name, status, outputs (workflow-run-steps reads the same through the CLI's own login)",
+      "args": ["ws", "workflow", "run"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "getWorkflowRunSteps",
+          "args": {
+            "ws": "ws",
+            "workflowId": "workflow",
+            "runId": "run"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "getWorkflowRun",
+        "contract_offset": 2102418,
+        "inventory": "library/clay-api/contracts.json"
+      },
+      "ui": "clay-go workflow --workflow {workflow}"
+    },
+    {
+      "name": "workflow-test-run",
+      "kind": "write",
+      "gate": "write:spends-credits",
+      "args": ["ws", "workflow", "email"],
+      "summary": "Run a workflow once with one email as its input, the way `clay workflows runs test` does. Spends the workflow's per-run credits (workflow-cost). verify-emails runs this for a whole CSV.",
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "createWorkflowTestRun",
+          "args": {
+            "ws": "ws",
+            "workflowId": "workflow",
+            "email": "email"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "createWorkflowRun",
+        "contract_offset": 2099632,
+        "body_schema": "{inputs, pinToLive?}: the clay CLI 1.9.1 binary sends {inputs:V} for `workflows runs test` (read 2026-10-17)",
+        "inventory": "library/clay-api/contracts.json"
+      },
+      "readback": {
+        "op": "workflow-run-summary",
+        "args": {
+          "workflow": "workflow"
+        },
+        "expect": "manual"
+      },
+      "confidence": "medium: the contract and the CLI's body are read from code; scripts/zb_verify.py ran the same test runs through the CLI on 2026-10-10",
+      "verified": false
+    },
+    {
+      "name": "verify-emails",
+      "kind": "write",
+      "gate": "write:spends-credits",
+      "args": ["ws", "workflow?", "csv", "out", "max_credits?"],
+      "summary": "Verify every address in csv= (an email column) through a ZeroBounce verify workflow, one test run each, and write email,verification,sub_status to out=. Addresses already verified in out=, or marked verified=valid in csv=, are skipped. Prices the batch with workflow-cost first. workflow= defaults to the workspace's own verify workflow (Zeutara: wf_0tmevkaRdsp2XHUwD8X).",
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "createWorkflowTestRun",
+          "args": {
+            "ws": "ws",
+            "workflowId": "workflow"
+          }
+        }
+      ],
+      "required_why": {
+        "out": "the verdicts file, also how a rerun knows which addresses are already paid for"
+      },
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "createWorkflowRun",
+        "contract_offset": 2099632,
+        "body_schema": "{inputs:{email}} per address, then getWorkflowRun until the Verify node is completed or failed (zeutara-gtme scripts/zb_verify.py)",
+        "inventory": "library/clay-api/contracts.json"
+      },
+      "readback": {
+        "op": "workflow-run-summary",
+        "args": {
+          "workflow": "workflow"
+        },
+        "expect": "manual"
+      },
+      "confidence": "medium: same request as workflow-test-run; the verdict is read from the Verify node's stepOutputs.result the way zb_verify.py read it",
+      "verified": false
+    },
+    {
       "name": "audience-segment",
       "kind": "read",
       "gate": "read",

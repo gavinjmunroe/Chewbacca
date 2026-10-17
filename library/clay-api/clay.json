@@ -4073,6 +4073,150 @@
       "learnedAt": "2026-10-16"
     },
     {
+      "name": "createWorkflowTestRun",
+      "description": "WRITE, bundle-derived (contract createWorkflowRun). Start one run of a workflow with the given email as its input, the request `clay workflows runs test WF --inputs -` sends (clay CLI 1.9.1 binary, 2026-10-17). Spends the workflow's per-run credits.",
+      "request": {
+        "method": "POST",
+        "url": "https://api.clay.com/v3/workspaces/1372623/tc-workflows/wf_example/runs",
+        "headers": {
+          "accept": "application/json, text/plain, */*",
+          "origin": "https://app.clay.com",
+          "referer": "https://app.clay.com/",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "content-type": "application/json"
+        },
+        "body": "{\"inputs\":{\"email\":\"person@example.com\"}}"
+      },
+      "slots": [
+        {
+          "param": "ws",
+          "at": ["path:2"]
+        },
+        {
+          "param": "workflowId",
+          "at": ["path:4"]
+        },
+        {
+          "param": "email",
+          "at": ["body", "json:/inputs/email"]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://app.clay.com/workspaces/{ws}/workflows/{workflowId}"
+      },
+      "match": {
+        "method": "POST",
+        "host": "api.clay.com",
+        "path": "/v3/workspaces/*/tc-workflows/*/runs"
+      },
+      "response": {
+        "format": "json"
+      },
+      "params": [
+        {
+          "name": "ws",
+          "type": "string",
+          "required": true,
+          "example": "1372623",
+          "pattern": "\\d+",
+          "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+        },
+        {
+          "name": "workflowId",
+          "type": "string",
+          "required": true,
+          "example": "wf_example",
+          "pattern": "wf_[A-Za-z0-9]+",
+          "hint": "a workflow id like wf_0tm... (workflows)"
+        },
+        {
+          "name": "email",
+          "type": "string",
+          "required": true,
+          "example": "person@example.com",
+          "pattern": "[A-Za-z0-9._%+'-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}",
+          "hint": "one email address, the workflow's email input"
+        }
+      ],
+      "readOnly": false,
+      "minTier": 1,
+      "learnedLoggedIn": true,
+      "learnedAt": "2026-10-17"
+    },
+    {
+      "name": "getWorkflowRunSteps",
+      "description": "One workflow run with every step: node name, status, outputs. (contract getWorkflowRun). The CLI's workflows runs steps answers the same from its own login.",
+      "request": {
+        "method": "GET",
+        "url": "https://api.clay.com/v3/workspaces/1372623/tc-workflows/wf_example/runs/wfr_example",
+        "headers": {
+          "accept": "application/json, text/plain, */*",
+          "origin": "https://app.clay.com",
+          "referer": "https://app.clay.com/",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "ws",
+          "at": ["path:2"]
+        },
+        {
+          "param": "workflowId",
+          "at": ["path:4"]
+        },
+        {
+          "param": "runId",
+          "at": ["path:6"]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://app.clay.com/workspaces/{ws}/workflows/{workflowId}"
+      },
+      "match": {
+        "method": "GET",
+        "host": "api.clay.com",
+        "path": "/v3/workspaces/*/tc-workflows/*/runs/*"
+      },
+      "response": {
+        "format": "json",
+        "extract": "workflowRunSteps",
+        "pick": ["id", "nodeName", "status", "stepOutputs", "failureCode"]
+      },
+      "params": [
+        {
+          "name": "ws",
+          "type": "string",
+          "required": true,
+          "example": "1372623",
+          "pattern": "\\d+",
+          "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+        },
+        {
+          "name": "workflowId",
+          "type": "string",
+          "required": true,
+          "example": "wf_example",
+          "pattern": "wf_[A-Za-z0-9]+",
+          "hint": "a workflow id like wf_0tm... (workflows)"
+        },
+        {
+          "name": "runId",
+          "type": "string",
+          "required": true,
+          "example": "wfr_example",
+          "pattern": "[A-Za-z0-9_-]+",
+          "hint": "a workflow run id (workflow-run-summary, or the run a test run started)"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": true,
+      "learnedAt": "2026-10-17"
+    },
+    {
       "name": "getAudienceSegment",
       "description": "One audience segment: name, entity type, filter and size. (contract getAudienceSegmentById).",
       "request": {

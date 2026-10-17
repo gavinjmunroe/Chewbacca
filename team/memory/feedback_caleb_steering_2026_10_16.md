@@ -34,11 +34,15 @@ Cost is the minutes of his attention one occurrence takes, guessed, never measur
 
 All three are Stop hooks registered by setup.sh, each with a test built from that day's real replies, and each refuses once (stop_hook_active lets the next stop through).
 
-- `open-work-guard.sh` (stopped_early). Reads the last reply plus the turn's wrap_up recap and ask. Names its own leftover ("haven't gone out", "aren't built", "still open") or offers it as "Want the ...?" with no BLOCKED: line, and the turn can't end. Replayed on every turn he answered that day: it fires on 15, and 11 of those he followed with a push or a poll; 3 were offers he then took.
-- `blocked-route-guard.sh` (missed_capability). A BLOCKED: that hands him a UI step must name two kit routes tried (chewbacca clay, jev-browse, browser pane, Claude in Chrome, peekaboo, computer use). Fires on both demo handoffs.
-- `learn-on-land.sh` (learn_ritual). A turn that ran `chewbacca land` or `git push`, after code edits that came after the session's last lesson write, saves a lesson or says "No new lesson:". 14 of the 23 learn-and-remember asks matched this shape.
+- `open-work-guard.sh` (stopped_early). Reads the last reply plus the turn's wrap_up recap and ask. Names its own leftover ("haven't gone out", "aren't built", "still open") or offers it as "Want the ...?" with no BLOCKED: line, and the turn can't end. Replayed on the 160 turns he answered that day (tests/test_steering_stop_replay.py, redacted corpus in tests/fixtures/steering): it fires on 13, 8 of which he followed with a push or a poll, and 2 more were its own offers he then took.
+- `blocked-route-guard.sh` (missed_capability). A BLOCKED: that hands him a UI step must name two kit routes tried (chewbacca clay, jev-browse, browser pane, Claude in Chrome, peekaboo, computer use). Fires on both demo handoffs and one turn after, nothing else that day.
+- `learn-on-land.sh` (learn_ritual). A turn that ran `chewbacca land` or `git push`, after code edits that came after the session's last lesson write, saves a lesson or says "No new lesson:". 14 of the 23 asks had landed code after the last lesson, but only 5 of 25 followed a turn that itself landed, which is the only place it fires (13 of 166 turns). Most asks came after quiet turns, so it covers part of this cluster, not all of it.
 
 Not shipped here: quality_slop already has slop-guard; unchecked_claim has [[feedback_claims_match_the_mechanism]] and next_move.py from the same day; permission_ask was the "Stop chewbs asking before paid runs" tab's job. Those three are the next targets if the rate doesn't drop.
+
+## Landing a guard
+
+The pre-push gate (tools/decision_evals.py) refuses a new guard without a replay or sealed eval. The first land of these hooks was refused for exactly that, and `chewbacca land` still exited 0, so read its last line before calling it landed.
 
 ## The falsifier
 

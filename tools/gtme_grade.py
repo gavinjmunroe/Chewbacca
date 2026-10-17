@@ -804,7 +804,11 @@ def warmup_approval(camp, args, attached, ages):
             if not (dt.date.fromisoformat(ruling["date"]) <= today
                     <= dt.date.fromisoformat(ruling["expires"])):
                 continue
-            if camp.get("id") not in ruling["campaigns"] or str(args.ws) != ruling["workspace"]:
+            # "all" is a standing ruling for every campaign in the workspace.
+            # Caleb, 2026-10-16: "I always accept warmup risk for zeutara". The
+            # dated expiry, caps, sender health and 3% bounce stop still hold.
+            scoped = ruling["campaigns"] == "all" or camp.get("id") in ruling["campaigns"]
+            if not scoped or str(args.ws) != ruling["workspace"]:
                 continue
             if len(ages) != len(attached) or min(ages) < ruling["minimum_age_days"]:
                 continue

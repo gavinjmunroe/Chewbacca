@@ -126,11 +126,12 @@ def write_receipt(client, report, open_items):
                    "client_unanswered": len(report["client_unanswered"] or [])}, f)
 
 
-def client_unanswered(messages, client_user, me):
+def client_unanswered(messages, client_user, me, handled=0.0):
     """Messages and files from the client after our last message, oldest first.
-    `messages` is one conversation's history, any order."""
+    `messages` is one conversation's history, any order. `handled` is the ts up
+    to which someone answered outside Slack (a call), from --answered-offline."""
     msgs = sorted(messages, key=lambda m: float(m.get("ts") or 0))
-    last_ours = max((float(m["ts"]) for m in msgs if m.get("user") in me), default=0.0)
+    last_ours = max([float(m["ts"]) for m in msgs if m.get("user") in me] + [float(handled or 0)])
     out = []
     for m in msgs:
         # Join notices and other system events carry a subtype; no person wrote them.
@@ -179,6 +180,11 @@ def main(argv=None):
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--ack", metavar="EMAIL", action="append",
                     help="mark this lead's latest reply as read and needing no answer")
+    # 2026-10-16: Caleb answered Jonah's 10-12 DM by phone, and the gate kept it
+    # open because it can only see Slack. A call is an answer; say how it went.
+    ap.add_argument("--answered-offline", metavar="CHANNEL", action="append",
+                    help="the client's messages so far in this Slack conversation were answered outside Slack")
+    ap.add_argument("--how", help="how they were answered (required with --answered-offline), e.g. 'phone call'")
     a = ap.parse_args(argv)
     cfg = client_config(a.client)
     slack_cfg = cfg.get("client_slack") or {}
@@ -214,9 +220,21 @@ def main(argv=None):
         try:
             saved = json.load(open(a.slack)) if a.slack else None
             found = []
+            acks = load_acks(a.client)
+            for ch in a.answered_offline or []:
+                if ch not in slack_cfg["conversations"]:
+                    raise RuntimeError(f"{ch} is not one of this client's Slack conversations")
+                if not (a.how or "").strip():
+                    raise RuntimeError("--answered-offline needs --how, so the receipt says how they were answered")
+                msgs = saved.get(ch, []) if saved is not None else fetch_slack(ch)
+                latest = max((float(m.get("ts") or 0) for m in msgs if m.get("user") == slack_cfg["user"]), default=0.0)
+                acks["slack:" + ch] = {"ts": latest, "how": a.how.strip()}
+                os.makedirs(os.path.dirname(acks_path(a.client)), exist_ok=True)
+                json.dump(acks, open(acks_path(a.client), "w"), indent=1)
             for ch in slack_cfg["conversations"]:
                 msgs = saved.get(ch, []) if saved is not None else fetch_slack(ch)
-                items = client_unanswered(msgs, slack_cfg["user"], set(slack_cfg.get("me") or []))
+                handled = (acks.get("slack:" + ch) or {}).get("ts") or 0.0
+                items = client_unanswered(msgs, slack_cfg["user"], set(slack_cfg.get("me") or []), handled)
                 for ts, n, files, words in bursts(items):
                     found.append((ch, ts, n, files, words))
             report["client_unanswered"] = found

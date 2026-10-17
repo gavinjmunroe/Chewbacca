@@ -590,6 +590,13 @@ def accepted(r=approval, accounts=live_accounts, stats=baseline, camp=approval_c
         return G.warmup_approval(camp, args, attached, [12] if ages is None else ages)
 
 check("warmup approval: explicit campaign decision at unchanged healthy caps passes", bool(accepted()))
+standing = dict(approval, campaigns="all")
+check("warmup approval: a standing 'all' ruling covers a new campaign", bool(accepted(r=standing, camp={"id": "cam_new"})))
+check("warmup approval: a standing ruling still refuses above 3 percent bounces",
+      not accepted(r=standing, camp={"id": "cam_new"}, stats=[{"campaignId": "cam_prior", "sent": 1000, "bounces": 31}]))
+check("warmup approval: a standing ruling still refuses another workspace",
+      not accepted(r=dict(standing, workspace="2"), camp={"id": "cam_new"}))
+check("warmup approval: only the word all widens it", not accepted(r=dict(approval, campaigns="cam_new,all")))
 for label, field, value in [
     ("expired", "expires", "2000-01-01"), ("retired", "status", "retired"),
     ("wrong workspace", "workspace", "2"), ("other campaign", "campaigns", ["cam_other"]),

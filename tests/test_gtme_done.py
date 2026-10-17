@@ -98,6 +98,22 @@ with tempfile.TemporaryDirectory() as d:
     p = run("--client", "Acme", "--inbox", os.path.join(d, "missing.json"), "--slack", slack)
     check("an unreadable source is not run, never clean (exit 2)", p.returncode == 2 and "not run" in p.stdout and "Done:" not in p.stdout)
 
+    # Answered by phone (Caleb called Jonah, 2026-10-16): the gate only sees
+    # Slack, so the call is recorded with how it happened, and only messages
+    # up to then close. A later message opens it again.
+    env["CHEWBACCA_GTM_ACKS"] = os.path.join(d, "acks")
+    json.dump({"D1": dm[:4]}, open(slack, "w"))
+    p = run("--client", "Acme", "--inbox", inbox, "--slack", slack, "--answered-offline", "D1")
+    check("answered offline without --how is not run", p.returncode == 2)
+    p = run("--client", "Acme", "--inbox", inbox, "--slack", slack, "--answered-offline", "D1", "--how", "phone call")
+    check("a phone answer closes the client's messages", p.returncode == 0 and "Done:" in p.stdout)
+    later = dm[:4] + [{"ts": "999.0", "user": JONAH, "text": "One more thing"}]
+    json.dump({"D1": later}, open(slack, "w"))
+    p = run("--client", "Acme", "--inbox", inbox, "--slack", slack)
+    check("a message after the call is open again", p.returncode == 1 and "One more thing" in p.stdout)
+    p = run("--client", "Acme", "--inbox", inbox, "--slack", slack, "--answered-offline", "D9", "--how", "call")
+    check("an unknown conversation is refused", p.returncode == 2)
+
 # The inbox reader: the API path is the default (no browser tab, 2026-10-11),
 # and a thread missing the newest reply its row reports is marked incomplete.
 import importlib.machinery, importlib.util

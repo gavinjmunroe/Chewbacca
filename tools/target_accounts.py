@@ -3,6 +3,13 @@
 
   target-accounts match <sheet.csv> < employers.jsonl    one verdict per line
   target-accounts overlap <bridge_start> <bridge_end> <joined_year>
+  target-accounts paths <sheet.csv> < result.json        one row per warm path
+
+A warm path has four stops: the customer contact, a bridge (them or a colleague) who used to
+work at a target account, the target, and the person in the buyer seat there today. paths
+reads {"customer": {"company", "company_domain"}, "people": [{name, relation, roles: [...]}],
+"target_contacts": [...]} as research returned it and keeps only what the sheet and the
+sources back up.
 
 A model matching names against a list fails quietly both ways: it misses "Brown & Toland"
 because the list says "Altais", and it matches Baptist Health South Florida to a Baptist in
@@ -130,9 +137,89 @@ def tenure_overlap(bridge_start, bridge_end, joined_year):
 
 
 def _year(value):
-    if value in (None, "", "null"):
-        return None
-    return int(value)
+    """2016, "2016" or "Dec 2021" give a year; "present", blank or junk give None."""
+    if isinstance(value, int):
+        return value
+    found = re.search(r"\b(19|20)\d{2}\b", str(value or ""))
+    return int(found.group(0)) if found else None
+
+
+def find_target_by_account(account, targets):
+    name = normalize_org_name(account)
+    return next((t for t in targets if normalize_org_name(t["account"]) == name), None) if name else None
+
+
+def build_connections(customer, people, targets):
+    """Former employers of the customer contact or a colleague that are on the target list.
+
+    match is domain, parent_domain or name when the sheet confirms it, and model_only when only
+    the research named the row. Dropped on purpose: a role with no source URL, a match on the
+    customer itself (where everyone works now, not a former employer), and a named target that
+    isn't on the sheet.
+    """
+    out, seen = [], set()
+    for person in people or []:
+        name = (person.get("name") or "").strip()
+        if not name:
+            continue
+        relation = "self" if (person.get("relation") or "").strip().lower() == "self" else "colleague"
+        for role in person.get("roles") or []:
+            source = (role.get("source_url") or "").strip()
+            if not role.get("company") or not source:
+                continue
+            target, match = match_employer(role["company"], role.get("company_domain"), targets)
+            if not target:
+                target = find_target_by_account(role.get("target_account"), targets)
+                match = "model_only" if target else None
+            if not target or is_same_organization(target, customer.get("company"), customer.get("company_domain")):
+                continue
+            key = (name.lower(), target["account"], role["company"].lower())
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append({"bridge_name": name, "bridge_title": person.get("title"), "bridge_relation": relation,
+                        "former_employer": role["company"], "former_title": role.get("title"),
+                        "start_year": _year(role.get("start_year")), "end_year": _year(role.get("end_year")),
+                        "role_source_url": source, "target_account": target["account"],
+                        "target_segment": target["segment"], "match": match,
+                        "model_match_basis": role.get("match_basis")})
+    return out
+
+
+def collect_target_contacts(contacts, targets):
+    """Buyer-seat people at each target, placed by domain or exact name; unsourced ones dropped."""
+    by_account = {}
+    for c in contacts or []:
+        source = (c.get("source_url") or "").strip()
+        if not c.get("name") or not source:
+            continue
+        target, _ = match_employer(c.get("target_account") or "", c.get("target_domain"), targets)
+        if not target:
+            continue
+        found = by_account.setdefault(target["account"], [])
+        if any(x["name"].lower() == c["name"].lower() for x in found):
+            continue
+        found.append({"name": c["name"], "title": c.get("title"), "persona": c.get("persona"),
+                      "source_url": source, "joined_year": _year(c.get("joined_year"))})
+    return by_account
+
+
+def warm_paths(customer, people, contacts, targets):
+    """One row per complete path, and one row with no buyer for a connection where nobody was
+    found, so a target with a bridge and no buyer still shows. A path never ends at the bridge."""
+    connections = build_connections(customer, people, targets)
+    buyers = collect_target_contacts(contacts, targets)
+    rows = []
+    for conn in connections:
+        at = [b for b in buyers.get(conn["target_account"], [])
+              if b["name"].lower() != conn["bridge_name"].lower()]
+        for b in at or [None]:
+            overlap, years = tenure_overlap(conn["start_year"], conn["end_year"], b and b["joined_year"])
+            rows.append({**conn, "buyer_name": b and b["name"], "buyer_title": b and b["title"],
+                         "buyer_source_url": b and b["source_url"], "buyer_joined_year": b and b["joined_year"],
+                         "tenure_overlap": overlap if b else None, "overlap_years": years if b else None,
+                         "buyers_found": len(at)})
+    return rows
 
 
 def main(argv=None):
@@ -146,6 +233,16 @@ def main(argv=None):
             row = json.loads(line)
             target, basis = match_employer(row.get("company"), row.get("company_domain"), targets)
             print(json.dumps({**row, "target": target["account"] if target else None, "basis": basis}))
+        return 0
+    if len(argv) == 2 and argv[0] == "paths":
+        with open(argv[1], encoding="utf-8") as f:
+            targets = parse_targets(f.read())
+        result = json.load(sys.stdin)
+        people = result.get("people")
+        if isinstance(people, str):  # research sometimes posts the list as a JSON string
+            people = json.loads(people)
+        for row in warm_paths(result.get("customer") or {}, people, result.get("target_contacts"), targets):
+            print(json.dumps(row))
         return 0
     if len(argv) == 4 and argv[0] == "overlap":
         overlap, years = tenure_overlap(*(_year(v) for v in argv[1:]))

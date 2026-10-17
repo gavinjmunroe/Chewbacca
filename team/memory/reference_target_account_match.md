@@ -12,3 +12,4 @@ metadata:
 - `overlap <bridge_start> <bridge_end> <joined_year>` answers whether a bridge and a buyer overlapped there: yes, possible (same year), no, or unknown when a year is missing. It never guesses a year.
 - A model saying two companies match is kept as a hint and labelled that way. On a real run a model missed Brown & Toland under its parent Altais, and called Tenet Healthcare a different company from Tenet until the domain came back.
 - The 13 tests in `tests/test_target_accounts.py` cover each of those cases.
+- `paths <sheet.csv> < result.json` turns research into warm paths: customer contact, a bridge who used to work at a target, the target, and the buyer there today, one row per path with tenure overlap. A role or buyer with no source URL is dropped, a match on the customer itself is not a former employer, and a path never ends at the bridge. 18 tests in all (2026-10-16).

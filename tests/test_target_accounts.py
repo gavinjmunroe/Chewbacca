@@ -3,7 +3,8 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tools"))
-from target_accounts import (is_same_organization, match_employer, normalize_org_name,  # noqa: E402
+from target_accounts import (build_connections, collect_target_contacts, is_same_organization,  # noqa: E402
+                             match_employer, normalize_org_name, warm_paths,
                              parse_targets, registrable_domain, tenure_overlap)
 
 # Shaped like a real client's published sheet, including its awkward cells.
@@ -89,6 +90,65 @@ class OverlapTest(unittest.TestCase):
         self.assertEqual(tenure_overlap(2004, 2007, None), ("unknown", None))
         self.assertEqual(tenure_overlap(2004, None, 2005)[0], "unknown")
         self.assertEqual(tenure_overlap(None, 2007, 2005), ("yes", None))
+
+
+CUSTOMER = {"company": "Surgery Partners", "company_domain": "surgerypartners.com"}
+JUSTIN = {"name": "Justin Oppenheimer", "title": "COO", "relation": "colleague", "roles": [
+    {"company": "Hospital for Special Surgery", "company_domain": "hss.edu", "title": "VP Operations",
+     "start_year": "2016", "end_year": "Dec 2021", "source_url": "https://example.com/justin"},
+    {"company": "Surgery Partners", "title": "COO", "start_year": 2022, "end_year": "present",
+     "source_url": "https://example.com/sp"},
+    {"company": "Baptist Health", "title": "Director", "source_url": ""},
+]}
+SHANNON = {"name": "Shannon Yarrow", "relation": "self", "roles": [
+    {"company": "Tenet Healthcare", "company_domain": "tenethealth.com", "title": "AVP National Contracting",
+     "start_year": 2004, "end_year": 2007, "source_url": "https://example.com/shannon"},
+    {"company": "Hospital for Special Surgery", "company_domain": "hss.edu", "title": "Director",
+     "start_year": 2008, "end_year": 2012, "source_url": "https://example.com/shannon-hss"},
+]}
+CONTACTS = [
+    {"target_account": "Tenet Healthcare", "target_domain": "tenethealth.com", "name": "Pat Rivera",
+     "title": "SVP Managed Care", "source_url": "https://example.com/pat", "joined_year": "2005"},
+    {"target_account": "Tenet", "name": "Lee Okafor", "title": "CFO",
+     "source_url": "https://example.com/lee", "joined_year": 2019},
+    {"target_account": "Tenet", "name": "No Source", "title": "VP Payer Relations"},
+    {"target_account": "Somewhere Else", "name": "Off List", "source_url": "https://example.com/x"},
+]
+
+
+class PathTest(unittest.TestCase):
+    def test_keeps_the_sourced_former_employer_only(self):
+        out = build_connections(CUSTOMER, [JUSTIN], TARGETS)
+        self.assertEqual(len(out), 1)
+        self.assertEqual((out[0]["target_account"], out[0]["match"], out[0]["start_year"], out[0]["end_year"]),
+                         ("Hospital for Special Surgery", "domain", 2016, 2021))
+
+    def test_a_model_only_match_is_labelled_and_an_off_sheet_target_dropped(self):
+        out = build_connections(CUSTOMER, [{"name": "Shannon Yarrow", "relation": "self", "roles": [
+            {"company": "Altais Medical Group", "source_url": "https://example.com/a",
+             "target_account": "Brown & Toland", "match_basis": "acquisition"},
+            {"company": "Somewhere", "source_url": "https://example.com/b", "target_account": "Not On The List"},
+        ]}], TARGETS)
+        self.assertEqual([(c["target_account"], c["match"], c["model_match_basis"]) for c in out],
+                         [("Brown & Toland", "model_only", "acquisition")])
+
+    def test_buyers_are_placed_by_domain_or_name_and_unsourced_dropped(self):
+        buyers = collect_target_contacts(CONTACTS, TARGETS)
+        self.assertEqual(list(buyers), ["Tenet"])
+        self.assertEqual([b["name"] for b in buyers["Tenet"]], ["Pat Rivera", "Lee Okafor"])
+
+    def test_one_row_per_complete_path_with_overlap(self):
+        rows = warm_paths(CUSTOMER, [SHANNON], CONTACTS, TARGETS)
+        self.assertEqual(len(rows), 3)
+        pat = next(r for r in rows if r["buyer_name"] == "Pat Rivera")
+        self.assertEqual((pat["tenure_overlap"], pat["overlap_years"], pat["buyers_found"]), ("yes", 2, 2))
+        self.assertEqual(next(r for r in rows if r["buyer_name"] == "Lee Okafor")["tenure_overlap"], "no")
+        hss = next(r for r in rows if r["target_account"] == "Hospital for Special Surgery")
+        self.assertEqual((hss["buyer_name"], hss["buyers_found"]), (None, 0))
+
+    def test_a_path_never_ends_at_the_bridge(self):
+        rows = warm_paths(CUSTOMER, [SHANNON], [{**CONTACTS[1], "name": "Shannon Yarrow"}], TARGETS)
+        self.assertTrue(all(r["buyer_name"] != "Shannon Yarrow" for r in rows))
 
 
 if __name__ == "__main__":

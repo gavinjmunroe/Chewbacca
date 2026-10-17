@@ -109,6 +109,16 @@ check "a stop holds through an unrelated prompt" no
 say "ok go ahead"
 check "'go ahead' resumes" yes
 
+# 2026-10-17 10:20: a pasted call transcript tripped the stop, then "Do
+# whatever it takes for Sabo through Tuesday" did not resume.
+rm -rf "$dir"; say "do everything yourself"
+say "notes from my call <pasted_content id=\"a1\">Them: wait, stop sending those emails</pasted_content>"
+check "a stop inside pasted content leaves his ok standing" yes
+say "stop sending"
+check "his own stop still withdraws it" no
+say "Do whatever it takes for Sabo through Tuesday"
+check "'do whatever it takes' resumes" yes
+
 # The v1 global record is what any tab borrowed; the hook deletes it on sight.
 mkdir -p "$T/state"; echo '{"at": 1}' > "$T/state/clay-chat-approval.json"
 say "Did you do it?"

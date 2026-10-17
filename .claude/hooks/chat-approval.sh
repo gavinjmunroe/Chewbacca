@@ -259,9 +259,17 @@ WORK = re.compile(r"\b(send(s|ing)?|launch(es|ing)?|campaigns?|waves?|emails?|ou
 # by "what's the status?" renewed the ok on the very next prompt (security
 # review, 2026-10-10). Reading a resume is the one place words are parsed, and
 # a missed one fails safe: the work stays paused and the agent says so.
-RESUME = re.compile(r"\b(go|resume|continue|unpause|keep going|do it|do everything|send|launch|start|yourself|urself)\b", re.I)
+RESUME = re.compile(r"\b(go|resume|continue|unpause|keep going|do it|do everything|send|launch|start|yourself|urself"
+                    r"|what ?ever it takes|wtv it takes?|however much)\b", re.I)
 
-if STOP.search(prompt) or (SOFT_STOP.search(prompt) and WORK.search(prompt)):
+# Only his own words can stop the work. On 2026-10-17 at 10:20 a pasted call
+# transcript with Karthik tripped STOP, and every Clay write and the Sabo
+# allowance stayed held the next morning after "Do whatever it takes for Sabo
+# through Tuesday". Pasted blocks are someone else's words.
+typed = re.sub(r"<pasted_content\b.*?</pasted_content>", " ", prompt, flags=re.S | re.I)
+typed = re.sub(r"<pasted_content\b.*", " ", typed, flags=re.S | re.I)
+
+if STOP.search(typed) or (SOFT_STOP.search(typed) and WORK.search(typed)):
     # Every tab's ok goes, since `chewbacca clay` honors any of them.
     for p in glob.glob(os.path.join(recdir, "*.json")):
         remove(p)

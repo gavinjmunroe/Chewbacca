@@ -700,6 +700,19 @@ const JSON_ARGS = {
     if (v.typeSettings !== undefined && !isObj(v.typeSettings)) return "typeSettings must be the column's whole typeSettings object";
     return null;
   },
+  // add-enrichment-column: one whole column body. An action must wait for run-cells
+  // (runAsButton), or creating it fills every row on Clay's side (2026-10-17).
+  spec: (v) => {
+    if (!isObj(v)) return "must be a JSON object";
+    const extra = Object.keys(v).filter((k) => !["name", "type", "typeSettings", "activeViewId"].includes(k));
+    if (extra.length) return `may only hold name, type, typeSettings, activeViewId (not ${extra.join(", ")})`;
+    if (!(typeof v.name === "string" && ARG_SHAPES.name.test(v.name))) return "name must be a 1 to 128 character string";
+    if (!["action", "formula", "text", "number", "email", "url", "date", "boolean"].includes(v.type)) return "type must be action, formula or a plain data type";
+    if (!isObj(v.typeSettings)) return "typeSettings must be an object";
+    if (v.type === "action" && v.typeSettings.runAsButton !== true) return "an action column needs typeSettings.runAsButton true, so it runs only on rows run-cells picks";
+    if (v.activeViewId !== undefined && !ID.test(String(v.activeViewId))) return "activeViewId must be a view id";
+    return null;
+  },
   records: (v, op) => {
     if (!Array.isArray(v) || !v.length) return "must be a non-empty JSON array";
     const cap = op?.limits?.records ?? 100;

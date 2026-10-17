@@ -215,6 +215,13 @@ class LiveHook(unittest.TestCase):
                            capture_output=True, text=True, input='')
         self.assertEqual(r.returncode, 1)
 
+    def test_garbage_payload_is_silent(self):
+        # The break-it pass on this hook's own change: jq printed a parse error
+        # into the transcript on a payload that was not JSON.
+        r = subprocess.run(['bash', str(HOOK)], input='not json', capture_output=True, text=True,
+                           env=self.env, timeout=60)
+        self.assertEqual((r.returncode, r.stderr), (0, ''))
+
     def test_foreign_repo_is_never_probed(self):
         self.assertFalse(B.trusted_repo(self.repo))
 

@@ -34,10 +34,10 @@ INPUT=$(cat)
 command -v jq >/dev/null 2>&1 || exit 0
 [ "${BREAK_IT_GUARD:-on}" = "off" ] && exit 0
 
-MSG=$(printf '%s' "$INPUT" | jq -r '.last_assistant_message // empty')
+MSG=$(printf '%s' "$INPUT" | jq -r '.last_assistant_message // empty' 2>/dev/null)
 [ -n "$MSG" ] || exit 0
 
-PROMPT_ID=$(printf '%s' "$INPUT" | jq -r '.prompt_id // .session_id // "unknown"')
+PROMPT_ID=$(printf '%s' "$INPUT" | jq -r '.prompt_id // .session_id // "unknown"' 2>/dev/null)
 GUARD="${TMPDIR:-/tmp}/break-it-guard-$PROMPT_ID"
 [ -f "$GUARD" ] && exit 0
 

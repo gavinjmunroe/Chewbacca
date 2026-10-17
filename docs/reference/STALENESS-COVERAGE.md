@@ -4,6 +4,8 @@ Per-file status for the repo-wide staleness audit, risk-first. Batch 1 is what e
 
 What "reviewed" means in batch 1: every markdown link and backticked path was checked for existence (relative to the file, the repo root and HOME); every backticked command was run through `command -v`, and `chewbacca <sub>` lines through `chewbacca <sub> --help`; each flag was triaged by hand. External URLs and prose claims were not checked, so a later batch reads those.
 
+The scanner is `tools/stale_scan.py` (test: tests/test_stale_scan.py). Run it on the next batch's files and triage each flag by hand.
+
 Dismissed as false positives: Tailwind class strings, YAML keys, code snippets and commit-message examples that the scanner read as commands.
 
 ## Batch 1, 2026-10-16: always-loaded instructions, rules, top 20 skills

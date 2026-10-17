@@ -91,6 +91,22 @@ themselves. Old documents, prior drafts, uploads, the repo's own history.
 Asking someone for a story that is sitting in their own notes tells them you are
 not reading, and they are right. Skimming filenames is not reading.
 
+The same goes before building. On 2026-10-17 he floated a Needledrop scrape
+plus the Spotify API ("idek what I'm thinking lol"). The agent ran a 7k-video
+scrape and wrote a Spotify client without looking, and he'd already built
+`calebnewtonusc/fantano` in June. A memory note pointed right at it and said
+CSV first, no Spotify login. Ten minutes in he wrote "Wait not today! J save
+it to todo. Idek what I wanna make yet." So, before any side project:
+
+```bash
+ls ~/code/archive/*/ ~/code/personal | grep -i <topic>
+gh repo list calebnewtonusc --limit 300 | grep -i <topic>
+grep -ril <topic> ~/second-brain/memory
+```
+
+Lead with what already exists. When he says "idek" or "random idea", give
+him two or three concrete shapes in a few lines before starting anything long.
+
 ---
 
 ## ASKING FOR A FACT IS NOT ASKING PERMISSION

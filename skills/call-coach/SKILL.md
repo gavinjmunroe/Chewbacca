@@ -54,6 +54,17 @@ bring, and the five objections they will raise with a response to each.
 An unverifiable specific goes in as `[NEED: ...]`, never as a plausible
 value, because the one person who notices is the one who was there.
 
+**Read the live thread with that person before touching the prep.** Run
+`mac contacts find <name>` then `mac messages history <handle> --limit 40`
+and check every claim the prep makes against the newest texts. On
+2026-10-17 a Karthik call prep asked "has any decision been made abt my
+role?" because of Sagar's "Not the direction we want to go in" text. The
+thread showed it was a reply to a Goodword ad Caleb had shared minutes
+earlier, and that Karthik had already written "let's level set, wanna make
+sure you feel integrated and good". Caleb had to say "Read his recent texts
+and adjust accordingly" mid-edit. The prep was arguing with a message
+nobody had reread.
+
 ## What this is not
 
 Not a verdict on the person. A bad call is usually a structural problem: no

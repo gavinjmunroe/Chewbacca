@@ -265,7 +265,13 @@ def run_campaigns(entries, ddir, ready, client, ws):
         # A real FAIL first: it is what a recipient would see. Then the input
         # that was never found, then whatever else went unchecked.
         failed = [g for g in bad if g["status"] == "FAIL"]
-        row["first_reason"] = (failed[0]["first"] if failed else missing[0] if missing and bad
+        # A grader that never ran is the reason, never the missing input beside
+        # it. On 2026-10-17 gtme-grade died on "--field-map names firm, which
+        # the leads file lacks" for all 8 Zeutara drafts, every gate went NOT
+        # CHECKED, and this column said "recipient read missing" all day.
+        crashed = "error" in doc if isinstance(doc, dict) else False
+        row["first_reason"] = (f"gtme-grade did not run: {doc['error']}" if crashed
+                               else failed[0]["first"] if failed else missing[0] if missing and bad
                                else bad[0]["first"] if bad else "")
         out.append(row)
     return out
@@ -305,6 +311,25 @@ def check_owed(client, inbox=None, slack=None):
 
 # ------------------------------------------------------------------- output
 
+def causes(rows, checks):
+    """Distinct reasons behind the blockers, most cells first. The blocker count
+    is gate cells: 8 drafts with one shared crash read 41 on 2026-10-17, the
+    same number as a different week's 41 catch-alls, so the count alone hid
+    that the cause had changed."""
+    tally = {}
+    for r in rows:
+        for g in r["gates"]:
+            if g["status"] != "PASS":
+                key = re.sub(r"cam_[A-Za-z0-9]+", "cam_*", r["first_reason"] if "did not run" in r["first_reason"]
+                             else g["first"] or "no reason given")
+                key = re.sub(r"\b\d+ of \d+\b", "N of M", key)
+                tally[key] = tally.get(key, 0) + 1
+    for c in checks:
+        if c["status"] != "PASS":
+            tally[f"{c['name']}: {c['first']}"] = tally.get(f"{c['name']}: {c['first']}", 0) + 1
+    return sorted(tally.items(), key=lambda kv: -kv[1])
+
+
 def blockers(rows, checks):
     n = sum(1 for r in rows for g in r["gates"] if g["status"] != "PASS")
     return n + sum(1 for c in checks if c["status"] != "PASS")
@@ -328,6 +353,12 @@ def table(client, ident, rows, checks, n_block):
         lines.append(f"  inputs not found for some campaigns: {', '.join(missing)} (each keeps its gate NOT CHECKED)")
     lines.append("")
     passing = sum(1 for r in rows if r["status"] == "PASS")
+    found = causes(rows, checks)
+    if found:
+        lines.append(f"  {n_block} blockers come from {len(found)} cause{'s' if len(found) != 1 else ''}:")
+        for why, n in found[:8]:
+            lines.append(f"    {n:>3}  {why[:120]}")
+        lines.append("")
     if n_block == 0 and rows:
         lines.append(f"READY: all {len(rows)} campaigns pass all five gates, the pre-send gate is fresh "
                      f"and nobody is owed a reply.")
@@ -434,6 +465,15 @@ def main(argv=None):
         checks.append({"name": "campaigns", "status": "FAIL", "first": "the drafts file lists no campaigns"})
     n_block = blockers(rows, checks)
     verdict = "READY" if n_block == 0 else "NOT READY"
+    # A path in clients.json outlives the week it was set for. On 2026-10-17 the
+    # 10-19 drafts were graded against the 10-12 verdicts and suppression files
+    # pinned there, so 42 freshly verified people read as unverified.
+    ddir = str(Path(drafts).resolve().parent)
+    stale = [f"{key} comes from clients.json ({ready[key]}), outside this drafts folder; "
+             f"set it on the drafts entries if this week's file differs"
+             for key in ("verification", "suppress", "senders")
+             if isinstance(ready.get(key), str) and not any(e.get(key) for e in entries)
+             and os.path.dirname(os.path.expanduser(ready[key])) != ddir]
     body = {"v": 1, "client": cfg["name"], "time": int(time.time()), "verdict": verdict, "blockers": n_block,
             "drafts": ident, "checks": checks,
             "campaigns": [{k: r[k] for k in ("campaign", "company", "tier", "status", "first_reason",
@@ -450,6 +490,8 @@ def main(argv=None):
         print(json.dumps(dict(body, result=str(dest) if dest else None), indent=1))
     else:
         print(table(cfg["name"], ident, rows, checks, n_block))
+        for w in stale:
+            print(f"  warn  {w}")
         if dest:
             print(f"Recorded in {dest}.")
     return 0 if verdict == "READY" else 1

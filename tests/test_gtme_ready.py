@@ -318,5 +318,32 @@ gtme_grade.score_email(step2, 0, [{"first_name": "Ann"}], g, "A")
 check("an email 1 that opens on nothing personal and not on the sender still fails line one",
       any("line one" in f for f in g.fails), g.fails)
 
+# 2026-10-17: gtme-grade crashed on a field-map column the leads file lacked,
+# all five gates went NOT CHECKED, and the table blamed a missing recipient read.
+w = World(("cam_ready1", "cam_ready2"))
+cfg = json.loads(w.clients.read_text())
+cfg["clients"][0]["ready"]["field_map"] = {"signal": "no_such_column"}
+w.clients.write_text(json.dumps(cfg))
+(w.data / "reviews" / "cam_ready1.json").unlink()
+p = w.run()
+r = w.result()
+row = next(c for c in r["campaigns"] if c["campaign"] == "cam_ready1")
+check("a grader crash is the first reason, not the missing input beside it",
+      row["first_reason"].startswith("gtme-grade did not run") and "no_such_column" in row["first_reason"], row)
+check("the table says how many causes sit behind the blocker count",
+      re.search(r"\d+ blockers come from \d+ causes?:", p.stdout) is not None, p.stdout)
+check("one shared crash reads as one cause, not one per gate",
+      re.search(r"come from 2 causes:", p.stdout) is not None or re.search(r"come from 1 cause:", p.stdout) is not None,
+      p.stdout)
+
+# A clients.json path from another folder is named, so last week's files can't grade this week silently.
+w = World()
+cfg = json.loads(w.clients.read_text())
+cfg["clients"][0]["ready"]["suppress"] = str(w.home / "old-week" / "suppress.csv")
+w.clients.write_text(json.dumps(cfg))
+p = w.run()
+check("a suppression file pinned in clients.json outside the drafts folder is flagged",
+      "suppress comes from clients.json" in p.stdout, p.stdout)
+
 print(f"\n{'all passed' if not fails else str(fails) + ' failed'}")
 sys.exit(1 if fails else 0)

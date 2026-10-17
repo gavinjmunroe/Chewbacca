@@ -418,6 +418,102 @@ if name == "python3" and args[:1] in (["tools/counts.py"], ["tools/checksums.py"
 if name == "python3" and args[:2] == ["-m", "json.tool"] and len(args) <= 3:
     out("allow")
 
+# Python near Clay, judged by its code, not by the words on the line (2026-10-16). Sabo's
+# spend_now.py was refused for `add --kind campaign`, a data value, while the same script
+# with other arguments never reached this guard at all. Caleb: "u get blocked by such simple
+# things that shouldn't be blockers". What can reach Clay is the code, so the code is read:
+# the script and every .py beside it (its local imports) must hold no Clay host, credential
+# or guard-state path, and may call the clay CLI only as `chewbacca clay`, the gated front
+# door. Modules imported from other directories aren't read; this stays a guard, not a sandbox.
+CLAY_DIRECT = re.compile(r"api\.clay\.com|app\.clay\.com|clay[-_ ]?(?:session|cookie|api[-_ ]?key|token)"
+                         r"|clay-allowance|send-gate-receipt|gtme[-_]grade[-_]key|launch-guard-last-url", re.I)
+CLI_LITERAL = re.compile(r"""(["'])(?:[^"'\s]*/)?clay\1""")
+
+
+def code_reaches_clay(text):
+    if CLAY_DIRECT.search(text):
+        return True
+    for m in CLI_LITERAL.finditer(text):
+        if not re.search(r"""chewbacca["']\s*,\s*$""", text[max(0, m.start() - 40):m.start()]):
+            return True
+    return False
+
+
+def script_reaches_clay(path):
+    folder = os.path.dirname(path)
+    try:
+        siblings = [os.path.join(folder, f) for f in os.listdir(folder) if f.endswith(".py")]
+    except OSError:
+        return True
+    for f in [path] + siblings:
+        try:
+            with open(f, errors="replace") as fh:
+                if code_reaches_clay(fh.read()):
+                    return True
+        except OSError:
+            return True
+    return False
+
+
+# No operator or functools: operator.attrgetter("modules")(sys) reaches os without an attribute
+# this check can see. No string or statistics: string.Formatter().get_field walks attributes
+# from a string, and statistics' globals hold random, which holds os.
+SAFE_MODULES = {"json", "sys", "re", "collections", "itertools", "math", "csv", "datetime", "textwrap"}
+# sys.modules["os"] is os, so sys gives only its streams, argv and exit.
+SYS_OK = {"stdin", "stdout", "stderr", "argv", "exit"}
+UNSAFE_NAMES = {"open", "exec", "eval", "compile", "__import__", "getattr", "setattr", "delattr",
+                "globals", "locals", "vars", "breakpoint", "input", "memoryview"}
+# Safe modules still hold other modules as plain attributes: json.codecs.sys, re.enum.sys.
+# Every route to os, a subprocess or a socket passes through one of these names.
+UNSAFE_ATTRS = UNSAFE_NAMES | {"sys", "modules", "os", "posix", "nt", "builtins", "codecs", "enum",
+                               "functools", "importlib", "io", "subprocess", "socket", "urllib", "http",
+                               "shutil", "pathlib", "ctypes", "system", "popen", "spawnv", "execv",
+                               "fork", "load_module", "mro", "Formatter"}
+
+
+def snippet_is_pure(code):
+    """`python3 -c` that only reshapes text: safe imports, no file, eval or import tricks."""
+    import ast
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import) and any(a.name.split(".")[0] not in SAFE_MODULES for a in node.names):
+            return False
+        if isinstance(node, ast.ImportFrom) and (node.level or (node.module or "").split(".")[0] not in SAFE_MODULES):
+            return False
+        if isinstance(node, ast.Name) and node.id in UNSAFE_NAMES:
+            return False
+        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "sys":
+            if node.attr not in SYS_OK:
+                return False
+        elif isinstance(node, ast.Attribute) and (node.attr.startswith("_") or node.attr in UNSAFE_ATTRS):
+            return False
+        if isinstance(node, ast.Name) and node.id == "sys" and not any(
+                isinstance(p, ast.Attribute) and p.value is node for p in ast.walk(tree)):
+            return False  # bare sys passed somewhere could be unpacked into modules
+    return not CLAY_DIRECT.search(code)
+
+
+if name == "python3":
+    rest = list(args)
+    while rest and rest[0] in ("-I", "-u", "-B", "-E", "-s"):
+        rest = rest[1:]
+    if rest[:1] == ["-c"] and len(rest) >= 2:
+        if snippet_is_pure(rest[1]) and not any(CLAY_DIRECT.search(a) for a in rest[2:]):
+            out("allow")
+        out("refuse", "python -c near Clay may only use json, re, collections and the like on its input")
+    if rest and rest[0].endswith(".py") and not rest[0].startswith("-"):
+        path = resolve(rest[0])
+        if not path or not os.path.isfile(path):
+            out("refuse", "the python script isn't a file here")
+        if any(CLAY_DIRECT.search(a) for a in rest[1:]):
+            out("refuse", "the script is handed a Clay credential or guard-state path")
+        if script_reaches_clay(path):
+            out("refuse", "the script or a .py beside it reaches Clay outside `chewbacca clay` (a Clay host, credential, or the bare clay CLI)")
+        out("allow")
+
 # The clay CLI's read subcommands, as argv prefixes.
 CLAY_READS = [("whoami",), ("credits", "balance"), ("campaigns", "list"), ("campaigns", "get"),
               ("campaigns", "analytics"), ("campaigns", "options"), ("tables", "list"), ("tables", "get"),
@@ -684,7 +780,9 @@ chewbacca gtm/gtme/gtme-grade, clay CLI reads, jev-browse run (no --allow-commit
 for a Clay page in the background, git (not config), local read tools,
 counts.py/checksums.py, code-slop, slop-check, and test runners (python3 tests/x.py,
 bash tests/run.sh [group], pytest tests/...; prefix CHEWBACCA_NO_SEND=1 so nothing
-sends). Writes go through chewbacca clay, which needs Caleb's ok (a terminal, or
+sends). A python script runs when its code and the .py beside it reach Clay only
+through chewbacca clay; python -c runs when it only reshapes text with json, re
+and the like. To write a file, use the Edit or Write tool, not a redirect. Writes go through chewbacca clay, which needs Caleb's ok (a terminal, or
 a prompt from him in chat within 2 hours, his standing instruction), except
 row, column and run-cells writes inside the workspace's standing credit
 allowance, which run with no ask (chewbacca clay allowance shows it); a

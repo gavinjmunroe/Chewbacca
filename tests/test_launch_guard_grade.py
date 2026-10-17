@@ -387,6 +387,11 @@ ALLOWED = [
     # a leading cd into a real checkout, then reads judged from there (2026-10-16)
     f"cd {KIT} && python3 tests/test_chewbacca_clay.py",
     f"cd {KIT} && CHEWBACCA_NO_SEND=1 python3 tests/test_chewbacca_clay.py 2>&1 | tail -5",
+    # Python judged by its code (2026-10-16): the exact shapes refused in the Sabo spend_now
+    # session, a front-door read reshaped by a pure snippet, and the kit's own GTM tool
+    "chewbacca clay rows ws=1 table=t_x | python3 -I -c \"import json,sys;d=json.load(sys.stdin);print(d.get('ok'),len(d.get('data') or []))\"",
+    "python3 -c \"print('clay')\"",
+    "python3 -I tools/creator_gtm/spend_now.py client.json score --today 2026-10-16",
 ]
 REFUSED = [
     ("a campaign START through the front door", "chewbacca clay campaign-status campaign=cam_x status=START --allow-writes | cat"),
@@ -472,7 +477,18 @@ REFUSED = [
     ("a write inside a pipeline", "grep x y | chewbacca clay campaign-status campaign=cam_x status=PAUSED --allow-writes"),
     ("a background job", "grep clay x & curl https://api.clay.com/v3"),
     ("a redirect to a file in a chain", "chewbacca clay campaigns > out.json; ls"),
-    ("python in a chain", "ls && python3 -c \"print('clay')\""),
+    ("python in a chain", "ls && python3 -c \"import urllib.request; print('clay')\""),
+    ("python -c reaching os through sys.modules", "python3 -c \"import sys; sys.modules['os'].system('clay campaigns update x')\""),
+    ("python -c with __import__", "python3 -c \"__import__('os').system('clay campaigns update x')\""),
+    ("python -c opening a file", "python3 -c \"open('/tmp/clay.sh','w').write('x')\""),
+    ("python -c via attrgetter", "python3 -c \"import operator,sys; operator.attrgetter('modules')(sys)['os'].system('clay')\""),
+    ("python -c dunder walk", "python3 -c \"print(().__class__.__bases__[0].__subclasses__(), 'clay')\""),
+    ("python -c passing bare sys", "python3 -c \"import sys; print(vars(sys), 'clay')\""),
+    ("python -c through json.codecs", "python3 -c \"import json; json.codecs.sys.modules['os'].system('clay')\""),
+    ("python -c through re.enum", "python3 -c \"import re; re.enum.sys.modules['os'].system('clay')\""),
+    ("python -c through string.Formatter", "python3 -c \"import string; print(string.Formatter(), 'clay')\""),
+    ("python -c through statistics", "python3 -c \"import statistics; print(statistics.random, 'clay')\""),
+    ("a python script that isn't a file", "python3 tools/creator_gtm/nope.py --kind campaign"),
     # jev-browse keeps its floor near Clay
     ("jev-browse lifting its floor on Clay", "jev-browse run --url https://app.clay.com/x --goal 'Open the table' --allow-commit"),
     ("jev-browse aimed at a campaign launch", "jev-browse run --url https://app.clay.com/x --goal 'Launch the campaign'"),
@@ -564,6 +580,28 @@ for cmd in ALLOWED:
 for name, cmd in REFUSED:
     code, err = e.hook("Bash", {"command": cmd})
     check(f"refused: {name}", code == 2, err)
+# A python script near Clay is judged by its code and the .py files beside it (2026-10-16).
+scripts = tempfile.mkdtemp()
+for fname, body, permitted in [
+    ("front_door.py", "import subprocess\nsubprocess.run(['chewbacca', 'clay', 'rows', 'ws=1'])\n", True),
+    ("direct_api.py", "import urllib.request\nurllib.request.urlopen('https://api.clay.com/v3/x')\n", False),
+    ("bare_cli.py", "import subprocess\nsubprocess.run(['clay', 'campaigns', 'update', 'x'])\n", False),
+    ("bare_cli_path.py", "import subprocess\nsubprocess.run([\"/usr/local/bin/clay\", 'campaigns'])\n", False),
+    ("allowance.py", "p = '~/.chewbacca/clay-allowances.json'\n", False),
+]:
+    folder = os.path.join(scripts, fname[:-3])
+    os.makedirs(folder)
+    with open(os.path.join(folder, fname), "w") as f:
+        f.write(body)
+    code, err = e.hook("Bash", {"command": f"python3 -I {fname} add --kind campaign"}, cwd=folder)
+    check(f"python script judged by its code: {fname}", code == (0 if permitted else 2), err)
+# A clean script with a sibling module that calls the Clay API is refused too.
+with open(os.path.join(scripts, "front_door", "helper.py"), "w") as f:
+    f.write("HOST = 'https://api.clay.com/v3'\n")
+code, err = e.hook("Bash", {"command": "python3 -I front_door.py add --kind campaign"},
+                   cwd=os.path.join(scripts, "front_door"))
+check("a clean script beside a module that reaches the Clay API is refused", code == 2, err)
+
 # The pieces after the cd are judged from the checkout, not the chat's cwd.
 code, err = e.hook("Bash", {"command": f"cd {KIT} && bin/chewbacca-clay ops"}, cwd=tempfile.mkdtemp())
 check("a relative front door after cd resolves in the checkout", code == 0, err)

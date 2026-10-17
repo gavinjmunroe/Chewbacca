@@ -127,6 +127,23 @@ class TabsTests(unittest.TestCase):
         self.assertIn('cursor', seen)
         self.assertIn('doing: "Rewriting the install section"', seen)
 
+    def test_note_without_a_session_finds_the_tab_by_its_cwd(self):
+        # 2026-10-16: a Claude desktop tab has no CHEWBACCA_SESSION_ID, so
+        # "landed, merge after me" had to go through the manager tab.
+        wt = self.root / 'wt'
+        wt.mkdir()
+        tabs.upsert('desk-1', 'claude-code', str(wt))
+        self.hook({'hook_event_name': 'SessionStart', 'session_id': 'other'})
+        env = {k: v for k, v in os.environ.items() if k != 'CHEWBACCA_SESSION_ID'}
+        with patch.dict(os.environ, env, clear=True), patch('os.getcwd', return_value=str(wt)):
+            self.assertEqual(tabs.main(['note', 'Landed, merge after me']), 0)
+        self.assertIn('doing: "Landed, merge after me"', tabs.context('other', str(self.repo)))
+        # Two tabs in one directory: refuse rather than guess which.
+        tabs.upsert('desk-2', 'claude-code', str(wt))
+        with patch.dict(os.environ, env, clear=True), patch('os.getcwd', return_value=str(wt)), \
+                patch('sys.stderr', io.StringIO()):
+            self.assertEqual(tabs.main(['note', 'ambiguous']), 2)
+
     def test_hook_cli_prints_plain_context_and_json_for_tool_events(self):
         tabs.upsert('b', 'codex', str(self.repo), task='Other work')
         payload = {'hook_event_name': 'SessionStart', 'session_id': 'a', 'cwd': str(self.repo)}

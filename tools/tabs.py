@@ -292,6 +292,18 @@ def live(now=None):
         return []
 
 
+def session_for_cwd(cwd, now=None):
+    """The one live tab whose cwd is this directory, or '' when none or several.
+
+    A Claude desktop tab has no CHEWBACCA_SESSION_ID in its shell, so on
+    2026-10-16 a tab couldn't post "landed, merge after me" and the manager
+    had to relay it. Its hooks already registered the cwd.
+    """
+    here = os.path.realpath(cwd) if cwd else ''
+    hits = [r['id'] for r in live(now) if r.get('cwd') and os.path.realpath(r['cwd']) == here]
+    return hits[0] if len(hits) == 1 else ''
+
+
 def recent_writes(now=None, window=LIVE_SECONDS):
     """{session: [(ts, path), ...]} newest first, from the tail of write-log.tsv."""
     path = write_log_path()
@@ -623,8 +635,10 @@ def main(argv=None):
         print(context(args.session, args.cwd) or 'Registered. No other live tabs.')
         return 0
     if args.command == 'note':
+        args.session = args.session or session_for_cwd(os.getcwd())
         if not args.session:
-            print('tabs note needs --session or CHEWBACCA_SESSION_ID', file=sys.stderr)
+            print('tabs note needs --session or CHEWBACCA_SESSION_ID '
+                  '(no single live tab has this directory as its cwd)', file=sys.stderr)
             return 2
         upsert(args.session, '', note=args.text)
         return 0

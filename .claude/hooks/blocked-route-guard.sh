@@ -21,7 +21,7 @@ type hook_init >/dev/null 2>&1 && hook_init blocked-route-guard.sh 10
 # API, no tab), jev-browse (his signed-in Chrome) and the browser pane. One
 # route failing became a blocker, and the click became his.
 #
-# WHAT IT ENFORCES. A reply whose BLOCKED: hands him a UI step (click, sort,
+# WHAT IT ENFORCES. A reply whose BLOCKED: line hands him a UI step (click, sort,
 # hide, toggle, "on ur screen", "has to be done by u") must name at least two
 # of the kit's routes it tried and how each failed. One failure is a reason to
 # try the next route, not a blocker. Refuses once per stop.
@@ -37,7 +37,11 @@ import os, re
 msg = os.environ["BR_MSG"]
 UI = re.compile(r"\bclick\b|\bon (?:ur|your) screen\b|\bin (?:its|the) UI\b|\bhas to (?:be done by|happen on) (?:u|you|ur)\b"
                 r"|\b(?:sort|hide|toggle|drag) (?:the|it|them)\b", re.I)
-if not UI.search(msg):
+# Only a BLOCKED: that opens a line hands something over. On 2026-10-16 the
+# steering-study reply describing this guard ("a BLOCKED: that hands him a
+# click") was refused by it: a mention mid-sentence is not a handoff.
+blocks = [m.group(0) for m in re.finditer(r"(?m)^[ \t>*-]*BLOCKED:.*(?:\n(?![ \t]*\n).*)*", msg)]
+if not any(UI.search(b) for b in blocks):
     print("ok"); raise SystemExit
 ROUTES = {
     "chewbacca clay": r"chewbacca clay|clay(?:'s)? (?:api|cli)\b|\bclay [a-z-]+ op\b",

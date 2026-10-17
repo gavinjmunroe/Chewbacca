@@ -19,4 +19,7 @@ echo "lets through:"
 probe "routes tried and named" 0 "BLOCKED: chewbacca clay view-sort returned 404 and jev-browse hit the login wall, so click Updated At on ur screen."
 probe "a BLOCKED with no UI step" 0 "BLOCKED: Jonah has to sign the DocuSign as himself."
 probe "no BLOCKED at all" 0 "Sorted the view through chewbacca clay. Strava is on top."
+probe "a BLOCKED: mentioned mid-sentence (the steering-study reply, 10/16)" 0 "- blocked-route-guard: a BLOCKED: that hands him a click has to name two kit routes tried first. It catches both demo handoffs, where he wrote BRO U HV JEV BROWSER AGENT."
+probe "the handoff in a dash list" 2 "Here's where it stands.
+- BLOCKED: the sort has to happen on ur screen, Claude in Chrome is down."
 [ "$fail" = 0 ] && echo "blocked-route-guard: all passed" || { echo "blocked-route-guard: $fail failed"; exit 1; }

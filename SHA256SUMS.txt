@@ -5,7 +5,7 @@ b9b8f16866a8894bc088331065eb4cc6aa80fe0df2c86c915f10e95833e59f1a  .claude/hooks/
 755609b0d6cee26710056a8e13224d7d43ada0b687f7e7f3dc1f8e1bf2d4b477  .claude/hooks/assumption-guard.sh
 603bca3287fb1272b3ae393453e1a5b8c9c1cb4b3473745103402675765aeafc  .claude/hooks/attribution-guard.sh
 5befb13c6a377810d4fd502103207909db1b9eb16631f1ead0d576a9a6a5b85a  .claude/hooks/auto-push.sh
-d0c094653acd605be023ccaaf59d17c1e7b22c094382b836c4f0872a5ae5167b  .claude/hooks/blocked-route-guard.sh
+4852bfd60b437f5b8818dc686b680bf9fe3e599c2360b386199948f38487079d  .claude/hooks/blocked-route-guard.sh
 a6727f860fc6578e607364d75a920f71f23a3f69d6110e2c5a7a8772cf9d901a  .claude/hooks/brain-recall.sh
 25f5c8bf4b70229fa7b02115256a7ed742c5cc5cb5743650a9f87f86a97b18ee  .claude/hooks/brain-sync.sh
 d8f5e0f3645011a6c96c7447c3e8ca4b1a29d7f4b1e74edd402338d2587330b2  .claude/hooks/brake-guard.sh

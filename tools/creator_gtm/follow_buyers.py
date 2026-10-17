@@ -135,8 +135,8 @@ def follow(seed, live, cols):
     rank, emit = L.jev_rank, L.emit
     L.jev_rank, L.emit = prefer_seed(rank, seed["name"]), (lambda _log: None)
     try:
-        chain = L.finish(cur["domain"], row, {"brand": brand, "domain": cur["domain"], "live": True,
-                                              "steps": log["steps"], "lane": log["lane"]}, t0, before, cols)
+        chain = L.guarded_finish(cur["domain"], row, {"brand": brand, "domain": cur["domain"], "live": True,
+                                                      "steps": log["steps"], "lane": log["lane"]}, t0, before, cols)
     finally:
         L.jev_rank, L.emit = rank, emit
     result = dict(chain.get("result") or {})
@@ -156,6 +156,15 @@ def follow(seed, live, cols):
     if not problem:
         result.pop("door", None)  # the seed is the door
     result["seed_verdict"] = verdict
+    if problem:
+        # The seed is the warm door, so no reachable email for them is a blocked step, not a dead end.
+        team = [{"name": n, "title": t, "score": None, "tried": L._norm(n) == L._norm(seed["name"])}
+                for n, t in result["team"]]
+        if not seed_in_search:
+            team.append({"name": seed["name"], "title": cur.get("title"), "email": email, "tried": True})
+        log["blocked"] = L.blocked("email_find", brand, cur["domain"],
+                                   f"no reachable {cur['domain']} email for past buyer {seed['name']}: {problem}",
+                                   evidence={"people": team})
     why = why_line(seed, result, seed_in_search, email, problem)
     status = WARM if not problem else f"{WARM}; needs work: {problem}"
     costs = (chain.get("costs") or []) + L.prov().drain_costs()
@@ -171,7 +180,8 @@ def follow(seed, live, cols):
                             "checked": time.strftime("%Y-%m-%d"), "in_clay_search": seed_in_search})
     log["result"] = {"person": seed["name"], "email": email, "zerobounce": verdict, "problem": problem,
                      "row": row, "status": status, "why": why, "team": result["team"],
-                     "chain_pick": result.get("person"), "door": result.get("door")}
+                     "chain_pick": result.get("person"), "door": result.get("door"),
+                     "next_move": log.get("blocked", {}).get("next")}
     after = L.prov().balance()
     log["costs"], log["cost"] = costs, L.gtm_provider.cost_total(costs)
     log["credits_observed"] = round(before - after, 2) if before is not None and after is not None else None

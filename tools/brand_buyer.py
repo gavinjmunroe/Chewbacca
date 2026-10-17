@@ -51,6 +51,7 @@ PROVIDER = RECORDS_FILE = None
 
 HERE = os.getcwd()
 RUN_LOG = None
+BLOCKERS_FILE = None
 # Seams for the blocked-search loop, swapped in tests: the site reader, Jev (None is live Jev),
 # and the lesson ledger the loop records org hops into (None is team/gtme-lessons).
 SITE_READ = next_move.read_site
@@ -103,7 +104,7 @@ class ClayFailed(SystemExit):
 
 def configure(cfg, strict=True):
     """Point the chain at one client's table: ids, views, creator, parents, people search."""
-    global WS, TABLE, VIEW, CLIENT_VIEW, CREATOR, RUN_LOG, ROWS_FILE, PEOPLE_SEARCH, PROVIDER, RECORDS_FILE
+    global WS, TABLE, VIEW, CLIENT_VIEW, CREATOR, RUN_LOG, ROWS_FILE, PEOPLE_SEARCH, PROVIDER, RECORDS_FILE, BLOCKERS_FILE
     global PICK_COLUMNS, WHY_COLUMN, READY, CLIENT_SLUG
     PROVIDER = gtm_provider.for_client(cfg, chain=sys.modules[__name__])
     WS, TABLE = str(cfg.get("ws", WS)), cfg.get("table", TABLE)
@@ -117,6 +118,7 @@ def configure(cfg, strict=True):
     # Per-client defaults: two client files in ~/.chewbacca/gtm/clients must not share a rows
     # file, or one client's brand row gets reused for the other's table.
     RUN_LOG, ROWS_FILE = here("run_log", f"{slug}.runs.jsonl"), here("rows", f"{slug}.rows.json")
+    BLOCKERS_FILE = here("blockers", f"{slug}.blockers.jsonl")
     RECORDS_FILE = here("records", f"{slug}.records.json")
     PEOPLE_SEARCH = {**PEOPLE_SEARCH, **cfg.get("people_search", {})}
     READY = cfg.get("ready_value") or READY
@@ -631,6 +633,44 @@ def done(log, before, t0, cols=None):
     return log
 
 
+def goal_for(brand):
+    return f"the person who decides which outside creators {brand} pays, with a verified email at {brand} or its parent"
+
+
+def blocked(step, brand, domain, failure, evidence=None, credits_left=None, flags=None):
+    """A blocked step's record and next-move's pick, appended to the client's blockers file."""
+    return next_move.on_blocked(
+        step, {"brand": brand, "domain": domain}, failure, client=CLIENT_SLUG or "brand-buyer", goal=goal_for(brand),
+        persona=[k.strip() for k in PEOPLE_SEARCH.get("keywords", "").split(",") if k.strip()],
+        evidence=evidence, credits_left=credits_left, log_path=BLOCKERS_FILE, evaluate=NEXT_MOVE_JEV, flags=flags)
+
+
+def provider_block(exc):
+    """(step, credits_left) when exc is a provider step that can't run, else None.
+
+    NotWired is a step with no adapter yet; a refusal carrying BLOCKED from `chewbacca clay` is
+    the credit allowance. Either way an empty result would lie, so the row says blocked and why.
+    """
+    if isinstance(exc, gtm_provider.NotWired):
+        return "provider_unwired", None
+    if isinstance(exc, ClayFailed) and "BLOCKED" in str(exc):
+        return "credit_budget", 0.0
+    return None
+
+
+def guarded_finish(brand_domain, row, log, t0, before, cols):
+    try:
+        return finish(brand_domain, row, log, t0, before, cols)
+    except (gtm_provider.NotWired, ClayFailed) as exc:
+        kind = provider_block(exc)
+        if kind is None:
+            raise
+        rec = blocked(kind[0], log["brand"], brand_domain, str(exc), credits_left=kind[1], flags=["provider_down"])
+        log["steps"].append({"step": "next move", "decision": rec["decision"], "next": (rec["next"] or {}).get("signature")})
+        log["result"] = {"person": None, "row": row, "reason": next_move.next_line(rec), "blocked": rec}
+        return done(log, before, t0, cols)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("brand", nargs="?")
@@ -670,7 +710,7 @@ def main(argv=None):
     if row:
         log["steps"].append({"step": "reuse row", "row": row})
     if row and a.live:
-        return finish(a.domain, row, log, t0, before, cols)
+        return guarded_finish(a.domain, row, log, t0, before, cols)
 
     opened = p.open_account(a.brand, a.domain, CREATOR, a.live)
     log["steps"].append({"step": "add row", "ms": opened["receipt"].get("_ms")})
@@ -684,7 +724,7 @@ def main(argv=None):
     row = opened["ref"]
     print(f"row {row}", file=sys.stderr, flush=True)
     save_row(a.brand, row)
-    return finish(a.domain, row, log, t0, before, cols)
+    return guarded_finish(a.domain, row, log, t0, before, cols)
 
 
 if __name__ == "__main__":

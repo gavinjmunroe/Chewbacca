@@ -91,6 +91,17 @@
       "reason": "the move has a field nothing can trust, so nothing can bound it"
     },
     {
+      "id": "provider-down",
+      "source": "wiring test 2026-10-16: on a NotWired provider the loop picked a paid rerun of the search that can't run",
+      "when": {
+        "flag": "provider_down",
+        "action_class": [
+          "paid_write"
+        ]
+      },
+      "reason": "the provider step that failed can't run until it's wired or the allowance resets, so no paid rerun"
+    },
+    {
       "id": "unclassified",
       "source": "this loop: every candidate declares what kind of action it is",
       "when": {
@@ -132,7 +143,9 @@
     "claygent_research": 3.0,
     "professional_posts": 2.5,
     "site_read": 0.0,
-    "linkedin_read": 0.0
+    "linkedin_read": 0.0,
+    "ats_read": 0.0,
+    "deliver_write": 0.0
   },
   "minutes": {
     "people_search": 1.0,
@@ -140,7 +153,9 @@
     "claygent_research": 5.0,
     "site_read": 0.2,
     "linkedin_read": 2.0,
-    "ask": 720.0
+    "ask": 720.0,
+    "ats_read": 0.5,
+    "deliver_write": 0.5
   },
   "sources": {
     "people_search": [
@@ -173,12 +188,33 @@
         "action_class": "read",
         "adds": "site_text"
       }
+    ],
+    "spend_evidence": [
+      {
+        "id": "site_read",
+        "action": "read the brand's newsroom, launch and press pages for paid creator work",
+        "action_class": "read",
+        "adds": "site_text"
+      },
+      {
+        "id": "ats_read",
+        "action": "read the brand's public job board for creator, influencer or partnership roles",
+        "action_class": "read",
+        "adds": "jobs"
+      },
+      {
+        "id": "linkedin_read",
+        "action": "read the company's recent LinkedIn posts in the background (read only)",
+        "action_class": "read",
+        "adds": "linkedin_text"
+      }
     ]
   },
   "rerun_cost": {
     "people_search": "people_search",
     "email_find": "email_find",
-    "buyer_rank": "people_search"
+    "buyer_rank": "people_search",
+    "deliver_write": "deliver_write"
   },
   "max_limit": 25,
   "_not_orgs": "Hosts a brand site links to that are platforms, not a related company. A link to one of these says nothing about ownership.",
@@ -234,5 +270,6 @@
       "email_find",
       "email_verify"
     ]
-  }
+  },
+  "_steps": "Blocked steps the creator GTM tools report: people_search, email_find, buyer_rank (brand_buyer, follow_buyers), spend_evidence (spend_now: no dated creator-spend evidence), deliver_write (deliver: the ledger post or the record stamp failed), provider_unwired and credit_budget (a provider step raised NotWired or hit the credit allowance). A step with no sources and no rerun gets ask or stop."
 }

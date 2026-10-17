@@ -502,6 +502,7 @@ if group "gtme"; then
   # Moves from evidence, boundaries as data, Barebells with no parents table; Jev stubbed, offline.
   check "gtme next-move derives moves from evidence and never runs one a boundary drops" python3 "$ROOT/tests/test_next_move.py"
   check "gtme next-move dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme next-move --help
+  check "every blocked creator GTM path emits a blocker record and asks next-move, for a second client" python3 "$ROOT/tests/test_next_move_wiring.py"
   expect "gtme-reply appears in help" "chewbacca gtme-reply" bash "$ROOT/bin/chewbacca" --help
   # Ported from togari-platform's dnc and scoring modules with their TypeScript cases; offline.
   check "gtme-dnc matches Togari's DNC check and calls an unreadable list unknown, never allowed" \

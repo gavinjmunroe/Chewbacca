@@ -159,11 +159,21 @@ def records_path(cfg, client_file):
     return p if os.path.isabs(p) else os.path.join(os.path.dirname(os.path.abspath(client_file)), p)
 
 
+def blocked_write(cfg, where, brand, domain, failure, evaluate=None):
+    """A ledger post or stamp that failed: record it with next-move's pick, never retry it here."""
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    import next_move  # noqa: E402
+    log = os.path.join(os.path.dirname(os.path.abspath(where)), f"{cfg.get('client_slug', 'client')}.blockers.jsonl")
+    return next_move.on_blocked("deliver_write", {"brand": brand, "domain": domain or ""}, failure,
+                                client=cfg.get("client_slug"), goal=f"{brand}'s handed contact recorded in the intro ledger",
+                                log_path=log, evaluate=evaluate)
+
+
 def deliver_records(cfg, path, live, post_fn):
     """Record each handed contact in the client's record file, then stamp the record. Returns the report."""
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from provider import load_records, save_record  # noqa: E402  (stdlib-only; no vendor import)
-    report = {"client": cfg["client_slug"], "live": live, "recorded": [], "already": [], "skipped": []}
+    report = {"client": cfg["client_slug"], "live": live, "recorded": [], "already": [], "skipped": [], "blocked": []}
     for key, rec in sorted(load_records(path).get("brands", {}).items()):
         if not handed(cfg, (rec.get("contact") or {}).get("status")):
             continue
@@ -179,9 +189,22 @@ def deliver_records(cfg, path, live, post_fn):
             report["recorded"].append({"brand": p["brand"], "person": p["person"], "email": p["email"],
                                        "for": p["delivered_for"], "dry_run": True})
             continue
-        record, created = post_fn(p)
-        save_record(path, key, {"delivered": {"on": record["delivered_on"], "for": record["delivered_for"],
-                                              "ledger": f"#{record['seq']} {record['hash'][:16]}"}})
+        try:
+            record, created = post_fn(p)
+        # Failed is a SystemExit (a ledger refusal raises it), so it's named: Exception alone missed it.
+        except (Exception, Failed) as e:  # one brand's failed post doesn't stop the batch, and isn't retried here
+            b = blocked_write(cfg, path, p["brand"], rec.get("domain"), f"ledger post failed: {e}")
+            report["blocked"].append({"brand": p["brand"], "key": key, "why": str(e)[:300], "next": b["next"]})
+            continue
+        try:
+            save_record(path, key, {"delivered": {"on": record["delivered_on"], "for": record["delivered_for"],
+                                                  "ledger": f"#{record['seq']} {record['hash'][:16]}"}})
+        except (Exception, Failed) as e:
+            b = blocked_write(cfg, path, p["brand"], rec.get("domain"),
+                              f"ledger has it as #{record['seq']} but the record stamp failed: {e}")
+            report["blocked"].append({"brand": p["brand"], "key": key, "why": str(e)[:300], "next": b["next"],
+                                      "ledger": record["seq"]})
+            continue
         report["recorded"].append({"brand": p["brand"], "person": p["person"], "seq": record["seq"],
                                    "delivered_on": record["delivered_on"], "new": created})
     return report
@@ -233,7 +256,7 @@ def main(argv=None):
         raise Failed(f"table {cfg['table']} has no column named {missing}")
     ids = {role: cols.get(name) for role, name in names.items()}
 
-    report = {"client": cfg["client_slug"], "live": a.live, "recorded": [], "already": [], "skipped": []}
+    report = {"client": cfg["client_slug"], "live": a.live, "recorded": [], "already": [], "skipped": [], "blocked": []}
     for row in read_rows(cfg, ids):
         if not handed(cfg, text(row["cells"].get(ids["status"]))):
             continue
@@ -249,11 +272,23 @@ def main(argv=None):
             report["recorded"].append({"brand": p["brand"], "person": p["person"], "email": p["email"],
                                        "for": p["delivered_for"], "dry_run": True})
             continue
-        record, created = post(env, p)
+        try:
+            record, created = post(env, p)
+        except (Exception, Failed) as e:
+            b = blocked_write(cfg, a.client_file, p["brand"], None, f"ledger post failed: {e}")
+            report["blocked"].append({"brand": p["brand"], "row": row["id"], "why": str(e)[:300], "next": b["next"]})
+            continue
         stamp = {ids["delivered_on"]: record["delivered_on"], ids["delivered_for"]: record["delivered_for"],
                  ids["ledger"]: f"#{record['seq']} {record['hash'][:16]}"}
-        clay("update-rows", True, write=True, ws=cfg["ws"], table=cfg["table"],
-             records=json.dumps([{"id": row["id"], "cells": stamp}]))
+        try:
+            clay("update-rows", True, write=True, ws=cfg["ws"], table=cfg["table"],
+                 records=json.dumps([{"id": row["id"], "cells": stamp}]))
+        except (Exception, Failed) as e:  # the ledger is right; the next run fills the row from it
+            b = blocked_write(cfg, a.client_file, p["brand"], None,
+                              f"ledger has it as #{record['seq']} but the table stamp failed: {e}")
+            report["blocked"].append({"brand": p["brand"], "row": row["id"], "why": str(e)[:300], "next": b["next"],
+                                      "ledger": record["seq"]})
+            continue
         report["recorded"].append({"brand": p["brand"], "person": p["person"], "seq": record["seq"],
                                    "delivered_on": record["delivered_on"], "new": created})
     print(json.dumps(report, indent=1))

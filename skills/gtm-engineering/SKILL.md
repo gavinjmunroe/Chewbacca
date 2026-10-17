@@ -485,6 +485,16 @@ held out anymore. Grade it on the next 10 real blockers.
   old chain 1 of 2 at 1.67. Per credit rewards giving up cheaply. The old chain's
   miss cost nothing, so a higher cleared count can lose on that metric. Read the
   cleared count next to it.
+- **Every blocked creator GTM path asks next-move (2026-10-16).** brand_buyer on
+  a provider that raises NotWired or hits the credit allowance, follow_buyers when a
+  past buyer has no reachable email, spend_now when a brand has no dated evidence,
+  and deliver when a ledger post or record stamp fails. Each one calls
+  `next_move.on_blocked()`, which writes a line to `<client>.blockers.jsonl` and
+  puts the pick in the run's report. It runs nothing, so a paid or outbound pick
+  waits for the caller's own gate. A provider that's down drops every paid rerun.
+  One brand's failed post no longer ends the batch, and that includes a ledger
+  refusal (a SystemExit, which `except Exception` missed). Proven on the made-up
+  Hearthside client in `tests/test_next_move_wiring.py`.
 
 ## Never call a launch ready without `gtme ready`
 

@@ -41,6 +41,28 @@ class Failed(SystemExit):
 
 # ── config ───────────────────────────────────────────────────────────────────
 
+def blockers_path(cfg):
+    return os.path.join(cfg["_dir"], f"{cfg.get('client_slug', 'client')}.blockers.jsonl")
+
+
+def blocked_brands(cfg, report, evaluate=None):
+    """A brand that scored 0 with no dated evidence is a blocked step: next-move says where to look.
+
+    Runs nothing; the reads it recommends go through collect or add like any other evidence.
+    """
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    import next_move  # noqa: E402
+    out = {}
+    for brand, score, line in report:
+        if score:
+            continue
+        out[brand] = next_move.on_blocked(
+            "spend_evidence", {"brand": brand, "domain": cfg["spend_now"]["brands"].get(brand, "")}, line,
+            client=cfg.get("client_slug"), goal=f"dated, sourced evidence that {brand} pays outside creators now",
+            log_path=blockers_path(cfg), evaluate=evaluate)
+    return out
+
+
 def load_client(path):
     with open(os.path.expanduser(path)) as f:
         cfg = json.load(f)
@@ -431,8 +453,11 @@ def main(argv=None):
         else:
             ev = load_evidence(cfg)
             report = [(b, *brand_result(ev, b, today, cfg)[::2]) for b in cfg["spend_now"]["brands"]]
+        stuck = blocked_brands(cfg, report)
         for brand, score, line in report:
             print(f"{score:>3}  {brand}: {line}")
+            if brand in stuck:
+                print(f"     {stuck[brand]['decision']}: {(stuck[brand]['next'] or {}).get('action') or 'stop'}")
 
 
 if __name__ == "__main__":

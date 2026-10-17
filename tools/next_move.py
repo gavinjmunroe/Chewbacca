@@ -337,8 +337,12 @@ def agent_move(c):
     # Security review, 2026-10-16: an agent move named "org_hop" reached the code's own
     # org_hop executor with an agent-chosen target and its own "trust". Agent kinds now sit
     # under "agent:", and trusted fields are dropped, so no agent move reaches a built-in executor.
-    c = {k: v for k, v in c.items() if k not in ("trust", "reruns", "args", "signature", "id", "source",
-                                                 "unvetted", "reclassed", "jev_confirmed", "malformed")}
+    # Security review, 2026-10-16: an agent could set "note" itself and stop Jev raising its ask
+    # to a send. Every flag the loop sets is stripped from input, and the ask exemption lives in
+    # "_ask_kept", which only the branch below writes.
+    c = {k: v for k, v in c.items() if not str(k).startswith("_") and k not in (
+        "trust", "reruns", "args", "signature", "id", "source", "unvetted", "reclassed", "jev_confirmed",
+        "malformed", "note")}
     c["source"] = "agent"
     action = str(c.get("action") or "")
     c["action"] = action
@@ -370,6 +374,7 @@ def agent_move(c):
     if (said == "ask" and does == ["send"] and SAFE["ask"].match(plain(action).strip())
             and not ASK_CHAIN.search(plain(action)) and set(c["touches"]) <= {"client_message"}):
         does = []
+        c["_ask_kept"] = True
         c["note"] = "mentions sending inside a question for the client; asks go to a person and never run"
     if said in RISK:
         c["action_class"] = max([said, *does], key=RISK.index)
@@ -434,6 +439,7 @@ def clean_blocker(raw):
     if "credits_left" in b and b["credits_left"] is not None:
         b["credits_left"] = max(num(b["credits_left"], 0.0), 0.0)
     b["receipts"] = b["receipts"] if isinstance(b.get("receipts"), dict) else {}
+    b["flags"] = [str(x) for x in b["flags"]] if isinstance(b.get("flags"), list) else []
     if b.get("client_dir") is not None and not isinstance(b["client_dir"], str):
         b["client_dir"] = None
     return b
@@ -488,6 +494,8 @@ def violations(c, ctx, data, rulings):
             hit &= c.get("action_class") not in w["action_class_not_in"]
         if "touches" in w:
             hit &= bool(set(c.get("touches") or []) & set(w["touches"]))
+        if "flag" in w:
+            hit &= w["flag"] in (ctx.get("flags") or [])
         if "malformed" in w:
             hit &= bool(c.get("malformed"))
         if "credits_over" in w:
@@ -505,7 +513,8 @@ def violations(c, ctx, data, rulings):
 
 
 def bound(cands, blocker, data):
-    ctx = {"credits_left": blocker.get("credits_left"), "receipts": blocker.get("receipts") or {}}
+    ctx = {"credits_left": blocker.get("credits_left"), "receipts": blocker.get("receipts") or {},
+           "flags": blocker.get("flags") or []}
     rulings = load_rulings(blocker.get("client_dir"))
     keep, dropped = [], []
     for c in cands:
@@ -638,7 +647,8 @@ def jev_reclass(cands, evaluate=None):
         # An ask kept as an ask (see agent_move) can still be raised to delete, launch or
         # add_leads, but not to send: mentioning a send is why it was kept.
         risky = [k for k, v in probs.items() if k in RISK and num(v, 0) >= 0.25
-                 and RISK.index(k) > RISK.index(c["action_class"]) and not (c.get("note") and k == "send")]
+                 and RISK.index(k) > RISK.index(c["action_class"])
+                 and not (c.get("_ask_kept") is True and c["action_class"] == "ask" and k == "send")]
         if risky:
             was, c["action_class"] = c["action_class"], max(risky, key=RISK.index)
             c["reclassed"] = f"labeled {was}, Jev reads the action as {c['action_class']}"
@@ -666,6 +676,56 @@ def plan(blocker, data=None, evaluate=None, use_jev=True, ledger=None):
     decision = "stop" if pick is None else ("ask" if pick["action_class"] == "ask" else "run")
     return {"decision": decision, "pick": pick, "ranked": ranked, "dropped": dropped, "jev": status,
             "agent_classes": classed, "generated": len(cands)}
+
+
+# ---------------------------------------------------------------- blocked paths
+
+# Seam for tests and callers with no Jev of their own; None is live Jev.
+DEFAULT_EVALUATE = None
+
+
+def on_blocked(step, account, failure, *, client=None, goal=None, evidence=None, persona=None, tried=None,
+               credits_left=None, client_dir=None, extra=None, log_path=None, evaluate=None, use_jev=True,
+               data=None, flags=None):
+    """A blocked step's record and next-move's plan for it, in place of an empty return or a raise.
+
+    Runs nothing. The caller keeps its own gates, so a paid or outbound pick is a
+    recommendation until the caller's gate runs it. The record is appended to log_path (JSONL)
+    when one is given. Never raises: a broken plan comes back as decision "stop" with the reason.
+    """
+    blocker = {"client": client or "unknown", "step": step, "account": account or {}, "failure": failure,
+               "goal": goal or f"get past the blocked {step} step", "evidence": evidence or {},
+               "persona": persona or [], "tried": tried or [], "extra": extra or [], "flags": flags or []}
+    if credits_left is not None:
+        blocker["credits_left"] = credits_left
+    if client_dir:
+        blocker["client_dir"] = client_dir
+    try:
+        p = plan(blocker, data, evaluate or DEFAULT_EVALUATE, use_jev)
+    except Exception as e:  # a blocked path must still say it's blocked
+        p = {"decision": "stop", "pick": None, "ranked": [], "dropped": [], "jev": f"plan failed: {type(e).__name__}: {e}"}
+    pick = p.get("pick")
+    rec = {"at": __import__("time").strftime("%Y-%m-%dT%H:%M:%S%z"), "client": blocker["client"], "step": step,
+           "account": blocker["account"], "failure": str(failure)[:500], "decision": p["decision"],
+           "next": {k: pick.get(k) for k in ("signature", "action", "why", "action_class", "credits")} if pick else None,
+           "ranked": [{"move": c["signature"], "p": c.get("p"), "ev": c.get("ev")} for c in p["ranked"][:5]],
+           "dropped": [{"move": c["signature"], "rules": [b["rule"] for b in c.get("broke", [])]} for c in p["dropped"]],
+           "jev": p["jev"]}
+    if log_path:
+        try:
+            with open(log_path, "a") as f:
+                f.write(json.dumps(rec, ensure_ascii=False, default=str) + "\n")
+        except OSError as e:
+            rec["log_error"] = str(e)
+    return rec
+
+
+def next_line(rec):
+    """One plain line for a report: what's blocked and what to do next."""
+    nxt = rec.get("next")
+    if not nxt:
+        return f"blocked at {rec['step']}: {rec['failure']}; no move worth making, stop"
+    return f"blocked at {rec['step']}: {rec['failure']}; next ({rec['decision']}): {nxt['action']}"
 
 
 # ---------------------------------------------------------------- act and learn
@@ -742,7 +802,8 @@ def run(blocker, executors, data=None, evaluate=None, use_jev=True, max_steps=4,
         if pick is None:
             return {"cleared": False, "decision": "ask" if p["decision"] == "ask" else p["decision"],
                     "next": p["pick"], "trace": trace, "credits": spent, "last_plan": p}
-        ctx = {"credits_left": blocker.get("credits_left"), "receipts": blocker.get("receipts") or {}}
+        ctx = {"credits_left": blocker.get("credits_left"), "receipts": blocker.get("receipts") or {},
+               "flags": blocker.get("flags") or []}
         broke = violations(pick, ctx, data, load_rulings(blocker.get("client_dir")))
         if broke:  # never reached through plan(); here so a caller's pick_fn can't route around a boundary
             raise PermissionError(f"refusing {pick['signature']}: {broke}")

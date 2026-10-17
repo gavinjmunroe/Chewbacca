@@ -38,7 +38,10 @@ opener as passing instead of failing it.
 
 - "DONT TELL ME UR READY IF THIS SHIT IS HAPPENING": the word ready, or "good
   until X", only follows a `chewbacca gtme ready` pass. ready-guard refuses it
-  otherwise.
+  otherwise. A tooling tab answering "We good?" names what is good in the
+  first line ("the lesson checks are on main"), never a bare "we're good":
+  in a GTM tab he reads it as the launch, and on 2026-10-16 a lesson-ledger
+  tab's "Yeah we're good" was refused while Zeutara sat NOT READY at 41.
 - "Never lie to me bro": report the blocker list as it stands, the same turn,
   even when it is long.
 - "Never tell anyone to press anything in clay themselves": the agent starts

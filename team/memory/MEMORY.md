@@ -370,3 +370,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_landing_a_railway_service: landing a Railway service from tools/: name it *.Dockerfile (pre-push compiles tools/ as Python), rebuild on fresh main when run.sh conflicts, ready-guard matches the bare word, 3 HTTP checks before ship (10/16)
 - feedback_attack_before_done: chewbacca break-it is step one of finishing, attack the change before saying done; the break-it Stop hook refuses a done claim over a change it can still break (Caleb, 10/16)
 - feedback_docs_name_bin_tools_off_path: docs naming bin/ tools by bare name (gtm, decision-inbox) break off PATH; write chewbacca <verb> or bin/<tool>, check command -v (backlog 26, 10/16)
+- reference_skill_route_eval: the skill router is measured by tools/skill_route_eval.py on private held-out labels; 10/16 held precision 8.5, recall 21.1; hub correction failed held-out, label more positives before tuning (10/16)

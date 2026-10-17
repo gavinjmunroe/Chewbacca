@@ -56,6 +56,10 @@ import json, os, re, sys
 
 msg = os.environ["RG_MSG"]
 body = re.sub(r"```.*?```", " ", msg, flags=re.S)
+# A quoted sentence is a report about a claim, not one. 2026-10-16: the reply
+# explaining this guard's own fix quoted "A13 is done, and A14 only needs ur
+# engagement-metrics cell" next to the word launch, and was refused.
+body = re.sub(r"\"[^\"\n]{0,300}\"|“[^”\n]{0,300}”", " ", body)
 low = body.lower()
 
 # An honest verdict quoted from the tool is the answer being asked for.

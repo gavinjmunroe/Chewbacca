@@ -14,6 +14,7 @@ Landing from a detached worktree with `chewbacca land` ([[feedback_push_race_ret
 
 5. **A land piped through `| tail` can say exit 0 and push nothing.** On 2026-10-16 `... && chewbacca land HEAD 2>&1 | tail -1` waited past the 600 s tool timeout, went to the background, and the laptop closed mid-queue. The notification said exit 0 (the pipe's exit is tail's) with empty output, and the commit wasn't on main. Never pipe land, and after any land run `git fetch && git merge-base --is-ancestor <landed sha> origin/main` before calling it landed.
 6. **`chewbacca land HEAD` landed nothing before e02d3650.** Inside its temp worktree HEAD was origin/main. Fixed: refs resolve in the caller's checkout.
+7. **Under heavy load pre-push refuses on a timing test, not on your change.** On 2026-10-17 at load 140 a two-file ready-guard fix was refused because tests/test_hookd.py's "one hookd dispatch answers like separate hooks" took 5.27 s against its 5 s cap. Read which check failed before touching your diff; if it is a timing check unrelated to the files you changed, rerun the land when `chewbacca machine` shows the load down.
 
 **Why:** each trap looked like a different failure (manifest refusal, a WIP on main, a guard refusal, a pathspec error), and each was paid once already.
 

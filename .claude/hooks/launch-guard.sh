@@ -520,7 +520,12 @@ CLAY_READS = [("whoami",), ("credits", "balance"), ("campaigns", "list"), ("camp
               ("tables", "columns", "get"), ("tables", "rows", "list"), ("tables", "rows", "get"),
               ("audiences", "list"), ("audiences", "get"), ("audiences", "records", "get"),
               ("audiences", "records", "search-ids"), ("workbooks", "list"), ("folders", "list"),
-              ("signals", "list"), ("workflows", "list")]
+              ("signals", "list"), ("workflows", "list"),
+              # The enrichment catalog: names, inputs, outputs and credit cost. It reads
+              # Clay's action list and touches no workspace data (Caleb, 2026-10-17: Chewbacca
+              # has to know every Clay tool and weigh them, not default to Findymail).
+              ("workflows", "actions", "list"), ("workflows", "actions", "search"),
+              ("workflows", "actions", "schema"), ("--version",)]
 if name == "clay":
     if any(tuple(args[:len(p)]) == p for p in CLAY_READS):
         out("allow")

@@ -364,6 +364,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_outcome_not_action_2026_10_13: Zeutara dead-deck night, six root causes: action checked not outcome, guesses broken by live data, fix not on shared path, lessons lost to louder defaults
 - reference_follow_past_buyers: follow past buyers lane, a past creator buyer who moves becomes a warm row; Findymail gives old-employer inboxes, people search misses "influencer manager", watcher is a Clay JobChange signal (Sabo, 10/16)
 - reference_clay_people_search_finds_buyers: Clay people search that finds the creator buyer, not the talent: identifiers_only beats the 20k read cap, buyer keywords, off-domain email retry, Jev score floor 0.5 (Sabo, 10/16)
+- feedback_tables_planned_and_tools_weighed: every Clay table follows a declared client view (table_tidy) and every enrichment is picked from the full catalog by measured value (enrich_catalog), Caleb 2026-10-17
 - project_sabo_design_partner_2026_10_16: Sabo (Aucta) is the first creator-manager design partner; parent-domain chain found his own $10K contact cold; weekly Tue 3:45 CT
 - feedback_use_any_api_key: chewbs may use any API key on the machine for the task (Caleb, every user, 10/16); never print or commit one; launch-guard reads a python script's code, not its args
 - reference_spend_now_score: spend_now ranks a creator client's brands by dated, Jev-confirmed spend evidence from client config, 0 credits; public Greenhouse, Ashby, Workable job feeds are free dated hiring data (Sabo, 10/16)

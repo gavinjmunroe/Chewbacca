@@ -355,8 +355,35 @@ Reply counts that disagree across sources, and replies read from a snippet: `che
   any client sees a Clay table: a client view sorted with the best rows on top,
   only the 4 to 6 columns the story needs, test rows deleted, one email column
   per person (Clay's waterfall pattern, which Caleb expects: "isn't the whole
-  point of a waterfall that it condenses"). View settings have no API yet, so
-  set them while he can still click, or map that endpoint first.
+  point of a waterfall that it condenses"). The view ops exist now
+  (`view-columns`, `view-move-columns`, `view-sort`), so this is one command:
+  `python3 -I tools/table_tidy.py --client <slug> --apply`. Run it after every
+  batch that writes rows, not only before a demo.
+- **Every table is planned, never grown.** Caleb, 2026-10-17: "Make sure every
+  table chewb ever makes is systematically organized, not brute forced. This
+  will make it infinitely easier to iterate and build off of and learn from
+  workflows." The Sabo table reached 38 columns by adding a column per
+  experiment: two Findymail columns, two Email formulas, two Verify columns,
+  nine hand-typed leftovers. Before adding any column: run
+  `table_graph.py <table>` and reuse a column that already does the step; write
+  the client file's `client_view` (or let `table_tidy` derive it from
+  `columns`); add the new column into that plan, not beside it.
+- **Weigh every enrichment before wiring one.** Same day: "I need chewbs to
+  have a perfect memory of all the diff clay tools you are yet to use a built
+  in waterfall and always weigh the best option systematically". The chain ran
+  Findymail alone on every brand while the Work Email waterfall (10 providers,
+  ~1.1 credits a row) sat in the Tools panel. Refresh the catalog with
+  `clay workflows actions list` (a launch-guard read; feed its output to
+  `tools/enrich_catalog.py build`), fold in our own outcomes with
+  `enrich_catalog.py learn <runs.jsonl>`, then `enrich_catalog.py pick
+"<capability>" --client <slug>`. Jev only decides which actions can deliver
+  the field. Every number after that is counted: Beta posteriors over usable
+  results (valid and at the right company, not merely found), cascades priced
+  as c1 + (1 - p1) c2, value from the client's deal size, reply rate, close
+  rate and dollars per credit. It prints P(best) per option and picks only at
+  0.9 or above; under that it names the test and its row count. Run the test,
+  `enrich_catalog.py record`, pick again. Caleb, same day: "Nothing in this
+  process should be based on vibes/rough association".
 - **During a live call, 3 lines max.** Caleb mid-demo: "This is too much
   text bro wtf". Give him what to say, not why.
 - **Nothing recurring runs on a Mac.** Caleb, 2026-10-16 3:05 PM: "we should

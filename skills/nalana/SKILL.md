@@ -204,3 +204,30 @@ Thirty-six corrections across two nights, most of them the same few mistakes.
   obvious at 2048. Every hand-off: read the exact file being linked at full
   size, then at 600px, and list what's still wrong from that look, never from
   memory of the fix.
+
+## Crest decals and finishing passes: from A15 (2026-10-16)
+
+- **Decals on an angled plane get placed in screen space.** The crest is seen
+  near edge-on, so dots laid out radially on the plane read as ovals and a
+  bend that points outward on the plane read as a tall M on screen. Pick the
+  points in render pixels, cast camera rays onto the crest plane, and build
+  there. Caleb's spec for the circuit trace: dots "centered radially, even
+  distance from the center", bends "pointed outward, not inward", triangles
+  "isoceles wide".
+- **A wall showing through a cut-out is the back of the same surface.** The
+  dark red in the S arm sat at theta 110 to 115, just past the backface-delete
+  range. Raycast the bad pixels back to the mesh (BVHTree from the camera
+  through the pixel) before guessing; that gave the exact angle in one call.
+  After widening a delete, drop loose islands, or a speck survives.
+- **A bump on a field-built surface gets fixed in the field.** Blur the radius
+  .npy locally with a feathered mask and rebuild; moving vertices just moves
+  the bump.
+- **On a hot Mac the job queue pauses heavy renders indefinitely.** At load 50
+  to 100 a queued render sat paused for 30+ minutes while Caleb waited. When he
+  is waiting on a render, say the load and ask to force it on the first stall,
+  not the third. Killing a paused render needs `kill -CONT` first, and killing
+  it marks its job failed.
+- **A handoff is a folder another person's agent can run.** For Tyler: scripts
+  resolve paths from `__file__`, one `render.sh` with every knob as a commented
+  env var, the history log, CLAUDE.md plus AGENTS.md, and the skills. Never put
+  a login in it, and test a render from a fresh unzip before calling it done.

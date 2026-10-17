@@ -80,6 +80,9 @@ class Claims(unittest.TestCase):
         ev = [{'kind': 'user', 'text': '<system-reminder>worktree</system-reminder>\nBuild the thing and test it'}]
         self.assertEqual(B.asks(ev), ['Build the thing and test it'])
 
+    def test_harness_prompts_are_not_the_ask(self):
+        self.assertFalse(B.is_human('Your response above was cut off mid-stream. Resume directly.'))
+
     def test_a_test_claim_needs_a_test_after_the_last_code_write(self):
         ev = [{'kind': 'user', 'text': 'fix it'},
               {'kind': 'tool', 'name': 'Bash', 'input': {'command': 'python3 -m pytest tests/test_x.py'}, 'error': False},

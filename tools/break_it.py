@@ -123,7 +123,10 @@ def _text(content):
 
 
 MACHINE_PREFIXES = ('<', 'Stop hook feedback', 'Another Claude session', '[Request interrupted',
-                    'This session is being continued', 'Caveat:', '[Image', 'Base directory for this skill')
+                    'This session is being continued', 'Caveat:', '[Image', 'Base directory for this skill',
+                    # The harness's resume prompt, read as Caleb's ask when break-it
+                    # ran on its own landed change (2026-10-16).
+                    'Your response above was')
 
 
 def strip_reminders(text):

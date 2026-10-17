@@ -1340,6 +1340,8 @@ function readAllowances() {
 function allowanceFor(ws) {
   const a = readAllowances().workspaces[String(ws)];
   const daily = Number(a?.daily_credits);
+  // An allowance with until= lapses after that local day.
+  if (a?.until && localDay() > String(a.until)) return null;
   return a && Number.isFinite(daily) && daily > 0 ? { ...a, daily_credits: daily } : null;
 }
 
@@ -1397,7 +1399,16 @@ function allowanceCheck(op, args) {
 // allowance-set at a terminal, or a fresh prompt of his in chat that names the
 // number and says credits (or budget, allowance, cap). A bare recent prompt is
 // not enough, or any "yo" would let an agent raise its own cap.
-function allowanceApproved(daily) {
+// A time-boxed allowance can also come from a message that names the client
+// and says to spend what it takes, with no number. Caleb, 2026-10-16, asked
+// twice for a Sabo cap: "Just use however much you need for tuesday to impress
+// sabo", then "Do wtv it take to impress sabo on tuesdeay, we can talk abt a
+// limit after that". It needs until= no more than 7 days out, so an open
+// allowance always lapses on its own.
+const OPEN_SPEND = /what ?ever (it )?takes?|wtv (it )?takes?|however much|no limit|whatever (you|u) need/i;
+const OPEN_MAX_DAYS = 7;
+
+function allowanceApproved(daily, open) {
   if (stoppedByCaleb()) return null;
   const num = String(daily);
   const names = new RegExp(`(^|[^0-9.])${num.replace(".", "\\.")}([^0-9]|$)`);
@@ -1412,6 +1423,7 @@ function allowanceApproved(daily) {
     if (!(age >= 0 && age < CHAT_APPROVAL_MS)) continue;
     const said = String(rec.excerpt || "");
     if (names.test(said) && /credit|budget|allowance|\bcap\b/i.test(said)) return `chat ${rec.session_id}: ${said.replace(/\s+/g, " ").slice(0, 80)}`;
+    if (open && open.test(said) && OPEN_SPEND.test(said)) return `chat ${rec.session_id}: ${said.replace(/\s+/g, " ").slice(0, 80)}`;
   }
   if (FIXTURES) return process.env.CHEWBACCA_CLAY_TTY_ANSWER === "allowance-set" ? "terminal" : null;
   let fd;
@@ -1442,9 +1454,15 @@ function allowanceCommand(cmd, kv) {
   const daily = Number(kv.daily);
   if (!(Number.isFinite(daily) && daily > 0 && daily <= 100000)) out({ ok: false, class: "usage", reason: "allowance-set needs daily=<credits a day>, a positive number" }, EXIT.usage);
   const client = kv.client === undefined ? cfg.workspaces[ws]?.client : String(kv.client).slice(0, 60);
-  const by = allowanceApproved(daily);
-  if (!by) out({ ok: false, class: "refused", reason: `BLOCKED: an allowance needs Caleb: allowance-set typed at a terminal, or his own chat message in the last 2 hours naming ${daily} credits` }, EXIT.refused);
-  cfg.workspaces[ws] = { ...(client ? { client } : {}), daily_credits: daily, set_at: new Date().toISOString(), set_by: by };
+  const until = kv.until === undefined ? undefined : String(kv.until);
+  if (until !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(until)) out({ ok: false, class: "usage", reason: "until= is a date like 2026-10-20" }, EXIT.usage);
+  const daysOut = until ? (Date.parse(`${until}T00:00:00`) - Date.parse(`${localDay()}T00:00:00`)) / 86400000 : Infinity;
+  if (until && daysOut < 0) out({ ok: false, class: "usage", reason: `until=${until} is already past` }, EXIT.usage);
+  // The client's own name, as a word, opens the no-number path.
+  const open = client && until && daysOut <= OPEN_MAX_DAYS ? new RegExp(`\\b${client.replace(/[^A-Za-z0-9 ]/g, "")}\\b`, "i") : null;
+  const by = allowanceApproved(daily, open);
+  if (!by) out({ ok: false, class: "refused", reason: `BLOCKED: an allowance needs Caleb: allowance-set typed at a terminal, or his own chat message in the last 2 hours naming ${daily} credits (or naming ${client || "the client"} and saying to spend what it takes, with until= at most ${OPEN_MAX_DAYS} days out)` }, EXIT.refused);
+  cfg.workspaces[ws] = { ...(client ? { client } : {}), daily_credits: daily, ...(until ? { until } : {}), set_at: new Date().toISOString(), set_by: by };
   writeJsonAtomic(ALLOWANCE_FILE, cfg);
   out({ ok: true, set: ws, allowances: view() }, EXIT.ok);
 }
@@ -1863,8 +1881,10 @@ const HELP = `chewbacca clay: Clay without opening Clay
   chewbacca clay measure <op> [k=v ...]  time each surface once and record it (reads only)
   chewbacca clay doctor                  engine pin, session, spec
   chewbacca clay allowance               each workspace's standing daily credit allowance and today's spend
-  chewbacca clay allowance-set ws=<id> daily=<credits> [client=<name>]
-                                         set one (needs Caleb: a terminal, or his chat message naming the number)
+  chewbacca clay allowance-set ws=<id> daily=<credits> [client=<name>] [until=YYYY-MM-DD]
+                                         set one (needs Caleb: a terminal, or his chat message naming the number;
+                                         with until= at most 7 days out, a message naming the client and
+                                         saying to spend what it takes is enough)
   chewbacca clay allowance-clear ws=<id> remove one
 
   --surface cli|api-anything|bin         force one surface

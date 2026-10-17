@@ -158,9 +158,44 @@ def test_setting_an_allowance_needs_caleb():
         ok(code == 0 and WS not in json.loads(allow.read_text())["workspaces"], "allowance-clear removes it with no ok needed")
 
 
+def test_open_allowance_is_time_boxed():
+    # Caleb, 2026-10-16: "Do wtv it take to impress sabo on tuesdeay, we can
+    # talk abt a limit after that". No number, so it only works with until=.
+    import datetime
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        allow, chat = d / "allow.json", d / "chat"
+        chat.mkdir()
+        env = {"CHEWBACCA_CLAY_ALLOWANCES": str(allow), "CHEWBACCA_CLAY_ALLOWANCE_SPEND": str(d / "spend.json"),
+               "CHEWBACCA_CLAY_CHAT_APPROVAL_DIR": str(chat)}
+        said = "Do wtv it take to impress sabo on tuesdeay, we can talk abt a limit after that"
+        (chat / "s-caleb.json").write_text(json.dumps({"v": 2, "interactive": True, "at": int(time.time()),
+                                                        "session_id": "s-caleb", "excerpt": said}))
+        day = lambda n: (datetime.date.today() + datetime.timedelta(days=n)).isoformat()
+        base = ("allowance-set", f"ws={WS}", "daily=6000", "client=Sabo")
+        code, out, _ = run({}, {}, *base, env_extra=env)
+        ok(code == 3 and not allow.exists(), "no until=: an open ok can't set a standing cap")
+        code, out, _ = run({}, {}, *base, f"until={day(8)}", env_extra=env)
+        ok(code == 3 and not allow.exists(), "more than 7 days out is refused")
+        code, out, _ = run({}, {}, "allowance-set", f"ws={WS}", "daily=6000", "client=Zeutara", f"until={day(4)}", env_extra=env)
+        ok(code == 3 and not allow.exists(), "a message about Sabo doesn't open Zeutara")
+        code, out, _ = run({}, {}, *base, f"until={day(4)}", env_extra=env)
+        a = json.loads(allow.read_text())["workspaces"][WS]
+        ok(code == 0 and a["daily_credits"] == 6000 and a["until"] == day(4), ("his open ok sets a time-boxed cap", out))
+        code, out, _ = run({}, {}, *base, f"until={day(-1)}", env_extra=env)
+        ok(code == 2, "an until in the past is a usage error")
+        # Once until passes, the allowance stops covering writes.
+        cfg = json.loads(allow.read_text())
+        cfg["workspaces"][WS]["until"] = day(-1)
+        allow.write_text(json.dumps(cfg))
+        code, out, _ = run(fixtures(100), {}, *RUN, env_extra=dict(env, CHEWBACCA_CLAY_CHAT_APPROVAL_DIR=str(d / "none")))
+        ok(code == 3 and "did not approve" in out["reason"], ("a lapsed allowance falls back to the usual ok", out))
+
+
 def main():
     test_inside_runs_over_refuses()
     test_setting_an_allowance_needs_caleb()
+    test_open_allowance_is_time_boxed()
     print(f"clay allowance: {checks} checks passed")
 
 

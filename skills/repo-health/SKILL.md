@@ -105,3 +105,10 @@ a diff day", the work-ledger entry (`--scope ~`) names every repo's state:
 pushed with its commit, PR open with its URL, died mid-run with what it was
 on, not started, and dropped with the reason. A list that only says "resume"
 makes the next tab redo the scan.
+
+The design pass fits the audience, and it cuts words. The Crown Institute redo
+(2026-10-17) passed every check and Caleb still said it "reads like a slop big
+wall of text", then "we gotta keep it professional tho it's not a tech site
+like lemma". For a church, school or family client: fewer words per section,
+one point each, calm layout, and none of the startup motion or punchy kickers.
+Judge the screenshot by whether it reads in a glance, not whether it builds.

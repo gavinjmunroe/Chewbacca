@@ -48,3 +48,42 @@ tools, not a house style: a brief can call for clean vector work instead.
 - **Pacing:** alternate dense and calm moments, and give the key beat room to breathe.
 - **Details reward replay:** real paper titles, tiny UI touches, plausible outputs. Keep them
   accurate or leave them out.
+
+## Using a reference video: take its mechanics, not its look (2026-10-17)
+
+The Firm Foundation hero (30s, Remotion, cut to a voiceover by Whisper word timings) went
+through three corrections in one day.
+
+**Never** build a deck. v1 was eight beats of type landing on flat paper backgrounds with a few
+photo cards and a phone. Every technical check passed. Caleb: "It's not epic or creative enough
+also take into acct the other video we had downloaded it was an ig link gav sent". The reference
+reel had been studied the day before, but v1 borrowed only its surface (white space, one line of
+type) and skipped its mechanics. Slides of type landing on word timestamps read as a deck, not a
+film.
+
+**Do** read the reference at full frame rate (25 fps) and write down its mechanics before
+designing: what is held fixed, what changes, how often in frames, how each shot hands off to the
+next, and the scale contrast. The reel (ahmed_fx3000) held a cut-out hero subject (Creation of
+Adam hands) LOCKED while the world behind it swapped every 4 to 6 frames, each new world opening
+as a small rectangle near the subject and growing to full frame. It added hairline guides, tiny
+marks and a tiny bottom caption, then a match cut: the subject collapses to a circle, the circle
+to a dot, the dot becomes a typing bullet, then an orb, then a product shot. The held image is huge and the type is tiny.
+
+**Carry one object through every beat.** v2's spine was the spark gap between the fingers: it
+becomes the royal dot, types the lines, routes an inquiry to a staff member, becomes the prompt
+cursor, and drops into the center of the cross at the end.
+
+**Matching a brand's site.** Caleb asked for the house site's style, then: "It shouldn't be a
+carbon copy of the site! Just same style". Take the texture and type language (mesh glow,
+halftone, hairline frames with mono ids, palette). Do not take its sections, layouts or content blocks.
+
+Sourcing for this build:
+- Public domain art from Wikimedia Commons through the API. Use the `thumburl` the imageinfo API
+  returns; hand-built thumb widths return an HTML error page.
+- Cut subjects out with Apple Vision `VNGenerateForegroundInstanceMaskRequest` from a small Swift
+  script, no rembg install. A fresco with two subjects needs each half lifted separately, then
+  merged.
+
+**Fan out the parts that don't share files.** Caleb: "Graph engineer bruh". Skill lessons and a
+separate-context judge that compares rendered frames to the reference's frames run in parallel.
+The one CPU-heavy render stays serial.

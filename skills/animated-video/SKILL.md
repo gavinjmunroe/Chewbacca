@@ -143,6 +143,13 @@ lenses, route issues to their owners by time range, fix in parallel, re-render, 
 - When the brief names a reference video, put each act's frame beside the reference's frame for
   the same beat before delivering. Check finish (detail, depth, lighting, real interfaces), not
   only breakage. A cut that looks sparser than its reference is not ready.
+- A reference video is a set of mechanics, not a look (Caleb, 2026-10-17: "It's not epic or
+  creative enough"). Before designing, read it at full frame rate and write down what is held
+  fixed, what changes and every how-many-frames, how each shot hands off, and the scale
+  contrast. Then carry one object through every beat. Type landing on word timestamps reads as
+  a deck. A brand's site gives texture and type language only: "It shouldn't be a carbon copy
+  of the site! Just same style". Fan out judges and lessons; keep the one heavy render serial.
+  [Detail](references/motion-graphics.md#using-a-reference-video-take-its-mechanics-not-its-look-2026-10-17).
 - Stop when a round gains less than about half a point, or when the top issue needs the user
   (their likeness, their voice, a format decision). Say so and ask.
 - Keep the open issues in `ISSUES.md` (time range, owner, severity, status) and update it after

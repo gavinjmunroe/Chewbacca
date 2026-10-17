@@ -1,0 +1,71 @@
+{
+ "name": "sabo-archer-top-pick-no-email",
+ "date": "2026-10-16",
+ "frozen": "2026-10-16 17:40 PT, before the loop ran on it",
+ "source": "Downloads/Sabo handoff/claude/runs.jsonl row 10",
+ "blocker": {
+  "client": "Sabo",
+  "goal": "the person who decides which outside creators Archer Meat Snacks pays, with a verified email at Archer Meat Snacks or its parent",
+  "persona": [
+   "influencer marketing",
+   "partnerships",
+   "creator marketing",
+   "social media manager",
+   "brand manager",
+   "community manager",
+   "marketing manager"
+  ],
+  "step": "email_find",
+  "account": {
+   "brand": "Archer Meat Snacks",
+   "domain": "archerjerky.com"
+  },
+  "failure": "Findymail found no email for the top pick, Brett Burbach",
+  "evidence": {
+   "filters": {
+    "limit": 5
+   },
+   "people": [
+    {
+     "name": "Brett Burbach",
+     "title": null,
+     "score": 0.97,
+     "email": null,
+     "tried": true
+    },
+    {
+     "name": "Andrew Cooper",
+     "title": null,
+     "score": 0.87,
+     "tried": false
+    },
+    {
+     "name": "Dominic Alvarado",
+     "title": null,
+     "score": 0.86,
+     "tried": false
+    }
+   ]
+  },
+  "tried": [],
+  "credits_left": 20
+ },
+ "world": {
+  "next_person:Andrew Cooper": {
+   "cleared": true,
+   "credits": 0.6,
+   "source": "row 10: Andrew Cooper's archerjerky.com address, ZeroBounce valid"
+  }
+ },
+ "old_path": [
+  "next_person:Andrew Cooper"
+ ],
+ "note": "titles weren't logged in row 10.",
+ "ask_once": {
+  "model": "codex",
+  "date": "2026-10-16",
+  "answer": "next_person:Andrew Cooper",
+  "signature": "next_person:Andrew Cooper",
+  "mapped": "second try; codex put its answer on the same line as its prayer, read by hand"
+ }
+}

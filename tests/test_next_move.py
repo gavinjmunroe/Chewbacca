@@ -60,6 +60,16 @@ class Generate(unittest.TestCase):
         self.assertNotIn("barebells.de", orgs, "the brand's own country sites aren't another company")
         self.assertNotIn("wikipedia.org", orgs, "a platform link says nothing about ownership")
 
+    def test_one_search_per_company(self):
+        """The footer names Vitamin Well Group and the site links two of its domains: one hop, careers host first."""
+        b = case("sabo-barebells-empty-search")["blocker"]
+        b["evidence"].update(SITE)
+        hops = [c["target"] for c in N.generate(b, N.load_data()) if c["kind"] == "org_hop"]
+        self.assertEqual(hops, ["vitaminwell.com"])
+        b["tried"] = ["org_hop:vitaminwell.com"]
+        hops = [c["target"] for c in N.generate(b, N.load_data()) if c["kind"] == "org_hop"]
+        self.assertEqual(hops, ["vitaminwellgroup.com"], "the other domain waits its turn, it isn't lost")
+
     def test_no_evidence_no_parent(self):
         b = case("sabo-barebells-empty-search")["blocker"]
         kinds = {c["kind"] for c in N.generate(b, N.load_data())}
@@ -266,6 +276,33 @@ class BreakIt(unittest.TestCase):
         self.assertIn("agent:org_hop:evil.com", sigs)
         self.assertNotIn("trust", sigs["agent:org_hop:evil.com"])
 
+    def ask_outcome(self, action, use_jev=True):
+        b = case("sabo-barebells-empty-search")["blocker"]
+        b["extra"] = [{"kind": "agent", "target": "x", "action": action, "action_class": "ask",
+                       "touches": ["client_message"]}]
+        p = N.plan(b, evaluate=says_class("send", 0.6), use_jev=use_jev)
+        return next((c["action_class"] for c in p["ranked"] if c.get("source") == "agent"), "dropped")
+
+    def test_a_question_that_mentions_sending_stays_an_ask(self):
+        for use_jev in (True, False):
+            self.assertEqual(self.ask_outcome("ask Jonah and Ryan which mailing address to use, or for a written "
+                                              "ruling to send without one", use_jev), "ask")
+
+    def test_an_ask_cannot_smuggle_a_send(self):
+        for action in ("ask Jonah, then send the intro to the lead", "ask Ava to confirm and email her the pitch",
+                       "ask Jonah whether to send it: send it", "ask Ava for a meeting by sending her the intro",
+                       "ask Ava for a call via email", "ask Ava by messaging her on LinkedIn",
+                       "ask Jonah to approve, then delete the rows", "ask Ava whether she buys creators, sending the deck"):
+            for use_jev in (True, False):
+                self.assertEqual(self.ask_outcome(action, use_jev), "dropped", (action, use_jev))
+
+    def test_an_ask_never_runs_outside_a_replay(self):
+        b = case("zeutara-launch-postal-address")["blocker"]
+        ran = []
+        N.run(b, N.AllMoves(lambda m, _: ran.append(m) or {"cleared": False}), evaluate=says_class("ask"),
+              max_steps=6, learn=False)
+        self.assertEqual([m for m in ran if m["action_class"] == "ask"], [])
+
     def test_harmless_agent_move_still_ranks(self):
         p = self.plan_with([{"kind": "agent", "action": "read the brand's careers page", "action_class": "read"}])
         self.assertEqual(len(self.agent(p)), 1)
@@ -354,6 +391,17 @@ class Replay(unittest.TestCase):
             self.assertIn("old_path", r, f.name)
             for sig, hit in c["world"].items():
                 self.assertTrue(hit.get("source"), f"{f.name} {sig}: every recorded outcome cites where it came from")
+
+    def test_heldout_cases_were_frozen_and_replay(self):
+        held = sorted((FIX / "heldout").glob("*.json"))
+        self.assertEqual(len(held), 2)
+        data = N.load_data()
+        for f in held:
+            c = json.loads(f.read_text())
+            self.assertIn("before the loop ran", c["frozen"])
+            r = N.replay_case(c, data, evaluate=flat_jev())
+            dropped = {d["signature"] for d in N.plan(c["blocker"], data, evaluate=flat_jev())["dropped"]}
+            self.assertFalse(dropped & set(r["loop"]["moves"]), f.name)
 
     def test_cli_plan_and_replay(self):
         out = subprocess.run([sys.executable, "-I", str(ROOT / "tools" / "next_move.py"), "plan",

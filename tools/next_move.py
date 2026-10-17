@@ -125,7 +125,7 @@ def related_orgs(blocker, data):
         for d in matched:
             hosts = ", ".join(sorted(domains[d]))
             found.setdefault(d, {"why": f'the brand\'s own text says "{quote}", and it links {hosts}',
-                                 "trust": "owned_and_linked"})
+                                 "trust": "owned_and_linked", "hosts": sorted(domains[d])})
         if not matched:
             for k in sorted(keys):
                 found.setdefault(f"{k}.com", {"why": f'the brand\'s own text says "{quote}"; '
@@ -133,7 +133,7 @@ def related_orgs(blocker, data):
                                               "trust": "owned_guessed"})
     for d, hosts in domains.items():
         found.setdefault(d, {"why": f"the brand's site links {', '.join(sorted(hosts))}, with no ownership sentence",
-                             "trust": "linked_only"})
+                             "trust": "linked_only", "hosts": sorted(hosts)})
 
     at = {}
     for p in ev.get("people") or []:
@@ -159,12 +159,41 @@ def minutes_of(data, step):
 # org_hop, persona_swap and loosen_filter all rerun the people search, whichever
 # step blocked: a wrong person at the email step is fixed upstream as often as
 # not (Gymshark, 2026-10-16). What they propose comes from the evidence alone.
+CORP_SUFFIX = re.compile(r"(group|holdings?|brands|inc|corp|co|international|global|hq)$")
+STAFF_HOST = re.compile(r"^(careers?|jobs|team|people|work|join)\.")
+TRUST_RANK = {"owned_and_linked": 3, "owned_guessed": 2, "linked_only": 1, "email_domain": 1}
+
+
+def company_stem(domain):
+    label = domain.split(".")[0]
+    return CORP_SUFFIX.sub("", label) or label
+
+
+# Replays, 2026-10-16: on a 0.67 vs 0.66 Jev tie the loop searched the parent's group domain and
+# then its operating domain, 0.5 credits for one company. Domains that share a stem are one company,
+# so the hop proposes its best untried domain: strongest tie, then a careers or jobs host
+# (people work there), then the shorter name. The rest wait until
+# that one has been tried.
 def op_org_hop(blocker, data):
-    return [{"kind": "org_hop", "target": d, "action": f"rerun the people search on {d}",
-             "why": why, "action_class": "paid_write", "credits": cost_of(data, "people_search"),
-             "minutes": minutes_of(data, "people_search"), "reversible": True, "touches": ["table_write"],
-             "reruns": "people_search", "trust": trust}
-            for d, why, trust in ((d, o["why"], o["trust"]) for d, o in related_orgs(blocker, data).items())]
+    tried = set(blocker.get("tried") or [])
+    groups = {}
+    for d, o in related_orgs(blocker, data).items():
+        groups.setdefault(company_stem(d), []).append((d, o))
+    out = []
+    for members in groups.values():
+        members.sort(key=lambda m: (-TRUST_RANK.get(m[1]["trust"], 0),
+                                    -any(STAFF_HOST.match(h) for h in m[1].get("hosts", [])), len(m[0])))
+        left = [m for m in members if f"org_hop:{m[0]}" not in tried]
+        if not left:
+            continue
+        d, o = left[0]
+        also = [m[0] for m in left[1:]]
+        out.append({"kind": "org_hop", "target": d, "action": f"rerun the people search on {d}",
+                    "why": o["why"] + (f"; same company as {', '.join(also)}, searched first" if also else ""),
+                    "action_class": "paid_write", "credits": cost_of(data, "people_search"),
+                    "minutes": minutes_of(data, "people_search"), "reversible": True, "touches": ["table_write"],
+                    "reruns": "people_search", "trust": o["trust"]})
+    return out
 
 
 def op_read_source(blocker, data):
@@ -334,6 +363,14 @@ def agent_move(c):
     said = c.get("action_class")
     said_text = plain(action) + " | " + plain(" ".join(c["touches"])).replace("_", " ")
     does = [cls for cls, rx in DOES if rx.search(said_text)]
+    # Replays, 2026-10-16: "ask Jonah and Ryan which mailing address to use, or for a written
+    # ruling to send without one" read as a send and dropped the move that cleared Zeutara's
+    # gate. An ask goes to a person and never runs, so an ask-shaped move whose only keyword is
+    # send stays an ask. A chained second action ("then send the intro") still counts.
+    if (said == "ask" and does == ["send"] and SAFE["ask"].match(plain(action).strip())
+            and not ASK_CHAIN.search(plain(action)) and set(c["touches"]) <= {"client_message"}):
+        does = []
+        c["note"] = "mentions sending inside a question for the client; asks go to a person and never run"
     if said in RISK:
         c["action_class"] = max([said, *does], key=RISK.index)
         if c["action_class"] != said:
@@ -343,7 +380,7 @@ def agent_move(c):
     # else: no known label and nothing read from the text, so "unclassified" drops it
     text = plain(action).strip()
     shape_ok = c.get("action_class") in SAFE and SAFE[c["action_class"]].match(text) and (
-        c["action_class"] == "ask" or not DOES_SOMETHING.search(text))
+        not ASK_CHAIN.search(text) if c["action_class"] == "ask" else not DOES_SOMETHING.search(text))
     if c.get("action_class") in SAFE and not shape_ok:
         c["unvetted"] = {"said": c["action_class"], "keyword_hit": bool(does)}
         c["action_class"] = "send"
@@ -559,6 +596,15 @@ def rank(cands, blocker, data, evaluate=None, use_jev=True, ledger=None):
     return sorted(cands, key=lambda c: -c["ev"]), status
 
 
+# How an ask smuggles a second action. Attack on the win-back, 2026-10-16: "ask Ava for a
+# meeting by sending her the intro" and "ask Ava by messaging her on LinkedIn" stayed asks.
+ASK_CHAIN = re.compile(r"\b(then|after that|afterwards|also|and)\s+(send|e-?mail|messag|launch|start|delet|remov|"
+                       r"add|enroll|reply|dm|text|call|post)\w*|[;:]|\b(send|e-?mail|messag|dm|text|ping)\w* "
+                       r"(her|him|them|it|this|the (intro|pitch|draft|deck|sequence|email|campaign))\b|"
+                       r"\b(by|via|over|through|on)\s+(send|e-?mail|messag|dm|text|linkedin|whatsapp|phone|call|sms)\w*|"
+                       r",\s*(send|e-?mail|messag|launch|delet|remov)\w*", re.I)
+
+
 JEV_CLASSES = {"read": "Only reads or looks something up; changes nothing and contacts nobody",
                "ask": "Asks the client or a teammate a question; nothing goes to a lead or prospect",
                "write": "Changes our own working data (a table cell, a draft) and nothing anyone outside sees",
@@ -589,8 +635,10 @@ def jev_reclass(cands, evaluate=None):
         top = max(probs, key=lambda k: num(probs[k], 0)) if probs else None
         if top in RISK and RISK.index(top) <= RISK.index(c["action_class"]):
             c["jev_confirmed"] = True
+        # An ask kept as an ask (see agent_move) can still be raised to delete, launch or
+        # add_leads, but not to send: mentioning a send is why it was kept.
         risky = [k for k, v in probs.items() if k in RISK and num(v, 0) >= 0.25
-                 and RISK.index(k) > RISK.index(c["action_class"])]
+                 and RISK.index(k) > RISK.index(c["action_class"]) and not (c.get("note") and k == "send")]
         if risky:
             was, c["action_class"] = c["action_class"], max(risky, key=RISK.index)
             c["reclassed"] = f"labeled {was}, Jev reads the action as {c['action_class']}"

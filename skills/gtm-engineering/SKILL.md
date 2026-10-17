@@ -472,11 +472,19 @@ held out anymore. Grade it on the next 10 real blockers.
   read or ask counts as a send and drops. It runs only when Jev confirms its class.
   Without Jev it comes back as an ask for a person, and Jev can raise a class but
   never lower it. Agent kinds sit under `agent:`, so none reaches a built-in
-  executor. Two things would win the cost back. A waiver ask that only mentions
-  sending could stay an ask, bc asks never run, they go to a person. And
-  same-company hops (vitaminwell.com and vitaminwellgroup.com) could collapse into
-  one search. Together those make the replay 5 of 5 at 3.9 credits, 1.28 per
-  credit. Neither is built yet.
+  executor.
+- **Both cost fixes are built, and 2 held-out blockers were scored (2026-10-16).**
+  An ask-shaped move whose only keyword is "send" stays an ask, bc asks go to a
+  person and never run. A chained or smuggled action ("then send", "by sending her
+  the intro", "via email") still drops it. Domains that share a company stem
+  (vitaminwell.com, vitaminwellgroup.com) get one search, and a careers host goes
+  first. Tuning set (the 5 above): 5 of 5 cleared, 1.28 per credit in 6 of 7 runs
+  and 1.11 in 1, against the old chain's 2 of 5 at 1.18. Held out (Barebells row
+  2 and Archer row 10 in runs.jsonl, frozen in tests/fixtures/next_move/heldout
+  before the loop saw them): loop 2 of 2 at 1.18, one Codex call 2 of 2 at 1.18,
+  old chain 1 of 2 at 1.67. Per credit rewards giving up cheaply. The old chain's
+  miss cost nothing, so a higher cleared count can lose on that metric. Read the
+  cleared count next to it.
 
 ## Never call a launch ready without `gtme ready`
 

@@ -36,6 +36,11 @@
       "script": "tools/recall_gate.py",
       "set": "~/second-brain/.bench/brain-retrieval",
       "floor": "recall@5 55.4"
+    },
+    ".claude/hooks/break-it-guard.sh": {
+      "type": "replay",
+      "test": "tests/test_break_it.py",
+      "corpus": "tests/fixtures/break_it/cases.json"
     }
   },
   "grandfathered": [

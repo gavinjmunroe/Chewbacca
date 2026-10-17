@@ -148,6 +148,18 @@ def merge_into(wt, path, disk, dest, old):
     return True
 
 
+def keep_exec_bit(disk, dest):
+    """Give the landed copy the disk copy's executable bit.
+
+    merge_into writes bytes, so a new file came out 0644: on 2026-10-16
+    bin/hud-verse landed 100644 from a chmod +x copy, and running it from
+    PATH said permission denied until a second land fixed the mode.
+    """
+    if os.path.exists(dest):
+        want = os.stat(disk).st_mode & 0o111
+        os.chmod(dest, (os.stat(dest).st_mode & ~0o111) | want)
+
+
 def main():
     ap = argparse.ArgumentParser(prog="chewbacca land", description=__doc__.split("\n\n")[0])
     ap.add_argument("commits", nargs="*", help="commits to land, oldest first")
@@ -191,6 +203,8 @@ def main():
                         os.makedirs(os.path.dirname(d) or wt, exist_ok=True)
                         if not merge_into(wt, p, s, d, old):
                             clashes.append(p)
+                        else:
+                            keep_exec_bit(s, d)
                     elif os.path.exists(d):
                         # Deleted on disk: land the deletion, unless someone
                         # changed the file on main since this checkout saw it.

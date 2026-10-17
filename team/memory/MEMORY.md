@@ -311,7 +311,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_every_call_comes_with_a_take: a call handed to Caleb with no "My take:" is refused by the decision inbox and flagged by `decision-inbox check` and the jobs runner; lane prompts start from config/instructions/unattended-lane.md (7 of 11 calls had none on 10/13)
 - feedback_solved_jobs_need_a_front_door: a PDF took minutes by hand while the fix sat inside the GTM report (10/11); solved jobs get a chewbacca command, use-the-kit-guard points there
 - feedback_too_many_tabs_one_goal: 13 tabs on "make chewb perfect" made it worse (load 33, push races); about four lanes, one tab each
-- feedback_land_workflow_traps: checksums.py hashes the index (add first), never chain cleanup with ;, DESTRUCTIVE_OK=1 must lead, zsh file lists need arrays (10/10)
+- feedback_land_workflow_traps: checksums.py hashes the index (add first), never chain cleanup with ;, DESTRUCTIVE_OK=1 must lead, zsh file lists need arrays, --paths kept the exec bit only after 10/17, a clash right after ur own land means a stale worktree (10/10)
 - feedback_site_research_pass: Every site starts with the kit pass (api-anything pulls every page, brand-grab, ux-pick, crafts, STEAL, COPY); site-gate research refuses without it (10/10)
 - feedback_never_vercel: Never deploy or set up anything on Vercel; Railway hosts everything and vercel-guard refuses vercel commands (10/10)
 - feedback_vercel_hobby_blocks_collaborator_commits: teammate's domain showing an old site = Vercel Hobby skipping Caleb's commits; a GitHub Action deploying main via the Vercel CLI fixed it, never pay or recommit (FF, 10/11)

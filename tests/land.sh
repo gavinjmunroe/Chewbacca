@@ -124,6 +124,11 @@ echo "$out" | grep -q "reword it" || fail "wip refusal said: $out"
 cd "$T/tabA" && sync && echo h > h.txt && git add h.txt && git commit -qm "feat: head ref"
 out=$(python3 -I "$LAND" HEAD 2>&1) || fail "land HEAD: $out"
 cd "$T/check" && git pull -q && [ -f h.txt ] || fail "land HEAD didn't land the caller's commit: $out"
+# --paths keeps the executable bit. On 2026-10-16 a chmod +x bin/hud-verse
+# landed 100644 and running it from PATH said permission denied.
+cd "$T/tabA" && sync && printf '#!/bin/sh\necho hi\n' > tool.sh && chmod +x tool.sh
+out=$(python3 -I "$LAND" --paths tool.sh -m "feat: a tool" 2>&1) || fail "exec land: $out"
+cd "$T/check" && git pull -q && [ -x tool.sh ] || fail "--paths dropped the executable bit"
 out=$(cd "$T/tabA" && python3 -I "$LAND" no-such-ref 2>&1) && fail "an unknown ref landed: $out"
 echo "$out" | grep -q "no-such-ref" || fail "unknown ref said: $out"
 echo ok

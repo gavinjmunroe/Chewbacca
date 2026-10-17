@@ -12,6 +12,9 @@ Landing from a detached worktree with `chewbacca land` ([[feedback_push_race_ret
 3. **`DESTRUCTIVE_OK=1` only counts as the command's first word.** destructive-guard matches `^DESTRUCTIVE_OK=1 `, so `cd x && DESTRUCTIVE_OK=1 git reset` is still refused. Lead with it: `DESTRUCTIVE_OK=1 bash -c 'cd x && ...'`.
 4. **zsh never word-splits `$F`.** A space-separated file list in a variable reaches git as one path. Use an array: `F=(a b c); git add "${F[@]}"`.
 
+5. **A land piped through `| tail` can say exit 0 and push nothing.** On 2026-10-16 `... && chewbacca land HEAD 2>&1 | tail -1` waited past the 600 s tool timeout, went to the background, and the laptop closed mid-queue. The notification said exit 0 (the pipe's exit is tail's) with empty output, and the commit wasn't on main. Never pipe land, and after any land run `git fetch && git merge-base --is-ancestor <landed sha> origin/main` before calling it landed.
+6. **`chewbacca land HEAD` landed nothing before e02d3650.** Inside its temp worktree HEAD was origin/main. Fixed: refs resolve in the caller's checkout.
+
 **Why:** each trap looked like a different failure (manifest refusal, a WIP on main, a guard refusal, a pathspec error), and each was paid once already.
 
 **How to apply:** follow the order in 1 and 2 on every worktree land. Related: [[feedback_shared_checkout_mid_merge]], [[feedback_remove_only_your_worktree]].

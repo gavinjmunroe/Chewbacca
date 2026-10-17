@@ -338,6 +338,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_agent_starts_the_campaign: nobody is told to press anything in Clay; the agent sends status=START itself, draft only, launch grade + pre-send gate + chat ok (10/12)
 - feedback_big_json_edit_reflows: an Edit to clay.json came back as a 6,537-line formatter reflow; patch big JSON specs by script and check diff --stat (10/12)
 - feedback_gtme_done_misses_forwards: gtme done called 2 replies owed that were a founder-meeting yes and a Togari-forwarded OOO; read the thread first, fix done to count forwards (10/12)
+- feedback_ready_is_built_the_morning_of_launch: gtme ready passes only on the launch morning, on that launch's drafts; 12h reads and receipt, dated per-campaign warmup ruling, unverified rows (Zeutara, 10/16)
 - feedback_ready_means_gtme_ready_passed: a launch is ready only when `chewbacca gtme ready` prints READY; a Zeutara launch was called "good until Jonah responds" with 1 of 14 graded, ready-guard refuses it now (10/12)
 - feedback_never_do_what_sagar_wouldnt: check every GTM change against references/sagar.md first; a GEX rewrite to 90/100 made his founder-story copy contrived ("NEVER DO SMTH SAGAR WOULDNT DO", 10/12)
 - feedback_client_channels_are_togari: agents never post in client Slack conversations as Caleb; Togari is the voice ("Everything should be togari", 13 posts from his acc 10/11-12); client-post-guard refuses
@@ -364,4 +365,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_claims_match_the_mechanism: a hand-filled lookup like parents.json is never pitched as Chewbacca reasoning around a blocker (Sabo call, 2026-10-16)
 - feedback_caleb_steering_2026_10_16: tools/steering_rate.py measures Caleb's steering per active agent hour; 10/16 baseline 2.59 (99 messages), top causes stopping early, handing him a click, not saving lessons, each now a Stop hook; falsifier command inside
 - reference_hud_card_ask: Screen ask= makes a HUD card double-click open the chat w that request (verse card, 10/16); live only after bundle + install
-- feedback_landing_a_railway_service: landing a Railway service from tools/: name it *.Dockerfile (pre-push compiles tools/ as Python), rebuild on fresh main when run.sh conflicts, ready-guard matches the bare word, 3 HTTP checks before ship (10/16)
+- feedback_landing_a_railway_service: landing a Railway service from tools/: name it \*.Dockerfile (pre-push compiles tools/ as Python), rebuild on fresh main when run.sh conflicts, ready-guard matches the bare word, 3 HTTP checks before ship (10/16)

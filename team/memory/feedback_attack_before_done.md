@@ -14,3 +14,11 @@ How to finish now: record attacks with `chewbacca break-it attack -m "<what>" --
 What it caught that green tests didn't, that day: next_move.py landed with 20 passing tests and crashed on `plan -` fed "not json" (2f97a007, fixed in 045cb4b5); a launch-guard fix passed its tests while ~/.claude/hooks still held the old copy; "Saved today's Sabo lessons" went out uncommitted.
 
 Replayed on that day's transcripts, the hook alone refuses 7 of 15 false-done finishes and 2 of 20 clean ones; with open-work-guard, 10 of 15 and 2 of 20. A done claim whose own reply says its work is still landing or unchecked is refused even with no code change. Numbers and cases: tests/fixtures/break_it/REPLAY.md.
+
+Installed live in Claude Code on 2026-10-17 at 10:44am, on Caleb's own yes in chat ("Yes, install break-it-guard into ~/.claude/hooks and register it in settings.json, only that hook"). A manager tab had relayed his 10/16 ask as the yes an hour earlier; that was not taken as one. What the install taught:
+
+- An installed hook has to find its tool in the kit runtime. `~/.claude/hooks/break-it-guard.sh` first looked in ~/code/chewbacca, which was behind main with no tools/break_it.py, so it would have exited 0 on every turn. It reads `~/.chewbacca/kit/current/tools/break_it.py` first since 402c712b.
+- A live check needs a throwaway worktree under ~/code. break-it skips /tmp as scratch, so the first check there passed for the wrong reason.
+- Verified live: a done claim over an uncommitted file was refused (exit 2), and passed after a commit, one `break-it attack` and `break-it run`.
+- Codex still loads its hooks from ~/code/chewbacca/tools/codex_hooks.py, so Codex runs this only once that checkout catches up to main.
+- ready-guard reads any "we're good" as a Zeutara launch claim. Name the exact thing that's done, and say Zeutara's state with its last `gtme ready` result.

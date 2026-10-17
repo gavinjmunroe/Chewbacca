@@ -2200,6 +2200,23 @@ _register("Stop", hooks_dir + "/ready-guard.sh", timeout=10,
 _register("Stop", hooks_dir + "/link-guard.sh", timeout=5,
           status="Checking every link in the reply opens...")
 
+# Three defaults from the 2026-10-16 steering study
+# (team/memory/feedback_caleb_steering_2026_10_16.md): 99 of his messages that
+# day steered an agent, 2.59 per active agent hour.
+# A turn may not end naming its own leftover. 22 pushes that day ("Are you
+# done with your work? There's noting more you could do?") answered recaps
+# that each listed one.
+_register("Stop", hooks_dir + "/open-work-guard.sh", timeout=10,
+          status="Checking nothing in the recap is left undone...")
+# A turn that lands code saves its lesson. He typed "Learn and remember
+# everything you should" 26 times that day.
+_register("Stop", hooks_dir + "/learn-on-land.sh", timeout=10,
+          status="Checking the lesson from this land was saved...")
+# A BLOCKED: that hands him a click names two kit routes tried first. Before a
+# live demo a Clay sort went to him twice: "Why can't you do it?"
+_register("Stop", hooks_dir + "/blocked-route-guard.sh", timeout=10,
+          status="Checking every route was tried before handing over a click...")
+
 # One brain commit per turn, named after the turn, in place of format-and-sync's
 # one commit per write. See the hook's header for the 2026-10-05 history count.
 _register("Stop", hooks_dir + "/brain-sync.sh", timeout=15,

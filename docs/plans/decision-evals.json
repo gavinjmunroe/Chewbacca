@@ -6,6 +6,21 @@
     ".claude/hooks/brain-recall.sh": "router"
   },
   "evals": {
+    ".claude/hooks/open-work-guard.sh": {
+      "type": "replay",
+      "test": "tests/test_steering_stop_replay.py",
+      "corpus": "tests/fixtures/steering/closing_turns_2026_10_16.json"
+    },
+    ".claude/hooks/blocked-route-guard.sh": {
+      "type": "replay",
+      "test": "tests/test_steering_stop_replay.py",
+      "corpus": "tests/fixtures/steering/closing_turns_2026_10_16.json"
+    },
+    ".claude/hooks/learn-on-land.sh": {
+      "type": "replay",
+      "test": "tests/test_steering_stop_replay.py",
+      "corpus": "tests/fixtures/steering/land_events_2026_10_16.json"
+    },
     "tools/gtme_reply.py": {
       "type": "replay",
       "test": "tests/test_gtme_reply.py",

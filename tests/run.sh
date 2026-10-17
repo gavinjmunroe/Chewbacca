@@ -1075,6 +1075,16 @@ if group "installer"; then
     bash "$ROOT/tests/ready_guard.sh"
   check  "link-guard refuses a reply whose file links don't open from the session root" \
     bash "$ROOT/tests/link_guard.sh"
+  check  "open-work-guard refuses ending a turn whose recap names its own leftover" \
+    bash "$ROOT/tests/open_work_guard.sh"
+  check  "learn-on-land refuses ending a turn that landed code without saving its lesson" \
+    bash "$ROOT/tests/learn_on_land.sh"
+  check  "blocked-route-guard refuses handing over a UI click after one route failed" \
+    bash "$ROOT/tests/blocked_route_guard.sh"
+  check  "steering_rate labels his messages like the 10/16 hand count and caps idle time" \
+    python3 "$ROOT/tests/test_steering_rate.py"
+  check  "the three steering Stop hooks replay 10/16's real closing turns within their measured bounds" \
+    python3 "$ROOT/tests/test_steering_stop_replay.py"
 
   check  "the full suite refuses its own repeat run on an unchanged tree" \
     bash "$ROOT/tests/suite_gate.sh"

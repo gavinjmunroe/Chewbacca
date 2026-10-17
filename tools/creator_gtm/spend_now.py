@@ -416,9 +416,27 @@ def write(cfg, today, live):
         if all(cells):  # a dry run has no ids for columns it hasn't made
             records += [{"id": rid, "cells": cells} for rid in rows.get(brand, [])]
         report.append((brand, score, line))
-    for i in range(0, len(records), 100):
-        clay("update-rows", live, write=True, ws=cfg["ws"], table=cfg["table"], records=json.dumps(records[i:i + 100]))
+    for batch in batches(records):
+        clay("update-rows", live, write=True, ws=cfg["ws"], table=cfg["table"], records=json.dumps(batch))
     return report
+
+
+# 2026-10-17, the first client's table: 33 brands' scores, evidence lines and sources in one update-rows came to more
+# than the front door's 16,000-character cap, so the whole write was refused. Split by size too.
+MAX_WRITE_CHARS = 15000
+
+
+def batches(records, max_rows=100, max_chars=MAX_WRITE_CHARS):
+    batch, size = [], 2
+    for r in records:
+        n = len(json.dumps(r)) + 2  # json.dumps joins list items with ", "
+        if batch and (len(batch) >= max_rows or size + n > max_chars):
+            yield batch
+            batch, size = [], 2
+        batch.append(r)
+        size += n
+    if batch:
+        yield batch
 
 
 # ── CLI ──────────────────────────────────────────────────────────────────────

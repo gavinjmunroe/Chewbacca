@@ -224,5 +224,15 @@ class Writes(Base):
         self.assertEqual(self.ops("update-rows"), [])  # no column ids yet, so nothing to write
 
 
+class Batching(unittest.TestCase):
+    def test_a_write_over_the_front_door_cap_is_split_by_size(self):
+        # Sabo, 2026-10-17: 33 rows of scores and sources in one update-rows were refused at 16,000 chars.
+        records = [{"id": f"r_{i}", "cells": {"f_e": "x" * 900}} for i in range(33)]
+        out = list(sn.batches(records))
+        self.assertGreater(len(out), 1)
+        self.assertTrue(all(len(json.dumps(b)) <= sn.MAX_WRITE_CHARS for b in out))
+        self.assertEqual(sum(len(b) for b in out), 33)
+
+
 if __name__ == "__main__":
     unittest.main()

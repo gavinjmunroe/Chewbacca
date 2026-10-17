@@ -556,6 +556,16 @@ def save_row(brand, row, path=None):
 def finish(brand_domain, row, log, t0, before, cols):
     domain, hops, trusted = brand_domain, [], True
     people = search_people(row, domain, log)
+    # Runna and Dove, 2026-10-17: the brand domain returned nobody and next-move found no ownership
+    # sentence on the brand's site, while parents.json already held Strava and Unilever as sourced,
+    # verified owners. A verified parent is searched before anything is guessed.
+    for parent in PARENT_DOMAINS.get(_norm(log["brand"]), []):
+        if people or parent == brand_domain:
+            continue
+        log["steps"].append({"step": "parent fallback", "from": brand_domain, "to": parent, "why": "verified in parents.json"})
+        people = search_people(row, parent, log)
+        if people:
+            domain, hops = parent, [parent]
     if not people:
         people, domain, hops, trusted = blocked_search(log["brand"], brand_domain, row, log)
     log["team"] = [(p.get("name"), p.get("title")) for p in people]

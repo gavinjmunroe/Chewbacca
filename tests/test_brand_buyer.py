@@ -207,6 +207,27 @@ class ChainTest(_Base):
             SITES.pop("runna.com")
             SITES.pop("zico.com")
 
+    def test_a_verified_parent_on_file_is_searched_before_next_move(self):
+        """Runna and Dove, 2026-10-17: parents.json held Strava and Unilever, verified with sources,
+        and the chain still ended with no people because next-move found no sentence on the site."""
+        parents = os.path.join(self.tmp.name, "parents.json")
+        with open(parents, "w") as f:
+            json.dump([{"brand": "Runna", "parent_status": "verified", "parent_source_url": "https://x.test",
+                        "search_domain": "runna.com first, then strava.com"}], f)
+        with open(L.CLIENT_FILE, "w") as f:
+            json.dump({"parents": parents}, f)
+        saved = L.PARENT_DOMAINS
+        try:
+            lead = person("Ana Ruiz", "Creator Partnerships Manager")
+            fake = FakeClay({"runna.com": [], "strava.com": [lead]}, email_by_url={lead["url"]: "ana@strava.com"})
+            log = self.run_chain(fake, "Runna", "runna.com", {"Ana Ruiz": 1.9})
+        finally:
+            L.PARENT_DOMAINS = saved
+        hop = next(s for s in log["steps"] if s["step"] == "parent fallback")
+        self.assertEqual((hop["to"], hop["why"]), ("strava.com", "verified in parents.json"))
+        self.assertFalse([s for s in log["steps"] if s["step"] == "next move"])
+        self.assertEqual(log["result"]["email"], "ana@strava.com")
+
     def test_guessed_parent_hop_never_marks_its_email_ready(self):
         """An ownership sentence whose company the site doesn't link is searched at a guessed domain,
         but its emails stay off the allowlist."""

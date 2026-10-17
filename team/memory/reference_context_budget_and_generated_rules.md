@@ -83,3 +83,14 @@ Two traps from the same evening. launch-guard refuses any shell command holding
 that GTM tool's name plus shell syntax, heredoc text included, so write such
 scripts with the Write or Edit tool and run the file. And `chewbacca land` exits
 0 when pre-push refuses the push; read its last line before calling it landed.
+
+## Codex cuts the middle past about 32k tokens
+
+A Codex hook's added context is capped near 32k tokens, and Codex keeps the
+head and tail and drops the middle. On 10/16 the start briefing was 41,986
+tokens and lost 10,028, which held the git, security and writing rules, the em
+dash ban included. Since eec9250c, `agent_context.startup_briefing` fits it
+under 104,000 characters by naming files instead of inlining them, in this
+order: memory/MEMORY.md, the typescript and naming rules, people.md, now.md.
+Voice, identity and every rule stay whole. Anything added to the Codex start
+output has to fit beside it.

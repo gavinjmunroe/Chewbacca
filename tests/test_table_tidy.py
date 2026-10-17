@@ -34,6 +34,21 @@ def test_plan_hides_everything_off_the_story():
     assert [(ids[a], ids[b]) for a, b in p["moves"]][:2] == [("Status", "Brand"), ("Spending now", "Status")]
 
 
+def test_a_waterfall_is_one_condensed_step_not_duplicates():
+    import table_graph as G
+    act = lambda i, deps="": {"id": i, "name": i, "type": "action", "typeSettings": {
+        "actionKey": "findymail-validate-email", "inputsBinding": [{"name": "e", "formulaText": deps}]}}
+    cols = [{"id": "f_in", "name": "Person", "type": "text", "typeSettings": {}},
+            act("f_v1", "{{f_in}}"), act("f_v2", "{{f_in}}"),
+            {"id": "f_w", "name": "Work email", "type": "formula", "typeSettings": {
+                "formulaType": "waterfall", "formulaWaterfall": [{"formula": "{{f_v1}}"}, {"formula": "{{f_v2}}"}]}},
+            {"id": "f_status", "name": "Status", "type": "text", "typeSettings": {}}]
+    by_id, deps, feeds, _ = G.graph(cols)
+    issues = G.lint(by_id, deps, feeds)
+    assert not any("columns run" in i for i in issues), issues
+    assert not any("No condensed result column" in i for i in issues), issues
+
+
 def test_a_missing_story_column_is_reported_not_skipped_silently():
     p = T.plan([c for c in COLUMNS if c["name"] != "Contact"], *T.spec(SABO))
     assert p["missing"] == ["Contact"]

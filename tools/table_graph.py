@@ -36,7 +36,10 @@ def columns(table):
 
 def inputs(col):
     ts = col.get("typeSettings") or {}
-    text = json.dumps(ts.get("inputsBinding", [])) + (ts.get("formulaText") or "")
+    # A waterfall formula keeps its references in formulaWaterfall and an action's run gate in
+    # conditionalRunFormulaText; reading neither made Sabo's waterfall look like loose columns.
+    text = (json.dumps(ts.get("inputsBinding", [])) + (ts.get("formulaText") or "")
+            + json.dumps(ts.get("formulaWaterfall", [])) + (ts.get("conditionalRunFormulaText") or ""))
     return sorted(set(REF.findall(text)))
 
 
@@ -77,8 +80,14 @@ def lint(by_id, deps, feeds):
         action = (c.get("typeSettings") or {}).get("actionKey", "")
         if not deps[c["id"]]:
             issues.append(f"'{c['name']}' ({action}) has no column inputs, so it can't be chained or gated.")
+    # Columns a waterfall formula reads are one condensed step on purpose (2026-10-17: the 7
+    # validators of Sabo's Work Email waterfall were reported as duplicates).
+    in_waterfall = {d for c in by_id.values() if (c.get("typeSettings") or {}).get("formulaType") == "waterfall"
+                    for d in deps[c["id"]]}
     dup_actions = {}
     for c in actions:
+        if c["id"] in in_waterfall:
+            continue
         dup_actions.setdefault(c["typeSettings"].get("actionKey"), []).append(c["name"])
     for key, names_ in dup_actions.items():
         if len(names_) > 1:

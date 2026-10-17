@@ -40,7 +40,7 @@ SUFFIX = re.compile(r"\b(llc|ltd|limited|inc|incorporated|llp|lp|plc|pty|gmbh|ag
                     r"management|advisors?|fund[s]?)\b")
 ALIASES = {"name": ("fullname","name","contactname","full_name"),
            "email": ("email","emailaddress","workemail","mail"),
-           "company": ("organization","company","companyname","org","employer","account"),
+           "company": ("organization","company","companyname","org","employer","account","firm","firmname"),
            "title": ("title","jobtitle","role","position"),
            "id": ("recordid","record_id","id","contactid")}
 

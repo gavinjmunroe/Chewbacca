@@ -35,6 +35,13 @@ printf '%s\nG1,Jane Roe,Partner,Ficial Services Ltd,jane@acme.com\n' "$H" > "$TM
 
 "$GATE" "$TMP/clean.csv" --expect sequoia >/dev/null 2>&1 && no "recall miss should fail" || ok "recall test fails when an expected firm is absent"
 
+# A "firm" column is the company (Zeutara's monday_wave.py, 2026-10-17): read
+# blind, every row looked like a placeholder company and the gate refused all 8 lists.
+printf 'email,full_name,title,firm\njane@acme.com,Jane Roe,Partner,Acme Ventures\n' > "$TMP/firmcol.csv"
+"$GATE" "$TMP/firmcol.csv" >/dev/null 2>&1 && ok "a firm column counts as the company" || no "a firm column should count as the company"
+printf 'email,full_name,title,firm\njane@acme.com,Jane Roe,Partner,Acme Ventures\nbob@acme.com,Bob Poe,Partner,Acme Ventures LLC\n' > "$TMP/firmdup.csv"
+"$GATE" "$TMP/firmdup.csv" >/dev/null 2>&1 && no "same firm twice in a firm column should fail" || ok "same firm twice in a firm column fails"
+
 : > "$TMP/empty.csv"
 "$GATE" "$TMP/empty.csv" >/dev/null 2>&1 && no "empty file should fail" || ok "empty file fails"
 

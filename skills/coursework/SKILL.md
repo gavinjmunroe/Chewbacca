@@ -360,6 +360,13 @@ The ledger goes stale in exactly three ways, and all three are silent:
   Oct 19 to Oct 21 (Chappelow's 10/12 "Correction of Dates"), ACAD 324 Quiz 2
   Oct 19 to Oct 21 and the P3 team eval Oct 14 to Oct 19 (Davina's 10/12 and
   10/14 slide agendas). The plan would have pointed him at the wrong Monday.
+- **A sign-up sheet is not the whole record.** Before calling a conference,
+  meeting or extension missed, search his school inbox for the instructor
+  (`GOOGLE_WORKSPACE_CLI_CONFIG_DIR=~/.chewbacca/email/<address> gws gmail
+users messages list`, `q: "<instructor email> newer_than:14d"`). On
+  2026-10-16 the WP2 conference sheet had no Caleb on it and the plan called
+  it missed, but he had emailed Chappelow on 10/14 to reschedule and an unread
+  reply offered Monday.
 - **An absence happens** and `absences.used` never moves. Increment it when the
   user says they missed a class. This is the field that decides a grade step and
   nobody remembers it in November.

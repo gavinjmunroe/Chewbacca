@@ -1151,10 +1151,17 @@ def test_every_cli_call_runs_in_its_own_workspace():
         ok(cfg["profiles"][sabo]["oauth"]["accessToken"] == "a1+++" and cfg["profiles"][zeu]["oauth"]["accessToken"] == "a2+++",
            f"each refreshed token was written back to its own workspace: {cfg['profiles']}")
 
-        # Back to back, the way the Sabo and Zeutara tabs ran at 12:43.
+        # Back to back, the way the Sabo and Zeutara tabs ran at 12:43, past a
+        # write-back lock a killed process left behind.
+        lock = Path(str(shared) + ".chewbacca.lock")
+        lock.write_text("")
+        os.utime(lock, (0, 0))
         for ws in (sabo, zeu):
             code, out = finish(start("workflow-graph", "workflow=wf_b2b", f"ws={ws}", FAKE_CLI_SLEEP="0"))
             ok(code == 0 and calls()[-1]["ws"] == ws, f"a back-to-back call in {ws} ran in {calls()[-1]['ws']}")
+        cfg = json.loads(shared.read_text())
+        ok(cfg["profiles"][sabo]["oauth"]["accessToken"] == "a1++++" and not lock.exists(),
+           "a stale write-back lock is cleared and the refreshed token still lands")
 
         # A write is pinned to the workspace shown at approval, whatever the CLI is switched to.
         trig = "15a2668a-07fd-4844-be50-37981ebb971a"

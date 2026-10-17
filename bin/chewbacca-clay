@@ -266,14 +266,16 @@ function cliExe() {
 // compare-and-swap on the token it started from, as the CLI's own refresh is.
 function withCliLock(file, fn) {
   const lock = `${file}.chewbacca.lock`;
-  for (let i = 0; i < 200; i++) {
+  // Waits up to 15 s, longer than the 10 s after which a lock counts as left
+  // by a killed process, so a stale lock is always cleared before giving up.
+  // A write-back holds it for milliseconds (guessed, never measured under load).
+  for (let i = 0; i < 600; i++) {
     let fd;
     try {
       fd = fs.openSync(lock, "wx", 0o600);
     } catch (e) {
       if (e.code !== "EEXIST") throw e;
-      // A lock left by a killed process is stale after 30 s; a write-back takes milliseconds.
-      try { if (Date.now() - fs.statSync(lock).mtimeMs > 30000) fs.rmSync(lock, { force: true }); } catch {}
+      try { if (Date.now() - fs.statSync(lock).mtimeMs > 10000) fs.rmSync(lock, { force: true }); } catch {}
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
       continue;
     }
@@ -288,6 +290,15 @@ function pinCli(ws) {
   if (!/^[0-9]{1,12}$/.test(ws)) return { error: `no Clay workspace for the CLI call: ${WS_UNRESOLVED || "pass ws=<id> or set CLAY_WORKSPACE_ID"}` };
   const found = cliProfile(ws);
   if (!found) return { error: `the clay CLI is not signed in to workspace ${ws}; nothing was sent` };
+  // A process killed mid-call leaves its private config (a copy of the
+  // sign-in) behind; any older than an hour is swept before a new one is made.
+  try {
+    for (const name of fs.readdirSync(os.tmpdir())) {
+      if (!name.startsWith("chewbacca-clay-cli-")) continue;
+      const p = path.join(os.tmpdir(), name);
+      if (Date.now() - fs.statSync(p).mtimeMs > 3600000) fs.rmSync(p, { recursive: true, force: true });
+    }
+  } catch {}
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "chewbacca-clay-cli-"));
   const file = path.join(dir, "clay", "config.json");
   const remove = () => fs.rmSync(dir, { recursive: true, force: true });
@@ -301,19 +312,27 @@ function pinCli(ws) {
     return { error: `could not pin the clay CLI to workspace ${ws} (${e.message}); nothing was sent` };
   }
   const started = JSON.stringify(found.prof);
+  // Never throws: the call has already run, and a failed write-back must not
+  // turn a write that landed into a crash.
   const done = () => {
     try {
       const now = parseOr(readText(file), null)?.profiles?.[ws];
       if (now && JSON.stringify(now) !== started) {
         withCliLock(found.file, () => {
-          const cur = parseOr(readText(found.file), null);
+          const raw = readText(found.file);
+          const cur = parseOr(raw, null);
           if (!cur?.profiles || JSON.stringify(cur.profiles[ws]) !== started) return;
           cur.profiles[ws] = now;
           const tmp = `${found.file}.${process.pid}.tmp`;
           fs.writeFileSync(tmp, `${JSON.stringify(cur, null, 2)}\n`, { mode: 0o600 });
+          // The CLI writes this file without the lock: if it moved since the
+          // read above, keep its version rather than clobber a switch or a refresh.
+          if (readText(found.file) !== raw) return fs.rmSync(tmp, { force: true });
           fs.renameSync(tmp, found.file);
         });
       }
+    } catch (e) {
+      process.stderr.write(`chewbacca clay: the refreshed CLI token for ${ws} was not written back (${e.message})\n`);
     } finally {
       remove();
     }
@@ -443,10 +462,12 @@ async function prepareWrite(op, s, frozen) {
   if (s.type !== "api-anything") {
     const exe = s.type === "cli" ? cliExe() : path.join(ROOT, "bin", frozen.argv[0]);
     if (!exe || !fs.existsSync(exe)) return { error: `${s.type === "cli" ? "the clay CLI" : frozen.argv[0]} is not installed` };
-    if (frozen.workspace === undefined) return { error: `no Clay workspace for the CLI call: ${WS_UNRESOLVED || "pass ws=<id> or set CLAY_WORKSPACE_ID"}` };
+    const cli = s.type === "cli";
+    if (cli && frozen.workspace === undefined) return { error: `no Clay workspace for the CLI call: ${WS_UNRESOLVED || "pass ws=<id> or set CLAY_WORKSPACE_ID"}` };
     const argv = frozen.argv.slice(1);
     return { files: [exe], send: async () => {
-      const pin = pinCli(frozen.workspace);
+      // Only the CLI reads the shared config; a kit bin runs as it always has.
+      const pin = cli ? pinCli(frozen.workspace) : { env: process.env, done: () => {} };
       if (pin.error) return { ok: false, class: "refused", reason: pin.error };
       let r;
       try {
@@ -456,7 +477,7 @@ async function prepareWrite(op, s, frozen) {
       }
       if (r.status !== 0) return { ok: false, class: "error", reason: (r.stderr || String(r.error || `exit ${r.status}`)).trim().slice(0, 400) };
       const data = parseOr(r.stdout, r.stdout);
-      const other = answeredElsewhere(data, frozen.workspace);
+      const other = cli ? answeredElsewhere(data, frozen.workspace) : null;
       if (other) return { ok: false, class: "workspace", reason: `the CLI answered for workspace ${other}, not ${frozen.workspace}` };
       return { ok: true, data };
     } };
@@ -535,7 +556,13 @@ function runProcess(kind, opName, file, argv, ws) {
     if (!f) return { exit: 127, stdout: "", stderr: `no fixture for ${kind} ${opName}` };
     return f;
   }
-  const exe = kind === "cli" ? cliExe() : file;
+  // Kit bins (clay-balance, clay-inbox) sign in their own way and never read
+  // the CLI's config, so only the CLI itself is pinned.
+  if (kind !== "cli") {
+    const r = spawnSync(file, argv, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024, timeout: 180000 });
+    return { exit: r.status ?? 1, stdout: r.stdout || "", stderr: r.stderr || String(r.error || "") };
+  }
+  const exe = cliExe();
   if (!exe) return { exit: 127, stdout: "", stderr: "the clay CLI is not installed" };
   const pin = pinCli(ws);
   if (pin.error) return { exit: 1, stdout: "", stderr: pin.error };

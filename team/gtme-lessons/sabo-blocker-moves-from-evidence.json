@@ -22,9 +22,9 @@
     "baseline": "old hard-coded chain cleared 2 of 5; one model call cleared 3 of 5",
     "version": 1
   },
-  "result": "On 5 replayed blockers (4 Sabo, 1 Zeutara gate) with live Jev the loop cleared 5 of 5. Cleared per credit was 1.28 in 3 of 4 runs and 1.14 in 1, against 1.18 for the old chain, so per credit is a tie. With Jev off the loop cleared 2 of 5. These cases aren't held out: one cost fix was made after the first replay.",
+  "result": "After the break-it fix (agent moves classed from their action text, never their label) the loop cleared 4 of 5 replayed blockers at 0.91 to 1.03 cleared per credit, against 2 of 5 at 1.18 for the old chain. Zeutara's waiver ask now reads as a send and is dropped. More blockers cleared, worse per credit.",
   "verdict": "observed",
-  "next_decision": "Grade it on the next 10 real blockers before claiming it beats the old chain per credit.",
+  "next_decision": "Grade it on the next 10 real blockers; tune the send keywords only with a test that keeps every evasive phrase dropped.",
   "check": "When a step comes back empty, run gtme next-move plan on the evidence before adding any per-case fallback.",
   "check_ref": [
     "kit:tools/next_move.py::OPERATORS = ("
@@ -34,6 +34,22 @@
     "2f97a007",
     "skills/gtm-engineering/SKILL.md"
   ],
-  "scope": "Sabo brand-buyer chain and Zeutara's launch gate, 2026-10-16.",
-  "history": []
+  "scope": "Sabo brand-buyer chain and the Zeutara launch gate, replayed on 2026-10-16 from run logs",
+  "history": [
+    {
+      "date": "2026-10-16",
+      "result": "On 5 replayed blockers (4 Sabo, 1 Zeutara gate) with live Jev the loop cleared 5 of 5. Cleared per credit was 1.28 in 3 of 4 runs and 1.14 in 1, against 1.18 for the old chain, so per credit is a tie. With Jev off the loop cleared 2 of 5. These cases aren't held out: one cost fix was made after the first replay.",
+      "verdict": "observed",
+      "next_decision": "Grade it on the next 10 real blockers before claiming it beats the old chain per credit.",
+      "oracle": {
+        "metric": "observation",
+        "numerator": 5,
+        "denominator": 5,
+        "unit": "cases",
+        "source": "run_log",
+        "baseline": "old hard-coded chain cleared 2 of 5; one model call cleared 3 of 5",
+        "version": 1
+      }
+    }
+  ]
 }

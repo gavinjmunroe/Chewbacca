@@ -33,6 +33,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 import urllib.request
 from pathlib import Path
 
@@ -249,7 +250,123 @@ OPERATORS = (op_read_source, op_org_hop, op_next_person, op_persona_swap, op_loo
 
 
 def signature(c):
-    return f"{c['kind']}:{c.get('target') or ''}"
+    return f"{c.get('kind') or 'agent'}:{c.get('target') or ''}"
+
+
+# Break-it pass, 2026-10-16: an agent move labeled "write" whose action was "delete the empty
+# row and retry" landed in ranked, and a move with no "kind" crashed generate(). An agent's
+# move is now classed by what its action text and touches say it does, and the most
+# restrictive of that and its own label wins. Code-built moves are trusted; agent ones aren't.
+RISK = ["read", "ask", "write", "paid_write", "add_leads", "send", "launch", "delete"]
+DOES = [
+    ("delete", re.compile(r"\b(delet\w*|remov\w*|purg\w*|eras\w*|wip(e|es|ed|ing)\b|drop (the|a|all)\b|"
+                          r"archiv\w*|truncat\w*|clear (the|all)\b|get rid of|nuk\w*|scrap\w*|trash\w*|destroy\w*)", re.I)),
+    ("launch", re.compile(r"\b(launch\w*|(start|kick off|turn on) (the |a )?(campaign|sequence)s?|resum\w*|unpaus\w*|"
+                          r"activat\w*|go live|hit (go|start|send))\b", re.I)),
+    ("send", re.compile(r"\b(send\w*|sent|reply to|respond to|e-?mail (them|him|her|the (lead|prospect|buyer|contact))|"
+                        r"messag\w* (them|him|her|the)|dm|text (them|him|her)|intro e-?mail|outreach|blast\w*|"
+                        r"fire off|ping (them|him|her|the)|cold e-?mail\w*|mail merge)\b", re.I)),
+    ("add_leads", re.compile(r"\b(add[- ]leads?|enroll\w*|add .{0,40}to (the |a )?(campaign|sequence))\b", re.I)),
+]
+TOUCH_WORDS = [("purchase", re.compile(r"\b(buy\w*|purchas\w*|subscrib\w*|pay for|upgrade (the )?plan)\b", re.I)),
+               ("auto_run", re.compile(r"\bauto[- ]?run\b", re.I)),
+               ("vendor_ui_by_hand", re.compile(r"\b(open|click\w*) (the |in )?(clay|ui|browser)\b", re.I))]
+
+
+def plain(text):
+    """Fold fullwidth and lookalike letters (NFKC) and drop invisible format characters, so
+    "ＤＥＬＥＴＥ" and "d<zero-width space>elete" read as delete."""
+    text = unicodedata.normalize("NFKC", str(text))
+    return "".join(ch for ch in text if unicodedata.category(ch) != "Cf")
+
+
+def agent_move(c):
+    """Normalize one agent-proposed move. Anything malformed comes back as a move the bounds drop."""
+    if not isinstance(c, dict):
+        return {"kind": "agent", "target": slug(str(c))[:60], "action": str(c)[:300], "why": "",
+                "action_class": None, "touches": [], "credits": 0.0, "minutes": 1.0, "reversible": False,
+                "source": "agent", "malformed": "a move is a JSON object"}
+    c = dict(c, source="agent")
+    action = str(c.get("action") or "")
+    c["action"] = action
+    c["kind"] = str(c.get("kind") or "agent")
+    c["target"] = str(c.get("target") or slug(action)[:60])
+    c["why"] = str(c.get("why") or "")
+    touches = c.get("touches") or []
+    c["touches"] = [str(t) for t in touches] if isinstance(touches, list) else [str(touches)]
+    for word, rx in TOUCH_WORDS:
+        if rx.search(plain(action)) and word not in c["touches"]:
+            c["touches"].append(word)
+    for key, default in (("credits", 0.0), ("minutes", 1.0)):
+        try:
+            val = float(c.get(key, default))
+        except (TypeError, ValueError):
+            val, c["malformed"] = default, f"{key} is not a number"
+        if val != val or val < 0 or val == float("inf"):  # NaN, negative, infinite
+            val, c["malformed"] = default, f"{key} must be a finite number of zero or more"
+        c[key] = val
+    c["reversible"] = c.get("reversible") is True
+    said = c.get("action_class")
+    said_text = plain(action) + " | " + plain(" ".join(c["touches"])).replace("_", " ")
+    does = [cls for cls, rx in DOES if rx.search(said_text)]
+    if said in RISK:
+        c["action_class"] = max([said, *does], key=RISK.index)
+        if c["action_class"] != said:
+            c["reclassed"] = f"labeled {said}, but the action reads as {c['action_class']}"
+    elif does:
+        c["action_class"] = max(does, key=RISK.index)
+    # else: no known label and nothing read from the text, so "unclassified" drops it
+    return c
+
+
+def num(value, default=None):
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return default
+    return v if v == v and v not in (float("inf"), float("-inf")) else default
+
+
+def clean_blocker(raw):
+    """The blocker in the shape every operator expects. Bad fields become empty, never a crash.
+
+    A credits_left that isn't a number becomes 0, so every paid move drops: an unreadable
+    budget is no budget (break-it pass, 2026-10-16: "abc" crashed the bound step).
+    """
+    if not isinstance(raw, dict):
+        raise ValueError("the blocker is a JSON object with goal, step, account, failure and evidence")
+    b = dict(raw)
+    acct = b.get("account")
+    b["account"] = {k: str(v) for k, v in acct.items() if v is not None} if isinstance(acct, dict) else (
+        {"brand": str(acct)} if acct else {})
+    for key in ("goal", "step", "failure", "client"):
+        if b.get(key) is not None and not isinstance(b[key], str):
+            b[key] = str(b[key])
+    ev = b.get("evidence")
+    ev = dict(ev) if isinstance(ev, dict) else {}
+    people = ev.get("people")
+    ev["people"] = [dict(p, score=num(p.get("score"), 0.0), name=str(p.get("name") or "someone"),
+                         title=p.get("title") if isinstance(p.get("title"), str) else None,
+                         email=p.get("email") if isinstance(p.get("email"), str) else None)
+                    for p in (people if isinstance(people, list) else []) if isinstance(p, dict)]
+    ev["filters"] = ev.get("filters") if isinstance(ev.get("filters"), dict) else {}
+    ev["links"] = [str(x) for x in ev.get("links")] if isinstance(ev.get("links"), list) else []
+    for k in ("site_text", "linkedin_text", "research_text", "error"):
+        if ev.get(k) is not None and not isinstance(ev[k], str):
+            ev[k] = json.dumps(ev[k], ensure_ascii=False)[:4000]
+    if not isinstance(ev.get("notes"), dict):
+        ev.pop("notes", None)
+    b["evidence"] = ev
+    tried = b.get("tried")
+    b["tried"] = [str(t) for t in tried] if isinstance(tried, list) else ([str(tried)] if tried else [])
+    persona = b.get("persona")
+    b["persona"] = [str(t) for t in persona] if isinstance(persona, list) else ([str(persona)] if persona else [])
+    if "credits_left" in b and b["credits_left"] is not None:
+        b["credits_left"] = max(num(b["credits_left"], 0.0), 0.0)
+    b["receipts"] = b["receipts"] if isinstance(b.get("receipts"), dict) else {}
+    if b.get("client_dir") is not None and not isinstance(b["client_dir"], str):
+        b["client_dir"] = None
+    return b
 
 
 def generate(blocker, data):
@@ -260,13 +377,9 @@ def generate(blocker, data):
             if sig not in seen:
                 seen.add(sig)
                 out.append(c)
-    for c in blocker.get("extra") or []:  # the agent's own moves
-        c = dict(c, source="agent")
-        c.setdefault("target", "")
-        c.setdefault("touches", [])
-        c.setdefault("reversible", False)
-        c.setdefault("credits", 0.0)
-        c.setdefault("minutes", 1.0)
+    extra = blocker.get("extra") or []
+    for c in extra if isinstance(extra, list) else [extra]:  # the agent's own moves
+        c = agent_move(c)
         sig = signature(c)
         if sig not in seen:
             seen.add(sig)
@@ -282,10 +395,13 @@ def generate(blocker, data):
 def load_rulings(client_dir):
     if not client_dir:
         return {}
-    f = Path(client_dir).expanduser() / "DECISIONS.json"
+    try:
+        f = Path(client_dir).expanduser() / "DECISIONS.json"
+    except (TypeError, ValueError):
+        return {}
     try:
         d = json.loads(f.read_text())
-    except (OSError, json.JSONDecodeError):
+    except (OSError, ValueError):  # ValueError covers bad JSON and a NUL in the path
         return {}
     rulings = d.get("rulings", d) if isinstance(d, dict) else d
     return {r.get("id"): r for r in rulings if isinstance(r, dict) and r.get("status", "active") == "active"}
@@ -302,6 +418,8 @@ def violations(c, ctx, data, rulings):
             hit &= c.get("action_class") not in w["action_class_not_in"]
         if "touches" in w:
             hit &= bool(set(c.get("touches") or []) & set(w["touches"]))
+        if "malformed" in w:
+            hit &= bool(c.get("malformed"))
         if "credits_over" in w:
             left = ctx.get(w["credits_over"])
             hit &= left is not None and float(c.get("credits") or 0) > float(left)
@@ -408,15 +526,51 @@ def rank(cands, blocker, data, evaluate=None, use_jev=True, ledger=None):
     return sorted(cands, key=lambda c: -c["ev"]), status
 
 
+JEV_CLASSES = {"read": "Only reads or looks something up; changes nothing",
+               "write": "Changes our own working data (a table cell, a draft) and nothing anyone outside sees",
+               "send": "Sends an email, message or reply to someone outside the team",
+               "launch": "Starts, resumes or activates a campaign or sequence",
+               "add_leads": "Adds people to a campaign or sequence",
+               "delete": "Deletes, removes, clears or archives data or records"}
+
+
+def jev_reclass(cands, evaluate=None):
+    """Ask Jev what each agent move does. Jev can only make a move MORE restricted, never less:
+    any class it gives 25% or more that is riskier than the label wins. Returns a status line."""
+    agent = [c for c in cands if c.get("source") == "agent" and c.get("action_class") in RISK]
+    if not agent:
+        return "no agent moves"
+    import jev
+    evaluate = evaluate or jev.evaluate
+    req = {"model": jev.MODEL, "state": "\n".join(f"{c['id']}: {c['action']}" for c in agent),
+           "questions": {c["id"]: {"type": "choice", "criteria": JEV_CLASSES,
+                                   "instructions": f"Move {c['id']}: \"{c['action']}\". What does carrying it out do?"}
+                         for c in agent}}
+    try:
+        answers = evaluate(req)["answers"]
+    except Exception as e:
+        return f"unavailable, keywords only: {type(e).__name__}"
+    for c in agent:
+        probs = (answers.get(c["id"]) or {}).get("probabilities") or {}
+        risky = [k for k, v in probs.items() if k in RISK and num(v, 0) >= 0.25
+                 and RISK.index(k) > RISK.index(c["action_class"])]
+        if risky:
+            was, c["action_class"] = c["action_class"], max(risky, key=RISK.index)
+            c["reclassed"] = f"labeled {was}, Jev reads the action as {c['action_class']}"
+    return "ok"
+
+
 def plan(blocker, data=None, evaluate=None, use_jev=True, ledger=None):
     data = data or load_data()
+    blocker = clean_blocker(blocker)
     cands = generate(blocker, data)
+    classed = jev_reclass(cands, evaluate) if use_jev else "off, keywords only"
     keep, dropped = bound(cands, blocker, data)
     ranked, status = rank(keep, blocker, data, evaluate, use_jev, ledger)
     pick = next((c for c in ranked if c["action_class"] in EXECUTABLE | {"ask"} and c["p"] >= data["stop_below"]), None)
     decision = "stop" if pick is None else ("ask" if pick["action_class"] == "ask" else "run")
     return {"decision": decision, "pick": pick, "ranked": ranked, "dropped": dropped, "jev": status,
-            "generated": len(cands)}
+            "agent_classes": classed, "generated": len(cands)}
 
 
 # ---------------------------------------------------------------- act and learn
@@ -483,8 +637,7 @@ def run(blocker, executors, data=None, evaluate=None, use_jev=True, max_steps=4,
     a move that breaks a boundary is never run, checked again here right before the call.
     """
     data = data or load_data()
-    blocker = copy.deepcopy(blocker)
-    blocker.setdefault("tried", [])
+    blocker = clean_blocker(copy.deepcopy(blocker))
     trace, spent = [], 0.0
     for _ in range(max_steps):
         p = plan(blocker, data, evaluate, use_jev, ledger)
@@ -618,7 +771,13 @@ def score(results, policy):
 # ---------------------------------------------------------------- CLI
 
 def read_input(path):
-    return json.loads(sys.stdin.read() if path == "-" else Path(path).read_text())
+    try:
+        got = json.loads(sys.stdin.read() if path == "-" else Path(path).read_text())
+    except (OSError, ValueError) as e:
+        raise SystemExit(f"gtme next-move: can't read {path}: {e}")
+    if not isinstance(got, dict):
+        raise SystemExit("gtme next-move: the input is a JSON object (a blocker, or a replay case holding one)")
+    return got
 
 
 def show_plan(p, out=sys.stdout):

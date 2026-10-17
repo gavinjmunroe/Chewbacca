@@ -83,6 +83,14 @@
       "reason": "spending money outside the credit allowance is Caleb's call"
     },
     {
+      "id": "malformed",
+      "source": "break-it pass 2026-10-16: an agent move with a bad field",
+      "when": {
+        "malformed": true
+      },
+      "reason": "the move has a field nothing can trust, so nothing can bound it"
+    },
+    {
       "id": "unclassified",
       "source": "this loop: every candidate declares what kind of action it is",
       "when": {

@@ -175,6 +175,78 @@ class Boundaries(unittest.TestCase):
         self.assertEqual(p["dropped"][0]["broke"][0]["rule"], "unclassified")
 
 
+class BreakIt(unittest.TestCase):
+    """The manager tab's break-it pass, 2026-10-16, and the attacks run on the fix after it."""
+
+    def plan_with(self, extra, evaluate=None, **over):
+        b = case("sabo-barebells-empty-search")["blocker"]
+        b.update(over, extra=extra)
+        return N.plan(b, evaluate=evaluate or flat_jev(0.99))
+
+    def agent(self, p, where="ranked"):
+        return [c for c in p[where] if c.get("source") == "agent"]
+
+    def test_agent_move_without_kind_does_not_crash(self):
+        p = self.plan_with([{"action": "send intro email", "action_class": "send"}])
+        self.assertEqual(self.agent(p), [])
+        self.assertEqual(self.agent(p, "dropped")[0]["broke"][0]["rule"], "no-send-without-ready")
+
+    def test_label_cannot_hide_what_the_move_does(self):
+        for action in ("delete the empty row and retry", "Remove all rows for this brand", "wipe the table",
+                       "launch the campaign now", "email the buyer directly", "add these 40 people to the campaign",
+                       "ＤＥＬＥＴＥ the row", "d​elete the row", "turn on auto-run", "buy a ZoomInfo seat"):
+            p = self.plan_with([{"kind": "agent", "action": action, "action_class": "write"}])
+            self.assertEqual(self.agent(p), [], action)
+
+    def test_jev_can_only_raise_a_class(self):
+        says = lambda cls: lambda req: {"answers": {q: {"type": "choice", "choice": cls, "probabilities": {cls: 0.9}}
+                                                    for q in req["questions"]}}
+        p = self.plan_with([{"kind": "agent", "action": "make the old rows go away", "action_class": "write"}],
+                           evaluate=says("delete"))
+        self.assertEqual(self.agent(p), [])
+        self.assertIn("Jev reads the action as delete", self.agent(p, "dropped")[0]["reclassed"])
+        p = self.plan_with([{"kind": "agent", "action": "delete the old rows", "action_class": "write"}],
+                           evaluate=says("read"))
+        self.assertEqual(self.agent(p), [], "Jev saying read never lowers what the keywords caught")
+
+    def test_bad_agent_moves_are_dropped_not_run(self):
+        for m in ("just a string", 42, None, {"kind": "agent", "action": "x", "action_class": "teleport"},
+                  {"kind": "agent", "action": "rerun", "action_class": "write", "credits": "lots"},
+                  {"kind": "agent", "action": "rerun", "action_class": "write", "credits": -5}):
+            p = self.plan_with([m])
+            self.assertEqual(self.agent(p), [], repr(m))
+
+    def test_harmless_agent_move_still_ranks(self):
+        p = self.plan_with([{"kind": "agent", "action": "read the brand's careers page", "action_class": "read"}])
+        self.assertEqual(len(self.agent(p)), 1)
+
+    def test_malformed_blockers_never_crash(self):
+        b = case("sabo-barebells-empty-search")["blocker"]
+        for over in ({"credits_left": "abc"}, {"evidence": []}, {"evidence": {"people": "nobody"}},
+                     {"evidence": {"people": [None, 3, {"name": None, "score": "x"}]}},
+                     {"evidence": {"filters": "titles"}}, {"account": "barebells"}, {"tried": "retry:"},
+                     {"client_dir": "/no/\x00where"}, {"receipts": ["gtme_ready"]},
+                     {"account": {"brand": "Bärebells 🍫", "domain": "bärebells.com"}, "persona": ["社交媒体经理"]}):
+            x = dict(b, **over)
+            N.plan(x, evaluate=flat_jev())
+            N.run(x, N.AllMoves(lambda m, _: {"cleared": False}), evaluate=flat_jev(), max_steps=2, learn=False)
+        N.plan({}, evaluate=flat_jev())
+
+    def test_unreadable_budget_drops_paid_moves(self):
+        b = case("sabo-barebells-empty-search")["blocker"]
+        b["credits_left"] = "abc"
+        p = N.plan(b, evaluate=flat_jev())
+        self.assertTrue(all(c["credits"] == 0 for c in p["ranked"]))
+
+    def test_cli_refuses_garbage_cleanly(self):
+        for raw in ("not json", "", "[]", "null", '"str"'):
+            out = subprocess.run([sys.executable, "-I", str(ROOT / "tools" / "next_move.py"), "plan", "-", "--no-jev"],
+                                 input=raw, capture_output=True, text=True, timeout=60)
+            self.assertNotEqual(out.returncode, 0, raw)
+            self.assertNotIn("Traceback", out.stderr, raw)
+            self.assertIn("gtme next-move:", out.stderr, raw)
+
+
 class Rank(unittest.TestCase):
     def test_jev_failure_says_so_and_still_ranks(self):
         def broken(req):

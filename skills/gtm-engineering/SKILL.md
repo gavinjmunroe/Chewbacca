@@ -452,6 +452,19 @@ cleared 2 of 5 at 0.32 per credit, so Jev's ranking is doing the work. The
 downstream-credit term was added after the first replay, so these five aren't
 held out anymore. Grade it on the next 10 real blockers.
 
+- **Never trust a move's own label (break-it pass, 2026-10-16).** The manager
+  tab got "delete the empty row and retry" through as a `write` and crashed the
+  loop with a move that had no `kind`. Agent moves are now classed from their
+  action text and touches: keywords after folding lookalike letters and zero-width
+  characters, then Jev, which can only raise a class. The riskiest reading wins.
+  On 6 evasive phrasings ("make the old rows go away", "let the sequence rip")
+  Jev caught all 6 and kept both harmless ones. Malformed blockers, an unreadable
+  budget (counts as 0) and garbage CLI input now drop or refuse cleanly. The cost
+  is a false positive. Zeutara's "ask for a written ruling to send without one"
+  now reads as a send and gets dropped, so the replay is down to 4 of 5 cleared at
+  0.91 to 1.03 per credit, under the old chain's 1.18. On the falsifier as we
+  wrote it, the loop clears more blockers but loses per credit.
+
 ## Never call a launch ready without `gtme ready`
 
 - **Never say a launch is ready, good to go, "good until X", "only waiting on

@@ -314,6 +314,13 @@ class ClayCLI:
                 if ws_id:
                     self.workspace = {"id": ws_id, "name": clip(ws.get("name"), 120)}
                 return body
+            # A server_error is retried like a rate limit: one on a single
+            # analytics read skipped the whole Zeutara snapshot on 2026-10-16,
+            # and the next run read the same campaign fine.
+            if code == 1 and '"server_error"' in (err or ""):
+                self.sleep(min(wait, 60.0))
+                wait = min(wait * 2, 60.0)
+                continue
             if code == 4:  # rate_limited: back off on Clay's own number
                 try:
                     detail = json.loads(err or "{}")["error"].get("details") or {}

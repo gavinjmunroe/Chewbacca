@@ -667,6 +667,17 @@ def test_finished_send_days_come_from_the_cache(tmp: Path):
     kept = json.loads(path.read_text())
     ok(len(kept) == 1 and all(v["ids"] for v in kept.values()), f"the day it read is kept: {kept}")
 
+    # One server_error is retried, not a reason to drop the snapshot.
+    flaky = {"n": 0}
+
+    def once(argv):
+        if argv[1:3] == ["campaigns", "analytics"] and flaky["n"] == 0:
+            flaky["n"] += 1
+            return 1, "", json.dumps({"error": {"code": "server_error", "message": "Sorry"}})
+        return base(argv)
+    raw = gi.fetch_clay(gi.ClayCLI(runner=once, sleep=lambda s: None), "111", today=today)
+    ok(flaky["n"] == 1 and len(raw["campaigns"]) == 2, "a single server_error is retried")
+
 
 def test_reply_text_cannot_drive_the_terminal():
     """Injection: C1 controls (U+009B is a one-byte CSI), ESC, line

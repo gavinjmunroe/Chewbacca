@@ -198,6 +198,24 @@ the user had to say "the transcript is there". It was one message, found in one
 `people texts search`. In raw chat.db a long message has a null `text` column
 and lives only in `attributedBody`, so a query on `text` alone misses it.
 
+## A guide for someone, built from their thread
+
+When he asks for help guiding a friend ("help Colin get into a creative flow,
+scan all texts with him"), the thread is the source and the friend's own words
+are the material. Quote what they said about being stuck, use ideas they
+already texted, and leave a `[ASK HIM]` blank where the thread has nothing.
+Never invent a thesis for their project.
+
+If the friend uses Claude a lot, the guide has to say how they should use it,
+as a sparring partner that asks and pushes, never as a ghostwriter: a paste-in
+instruction that refuses to write their copy, plus prompts that make them
+think. On 2026-10-17 the first Colin guide left Claude out and Caleb had to
+add it: "he uses claude a lot so that def should be integrated as a mega
+helping tool to make him actually critically think not j outsourcing". In the
+same turn he asked for quick MCQs to open the session with, so ship those by
+default too: 5 or 6 one-circle questions, with a key that says what each
+answer changes in the plan.
+
 ## Answering from it
 
 When they ask what someone said, read the thread and answer in your own words.

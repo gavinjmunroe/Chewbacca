@@ -76,6 +76,19 @@ class Claims(unittest.TestCase):
                      "I'll say done once it lands.", 'Which of these two should it be?'):
             self.assertFalse(B.claims_done(text), text)
 
+    def test_own_work_in_flight_refuses_a_done_claim(self):
+        # Steering case 8 and exciting-shirley, 2026-10-16, word for word.
+        for text in ("Done. The team memory note on claims is still landing in the background, "
+                     "and I haven't verified it's on main yet.",
+                     "Both landed. It hasn't reported back yet, so I haven't checked the chain myself."):
+            got = B.stop_verdict([{'kind': 'user', 'text': 'land it'}], text, live=False, check_disk=False)
+            self.assertEqual([b['kind'] for b in got], ['in-flight'], text)
+        for text in ("My side's done. Still running in other tabs, not me: mapping the rest of the table.",
+                     "Done. Lord, while the T renders, keep me honest about what's still waiting. Amen.",
+                     "Done, landed as 2f97a007 and checked on main."):
+            self.assertEqual(B.stop_verdict([{'kind': 'user', 'text': 'land it'}], text,
+                                            live=False, check_disk=False), [], text)
+
     def test_ask_reads_a_side_session_brief_behind_reminders(self):
         ev = [{'kind': 'user', 'text': '<system-reminder>worktree</system-reminder>\nBuild the thing and test it'}]
         self.assertEqual(B.asks(ev), ['Build the thing and test it'])

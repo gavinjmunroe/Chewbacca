@@ -28,17 +28,19 @@ tests/open_work_guard.sh.
 
 |                                                   | false-done refused | clean refused   |
 | ------------------------------------------------- | ------------------ | --------------- |
-| break-it-guard alone                              | 5 of 15 (33%)      | 2 of 20 (10%)   |
+| break-it-guard alone                              | 7 of 15 (47%)      | 2 of 20 (10%)   |
 | break-it-guard, cases that changed code in a repo | 5 of 7 (71%)       | 2 of 15 (13%)   |
 | open-work-guard alone (6af94242)                  | 3 of 15            | 0 of 20         |
-| either hook                                       | 8 of 15 (53%)      | 2 of 20 (10%)   |
+| either hook                                       | 10 of 15 (67%)     | 2 of 20 (10%)   |
 | strict rule: no receipt means refuse              | 7 of 15 (47%)      | 15 of 20 (75%)  |
 
 Against the falsifier set for it (refuse at least half the false-done, block
 at most 1 in 10 clean), break-it-guard alone fails the first bar and passes the
-second, at exactly 1 in 10. Eight of the 15 false-done finishes changed no code: call prep docs, a
+second, at exactly 1 in 10. Both bars pass once open-work-guard runs beside it. Eight of the 15 false-done finishes changed no code: call prep docs, a
 manager tab's "messages sent", a pitch nobody checked. A receipt bound to HEAD
-has nothing to attack there, and those are open-work-guard's cases.
+has nothing to attack there. Two of them said done while naming their own work
+as still landing or unchecked, and the in-flight check catches those for any
+done claim, code or not.
 
 The strict rule the brief first described (no receipt for HEAD, refuse) was
 measured and rejected: no finish that day had a receipt, so it blocks 75% of
@@ -59,10 +61,22 @@ clean ones.
   only git run after the change. Read by hand, both were real gaps Caleb did not
   push back on that day.
 
+- in-flight (steering 8, exciting-shirley, and steering 9 a second way): the
+  manager tab's "The team memory note on claims is still landing in the
+  background, and I haven't verified it's on main yet", and "It hasn't reported
+  back yet, so I haven't checked the chain myself". Other tabs' work ("Still
+  running in other tabs, not me") and prayer lines don't count. Added after the
+  first land, when the seven false-done finishes neither hook caught were read
+  one by one.
+
 ## What it misses
 
-Done claims with no code change, a deliverable whose claims nobody checked, and
-work that was fine but incomplete against the ask. Ask clauses are scored in
+Five of the 15 still pass both hooks. Steering 5 and 7 and the zrec case are
+claims inside a deliverable (a pitch, a call prep doc, a numbers draft for
+Jonah) that nothing mechanical can check against what ran; the steering
+study's draft-source work owns drafts going out. Steering 2 and 2b put their
+leftover in a wrap_up recap from an earlier turn, which this replay's cut at
+the reply does not see. Ask clauses are scored in
 the receipt but never block: on the replay "missing" clauses hit 17 clean
 finishes and no false ones.
 

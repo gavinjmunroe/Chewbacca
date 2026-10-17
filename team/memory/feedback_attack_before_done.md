@@ -13,4 +13,4 @@ How to finish now: record attacks with `chewbacca break-it attack -m "<what>" --
 
 What it caught that green tests didn't, that day: next_move.py landed with 20 passing tests and crashed on `plan -` fed "not json" (2f97a007, fixed in 045cb4b5); a launch-guard fix passed its tests while ~/.claude/hooks still held the old copy; "Saved today's Sabo lessons" went out uncommitted.
 
-Replayed on that day's transcripts, the hook alone refuses 5 of 15 false-done finishes and 2 of 20 clean ones. 8 of the 15 changed no code, which is open-work-guard's ground. Numbers and cases: tests/fixtures/break_it/REPLAY.md.
+Replayed on that day's transcripts, the hook alone refuses 7 of 15 false-done finishes and 2 of 20 clean ones; with open-work-guard, 10 of 15 and 2 of 20. A done claim whose own reply says its work is still landing or unchecked is refused even with no code change. Numbers and cases: tests/fixtures/break_it/REPLAY.md.

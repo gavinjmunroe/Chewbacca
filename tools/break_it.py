@@ -682,7 +682,7 @@ def not_live(turn, repo, rel_paths, check_disk=True):
 # receipt as notes: on the 2026-10-16 replay ask-missing hit 17 clean finishes
 # and no false one (it reads chatter like "This shit's insane" as a clause), and
 # in-flight hit 10 clean to 1 false, mostly honest "the suite is queued" lines.
-BLOCKING = {'uncommitted', 'nothing-ran', 'nothing-attacked', 'not-live', 'hard-coded-client', 'todo',
+BLOCKING = {'in-flight', 'uncommitted', 'nothing-ran', 'nothing-attacked', 'not-live', 'hard-coded-client', 'todo',
             'swallowed-error', 'unbacked-claim', 'attack-broke', 'another-tab', 'no-declared-attack'}
 
 
@@ -765,7 +765,7 @@ def break_key(b):
 # the copy that runs is the false positive Caleb named on 2026-10-16, even when
 # the reply admits it: the launch-guard tab said "the live hook ... doesn't have
 # this change yet", called it done, and its own `cd` was refused an hour later.
-MUST_FIX = {'not-live', 'uncommitted'}
+MUST_FIX = {'not-live', 'uncommitted', 'in-flight'}
 
 
 def unreported(breaks, reply):
@@ -1063,6 +1063,29 @@ def uncommitted(turn, repo, paths, live=True):
              'detail': f'{len(left)} file(s) this session wrote are not committed'}]
 
 
+# Someone else's work in flight is a report, and a prayer is not a status line.
+OTHERS_RE = re.compile(r"\b(other tabs?|another tab|not me|that tab|the \w+ tab|other sessions?|"
+                       r"(he|she|they|caleb|jonah|sagar|ryan) (has|hasn'?t|still))\b", re.I)
+PRAYER_RE = re.compile(r"\b(amen|lord|jesus|father)\b", re.I)
+
+
+def own_in_flight(full):
+    """A done claim over this turn's own work that the same reply says is still
+    landing, unreported or unchecked. 2026-10-16: the manager tab's recap said done
+    with "The team memory note on claims is still landing in the background, and I
+    haven't verified it's on main yet" (steering case 8), and exciting-shirley said
+    "It hasn't reported back yet, so I haven't checked the chain myself". On the
+    replay it fires on 3 of 15 false-done finishes and 1 of 20 clean (a TTS logo
+    the reply said "the autopush will send", already refused as uncommitted),
+    once other tabs' work and prayer lines are excluded: unexcluded, a clean
+    finish's prayer ("what's still waiting") and steering case 5's "Still running
+    in other tabs, not me" tripped it."""
+    for s in sentences(full):
+        if IN_FLIGHT_RE.search(s) and not OTHERS_RE.search(s) and not PRAYER_RE.search(s):
+            return [{'kind': 'in-flight', 'where': '', 'detail': s[:160]}]
+    return []
+
+
 def receipt_ok(repo, reply):
     head, dirty = tree_state(Path(repo))
     try:
@@ -1079,8 +1102,8 @@ def stop_verdict(events, reply, live=True, check_disk=True, probe_budget=8):
     full = ((reply or '') + '\n' + recap_of(turn)).strip()
     if not claims_done(full):
         return []
+    out = own_in_flight(full)
     repos = code_repos(turn, live)
-    out = []
     ask_texts = asks(events)
     for repo, paths in repos.items():
         if live and receipt_ok(repo, full):

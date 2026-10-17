@@ -16,7 +16,7 @@ skills and a second brain in their head.
 Never answer this from the skill list alone. Read the ground:
 
 - The repo: what it is, what is half-finished, what has no tests.
-- `~/.claude/skills/` and `~/Chewbacca/skills/`: what is installed and what
+- `~/.claude/skills/` and the checkout's `skills/` (`chewbacca where` prints where the kit lives): what is installed and what
   is quietly unused.
 - The second brain, especially `NOW.md` for what is actually live and what is
   broken right now.

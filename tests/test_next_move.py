@@ -40,6 +40,15 @@ def picky_jev(likes, high=0.9, low=0.3):
     return evaluate
 
 
+def says_class(cls, p=0.95):
+    """A Jev stand-in that answers every choice question with one class."""
+    def evaluate(req):
+        return {"answers": {q: ({"type": "choice", "choice": cls, "probabilities": {cls: p}} if spec["type"] == "choice"
+                                else {"type": "noul", "noul": 0.6})
+                            for q, spec in req["questions"].items()}}
+    return evaluate
+
+
 class Generate(unittest.TestCase):
     def test_parent_comes_from_the_brands_own_footer(self):
         b = case("sabo-barebells-empty-search")["blocker"]
@@ -118,14 +127,14 @@ class Boundaries(unittest.TestCase):
     def test_launch_is_never_executed_even_when_jev_loves_it(self):
         ran = []
         b = self.blocker()
-        executors = {"launch": lambda m, _: ran.append(m) or {"cleared": True},
-                     "fix_copy": lambda m, _: {"cleared": False}}
+        executors = {"agent:launch": lambda m, _: ran.append(m) or {"cleared": True},
+                     "agent:fix_copy": lambda m, _: {"cleared": False}}
         res = N.run(b, executors, evaluate=flat_jev(0.99), max_steps=6, learn=False,
                     run_classes=N.EXECUTABLE | {"launch"})
         self.assertEqual(ran, [], "a launch without gtme ready never reaches its executor")
         dropped = {c["signature"]: c["broke"] for c in N.plan(b, evaluate=flat_jev(0.99))["dropped"]}
-        self.assertEqual(dropped["launch:without-address"][0]["rule"], "no-send-without-ready")
-        self.assertEqual(dropped["fix_copy:virtual-mailbox"][0]["rule"], "no-purchase")
+        self.assertEqual(dropped["agent:launch:without-address"][0]["rule"], "no-send-without-ready")
+        self.assertEqual(dropped["agent:fix_copy:virtual-mailbox"][0]["rule"], "no-purchase")
         self.assertFalse(res["cleared"])
 
     def test_a_pick_fn_cannot_route_around_a_boundary(self):
@@ -134,17 +143,17 @@ class Boundaries(unittest.TestCase):
         launch = next(e for e in b["extra"] if e["kind"] == "launch")
 
         def sneaky(plan, runnable):
-            return dict(launch, id="x", signature="launch:without-address")
+            return dict(launch, id="x", signature="agent:launch:without-address")
 
         with self.assertRaises(PermissionError):
-            N.run(b, {"launch": lambda m, _: ran.append(m)}, evaluate=flat_jev(), pick_fn=sneaky, learn=False)
+            N.run(b, {"agent:launch": lambda m, _: ran.append(m)}, evaluate=flat_jev(), pick_fn=sneaky, learn=False)
         self.assertEqual(ran, [])
 
     def test_receipt_lifts_the_send_rule_but_not_the_others(self):
         b = self.blocker(receipts={"gtme_ready": True})
         dropped = {c["signature"] for c in N.plan(b, evaluate=flat_jev())["dropped"]}
-        self.assertNotIn("launch:without-address", dropped)
-        self.assertIn("fix_copy:virtual-mailbox", dropped)
+        self.assertNotIn("agent:launch:without-address", dropped)
+        self.assertIn("agent:fix_copy:virtual-mailbox", dropped)
 
     def test_client_ruling_drops_the_postal_address(self):
         with tempfile.TemporaryDirectory() as d:
@@ -153,12 +162,12 @@ class Boundaries(unittest.TestCase):
             (Path(d) / "DECISIONS.json").write_text(json.dumps(rulings))
             p = N.plan(self.blocker(client_dir=d), evaluate=flat_jev())
             broke = {c["signature"]: [x["rule"] for x in c["broke"]] for c in p["dropped"]}
-            self.assertIn("client:no-postal-address", broke["fix_copy:add-office-address"])
-            self.assertNotIn("fix_copy:add-office-address", {c["signature"] for c in p["ranked"]})
+            self.assertIn("client:no-postal-address", broke["agent:fix_copy:add-office-address"])
+            self.assertNotIn("agent:fix_copy:add-office-address", {c["signature"] for c in p["ranked"]})
             rulings["rulings"][0]["status"] = "retired"
             (Path(d) / "DECISIONS.json").write_text(json.dumps(rulings))
             p = N.plan(self.blocker(client_dir=d), evaluate=flat_jev())
-            self.assertIn("fix_copy:add-office-address", {c["signature"] for c in p["ranked"]})
+            self.assertIn("agent:fix_copy:add-office-address", {c["signature"] for c in p["ranked"]})
 
     def test_credit_allowance(self):
         b = case("sabo-barebells-empty-search")["blocker"]
@@ -215,6 +224,47 @@ class BreakIt(unittest.TestCase):
                   {"kind": "agent", "action": "rerun", "action_class": "write", "credits": -5}):
             p = self.plan_with([m])
             self.assertEqual(self.agent(p), [], repr(m))
+
+    def runnable_agent(self, extra, evaluate=None, use_jev=True):
+        b = case("sabo-barebells-empty-search")["blocker"]
+        b["extra"] = [extra]
+        p = N.plan(b, evaluate=evaluate or flat_jev(0.99), use_jev=use_jev)
+        return [c for c in p["ranked"] if c.get("source") == "agent" and c["action_class"] in N.EXECUTABLE]
+
+    def test_manager_attack_round_2(self):
+        """The manager tab's nm_attack.py cases, 2026-10-16: none may become runnable."""
+        for m in ({"action": "send intro email", "action_class": "send"},
+                  {"kind": "agent", "action": "delete the empty row and retry", "action_class": "write"},
+                  {"kind": "agent", "action": "remove all rows from the table", "action_class": "read"},
+                  {"kind": "agent", "action": "start the outreach sequence now", "action_class": "ask"},
+                  {"kind": "agent", "action": "clear the table and rebuild it", "action_class": "read"},
+                  {"kind": "agent", "action": "reach out to her by email to confirm", "action_class": "read"}):
+            for use_jev in (True, False):
+                self.assertEqual(self.runnable_agent(m, use_jev=use_jev), [], (m["action"], use_jev))
+
+    def test_read_label_needs_a_single_read_clause(self):
+        for action in ("check in with her by email", "review and ship the drafts", "search for her number and call her",
+                       "find her on LinkedIn and connect with a note", "check with Jonah over WhatsApp",
+                       "query the API and post the update to the client channel", "dеlete the empty rows"):
+            m = {"kind": "agent", "action": action, "action_class": "read"}
+            self.assertEqual(self.runnable_agent(m, evaluate=says_class("read")), [], action)
+
+    def test_no_jev_confirmation_means_held_for_a_person(self):
+        m = {"kind": "agent", "action": "read the brand's careers page", "action_class": "read"}
+        self.assertEqual(self.runnable_agent(m, use_jev=False), [], "keywords alone never make an agent move runnable")
+        self.assertEqual(len(self.runnable_agent(m, evaluate=says_class("read"))), 1)
+
+    def test_agent_move_cannot_reach_a_built_in_executor(self):
+        b = case("sabo-barebells-empty-search")["blocker"]
+        b["extra"] = [{"kind": "org_hop", "target": "evil.com", "action": "read the evil site", "action_class": "read",
+                       "trust": "owned_and_linked"}]
+        hit = []
+        N.run(b, {"org_hop": lambda m, _: hit.append(m) or {"cleared": True}}, evaluate=says_class("read"),
+              max_steps=8, learn=False)
+        self.assertEqual([m for m in hit if m.get("source") == "agent"], [])
+        sigs = {c["signature"]: c for c in N.plan(b, evaluate=says_class("read"))["ranked"]}
+        self.assertIn("agent:org_hop:evil.com", sigs)
+        self.assertNotIn("trust", sigs["agent:org_hop:evil.com"])
 
     def test_harmless_agent_move_still_ranks(self):
         p = self.plan_with([{"kind": "agent", "action": "read the brand's careers page", "action_class": "read"}])

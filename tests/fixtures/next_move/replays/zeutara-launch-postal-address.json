@@ -77,25 +77,25 @@
   ]
  },
  "world": {
-  "fix_copy:add-office-address": {
+  "agent:fix_copy:add-office-address": {
    "cleared": false,
    "credits": 0,
    "source": "DECISIONS.json: Jonah would not use the office address"
   },
-  "ask_client:address-or-waiver": {
+  "agent:ask_client:address-or-waiver": {
    "cleared": true,
    "credits": 0,
    "source": "Ryan Korn's written ruling 2026-10-14, send without a postal address"
   }
  },
  "old_path": [
-  "fix_copy:add-office-address"
+  "agent:fix_copy:add-office-address"
  ],
  "note": "replayed as of 10/12, before the ruling existed, so client_dir is unset here; the boundary test uses the ruling.",
  "ask_once": {
   "model": "codex",
   "date": "2026-10-16",
   "answer": "fix_copy:add-jonah-office-address-to-all-footers",
-  "signature": "fix_copy:add-office-address"
+  "signature": "agent:fix_copy:add-office-address"
  }
 }

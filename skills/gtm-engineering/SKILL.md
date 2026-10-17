@@ -464,6 +464,19 @@ held out anymore. Grade it on the next 10 real blockers.
   now reads as a send and gets dropped, so the replay is down to 4 of 5 cleared at
   0.91 to 1.03 per credit, under the old chain's 1.18. On the falsifier as we
   wrote it, the loop clears more blockers but loses per credit.
+- **Agent moves fail closed (attack round 2, 2026-10-16).** "reach out to her
+  by email to confirm" labeled read got through, and a keyword list always loses
+  to paraphrase. So a move the agent proposes counts as a read only when it's one
+  read clause from a short allowlist with no contact or change words, and as an
+  ask only when it starts "ask the client" or "ask <Name>". Anything else labeled
+  read or ask counts as a send and drops. It runs only when Jev confirms its class.
+  Without Jev it comes back as an ask for a person, and Jev can raise a class but
+  never lower it. Agent kinds sit under `agent:`, so none reaches a built-in
+  executor. Two things would win the cost back. A waiver ask that only mentions
+  sending could stay an ask, bc asks never run, they go to a person. And
+  same-company hops (vitaminwell.com and vitaminwellgroup.com) could collapse into
+  one search. Together those make the replay 5 of 5 at 3.9 credits, 1.28 per
+  credit. Neither is built yet.
 
 ## Never call a launch ready without `gtme ready`
 

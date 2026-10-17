@@ -268,14 +268,33 @@ DOES = [
                         r"fire off|ping (them|him|her|the)|cold e-?mail\w*|mail merge)\b", re.I)),
     ("add_leads", re.compile(r"\b(add[- ]leads?|enroll\w*|add .{0,40}to (the |a )?(campaign|sequence))\b", re.I)),
 ]
-TOUCH_WORDS = [("purchase", re.compile(r"\b(buy\w*|purchas\w*|subscrib\w*|pay for|upgrade (the )?plan)\b", re.I)),
+# Attack round 2, 2026-10-16: "reach out to her by email to confirm" labeled read got ranked.
+# A keyword list always loses to paraphrase, so the default flipped: an agent move counts as a
+# read or an ask only when its whole action matches one of these known-safe shapes. Anything
+# else labeled read or ask is treated as a send, which no-send-without-ready drops. Jev can't
+# unlock one: a test with a Jev that answers "read" to everything got "check in with her by
+# email" through, so Jev only confirms or raises a class.
+SAFE = {
+    "read": re.compile(r"^(re-?)?(read|look up|look at|check|search|fetch|scan|review|list|count|compare|score|rank|"
+                       r"find|pull|view|inspect|grep|query)\b[^.;!?]{0,140}$", re.I),
+    "ask": re.compile(r"^ask (the )?(client|team|caleb|[A-Z][a-z]+( and [A-Z][a-z]+)?)\b[^.;!?]{0,200}$"),
+}
+# A safe shape is one clause. Round 3 of the attack got "check in with her by email", "review
+# and ship the drafts" and "search for her number and call her" past a verb-only allowlist.
+DOES_SOMETHING = re.compile(
+    r"\b(and|then|after|before|plus|also|e-?mail\w*|messag\w*|call\w*|phon\w*|text\w*|whatsapp|slack|dm|"
+    r"connect\w*|note|intro\w*|pitch\w*|ship\w*|live|post\w*|publish\w*|trigger\w*|wave|overwrit\w*|updat\w*|"
+    r"set|write|writ\w*|chang\w*|edit\w*|mov\w*|sign\w*|buy\w*|enroll\w*|in with|reach\w*|contact\w*|"
+    r"submit\w*|book\w*|invit\w*|schedul\w*)\b|[,;&]", re.I)
+TOUCH_WORDS = [("purchase", re.compile(r"\b(buy\w*|purchas\w*|subscrib\w*|pay for|upgrade (the )?plan|sign(ing|s|ed)? up)\b", re.I)),
                ("auto_run", re.compile(r"\bauto[- ]?run\b", re.I)),
                ("vendor_ui_by_hand", re.compile(r"\b(open|click\w*) (the |in )?(clay|ui|browser)\b", re.I))]
 
 
 def plain(text):
-    """Fold fullwidth and lookalike letters (NFKC) and drop invisible format characters, so
-    "ＤＥＬＥＴＥ" and "d<zero-width space>elete" read as delete."""
+    """Fold compatibility forms (NFKC: fullwidth, ligatures) and drop invisible format characters,
+    so "ＤＥＬＥＴＥ" and "d<zero-width space>elete" read as delete. Cross-script lookalikes
+    (a Cyrillic e) are NOT folded; that's why agent moves fail closed without a Jev confirmation."""
     text = unicodedata.normalize("NFKC", str(text))
     return "".join(ch for ch in text if unicodedata.category(ch) != "Cf")
 
@@ -286,10 +305,16 @@ def agent_move(c):
         return {"kind": "agent", "target": slug(str(c))[:60], "action": str(c)[:300], "why": "",
                 "action_class": None, "touches": [], "credits": 0.0, "minutes": 1.0, "reversible": False,
                 "source": "agent", "malformed": "a move is a JSON object"}
-    c = dict(c, source="agent")
+    # Security review, 2026-10-16: an agent move named "org_hop" reached the code's own
+    # org_hop executor with an agent-chosen target and its own "trust". Agent kinds now sit
+    # under "agent:", and trusted fields are dropped, so no agent move reaches a built-in executor.
+    c = {k: v for k, v in c.items() if k not in ("trust", "reruns", "args", "signature", "id", "source",
+                                                 "unvetted", "reclassed", "jev_confirmed", "malformed")}
+    c["source"] = "agent"
     action = str(c.get("action") or "")
     c["action"] = action
-    c["kind"] = str(c.get("kind") or "agent")
+    kind = str(c.get("kind") or "move")
+    c["kind"] = kind if kind.startswith("agent:") else f"agent:{kind}"
     c["target"] = str(c.get("target") or slug(action)[:60])
     c["why"] = str(c.get("why") or "")
     touches = c.get("touches") or []
@@ -316,6 +341,14 @@ def agent_move(c):
     elif does:
         c["action_class"] = max(does, key=RISK.index)
     # else: no known label and nothing read from the text, so "unclassified" drops it
+    text = plain(action).strip()
+    shape_ok = c.get("action_class") in SAFE and SAFE[c["action_class"]].match(text) and (
+        c["action_class"] == "ask" or not DOES_SOMETHING.search(text))
+    if c.get("action_class") in SAFE and not shape_ok:
+        c["unvetted"] = {"said": c["action_class"], "keyword_hit": bool(does)}
+        c["action_class"] = "send"
+        c["reclassed"] = (f"labeled {c['unvetted']['said']}, but the action isn't one of the known-safe "
+                          f"{c['unvetted']['said']} shapes, so it counts as a send")
     return c
 
 
@@ -526,7 +559,8 @@ def rank(cands, blocker, data, evaluate=None, use_jev=True, ledger=None):
     return sorted(cands, key=lambda c: -c["ev"]), status
 
 
-JEV_CLASSES = {"read": "Only reads or looks something up; changes nothing",
+JEV_CLASSES = {"read": "Only reads or looks something up; changes nothing and contacts nobody",
+               "ask": "Asks the client or a teammate a question; nothing goes to a lead or prospect",
                "write": "Changes our own working data (a table cell, a draft) and nothing anyone outside sees",
                "send": "Sends an email, message or reply to someone outside the team",
                "launch": "Starts, resumes or activates a campaign or sequence",
@@ -552,6 +586,9 @@ def jev_reclass(cands, evaluate=None):
         return f"unavailable, keywords only: {type(e).__name__}"
     for c in agent:
         probs = (answers.get(c["id"]) or {}).get("probabilities") or {}
+        top = max(probs, key=lambda k: num(probs[k], 0)) if probs else None
+        if top in RISK and RISK.index(top) <= RISK.index(c["action_class"]):
+            c["jev_confirmed"] = True
         risky = [k for k, v in probs.items() if k in RISK and num(v, 0) >= 0.25
                  and RISK.index(k) > RISK.index(c["action_class"])]
         if risky:
@@ -560,11 +597,21 @@ def jev_reclass(cands, evaluate=None):
     return "ok"
 
 
+def hold_unconfirmed(cands, classed):
+    """An agent move Jev didn't confirm never runs: it comes back as an ask for a person."""
+    for c in cands:
+        if c.get("source") == "agent" and c.get("action_class") in EXECUTABLE and not c.get("jev_confirmed"):
+            c["reclassed"] = (f"held for a person: labeled {c['action_class']}, and Jev didn't confirm it "
+                              f"({classed})")
+            c["action_class"] = "ask"
+
+
 def plan(blocker, data=None, evaluate=None, use_jev=True, ledger=None):
     data = data or load_data()
     blocker = clean_blocker(blocker)
     cands = generate(blocker, data)
     classed = jev_reclass(cands, evaluate) if use_jev else "off, keywords only"
+    hold_unconfirmed(cands, classed)
     keep, dropped = bound(cands, blocker, data)
     ranked, status = rank(keep, blocker, data, evaluate, use_jev, ledger)
     pick = next((c for c in ranked if c["action_class"] in EXECUTABLE | {"ask"} and c["p"] >= data["stop_below"]), None)

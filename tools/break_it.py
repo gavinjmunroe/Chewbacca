@@ -934,8 +934,10 @@ def check(args):
     open break in it is named in the reply."""
     repo = repo_root(args.repo)
     if repo is None:
-        print('not a git repository')
-        return 0
+        # Found by break-it on its own change: this said ok outside a repo,
+        # certifying a tree it never looked at.
+        print('not a git repository: nothing to certify')
+        return 1
     head, dirty = tree_state(repo)
     try:
         r = json.loads(receipt_path(repo, head).read_text())

@@ -222,6 +222,10 @@ class LiveHook(unittest.TestCase):
                            env=self.env, timeout=60)
         self.assertEqual((r.returncode, r.stderr), (0, ''))
 
+    def test_check_outside_a_repo_certifies_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(B.main(['check', '--repo', tmp]), 1)
+
     def test_foreign_repo_is_never_probed(self):
         self.assertFalse(B.trusted_repo(self.repo))
 

@@ -266,11 +266,23 @@ def rank(capability, catalog=None, observed=None, value=None, use_jev=False, fit
     catalog = load(CATALOG, {}) if catalog is None else catalog
     observed = load(OBSERVED, {}) if observed is None else observed
     opts = with_cascades(candidates(capability, options(catalog), use_jev, fit), observed)
+    prior = M.pooled_prior(observed)
     for o in opts:
         names = o.get("steps") or [key(o)]
-        o["rates"] = [M.posterior(*counts(observed, n)) for n in names]
+        o["rates"] = [M.posterior(*counts(observed, n), prior=prior) for n in names]
+        o["tried"] = [counts(observed, n)[1] for n in names]
         o["observed"] = [f"{counts(observed, n)[0]}/{counts(observed, n)[1]}" for n in names]
-    return M.compare(opts, value=value)
+    # Exploit what's measured, list what isn't. Forty unrun providers each drawn from the pool would
+    # out-draw any measured winner by sheer count, so the pick is made among measured options and the
+    # unrun ones come back as tests to schedule (2026-10-17, the real catalog).
+    measured = [o for o in opts if all(o["tried"])]
+    ranked, decision = M.compare(measured or opts, value=value)
+    if measured:
+        unrun = [{**o, "p_best": None, "metric": "unmeasured: test it"} for o in opts if not all(o["tried"])]
+        cost = lambda o: sum(o["credits"]) if isinstance(o.get("credits"), list) else (o.get("credits") or 0)
+        ranked += sorted(unrun, key=lambda o: (o.get("credits") is None, cost(o)))
+        decision["untested"] = [o["name"] for o in unrun if o.get("credits") is not None][:5]
+    return ranked, decision
 
 
 def main(argv=None):
@@ -307,7 +319,8 @@ def main(argv=None):
               " (no client value block with deal_usd, reply_rate, close_rate, usd_per_credit)"))
         for o in rows:
             if o.get("p_best") is None:
-                print(f"- {o['name']}: price unknown, not ranked")
+                why = "unmeasured, a test to schedule" if o.get("credits") is not None else "price unknown"
+                print(f"- {o['name']}{' (' + o['package'] + ')' if o.get('package') else ''}: {why}")
                 continue
             y = o["yield"]
             cost = o["credits"] if not o.get("cascade") else "+".join(map(str, o["credits"]))

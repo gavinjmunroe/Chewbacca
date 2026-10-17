@@ -40,20 +40,19 @@ def test_error_dump_is_refused(tmp_path):
         raise AssertionError("an expired-session dump must not become an empty catalog")
 
 
-def test_unmeasured_waterfall_means_a_test_not_a_pick():
-    # Findymail 15 usable of 24, the waterfall never run: the data can't separate them, so the
-    # answer is a sized test of the unmeasured step, never a guessed rate.
+def test_an_unmeasured_waterfall_is_listed_as_a_test_never_given_a_rate():
+    # Findymail 15 usable of 24, the waterfall never run: the pick is made among measured options,
+    # and the waterfall and the cascade come back as untested, never with a guessed yield.
     rows, d = C.rank("work email", catalog={}, observed={FM: {"tried": 24, "usable": 15}})
-    assert d["action"] == "test" and d["rows"] > 0
-    assert "Work Email" in d["name"]
-    assert any(r.get("cascade") for r in rows), "the cascade is priced as its own option"
+    assert "Work Email" in d["untested"]
+    assert any(r.get("cascade") and r["p_best"] is None for r in rows), "the cascade is listed, unrated"
 
 
 def test_enough_evidence_makes_a_pick():
     obs = {FM: {"tried": 200, "usable": 20}, "Work Email": {"tried": 200, "usable": 180},
-           f"Work Email|after {FM} miss": {"tried": 180, "usable": 160}}
+           f"Work Email|after {FM} miss": {"tried": 180, "usable": 100}}
     _, d = C.rank("work email", catalog={}, observed=obs)
-    assert d["action"] == "pick"
+    assert d["action"] == "pick" and d["name"] == "Work Email"
 
 
 def test_a_cheap_option_nobody_ran_is_tested_not_picked():
@@ -61,7 +60,7 @@ def test_a_cheap_option_nobody_ran_is_tested_not_picked():
     cat = {"actions": [{"name": "Scrape website", "credits": 0.1, "outputs": ["email"]},
                        {"name": "Find email", "credits": 0.5, "actionKey": "fe", "outputs": ["email"]}]}
     _, d = C.rank("email", catalog=cat, observed={"fe": {"tried": 50, "usable": 30}})
-    assert d["action"] == "test" and d["name"] == "Scrape website"
+    assert d["name"] == "Find email" and d["untested"] == ["Scrape website"]
 
 
 def test_an_unpriced_catalog_function_takes_the_panel_price():
@@ -75,9 +74,9 @@ def test_cascade_cost_and_yield_follow_the_formula():
     big = 10 ** 6
     opt = {"name": "c", "cascade": True, "credits": [0.5, 1.1],
            "rates": [(0.6 * big, 0.4 * big), (0.5 * big, 0.5 * big)]}
-    rows, _ = M.compare([opt], value=None, n=2000)
+    rows, _ = M.compare([opt], value=10.0, n=2000)
     assert abs(rows[0]["yield"]["mean"] - (0.6 + 0.4 * 0.5)) < 0.01
-    assert abs(rows[0]["metric_mean"] - 0.8 / (0.5 + 0.4 * 1.1)) < 0.01
+    assert abs(rows[0]["metric_mean"] - (10 * 0.8 - (0.5 + 0.4 * 1.1))) < 0.05
 
 
 def test_value_needs_every_client_factor():

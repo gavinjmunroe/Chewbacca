@@ -117,7 +117,7 @@ def apply(client, bodies):
         text = json.dumps(b["body"])
         for src, dst in new.items():
             text = text.replace("{{" + src + "}}", "{{" + dst + "}}")
-        r = clay("add-enrichment-column", f"ws={client['ws']}", f"table={client['table']}", f"field={text}",
+        r = clay("add-enrichment-column", f"ws={client['ws']}", f"table={client['table']}", f"spec={text}",
                  "--allow-writes")
         new[b["source"]] = created_id(r)
         print(f"created {b['body']['name']} -> {new[b['source']]}", flush=True)

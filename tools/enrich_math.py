@@ -34,8 +34,25 @@ Z90 = 1.645
 TEST_HALF_WIDTH = 0.10
 
 
-def posterior(usable, tried):
-    return PRIOR_A + usable, PRIOR_B + max(tried - usable, 0)
+def posterior(usable, tried, prior=(PRIOR_A, PRIOR_B)):
+    return prior[0] + usable, prior[1] + max(tried - usable, 0)
+
+
+# Empirical Bayes. 2026-10-17: with Beta(1, 1) every provider nobody had run looked like a 50% hit,
+# so the cheapest unknowns led every pick and the advice was an endless round of 68-row tests. The
+# Zeutara waterfalls had run 7 providers on 3,503 rows and verified 1,025 (29%), with five of them
+# under 10%. An unrun provider is drawn from that population, not from a coin flip. Weight 2 keeps
+# the prior weak: two real rows move it as much as the whole pool does.
+POOL_WEIGHT = 2.0
+
+
+def pooled_prior(observed):
+    tried = sum(o.get("tried", 0) for o in observed.values())
+    usable = sum(o.get("usable", 0) for o in observed.values())
+    if not tried:
+        return PRIOR_A, PRIOR_B
+    m = usable / tried
+    return max(m * POOL_WEIGHT, 1e-3), max((1 - m) * POOL_WEIGHT, 1e-3)
 
 
 def client_value(v):
@@ -71,8 +88,11 @@ def compare(options, value=None, seed=SEED, n=DRAWS):
                 c = o["credits"][0] + (1 - ps[0]) * o["credits"][1]
             else:
                 p, c = ps[0], o["credits"]
-            # Higher is better in both modes: net credits, or usable contacts per credit.
-            score = value * p - c if value is not None else (p / c if c else float("inf"))
+            # Higher is better. With the client's value: net credits per row. Without it: usable
+            # yield, cost only breaking ties. Per-credit picked Findymail (0.42 / 0.5) over the
+            # waterfall (0.82 / 1.1) on 2026-10-17, which drops 40% of the buyers to save 0.6 credits;
+            # a ratio is only right when a missed contact is worth nothing.
+            score = value * p - c if value is not None else p - 1e-6 * c
             yield_draws[i].append(p)
             metric_draws[i].append(score)
             if best_score is None or score > best_score:
@@ -85,7 +105,7 @@ def compare(options, value=None, seed=SEED, n=DRAWS):
         out.append({**o, "p_best": wins[i] / n, "yield": {"mean": sum(ys) / n, "lo": ys[int(0.05 * n)],
                                                            "hi": ys[int(0.95 * n) - 1]},
                     "metric_mean": sum(ms) / n, "metric": "net credits per row" if value is not None
-                    else "usable contacts per credit", "cost": cost})
+                    else "usable yield (cost breaks ties)", "cost": cost})
     out.sort(key=lambda r: -r["p_best"])
     out += [{**o, "p_best": None, "metric": "price unknown"} for o in options if o.get("credits") is None]
     return out, decide(out)
@@ -98,14 +118,15 @@ def decide(ranked):
     # 2026-10-17, first run on the real catalog: every unmeasured option shares Beta(1, 1), so the
     # cheapest one ("Scrape website", 0.1 credits) won 93% of draws on price alone. Never pick an
     # option nobody has run; its P(best) is the prior talking.
-    unmeasured = any(a + b - PRIOR_A - PRIOR_B == 0 for a, b in lead["rates"])
+    unmeasured = any(n == 0 for n in lead.get("tried") or [0])
     if lead["p_best"] >= CONFIDENT and not unmeasured:
         return {"action": "pick", "name": lead["name"], "p_best": lead["p_best"]}
     # Test whichever of the top two has the wider 90% yield interval: that uncertainty is what's
     # holding the call. Within it, the least-counted step is the one to run.
     top = [r for r in ranked[:2] if r.get("p_best") is not None]
     target = lead if unmeasured else max(top, key=lambda r: r["yield"]["hi"] - r["yield"]["lo"])
-    a, b = min(target["rates"], key=lambda ab: ab[0] + ab[1])
-    n = rows_to_test(a / (a + b), a + b - PRIOR_A - PRIOR_B)
+    i = min(range(len(target["rates"])), key=lambda k: (target.get("tried") or [0] * len(target["rates"]))[k])
+    a, b = target["rates"][i]
+    n = rows_to_test(a / (a + b), (target.get("tried") or [0] * len(target["rates"]))[i])
     what = target["name"] + (" (second step on the first step's misses)" if target.get("cascade") else "")
     return {"action": "test", "name": what, "rows": n, "p_best": lead["p_best"], "leader": lead["name"]}

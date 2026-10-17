@@ -49,7 +49,11 @@ def main() -> int:
     print("against it, so a fresh install stops at verification.\n", file=sys.stderr)
     for f in touched:
         print(f"  {f}", file=sys.stderr)
-    print("\n  python3 tools/checksums.py && git add SHA256SUMS.txt\n", file=sys.stderr)
+    # checksums.py hashes the index, so run before `git add` it rewrites the old
+    # hashes and this refusal repeats; on 2026-10-16 a tab hit it twice in a row
+    # by following the bare command that used to be printed here.
+    print(f"\n  git add {' '.join(touched)} && python3 tools/checksums.py && git add SHA256SUMS.txt\n",
+          file=sys.stderr)
     print("Override with SKIP_MANIFEST_GUARD=1 if you know the manifest is", file=sys.stderr)
     print("already correct for these.\n", file=sys.stderr)
     return 1

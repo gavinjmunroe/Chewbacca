@@ -166,6 +166,15 @@ engine or replace the requested platform work with offline work. When a read
 had to come from the page, add it as an op afterwards (below), so the next
 person does not open Clay for it.
 
+## Reading Clay files from the repo
+
+launch-guard reads the command string, so any Bash call that names a Clay
+path (`skills/clay-navigation/`, `library/clay-api/`, `bin/chewbacca-clay`)
+and adds `echo`, `xargs`, a redirect, a heredoc or a `python -c` that writes
+is refused. On 2026-10-17 four plain reads were refused in one session that
+way. Read those files with the Read tool, write them with Edit or Write, and
+keep shell calls to one plain `grep` or `head`.
+
 ## Pick the fastest surface: API, CLI or UI
 
 Caleb, 2026-10-09: "use the clay api for things that are faster through the

@@ -2741,12 +2741,18 @@ esac
 # Merge, do not clobber. Anyone who already had a CLAUDE.md lost it here, with
 # no backup and no warning. The logic lives in its own file so it can be tested;
 # it could not be, buried in a 1,700-line installer.
-MERGE_RESULT="$(bash "$SCRIPT_DIR/bin/lib/merge-claude-md.sh" "$GLOBAL_CLAUDE/CLAUDE.md" "$STANDARDS" 2>/dev/null || echo failed)"
+# It prints one word and exits 1 on refused, so `|| true` keeps that word
+# rather than appending a second one.
+MERGE_RESULT="$(bash "$SCRIPT_DIR/bin/lib/merge-claude-md.sh" "$GLOBAL_CLAUDE/CLAUDE.md" "$STANDARDS" 2>/dev/null || true)"
 case "$MERGE_RESULT" in
   merged) warn "You already had a CLAUDE.md. It is kept below the standards, and"
           warn "  the original is backed up next to it as CLAUDE.md.yours-*" ;;
   updated) log "Standards region updated, your own additions left alone" ;;
-  failed) warn "Could not write ~/.claude/CLAUDE.md" ;;
+  unchanged) log "Standards already current in ~/.claude/CLAUDE.md" ;;
+  refused) warn "Left ~/.claude/CLAUDE.md alone: it is read-only or its Chewbacca"
+           warn "  markers are unbalanced. Fix that, then re-run setup." ;;
+  wrote|adopted) ;;
+  *) warn "Could not write ~/.claude/CLAUDE.md" ;;
 esac
 # doctor.sh reads this. Without it, it checks for the coursework ledger and the
 # GitHub repos that a personal install deliberately never creates, and reports

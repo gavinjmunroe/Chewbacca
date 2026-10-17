@@ -1545,7 +1545,7 @@ if group "CLAUDE.md merge"; then
     bash "$ROOT/bin/lib/merge-claude-md.sh" "$M/CLAUDE.md" "$M/standards.md"
   check  "their content survives" grep -q "Always call me Caleb" "$M/CLAUDE.md"
   check  "the original is backed up" bash -c "ls '$M'/CLAUDE.md.yours-* >/dev/null"
-  expect "a second run updates the region" "updated" \
+  expect "a second identical run writes nothing" "unchanged" \
     bash "$ROOT/bin/lib/merge-claude-md.sh" "$M/CLAUDE.md" "$M/standards.md"
   printf '# Standards v2\n\nRule one. Rule two.\n' > "$M/standards.md"
   bash "$ROOT/bin/lib/merge-claude-md.sh" "$M/CLAUDE.md" "$M/standards.md" >/dev/null
@@ -1555,6 +1555,8 @@ if group "CLAUDE.md merge"; then
   rm -f "$M/CLAUDE.md"
   expect "no existing file just writes" "wrote" \
     bash "$ROOT/bin/lib/merge-claude-md.sh" "$M/CLAUDE.md" "$M/standards.md"
+  check  "CLAUDE.md and AGENTS.md keep user bytes: CRLF, backslashes, symlink, read-only, no-op rerun" \
+    python3 "$ROOT/tests/test_instruction_merge.py"
 fi
 
 # ── context import ────────────────────────────────────────────────────────────

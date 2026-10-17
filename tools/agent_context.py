@@ -12,6 +12,7 @@ import re
 import shlex
 from pathlib import Path
 import tempfile
+import time
 from work_ledger import context_for
 
 BEGIN = '<!-- CHEWBACCA PERSONAL CONTEXT BEGIN -->'
@@ -129,7 +130,8 @@ def atomic_write(path, text):
     mode = path.stat().st_mode & 0o777 if path.exists() else 0o600
     fd, temporary = tempfile.mkstemp(prefix='.' + path.name, dir=path.parent)
     try:
-        with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+        # newline='' writes CRLF back as CRLF instead of translating it.
+        with os.fdopen(fd, 'w', encoding='utf-8', newline='') as stream:
             stream.write(text)
         os.chmod(temporary, mode)
         os.replace(temporary, path)
@@ -178,9 +180,19 @@ updates so the two agents do not grow separate personal histories.
 
 
 def merge_block(target, block, begin=BEGIN, end_marker=END):
+    """Put block between the markers, keeping every other byte of target.
+
+    Read with newline='' so CRLF survives, never rewrite an unchanged file,
+    refuse a read-only file (os.replace would swap it for a writable one), and
+    back up a file with the user's text before its first change. Fixture tests:
+    tests/test_instruction_merge.py (backlog 250).
+    """
     # Preserve an existing symlink, including a user's dotfiles-managed target.
     target = target.resolve() if target.is_symlink() else target
-    existing = target.read_text() if target.exists() else ''
+    existing = ''
+    if target.exists():
+        with open(target, encoding='utf-8', newline='') as stream:
+            existing = stream.read()
     if begin in existing or end_marker in existing:
         if existing.count(begin) != 1 or existing.count(end_marker) != 1:
             raise ValueError('ambiguous startup markers; refusing to replace existing instructions')
@@ -190,7 +202,20 @@ def merge_block(target, block, begin=BEGIN, end_marker=END):
         end = closing + len(end_marker)
         updated = existing[:start] + block + existing[end:]
     else:
-        updated = existing.rstrip() + ('\n\n' if existing.strip() else '') + block + '\n'
+        # Keep the user's bytes exactly, trailing whitespace included.
+        separator = '' if not existing else ('\n' if existing.endswith('\n') else '\n\n')
+        updated = existing + separator + block + '\n'
+    if updated == existing:
+        return target
+    if target.exists() and not os.access(target, os.W_OK):
+        raise PermissionError(f'{target} is read-only; left as it is')
+    if existing.strip() and begin not in existing:
+        backup = target.with_name(target.name + '.yours-' + time.strftime('%Y%m%d-%H%M%S'))
+        n = 1
+        while backup.exists():
+            n += 1
+            backup = target.with_name(f"{target.name}.yours-{time.strftime('%Y%m%d-%H%M%S')}-{n}")
+        backup.write_bytes(target.read_bytes())
     atomic_write(target, updated)
     return target
 

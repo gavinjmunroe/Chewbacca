@@ -216,6 +216,15 @@ same turn he asked for quick MCQs to open the session with, so ship those by
 default too: 5 or 6 one-circle questions, with a key that says what each
 answer changes in the plan.
 
+The MCQs are the structure, not a quiz bolted on. Caleb, same day: "they
+should influence the rewriting/structuring of the guide". Write the first
+version with the branches spelled out, and when the answers come back,
+rewrite the guide around them: drop the branches, say what each answer set
+up, and move the step the answers expose (Colin's "no idea" on his through-line)
+to the front. Ask who will hold the guide before writing it. A guide for the
+friend to run alone is written to them in second person, with the check-ins
+to Caleb built into the calendar.
+
 ## Answering from it
 
 When they ask what someone said, read the thread and answer in your own words.

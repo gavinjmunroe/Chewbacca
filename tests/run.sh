@@ -256,6 +256,9 @@ fi
 
 # ── people ────────────────────────────────────────────────────────────────────
 if group "people"; then
+  # `people distill --help` used to start a real distill (2026-10-16): --help on
+  # a subcommand prints its usage and never opens the store.
+  check  "people <cmd> --help prints usage and runs nothing" bash -c 'h=$(mktemp -d); HOME=$h node "$1/bin/people" distill --help | grep -q "people distill" && [ ! -e "$h/.chewbacca/people/people.db" ]' _ "$ROOT"
   if ! command -v node >/dev/null 2>&1; then
     skip "the whole group" "node not installed"
   else

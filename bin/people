@@ -150,6 +150,15 @@ function main() {
     return;
   }
   if (cmd === "--version" || cmd === "version") return say("people 1.0.0");
+  // `people <cmd> --help` ran the command: `people distill --help` started a
+  // real distill over the message store (backlog 26 audit, 2026-10-16). Only
+  // texts reads its own --help, so every other command prints the help lines
+  // that name it and stops.
+  if (cmd !== "texts" && COMMANDS[cmd] && (argv.includes("--help") || argv.includes("-h"))) {
+    const lines = HELP.split("\n").filter((l) => new RegExp(`\\bpeople ${cmd}\\b|^\\s+${cmd}\\b`).test(l));
+    process.stdout.write((lines.length ? lines.join("\n") : HELP) + "\n");
+    return;
+  }
   const fn = COMMANDS[cmd];
   if (!fn) {
     process.stderr.write(c.red(`people: unknown command "${cmd}"\n\n`));

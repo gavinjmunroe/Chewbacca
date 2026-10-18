@@ -38,6 +38,11 @@ def main() -> int:
     # The Kyber Lines parser ends a value at the next double quote.
     bad = [r for r, t in m.VERSES if '"' in t or '"' in r or "\n" in t]
     check("no double quote or newline in a verse", not bad, ", ".join(bad))
+    # Caleb, 2026-10-17: "Change my hud verses to ESV translation". A KJV line
+    # slipping back in shows up as one of these words.
+    kjv = [r for r, t in m.VERSES if any(w in f" {t.lower()} " for w in (" thee ", " thou ", " thy ", " ye ", " hath ", "eth "))]
+    check("every verse is ESV, none left in KJV", not kjv, ", ".join(kjv))
+    check("the card says ESV", 'title="PSALM 23:1 ESV"' in m.payload("Psalm 23:1", "x"))
     p = m.payload(*m.VERSES[0])
     check("payload stays until he closes it", "life=" not in p and p.startswith("@ verse "))
     check("payload never breaks through a hidden display", "urgency=ambient" in p)

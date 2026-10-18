@@ -73,3 +73,32 @@ times in one night. Each line below is one of those corrections and what fixed i
 - A VO split at Whisper's word end clipped a trailing "s". Whisper's end time
   marks where the sibilant starts. Measure the waveform and cut in the silence
   after it.
+
+## Later the same night (v11, v12)
+
+- "the background music is terrible gav will handle that, keep the sound effects" and
+  "the amount of sound effects is getting a lil obnoxious, only have them where it adds
+  smth/fills space". Cut typing under every typed line, pops per element, blip floods
+  and a paper slap per piece. Keep one sound per real moment (the spark, the name, a cut,
+  a folder shut, a question landing) plus whatever fills a music-free gap.
+- "The intro is too high cognitive overload". Ten scraps plus the title over every figure
+  for 3s was too much. Use five pieces, and lift the title once its glint finishes.
+- "Only use rectangles when that is the tuffest thing to do, most times it reads slideshow
+  presentation". On an instrument scene, draw the artifacts straight onto the ground with
+  no framed cards, one drawing per beat.
+- "If stuart and [cliffe] get an iPhone, should the others get smth else?" One rule
+  works better than one-offs: each person rises out of the medium of their age, a printed
+  broadside, a 1950s TV, a phone. Put the person behind the object so the medium carries
+  them in.
+- Living people in an ad: ask before using their faces. Caleb got his Christian
+  leadership's ok for the Knechtles, and Chase and Reagan gave theirs for their sites.
+
+## What ahmed_fx3000 does (Lupa and ChatGPT reels, studied 2026-10-17)
+
+- He carries one hero object the whole way. A photo goes from collage to UI to its own
+  world, and the camera pushes into it at each cut.
+- He puts the word behind the subject ("Elevated" sits behind the snowboarder), so type and
+  image share depth.
+- The key VO word punches in huge as its own cut.
+- One motif keeps changing shape: [ ] shrinks to [•] and then opens into a window.
+- He shows one thing at a time and leaves a lot of empty space.

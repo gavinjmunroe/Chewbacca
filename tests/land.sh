@@ -160,4 +160,14 @@ echo "$out" | grep -q "same lines" || fail "missing-lines refusal said: $out"
 cd "$T/check" && git pull -q
 [ "$(tr '\n' ' ' < sib.txt)" = "a b X c d " ] || fail "a refused land changed main: $(tr '\n' ' ' < sib.txt)"
 
+# And the other way: a copy still holding a line its own land removed would
+# put it back on main through that base, so it gets the clash too.
+cd "$T/seed" && git pull -q && printf 'p\nq\nr\ns\n' > rm.txt && python3 tools/checksums.py && git add -A && git commit -qm rm && git push -q origin main
+git clone -q "$T/origin.git" "$T/t2" && cd "$T/t2" && printf 'p\nr\ns\n' > rm.txt
+out=$(python3 -I "$LAND" --paths rm.txt -m "feat: drop q" 2>&1) || fail "verbatim delete land: $out"
+printf 'p\nq\nN\nr\ns\n' > rm.txt
+out=$(python3 -I "$LAND" --paths rm.txt -m "feat: N" 2>&1) && fail "a copy holding a line its land removed merged: $out"
+cd "$T/check" && git pull -q
+[ "$(tr '\n' ' ' < rm.txt)" = "p r s " ] || fail "a refused land changed main: $(tr '\n' ' ' < rm.txt)"
+
 echo ok

@@ -22,6 +22,7 @@ correct path.
 """
 import argparse
 from collections import Counter
+import hashlib
 import json
 import os
 import shutil
@@ -169,7 +170,10 @@ def landed_record(root):
     other files, so its record would be the wrong base here.
     """
     base = os.path.join(os.path.expanduser(os.environ.get("CHEWBACCA_HOME", "~/.chewbacca")), "land-landed")
-    key = os.path.realpath(root).replace("/", "_")[-120:]
+    # A hash of the tree path plus its own git dir: the old truncated, mangled
+    # path could map two trees to one record (security review, 10/18).
+    tree_git = run(["git", "rev-parse", "--absolute-git-dir"], root).stdout.strip()
+    key = hashlib.sha256(f"{os.path.realpath(root)}\0{os.path.realpath(tree_git)}".encode()).hexdigest()
     return os.path.join(base, key + ".json")
 
 
@@ -193,7 +197,7 @@ def own_landed_base(src, target, path, record):
 
 
 def derived_from(disk, own, old):
-    """True when the disk copy still holds every line its own land added.
+    """True when the disk copy matches its own land: lines it added, none it removed.
 
     Merging against the landed copy as base reads any of those lines missing
     from disk as a deletion. A disk copy that never had them (an older file,
@@ -201,8 +205,11 @@ def derived_from(disk, own, old):
     """
     with open(disk, "rb") as f:
         have = Counter(f.read().splitlines())
-    added = Counter(own.splitlines()) - Counter((old or b"").splitlines())
-    return not (added - have)
+    before = Counter((old or b"").splitlines())
+    after = Counter(own.splitlines())
+    added, removed = after - before, before - after
+    # Both ways: a copy still holding lines the land removed would put them back.
+    return not (added - have) and not (removed & have)
 
 
 def main():

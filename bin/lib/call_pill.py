@@ -429,6 +429,16 @@ class CallState:
     evidence: list[str] = field(default_factory=list)
 
 
+# The owners of every on-screen window, one per line, from CGWindowListCopyWindowInfo: no AX call.
+BANNER_JXA = (
+    "ObjC.import('CoreGraphics');ObjC.import('Foundation');"
+    "var l=ObjC.castRefToObject($.CGWindowListCopyWindowInfo($.kCGWindowListOptionOnScreenOnly,0));"
+    "var o=[];for(var i=0;i<l.count;i++){o.push(ObjC.unwrap(l.objectAtIndex(i).objectForKey('kCGWindowOwnerName'))||'')}"
+    "o.join('\\n')"
+)
+NC_OWNERS = {"NotificationCenter", "Notification Center"}
+
+
 class Ax:
     """`chewie app` (mac/appctl), the accessibility layer, as JSON calls.
     Nothing here moves the mouse or raises a window; `press` and `menu_press`
@@ -461,6 +471,20 @@ class Ax:
     def windows(self, app: str) -> list[dict]:
         got = self._json("windows", app)
         return got if isinstance(got, list) else []
+
+    @staticmethod
+    def banner_up() -> bool:
+        """Is any Notification Center window on screen, asked of the window server, never AX.
+
+        Caleb, 2026-10-17: "My nav bar is oscillating". The watcher had run for 4 days asking
+        Notification Center for its AX windows every 2 s, and appctl retries an empty answer 8
+        times 80 ms apart, so the process that draws the menu bar was polled nonstop with
+        nothing on screen. Stopping the watcher stopped the shaking. The window list is a
+        passive CoreGraphics read, so the tree is only asked for once a banner is up."""
+        done = run(["osascript", "-l", "JavaScript", "-e", BANNER_JXA], timeout=4)
+        if not done or done.returncode != 0:
+            return False
+        return any(o in NC_OWNERS for o in (done.stdout or "").split("\n"))
 
     def see(self, app: str, window: int) -> list[dict]:
         got = self._json("see", app, "--window", str(window), "--limit", "300")
@@ -528,7 +552,7 @@ def read_state(ax: Ax, dialed_name: str = "", dialing: bool = False, db_path: Pa
     ax.errors = []
     windows: list[tuple[str, int, list[dict]]] = []
     ft_running = ax.running(FACETIME)
-    apps = ([FACETIME] if ft_running else []) + [NOTIFICATIONS]
+    apps = ([FACETIME] if ft_running else []) + ([NOTIFICATIONS] if ax.banner_up() else [])
     for app in apps:
         for w in ax.windows(app):
             wid = int(w.get("window") or 0)

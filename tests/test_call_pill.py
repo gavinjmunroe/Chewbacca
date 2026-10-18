@@ -148,6 +148,16 @@ if sys.argv[-1] == "FaceTime" and state.get("running"):
 sys.exit(1)
 '''
 
+# The window server's owner list: Notification Center is on screen exactly when the fake has a
+# banner window for it, so a test with no banner proves the AX tree is never asked.
+FAKE_OSASCRIPT = r'''#!/usr/bin/env python3
+import json, os, sys
+state = json.load(open(os.environ["CALL_PILL_FAKE"]))
+print("Dock")
+if state.get("windows", {}).get("Notification Center"):
+    print("NotificationCenter")
+'''
+
 FAKE_LSAPPINFO = r'''#!/usr/bin/env python3
 import json, os, sys
 state = json.load(open(os.environ["CALL_PILL_FAKE"]))
@@ -160,7 +170,7 @@ print('"CFBundleIdentifier"="%s"' % state.get("front", "com.apple.Terminal"))
 def install_fakes() -> None:
     FAKES.mkdir(parents=True, exist_ok=True)
     for name, body in (("chewie", FAKE_CHEWIE), ("open", FAKE_OPEN), ("pgrep", FAKE_PGREP),
-                       ("lsappinfo", FAKE_LSAPPINFO)):
+                       ("lsappinfo", FAKE_LSAPPINFO), ("osascript", FAKE_OSASCRIPT)):
         path = FAKES / name
         path.write_text(body, encoding="utf-8")
         path.chmod(0o755)
@@ -383,6 +393,17 @@ def test_idle_facetime_is_no_call():
     state = cp.read_state(cp.Ax())
     assert state.kind == "none", state
     assert "Video menu: Mute disabled" in state.evidence
+
+
+def test_idle_never_asks_notification_center_for_its_tree():
+    """Caleb, 2026-10-17: the menu bar shook while the watcher polled Notification Center's AX
+    windows every 2 s for 4 days. With no banner on screen it must never be asked."""
+    install_fakes()
+    reset()
+    set_state(running=False, windows={}, menu={})
+    for _ in range(5):
+        assert cp.read_state(cp.Ax()).kind == "none"
+    assert not [c for c in calls_log() if "Notification Center" in c], calls_log()
 
 
 def test_a_live_call_window_gives_who_timer_mute_and_end():

@@ -13,3 +13,10 @@ The Monday section is the one Apple-style part (rounded, plain white, real icons
 of the site stays square per site/reference/DESIGN.md. The footer is one short bar, the hero
 shows five plates on laptops and three on phones, and nothing on the site may read like a
 slideshow or a spreadsheet. Built in gavinjmunroe/firm-foundation PR #1.
+
+Status 2026-10-17 evening: all 13 call items are built on branch feat/site-call-2026-10-17,
+gavinjmunroe/firm-foundation PR #1, and that branch is live on the Railway preview
+(firm-foundation.up.railway.app, `railway up --ci` from site/). firmfoundation.tech on
+Vercel still shows main: Vercel blocks deploys of commits that aren't Gavin's, so Gavin
+merges and deploys. Still open on the page: Caleb's 2 to 3 sentence founder statement and
+the photo of Gavin in his green Pine Cove shirt, both shown as [NEED] boxes on /mission.

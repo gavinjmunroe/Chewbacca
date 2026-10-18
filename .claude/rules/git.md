@@ -59,6 +59,19 @@ the index holds files far older than the newest one. Enable it with
 `git config core.hooksPath .githooks`. It is a backstop: it cannot catch a
 file a build step regenerated seconds ago.
 
+## A shared file commits whole, other tabs' lines included
+
+`git commit -- <path>` keeps other files out, but it commits the whole of that
+path as it sits on disk. In a file several tabs append to (`team/memory/MEMORY.md`,
+an index, a changelog), that means another tab's uncommitted lines ride along.
+On 2026-10-17 a one-line index add carried two other tabs' lines for files that
+weren't committed, and pre-push refused the land ("index names a missing file").
+For a shared file, write the commit from the last committed version plus only
+your line: `git show HEAD:<path>`, add the line, then `git hash-object -w` and
+`git update-index --cacheinfo` into a temporary `GIT_INDEX_FILE`, so the shared
+working tree and the real index stay untouched. The team memory index format is
+`- <slug>: <hook>`, where the slug is the file name.
+
 ## One task, one worktree
 
 **Never edit a checkout another session might be using.** Start each task in

@@ -318,6 +318,27 @@ set?" while the 185 guide already existed and only lacked a short-answer
 drill for an all-short-answer exam. Check the guide against the exam format
 (W8S15 p13: short answer, no notes) and fix that gap instead of asking.
 
+## Read replies to his own school emails before saying nothing's there
+
+When he asks about a class thing ("do I need to schedule my bio lab"), the
+first search is every thread where HE emailed course staff in the last 21
+days, and whether the staff reply is unread. Keyword searches miss these,
+because the subject is whatever he wrote. On 2026-10-17 a search for
+"makeup OR schedule OR missed" came back empty, the reply said nothing on
+disk needed scheduling, and he asked again: "Did you schedule my lab
+makeup?" The answer was in "Re: BISC 101 lab absence tomorrow", an unread
+10/15 email from the lab manager asking for his availability for a 2-hour
+makeup. It sat for two days.
+
+```bash
+GOOGLE_WORKSPACE_CLI_CONFIG_DIR=~/.chewbacca/email/calebnew@usc.edu \
+  gws gmail users messages list --params \
+  '{"userId":"me","q":"is:unread from:usc.edu -category:promotions -category:updates newer_than:21d"}'
+```
+
+Read every unread personal reply from an instructor, TA or lab manager in
+full before planning his week. Each one usually asks him for something.
+
 ## Planning a lock-in when he names only some courses
 
 When he says "lock in on X and Y tonight", the plan still has to account for

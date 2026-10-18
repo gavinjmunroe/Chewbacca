@@ -20,3 +20,10 @@ gavinjmunroe/firm-foundation PR #1, and that branch is live on the Railway previ
 Vercel still shows main: Vercel blocks deploys of commits that aren't Gavin's, so Gavin
 merges and deploys. Still open on the page: Caleb's 2 to 3 sentence founder statement and
 the photo of Gavin in his green Pine Cove shirt, both shown as [NEED] boxes on /mission.
+
+Status 2026-10-18 1am: Caleb's founder statement has two drafts, unpicked, in
+~/Downloads/Caleb founder statement drafts.md (family one recommended, built from his own
+10/12 video line "countless hours learning and mastering tech for businesses and
+ministries... called to use those gifts for the church"). Open with it: does he want a
+place like Gavin's "from Dallas", and is he OK naming his dad's ministry and his grandpa's
+Bulgaria missions publicly. Work ledger task ff-caleb-statement-2026-10-18.

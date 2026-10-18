@@ -395,3 +395,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - project_semyon_onramp_2026_10_17: Semyon (backend, installer and guard tasks) onboarding one pager to Chewbacca and the Clay bridge, in Downloads; written 10/17, not sent
 - feedback_launch_guard_reading_clay_files: launch-guard refuses shell reads that mention Clay plus echo, xargs or python -c; read those files with the Read tool or one plain grep
 - project_lock_in_for_everyone_2026_10_17: colin-kit lock-in moves (one block per session, loop dump, capacity math, rough cuts to a coach, coach not ghostwriter) become the default for every user (10/17)
+- feedback_ff_site_is_for_church_staff: FF site is for church staff, not Instagram; cool only if an exec pastor still trusts it

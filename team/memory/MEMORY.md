@@ -372,6 +372,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - project_sabo_design_partner_2026_10_16: Sabo (Aucta) is the first creator-manager design partner; parent-domain chain found his own $10K contact cold; weekly Tue 3:45 CT
 - feedback_use_any_api_key: chewbs may use any API key on the machine for the task (Caleb, every user, 10/16); never print or commit one; launch-guard reads a python script's code, not its args
 - reference_spend_now_score: spend_now ranks a creator client's brands by dated, Jev-confirmed spend evidence from client config, 0 credits; public Greenhouse, Ashby, Workable job feeds are free dated hiring data (Sabo, 10/16)
+- reference_gtme_creator_command: chewbacca gtme creator runs one roster creator end to end, dry run prices each step from the run log; IG post dates decode from the shortcode; never pays twice for a Ready row (2026-10-17)
 - reference_intro_ledger: the intro ledger, an append-only server-dated hash-chained record of every contact handed a creator-GTM client so a late deal is provably ours; live on Railway, deliver.py stamps Delivered On/For (Sabo, 10/16)
 - feedback_claims_match_the_mechanism: a hand-filled lookup like parents.json is never pitched as Chewbacca reasoning around a blocker (Sabo call, 2026-10-16)
 - feedback_caleb_steering_2026_10_16: tools/steering_rate.py measures Caleb's steering per active agent hour; 10/16 baseline 2.59 (99 messages), top causes stopping early, handing him a click, not saving lessons, each now a Stop hook; falsifier command inside

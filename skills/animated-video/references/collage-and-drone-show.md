@@ -115,3 +115,13 @@ times in one night. Each line below is one of those corrections and what fixed i
 - "The light outline around the firm foundation text... making it pop less", "Line under the title also is not aura". The title is now just the silver letters.
 - "'everything' 'else' should not be 2 separate quick things". A list should roll like a decelerating reel and land once, then hold.
 - "once it scaled down it was still just a hard cut", "the book a call to the God's firm foundation one isn't even a transition". Every hand-off carries an object across: the screen scrolls into the next page, and the blueprint tips back into the foundation.
+
+## v16 to v19 (2026-10-18, past 1 AM)
+
+- Know who it's for. A church-staff video should look cool but still feel calm, clear and trustworthy, so judge every beat as an ops director would. Caleb: "rmr this is for church staff not for instagram".
+- Keep it calm: "too much of it is fast", "none of the reels we've sent were overwhelming". Lengthen the morphs and holds, shrink the camera travel, and drop motion before adding any.
+- Decide whether each transition is loud or quiet. A move that shifts the whole frame has to mean it ("if a transition is causing major motion of EVERYTHING it has to have an understanding if that is supposed to be loud or quiet"). The camera dive into a phone and back out was "so tasteless". An overshoot on a cut-out's entrance "adds nothing and looks rlly stupid".
+- Let one thing move at the centre. v18 had the title, drone figures, paper and hands competing, and Caleb called it "a mess". The original reel holds one subject still (the hands) and lets everything else happen behind it: full-frame flashes every 2 to 3 frames, red construction lines and circles drawn over the subject, two pixel squares at the gap, one tiny caption. Read a reference frame by frame at 15 fps before claiming its structure. The 6 fps read missed the guide lines.
+- Make the intro title big and centred, and keep it up the whole intro. Never put a halo, outline or floor line on it, and never set it over paper.
+- Hold a beat long enough to read. At about 2 frames, the Cliffe and Stuart pop-out was "there for like 2 frames lmao".
+- Pace a rolling list or an on-screen object to the words it illustrates. The nodes and the envelope drew too fast, and the fix was to start them together and end them as "everything else" finished. Small live details that prove the job help: an inbox badge counting up, kids checking into a floor plan.

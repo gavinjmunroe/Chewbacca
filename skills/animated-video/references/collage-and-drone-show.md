@@ -125,3 +125,4 @@ times in one night. Each line below is one of those corrections and what fixed i
 - Make the intro title big and centred, and keep it up the whole intro. Never put a halo, outline or floor line on it, and never set it over paper.
 - Hold a beat long enough to read. At about 2 frames, the Cliffe and Stuart pop-out was "there for like 2 frames lmao".
 - Pace a rolling list or an on-screen object to the words it illustrates. The nodes and the envelope drew too fast, and the fix was to start them together and end them as "everything else" finished. Small live details that prove the job help: an inbox badge counting up, kids checking into a floor plan.
+- Make the intro name the still point. Put it big and centred in front and leave it still ("I don't think the firm foundation text should move"). Things can play behind it, which is why it sits front and centre ("Stuff can be behind the name!").

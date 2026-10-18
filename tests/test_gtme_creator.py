@@ -195,6 +195,25 @@ class CreatorRunTest(_Base):
 
 
 class PiecesTest(unittest.TestCase):
+    def test_a_broken_logged_out_read_falls_back_to_the_signed_in_reader(self):
+        """2026-10-17: getPosts failed for @noah.rolette while `chewbacca ig posts` read his feed."""
+        saved = (CR.api_anything, CR.signed_in_posts)
+
+        def broken(*a, **k):
+            raise RuntimeError("embedded data not found")
+
+        CR.api_anything = broken
+        CR.signed_in_posts = lambda handle, limit=24: [{"code": "DeIf4dDxBI8", "caption": "Fish oils #GNCpartner"}]
+        try:
+            self.assertEqual(CR.ig_posts("noah.rolette")[0]["caption"], "Fish oils #GNCpartner")
+            CR.signed_in_posts = lambda handle, limit=24: (_ for _ in ()).throw(RuntimeError("no session"))
+            with self.assertRaises(RuntimeError) as e:
+                CR.ig_posts("noah.rolette")
+            self.assertIn("embedded data not found", str(e.exception))
+            self.assertIn("no session", str(e.exception))
+        finally:
+            CR.api_anything, CR.signed_in_posts = saved
+
     def test_shortcode_dates(self):
         # Three posts from the first client's research, decoded and checked against their pages.
         self.assertEqual(CR.shortcode_date("DQfQg2TEtJJ"), dt.date(2025, 10, 31))

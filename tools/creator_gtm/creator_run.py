@@ -93,8 +93,30 @@ def api_anything(site, op, **args):
 
 
 def ig_posts(handle):
-    return [{"code": p.get("node.code"), "caption": p.get("node.caption.text") or ""}
-            for p in api_anything("instagram", "getPosts", username=handle)]
+    try:
+        return [{"code": p.get("node.code"), "caption": p.get("node.caption.text") or ""}
+                for p in api_anything("instagram", "getPosts", username=handle)]
+    except RuntimeError as first:
+        # 2026-10-17: the logged-out getPosts template stopped replaying ("embedded data not
+        # found") for @noah.rolette and @rawdawgclub, while `chewbacca ig posts` read 24 of
+        # Noah's posts through the signed-in session, GNC, NOCCO and Airbnb deals included.
+        # Two pages at most: that reader paces itself one page every 3 s for the account's sake.
+        try:
+            return signed_in_posts(handle)
+        except RuntimeError as second:
+            raise RuntimeError(f"{first}; signed-in reader: {second}")
+
+
+def signed_in_posts(handle, limit=24):
+    out = subprocess.run(["chewbacca", "ig", "posts", handle, "--limit", str(limit), "--json"],
+                         capture_output=True, text=True, timeout=180)
+    try:
+        posts = json.loads(out.stdout)
+    except json.JSONDecodeError:
+        raise RuntimeError((out.stderr or out.stdout).strip()[:300] or "chewbacca ig posts failed")
+    if not isinstance(posts, list):
+        raise RuntimeError("chewbacca ig posts returned no list")
+    return [{"code": p.get("code"), "caption": p.get("caption") or ""} for p in posts]
 
 
 def ig_profile(handle):

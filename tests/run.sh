@@ -574,6 +574,9 @@ if group "gtme"; then
   # to end; fixed column names, a fixed "Ready" and a Clay-only deliver each failed it.
   check "creator gtm second client: the whole chain runs from a different client file, no client named in tools" \
     python3 "$ROOT/tests/test_creator_gtm_second_client.py"
+  # 2026-10-17: a creator's run took a hand-typed brand list and five tools run in order by hand.
+  check "gtme creator: one creator end to end for the second client, spending brands first, dry run prices each step" \
+    python3 "$ROOT/tests/test_gtme_creator.py"
   # 2026-10-13: 97 executable lines hard-coded one client and its rulings had
   # two homes; the clients.json entry is the contract a second client fills in.
   check "gtme config checks a client entry, resolves its one workspace, keeps rulings in one file" \

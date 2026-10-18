@@ -727,10 +727,13 @@ def main(argv=None):
     ap.add_argument("--row", help="rerun on this row (default: the brand's row in rows.json)")
     ap.add_argument("--new-row", action="store_true", help="add a fresh row even if the brand has one")
     ap.add_argument("--people-limit", type=int, help=f"set the people-search cap first (1..{MAX_SAFE_LIMIT})")
+    ap.add_argument("--creator", help="the creator this row is for (default: the client file's creator)")
     a = ap.parse_args(argv)
     cfg = load_client(a.client)
     if not cfg:
         ap.error("--client <slug or client.json> is required (or set BRAND_BUYER_CLIENT); slugs live in ~/.chewbacca/gtm/clients")
+    if a.creator:
+        cfg["creator"] = a.creator
     configure(cfg, strict=not a.setup)
     if a.setup:
         out = setup(a.live, hide=(cfg or {}).get("hide", ()))

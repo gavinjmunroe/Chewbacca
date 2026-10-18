@@ -19,6 +19,9 @@
     gtme next-move plan FILE  a step came back empty or blocked: every move the evidence supports,
                              boundaries applied, Jev-ranked; replay DIR measures it on old blockers
     gtme sync                refresh the graph (chewbacca gtm sync) and record credit balances
+    gtme creator CLIENT "Name" [--brands F] [--instagram H] [--live]
+                             one creator's brands found, buyers and emails found, spend ranked and
+                             the table tidied; the dry run prints each step's estimated credits
 
 Nothing here sends an email, spends a credit or creates an account. Reads run
 freely; anything that sends, spends or changes a campaign is printed with the
@@ -2430,6 +2433,11 @@ def main(argv=None) -> int:
     if argv and argv[0] == "next-move":
         import next_move
         return next_move.main(argv[1:])
+    if argv and argv[0] == "creator":
+        sys.path.insert(0, str(Path(__file__).resolve().parent / "creator_gtm"))
+        import creator_run
+        creator_run.main(argv[1:])
+        return 0
     if argv and argv[0] == "recovery-preview":
         import gtme_recovery
         return gtme_recovery.main(argv[1:])

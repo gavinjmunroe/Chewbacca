@@ -62,3 +62,13 @@ being built Caleb corrected the build a dozen times. Every one of these is a rul
 - A transition never crossfades two grounds into grey, and never wipes with a hard circle over the title. Clear the title first, pour into the next beat's anchor, then cut.
 - "Make it feel like data" means 1-bit pixels, not dots: a noise field thresholded on a 4x4 Bayer matrix, tiles that dissolve by coverage and turn into ASCII in flight (Gav's DITHERING-PHYSICS.md).
 - Fan out per beat: split the composition into one file per beat first, so helpers never share a file.
+
+## v8, Caleb's notes on v7 (2026-10-17 night)
+
+- "Scraps" in a scrapbook look means cutouts: an object cut along its own silhouette (like the hand matte), or a clipping out of a newspaper or magazine with real print in it (headline type, halftone, column rules, a scissor edge). A square photo card with torn edges and tape is not a scrap. Caleb on v8's era cards: "Not just a square with some stuff on it that's so uncreative and not lit." Matte the object out before placing it.
+- When a scrap travels side to side to change content, he calls it "polaroids jumping left and right". Scraps land once and stay put, and new ones layer on.
+- A morph that transforms AND rotates the field is too much motion. Transform only.
+- "Too obnoxious" on an intro meant too many simultaneous motions (a 9x zoom with blur, a swirl, a flicker and a traveling card). Cut motions, not just durations.
+- A heart or grid filled by cycling a short media list repeats every image three or four times. Place each image once and fill the remaining cells with plain tiles.
+- Check rolling digit reels in stills: a reel mid-roll read "10:99". Constrain each digit's pool to valid values.
+- Run a repeated-image audit across every beat before render (grep every asset name, count uses, and check the same site or person isn't shown twice in different files).

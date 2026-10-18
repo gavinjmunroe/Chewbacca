@@ -52,3 +52,13 @@ being built Caleb corrected the build a dozen times. Every one of these is a rul
   own rectangle edge showing once it moves, a watermark word nobody asked for, and a grid
   scaled up until it ran over its own sentence. Fix what the review finds before asking
   the user about it; ask only about taste calls.
+
+## v7, the second call (2026-10-17 evening)
+
+- Before calling a cut done, list every instruction from every call transcript and Caleb's messages and mark each built, in progress or not done. He asked "Did you implement every single thing Gavin and I said to do?" and the honest answer was no. Say so with the list.
+- Re-use the matte that was already fixed. v6 swapped back to the raw cut-out and Caleb asked "Why did the tracing get worse???"
+- A dot field never sits in a box ("shouldn't hv firm square boundaries"): fade the sampling weight on an ellipse and fill the frame with an ambient field that bends with the morph.
+- Titles: offer a picker sheet of real alternatives (solid, chrome, glass slab, dither, misregistered) over the real ground instead of iterating one look. Puffy bevel reads as 2009; tinted glass letters read gray and unreadable; colour belongs only at edges if at all. He picked chrome with a light sweep.
+- A transition never crossfades two grounds into grey, and never wipes with a hard circle over the title. Clear the title first, pour into the next beat's anchor, then cut.
+- "Make it feel like data" means 1-bit pixels, not dots: a noise field thresholded on a 4x4 Bayer matrix, tiles that dissolve by coverage and turn into ASCII in flight (Gav's DITHERING-PHYSICS.md).
+- Fan out per beat: split the composition into one file per beat first, so helpers never share a file.

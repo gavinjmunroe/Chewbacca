@@ -21,6 +21,7 @@ a bare commit that swallowed another tab's staged work. One command, one
 correct path.
 """
 import argparse
+from collections import Counter
 import json
 import os
 import shutil
@@ -162,9 +163,13 @@ def keep_exec_bit(disk, dest):
 
 
 def landed_record(root):
-    """Where this checkout remembers the bytes it last landed verbatim, per path."""
+    """Where this working tree remembers the bytes it last landed verbatim, per path.
+
+    Keyed by the working tree, not the shared .git: a sibling worktree holds
+    other files, so its record would be the wrong base here.
+    """
     base = os.path.join(os.path.expanduser(os.environ.get("CHEWBACCA_HOME", "~/.chewbacca")), "land-landed")
-    key = os.path.realpath(git_common_dir(root)).replace("/", "_")[-120:]
+    key = os.path.realpath(root).replace("/", "_")[-120:]
     return os.path.join(base, key + ".json")
 
 
@@ -185,6 +190,19 @@ def own_landed_base(src, target, path, record):
         if run(["git", "rev-parse", "-q", "--verify", f"{rev}:{path}"], src, check=False).stdout.strip() == sha:
             return subprocess.run(["git", "cat-file", "blob", sha], cwd=src, capture_output=True).stdout
     return None
+
+
+def derived_from(disk, own, old):
+    """True when the disk copy still holds every line its own land added.
+
+    Merging against the landed copy as base reads any of those lines missing
+    from disk as a deletion. A disk copy that never had them (an older file,
+    another tree) would then strip them from main, so it gets the clash.
+    """
+    with open(disk, "rb") as f:
+        have = Counter(f.read().splitlines())
+    added = Counter(own.splitlines()) - Counter((old or b"").splitlines())
+    return not (added - have)
 
 
 def main():
@@ -236,7 +254,7 @@ def main():
                         merged = merge_into(wt, p, s, d, old)
                         if not merged:
                             own = own_landed_base(src, target, p, record)
-                            merged = own is not None and merge_into(wt, p, s, d, own)
+                            merged = own is not None and derived_from(s, own, old) and merge_into(wt, p, s, d, own)
                         if not merged:
                             clashes.append(p)
                         else:

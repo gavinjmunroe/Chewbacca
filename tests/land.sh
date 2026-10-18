@@ -144,5 +144,20 @@ cd "$T/own" && printf 'l1\nl2\nX\nY\nl3\n' > own.txt
 out=$(python3 -I "$LAND" --paths own.txt -m "feat: Y" 2>&1) || fail "second own land next to the first: $out"
 cd "$T/check" && git pull -q
 [ "$(tr '\n' ' ' < own.txt)" = "l0 l1 l2 X Y l3 " ] || fail "own re-land lost a line: $(tr '\n' ' ' < own.txt)"
+# That own-land base is never used for a copy that lacks the lines its land
+# added. A sibling worktree (same .git, older file) or this tree with X gone
+# gets the clash, instead of a clean merge that strips X from main (security
+# review of da1b2a0b, 10/18).
+cd "$T/seed" && git pull -q && printf 'a\nb\nc\nd\n' > sib.txt && python3 tools/checksums.py && git add -A && git commit -qm sib && git push -q origin main
+git clone -q "$T/origin.git" "$T/t1" && cd "$T/t1" && git worktree add -q --detach "$T/t1-sib" HEAD
+printf 'a\nb\nX\nc\nd\n' > sib.txt
+out=$(python3 -I "$LAND" --paths sib.txt -m "feat: sib X" 2>&1) || fail "verbatim land: $out"
+cd "$T/t1-sib" && printf 'a\nb\nW\nc\nd\n' > sib.txt
+out=$(python3 -I "$LAND" --paths sib.txt -m "feat: sib W" 2>&1) && fail "a sibling worktree used another tree's land as base: $out"
+cd "$T/t1" && printf 'a\nb\nV\nc\nd\n' > sib.txt
+out=$(python3 -I "$LAND" --paths sib.txt -m "feat: sib V" 2>&1) && fail "a copy missing its own landed lines merged: $out"
+echo "$out" | grep -q "same lines" || fail "missing-lines refusal said: $out"
+cd "$T/check" && git pull -q
+[ "$(tr '\n' ' ' < sib.txt)" = "a b X c d " ] || fail "a refused land changed main: $(tr '\n' ' ' < sib.txt)"
 
 echo ok

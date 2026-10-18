@@ -33,6 +33,7 @@ import statistics
 import subprocess
 import sys
 import time
+import urllib.parse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOOLS = os.path.dirname(HERE)
@@ -106,9 +107,29 @@ POSTS = ig_posts
 PROFILE = ig_profile
 
 
+HOSTNAME = re.compile(r"^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
+
+
 def host(url):
-    h = re.sub(r"^[a-z]+://", "", (url or "").strip().lower()).split("/")[0].split("?")[0]
-    return h[4:] if h.startswith("www.") else h
+    """The bare hostname of a URL or domain, or "" when it isn't one."""
+    url = (url or "").strip().lower()
+    h = urllib.parse.urlsplit(url if "://" in url else "https://" + url).hostname or ""
+    h = h[4:] if h.startswith("www.") else h
+    return h if HOSTNAME.match(h) else ""
+
+
+def label(text, limit=60):
+    """A name from a profile, as plain printable text of bounded length: it goes into Jev's prompts."""
+    kept = "".join(ch if ch.isprintable() else " " if ch.isspace() else "" for ch in (text or ""))
+    return " ".join(kept.split())[:limit]
+
+
+def names_site(domain, *names):
+    """True when the domain's own name is in the handle or display name, or the other way round.
+    A bio link is the profile owner's claim; a site that doesn't carry the brand's name stays out, so
+    a profile can't put someone else's domain on the email allowlist."""
+    site = norm(domain.split(".")[-2] if domain.count(".") else domain)
+    return len(site) >= 3 and any(n and (site in n or n in site) for n in map(norm, names))
 
 
 def norm(name):
@@ -127,15 +148,17 @@ def known_domains(cfg, records):
 def resolve_handle(handle, known):
     """(brand, domain, how) for an @handle, from its own profile; domain None when unresolved."""
     prof = PROFILE(handle) or {}
-    brand = (prof.get("full_name") or handle).strip()
+    brand = label(prof.get("full_name")) or handle
     for key in (norm(brand), norm(handle)):
         if key in known:
             return brand, known[key], "already on the client's brand list"
     for link in prof.get("bio_links") or []:
         url = link.get("url") if isinstance(link, dict) else link
         h = host(url)
-        if h and "." in h and h not in LINK_HOSTS:
-            return brand, h, f"@{handle}'s bio link {url}"
+        if h and h not in LINK_HOSTS:
+            if names_site(h, handle, brand):
+                return brand, h, f"@{handle}'s bio link {h}"
+            return handle, None, f"@{handle}'s bio link {h} doesn't carry its name"
     return brand, None, f"@{handle} has no site in its bio"
 
 
@@ -169,7 +192,7 @@ def from_instagram(handles, creator, known, today, own=()):
                 date = shortcode_date(post.get("code"))
                 found.append({"creator": creator, "brand": brand, "domain": domain, "kind": "sponsored_post",
                               "date": date.isoformat() if date else "", "url": f"https://www.instagram.com/p/{post['code']}/",
-                              "text": f"@{handle} post tagging @{tag}: {' '.join(caption.split())[:240]}",
+                              "text": f"@{handle} post tagging @{tag}: {label(caption, 240)}",
                               "found_by": f"instagram @{handle}; domain from {how}; date decoded from the shortcode",
                               "found_on": today.isoformat()})
     return found, unreadable, unresolved
@@ -198,6 +221,7 @@ def read_brands_file(path):
 def from_handed(pairs, creator, known, today, source):
     found, unresolved = [], []
     for brand, domain in pairs:
+        brand = label(brand)
         domain = host(domain) if domain else known.get(norm(brand))
         if not domain:
             unresolved.append({"brand": brand, "why": "handed over with no domain, and none on file"})
@@ -390,8 +414,10 @@ ALLOWANCE = read_allowance
 # ── the steps that write ─────────────────────────────────────────────────────
 
 def run_chain(cfg, creator, brand, domain, row, live):
-    argv = [brand, domain, "--client", cfg["_path"], "--creator", creator] + (["--live"] if live else [])
-    argv += ["--row", row] if row else ["--new-row"]
+    if not HOSTNAME.match(domain or ""):
+        raise SystemExit(f"{domain!r} is not a hostname")
+    argv = ["--client", cfg["_path"], "--creator", creator] + (["--live"] if live else [])
+    argv += (["--row", row] if row else ["--new-row"]) + ["--", brand, domain]
     with contextlib.redirect_stdout(sys.stderr):
         return L.main(argv)
 

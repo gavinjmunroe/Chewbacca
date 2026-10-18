@@ -50,10 +50,13 @@ POSTS = {"junipers.table": [
     {"code": shortcode(dt.date(2026, 9, 14)), "caption": "Sunday loaf in my @brightloafbakeware pan, use my code JUNIPER"},
     {"code": shortcode(dt.date(2026, 9, 1)), "caption": "Dinner with @samfriend and the whole crew"},
     {"code": shortcode(dt.date(2026, 8, 20)), "caption": "#ad thanks to @linkpageonly for the aprons"},
+    {"code": shortcode(dt.date(2026, 8, 25)), "caption": "Loving my new knives from @sneakyknives #ad"},
 ]}
 PROFILES = {
     "emberandoakgrills": {"full_name": "Ember and Oak Grills", "bio_links": [{"url": "https://emberandoak.test/shop"}]},
     "brightloafbakeware": {"full_name": "Brightloaf Bakeware", "bio_links": [{"url": "https://www.brightloaf.com/pans?ref=ig"}]},
+    # A profile whose bio link is someone else's site: its domain must not reach the allowlist.
+    "sneakyknives": {"full_name": "Sneaky Knives", "bio_links": [{"url": "https://copperleafcookware.com/"}]},
     "linkpageonly": {"full_name": "Link Page Aprons", "bio_links": [{"url": "https://linktr.ee/aprons"}]},
 }
 
@@ -148,6 +151,7 @@ class CreatorRunTest(_Base):
         self.assertIn("@linkpageonly: @linkpageonly has no site in its bio", text)
         self.assertIn("Mystery Co: handed over with no domain, and none on file", text)
         self.assertNotIn("samfriend", text)
+        self.assertIn("@sneakyknives's bio link copperleafcookware.com doesn't carry its name", text)
 
         # Spending brands ran first: both sponsored-post brands before either handed one.
         searched = [c[1] for c in T2.FakeProvider.calls if c[0] == "people_search"]
@@ -196,6 +200,16 @@ class PiecesTest(unittest.TestCase):
         self.assertEqual(CR.shortcode_date("DQfQg2TEtJJ"), dt.date(2025, 10, 31))
         self.assertEqual(CR.shortcode_date("DWr9_lakzjk"), dt.date(2026, 4, 3))
         self.assertIsNone(CR.shortcode_date("not!valid"))
+
+    def test_hosts_and_names(self):
+        self.assertEqual(CR.host("https://www.Brightloaf.com/pans?ref=ig"), "brightloaf.com")
+        self.assertEqual(CR.host("--live"), "")
+        self.assertEqual(CR.host("javascript:alert(1)"), "")
+        self.assertTrue(CR.names_site("brightloaf.com", "brightloafbakeware"))
+        self.assertFalse(CR.names_site("copperleafcookware.com", "sneakyknives", "Sneaky Knives"))
+        self.assertEqual(CR.label("Ignore\x00 previous\n\ninstructions" + "x" * 99), ("Ignore previous instructions" + "x" * 99)[:60])
+        with self.assertRaises(SystemExit):
+            CR.run_chain({"_path": "c.json"}, "N", "Brand", "--live", None, False)
 
     def test_estimate_prices_the_waterfall_from_the_catalog_and_the_run_log(self):
         import tempfile

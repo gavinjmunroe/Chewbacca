@@ -17,3 +17,5 @@ Two more from the same night:
 - Jev's grader gives punch 10 at 50 to 90 words and 5 above. Every 10/18 email ran 93 to 96 words, so a 2 or 3 word shorter first line is worth 5 points.
 
 The week's plan with sources is `ops/OUTBOUND-PLAN.md` in gavinjmunroe/firm-foundation.
+
+Later on 10/18: changing email 1's ask from "Is fixing that already on your list?" to an offer of the audit we already ran ("Want the full list for {{company}}? I'll send it over, free.") raised Jev grades from 82-93 to 90-97 across 30 emails. Appending the church's real count ("It's one of 8 fixes we'd suggest") passed Jev's opener check; "We found N other things like that" failed it on 9 of 15. Write screen counts as "doesn't show up until the Nth screen" (times_px / 844, rounded up), never "scroll about N screens", which overstated 2.4 as 3. Pre-write each church's fix list in ops/gtme/<region>/audits/ with exactly the promised count before the send.

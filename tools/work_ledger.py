@@ -7,6 +7,7 @@ Evidence and owner fields are declarations, not independent verification.
 import argparse
 from contextlib import contextmanager
 from datetime import datetime, timezone
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -201,8 +202,12 @@ def main(argv=None):
         command = commands.add_parser(name)
         command.add_argument('--scope', default=os.getcwd(), help='exact workspace path; canonicalized, no parent-scope lookup. Use ~ for a personal todo that shows in every workspace')
         if name == 'add':
-            command.add_argument('--title', required=True)
-            command.add_argument('--source-key', required=True, help='idempotency key unique within this workspace')
+            # 2026-10-18: an agent saving "save to todo" ran
+            # `work-ledger add --scope ~ "<text>"`, the spelling AGENTS.md
+            # implies, and got an argparse error. A plain title now works.
+            command.add_argument('words', nargs='*', help='the task title, when --title is not given')
+            command.add_argument('--title')
+            command.add_argument('--source-key', help='idempotency key unique within this workspace; defaults to a hash of the title')
             command.add_argument('--owner', default='')
             command.add_argument('--next-action', default='')
         elif name == 'update':
@@ -221,6 +226,15 @@ def main(argv=None):
                 print(result)
         else:
             if command == 'add':
+                words = ' '.join(args.pop('words'))
+                if args['title'] and words:
+                    raise ValueError('give the title once, positionally or with --title')
+                args['title'] = args['title'] or words
+                if not args['title']:
+                    raise ValueError('a task title is required')
+                if not args['source_key']:
+                    digest = hashlib.sha256(' '.join(args['title'].split()).encode()).hexdigest()
+                    args['source_key'] = 'title-' + digest[:16]
                 result = add(scope, **args)
             elif command == 'list':
                 result = list_tasks(scope, include_terminal=args['all'])

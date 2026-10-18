@@ -35,6 +35,18 @@ class WorkLedgerTests(unittest.TestCase):
         return subprocess.run([sys.executable, str(ROOT / 'bin/work-ledger'), *args,
                                '--scope', str(self.scope)], capture_output=True, text=True, timeout=15)
 
+    def test_cli_add_takes_a_plain_title_and_dedupes_it(self):
+        first = self.cli('add', 'Build the microbots', 'side quest')
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        task = json.loads(first.stdout)['task']
+        self.assertEqual(task['title'], 'Build the microbots side quest')
+        self.assertTrue(task['source_key'].startswith('title-'))
+        again = self.cli('add', 'Build the microbots side quest')
+        self.assertFalse(json.loads(again.stdout)['created'])
+        self.assertEqual(self.cli('add').returncode, 2)
+        self.assertEqual(self.cli('add', 'x', '--title', 'y').returncode, 2)
+        self.assertEqual(len(ledger.list_tasks(self.scope)), 1)
+
     def test_context_and_list_do_not_create_storage(self):
         self.assertEqual(ledger.context_for(self.scope), '')
         self.assertEqual(ledger.list_tasks(self.scope), [])

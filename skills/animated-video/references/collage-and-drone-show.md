@@ -102,3 +102,16 @@ times in one night. Each line below is one of those corrections and what fixed i
 - The key VO word punches in huge as its own cut.
 - One motif keeps changing shape: [ ] shrinks to [•] and then opens into a window.
 - He shows one thing at a time and leaves a lot of empty space.
+
+## Fakeplastictree "Motion Graphic | Collage" (Caleb's reference, studied 2026-10-18)
+
+- It builds one scene a piece at a time in reading order and then holds it. A building slides in from the edge, then a second, then two figures, then the sun, and every piece stays until the whole scene leaves together.
+- The cut-outs move on twos (each pose held two frames) and the grain jumps every two frames, so it reads as handmade stop motion. Keep type and particle systems smooth.
+- The ground is a black void, the cuts are clean with no rim, and scale is surreal (a giant sun over small people).
+
+## v14 to v15 corrections
+
+- "The scrap paper popping in and out out of nowhere in the intro is so bad... make the paper shapeshift instead". The paper is now a gooey mask drawn from the dots themselves, so it flows with every morph. It only forms once the first figure lands, because grown during the flight it read as blotches.
+- "The light outline around the firm foundation text... making it pop less", "Line under the title also is not aura". The title is now just the silver letters.
+- "'everything' 'else' should not be 2 separate quick things". A list should roll like a decelerating reel and land once, then hold.
+- "once it scaled down it was still just a hard cut", "the book a call to the God's firm foundation one isn't even a transition". Every hand-off carries an object across: the screen scrolls into the next page, and the blueprint tips back into the foundation.

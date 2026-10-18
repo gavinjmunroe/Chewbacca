@@ -35,6 +35,19 @@ class WorkLedgerTests(unittest.TestCase):
         return subprocess.run([sys.executable, str(ROOT / 'bin/work-ledger'), *args,
                                '--scope', str(self.scope)], capture_output=True, text=True, timeout=15)
 
+    def test_board_groups_by_project_label_and_orders_views(self):
+        ledger.add(self.scope, 'Midterm', 'k1', next_action='[School | Backlog] later')
+        ledger.add(self.scope, 'Lab coat', 'k2', next_action='[School | Next] Fri')
+        ledger.add(self.scope, 'Loose idea', 'k3')
+        done = ledger.add(self.scope, 'Finished', 'k4', next_action='[School | Next] x')
+        ledger.update(self.scope, done['task']['id'], status='done', evidence='seen')
+        lines = ledger.board(self.scope).splitlines()
+        self.assertEqual(lines[:5], ['School (2)', '  Next', '    - Lab coat', '  Backlog', '    - Midterm'])
+        self.assertEqual(lines[5:], ['Unsorted (1)', '  Backlog', '    - Loose idea'])
+        result = self.cli('board')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('School (2)', result.stdout)
+
     def test_cli_add_takes_a_plain_title_and_dedupes_it(self):
         first = self.cli('add', 'Build the microbots', 'side quest')
         self.assertEqual(first.returncode, 0, first.stdout + first.stderr)

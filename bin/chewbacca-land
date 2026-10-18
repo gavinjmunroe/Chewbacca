@@ -21,6 +21,7 @@ a bare commit that swallowed another tab's staged work. One command, one
 correct path.
 """
 import argparse
+import json
 import os
 import shutil
 import subprocess
@@ -160,6 +161,32 @@ def keep_exec_bit(disk, dest):
         os.chmod(dest, (os.stat(dest).st_mode & ~0o111) | want)
 
 
+def landed_record(root):
+    """Where this checkout remembers the bytes it last landed verbatim, per path."""
+    base = os.path.join(os.path.expanduser(os.environ.get("CHEWBACCA_HOME", "~/.chewbacca")), "land-landed")
+    key = os.path.realpath(git_common_dir(root)).replace("/", "_")[-120:]
+    return os.path.join(base, key + ".json")
+
+
+def own_landed_base(src, target, path, record):
+    """The copy this checkout last landed of path, if main's history still has it.
+
+    The merge base is the checkout's stale HEAD, which lacks the tab's own
+    earlier land, so a second edit next to the first read as a clash: seen 3x
+    on 10/10 (ledger e9e4cdf9) and again 10/18 on tools/work_ledger.py, each
+    time worked around by hand with a temp worktree. Only verbatim lands are
+    recorded, so this base never holds another tab's merged-in lines.
+    """
+    sha = record.get(path)
+    if not sha:
+        return None
+    revs = run(["git", "rev-list", "-n", "200", target, "--", path], src, check=False).stdout.split()
+    for rev in revs:
+        if run(["git", "rev-parse", "-q", "--verify", f"{rev}:{path}"], src, check=False).stdout.strip() == sha:
+            return subprocess.run(["git", "cat-file", "blob", sha], cwd=src, capture_output=True).stdout
+    return None
+
+
 def main():
     ap = argparse.ArgumentParser(prog="chewbacca land", description=__doc__.split("\n\n")[0])
     ap.add_argument("commits", nargs="*", help="commits to land, oldest first")
@@ -193,7 +220,12 @@ def main():
         run(["git", "worktree", "add", "-q", "--detach", wt, target], src)
         try:
             if a.paths:
-                missing, clashes = [], []
+                missing, clashes, verbatim = [], [], {}
+                try:
+                    with open(landed_record(src)) as f:
+                        record = json.load(f)
+                except (OSError, ValueError):
+                    record = {}
                 base = run(["git", "merge-base", "HEAD", target], src, check=False).stdout.strip()
                 for p in a.paths:
                     s = os.path.join(src, p)
@@ -201,10 +233,17 @@ def main():
                     old = blob(src, base, p)
                     if os.path.exists(s):
                         os.makedirs(os.path.dirname(d) or wt, exist_ok=True)
-                        if not merge_into(wt, p, s, d, old):
+                        merged = merge_into(wt, p, s, d, old)
+                        if not merged:
+                            own = own_landed_base(src, target, p, record)
+                            merged = own is not None and merge_into(wt, p, s, d, own)
+                        if not merged:
                             clashes.append(p)
                         else:
                             keep_exec_bit(s, d)
+                            with open(s, "rb") as f1, open(d, "rb") as f2:
+                                if f1.read() == f2.read():
+                                    verbatim[p] = run(["git", "hash-object", "--", d], wt).stdout.strip()
                     elif os.path.exists(d):
                         # Deleted on disk: land the deletion, unless someone
                         # changed the file on main since this checkout saw it.
@@ -279,6 +318,13 @@ def main():
                     sha = run(["git", "rev-parse", "--short", "HEAD"], wt).stdout.strip()
                     subj = run(["git", "log", "-1", "--format=%s"], wt).stdout.strip()
                     print(f"land: {sha} {subj}")
+                    if a.paths:
+                        record.update(verbatim)
+                        for p in set(a.paths) - set(verbatim):
+                            record.pop(p, None)
+                        os.makedirs(os.path.dirname(landed_record(src)), exist_ok=True)
+                        with open(landed_record(src), "w") as f:
+                            json.dump(record, f)
                     return 0
                 err = (p.stderr or "") + (p.stdout or "")
                 raced = any(k in err for k in ("non-fast-forward", "fetch first", "cannot lock ref"))

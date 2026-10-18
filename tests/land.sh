@@ -131,4 +131,18 @@ out=$(python3 -I "$LAND" --paths tool.sh -m "feat: a tool" 2>&1) || fail "exec l
 cd "$T/check" && git pull -q && [ -x tool.sh ] || fail "--paths dropped the executable bit"
 out=$(cd "$T/tabA" && python3 -I "$LAND" no-such-ref 2>&1) && fail "an unknown ref landed: $out"
 echo "$out" | grep -q "no-such-ref" || fail "unknown ref said: $out"
+# A tab lands a file, its checkout stays stale, and it lands an edit right
+# next to the first one: its own earlier land is not a clash (ledger
+# e9e4cdf9, hit 3x on 10/10 and again 10/18). A line another tab merged in
+# meanwhile still survives.
+cd "$T/seed" && git pull -q && printf 'l1\nl2\nl3\n' > own.txt && python3 tools/checksums.py && git add -A && git commit -qm own && git push -q origin main
+git clone -q "$T/origin.git" "$T/own" && cd "$T/own"
+printf 'l1\nl2\nX\nl3\n' > own.txt
+out=$(python3 -I "$LAND" --paths own.txt -m "feat: X" 2>&1) || fail "first own land: $out"
+cd "$T/seed" && git pull -q && printf 'l0\n' | cat - own.txt > o && mv o own.txt && python3 tools/checksums.py && git commit -qam other && git push -q origin main
+cd "$T/own" && printf 'l1\nl2\nX\nY\nl3\n' > own.txt
+out=$(python3 -I "$LAND" --paths own.txt -m "feat: Y" 2>&1) || fail "second own land next to the first: $out"
+cd "$T/check" && git pull -q
+[ "$(tr '\n' ' ' < own.txt)" = "l0 l1 l2 X Y l3 " ] || fail "own re-land lost a line: $(tr '\n' ' ' < own.txt)"
+
 echo ok

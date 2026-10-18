@@ -342,6 +342,8 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_big_json_edit_reflows: an Edit to clay.json came back as a 6,537-line formatter reflow; patch big JSON specs by script and check diff --stat (10/12)
 - feedback_gtme_done_misses_forwards: gtme done called 2 replies owed that were a founder-meeting yes and a Togari-forwarded OOO; read the thread first, fix done to count forwards (10/12)
 - feedback_blocker_count_is_cells_not_causes: gtme ready's count is gate cells, so "41" hid a grader crash and week-old pinned files on 10/17; it now prints causes (3f3200ae)
+- feedback_model_reader_needs_clean_context: a claude -p judge needs CLAUDE_CODE_DISABLE_CLAUDE_MDS=1, --setting-sources "", --tools "" and its own system prompt, or it loads 111k of personal context and fakes tool calls (10/17)
+- project_zeutara_monday_one_command_2026_10_17: Zeutara Monday is monday_go.py (model triage, read, gated repair, presend, ready, START on READY) plus one @Togari line per held reply (10/17)
 - reference_togari_repair_loop: Togari's LLM redrafts a refused reply and the gates decide; investor text is untrusted, parked rows clear when the thread moves (repair.ts, 10/17)
 - feedback_vantage_refuses_founder_next_to_call: Vantage refuses "founder" beside a call word; Togari's own OOO note did that, so every follow-up parked as a handoff (fixed 48fe0e2, 10/17)
 - feedback_gtme_done_misses_togari_followups: gtme done never reads Togari's follow-up queue; "nobody waiting" on 10/16 met a 26-investor digest on 10/17. Read findStuck and close settled threads first

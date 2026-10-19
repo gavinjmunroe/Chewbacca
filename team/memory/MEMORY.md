@@ -399,3 +399,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_firm_foundation_preflight_2026_10_18: before a FF send day, check the sending Gmail answers (10/18 it 401d) and re-audit hooks (Warehouse's was false)
 - feedback_ff_work_lives_in_ff_repo: FF work goes in gavinjmunroe/firm-foundation, never a founder's side repo; a handoff is done when a fresh clone as the recipient builds, and an invite isn't access (10/18 video)
 - feedback_outbound_numbers_from_own_list: recount every stat in a region's sequence from its own audit CSV; SoCal step 2 cited 15 Dallas sites (10/18)
+- feedback_ff_video_in_outbound_2026_10_19: FF hero video goes in email 2 as a firmfoundation.tech/watch link; contact-sheet renders first (v21 had placeholder text), curl the link before a batch

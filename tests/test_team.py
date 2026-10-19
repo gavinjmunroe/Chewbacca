@@ -277,6 +277,21 @@ class TeamTest(unittest.TestCase):
         left = [t["title"] for t in json.loads(self.run_team(self.a, "board", "--json")[1])]
         self.assertEqual(left, ["Hand made"])
 
+    def test_impossible_due_empty_title_on_edit_and_missing_import_are_refused(self):
+        # Break-it, 2026-10-19: --due 2026-99-99 was accepted, `edit --title ""`
+        # blanked a title that add would have refused, and import of a missing
+        # file was a traceback.
+        code, _, err = self.run_team(self.a, "add", "Real task", "--due", "2026-99-99")
+        self.assertNotEqual(code, 0)
+        self.assertIn("real date", err)
+        self.run_team(self.a, "add", "Real task")
+        code, _, err = self.run_team(self.a, "edit", "CHW-1", "--title", "")
+        self.assertNotEqual(code, 0)
+        self.assertEqual(team.parse(self.remote_file("team/tasks/CHW-1.md"))["title"], "Real task")
+        code, _, err = self.run_team(self.a, "import", "/nonexistent/BACKLOG.md")
+        self.assertNotEqual(code, 0)
+        self.assertIn("doesn't exist", err)
+
     def test_a_commit_older_than_the_task_does_not_close_it(self):
         # Break-it, 2026-10-19: "fixes CHW-1" pushed before CHW-1 existed
         # closed the brand-new task as done with that old sha as proof.

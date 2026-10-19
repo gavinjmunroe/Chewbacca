@@ -377,6 +377,12 @@ def resolve_owner(repo, owner):
 def check_date(value):
     if value and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
         raise TeamError(f"dates are YYYY-MM-DD, got {value!r}")
+    # The shape alone let 2026-99-99 through as a due date (break-it, 2026-10-19).
+    if value:
+        try:
+            dt.date.fromisoformat(value)
+        except ValueError:
+            raise TeamError(f"{value} isn't a real date")
     return value
 
 
@@ -797,6 +803,9 @@ def main(argv=None):
             for k in ("title", "due", "priority", "done_when", "proof", "notes", "area", "parent"):
                 v = getattr(a, k)
                 if v is not None:
+                    # add refuses an empty title; edit set one (break-it, 2026-10-19).
+                    if k == "title" and not one_line(v):
+                        raise TeamError("a task needs a title")
                     changes[k] = check_date(v) if k == "due" else v
             if a.labels is not None:
                 changes["labels"] = [x.strip() for x in a.labels.split(",") if x.strip()]
@@ -820,6 +829,8 @@ def main(argv=None):
             print(json.dumps(tasks, indent=1) if a.json else f"Inbox: {len(tasks)}\n" + "\n".join(line(t) for t in tasks))
         elif cmd == "import":
             path = pathlib.Path(a.file)
+            if not path.is_file():
+                raise TeamError(f"{path} doesn't exist")
             rows = read_backlog(path.read_text(), path.name)
             fresh = plan_import(repo, rows)
             if not a.apply:

@@ -3,7 +3,7 @@ b9b8f16866a8894bc088331065eb4cc6aa80fe0df2c86c915f10e95833e59f1a  .claude/hooks/
 7a04ea9d057329ba1e009db591f70f22155551ac8f3b1fd6306af0fa2a760ba3  .claude/hooks/artifact-guard.sh
 665a17f7cfc8cf1d56802662126bf25cd03b75f4790addc73ca99d3edc7242fa  .claude/hooks/ask-capture.sh
 755609b0d6cee26710056a8e13224d7d43ada0b687f7e7f3dc1f8e1bf2d4b477  .claude/hooks/assumption-guard.sh
-603bca3287fb1272b3ae393453e1a5b8c9c1cb4b3473745103402675765aeafc  .claude/hooks/attribution-guard.sh
+764b9c2bcb45d1f92124a209068fc51f52b77235d413cfae706d7590bf7f078c  .claude/hooks/attribution-guard.sh
 5befb13c6a377810d4fd502103207909db1b9eb16631f1ead0d576a9a6a5b85a  .claude/hooks/auto-push.sh
 4852bfd60b437f5b8818dc686b680bf9fe3e599c2360b386199948f38487079d  .claude/hooks/blocked-route-guard.sh
 a6727f860fc6578e607364d75a920f71f23a3f69d6110e2c5a7a8772cf9d901a  .claude/hooks/brain-recall.sh

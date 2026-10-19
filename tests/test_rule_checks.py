@@ -89,6 +89,22 @@ class AttributionGuard(unittest.TestCase):
                                                 "tool_input": {"command": "git commit -F ~/m.txt"}}, {"HOME": home})
         self.assertTrue(denied(out))
 
+    def test_break_it_shapes_are_refused(self):
+        # Break-it, 2026-10-19: every one of these got through.
+        d = tempfile.mkdtemp()
+        (Path(d) / "msg").write_text(f"fix: y\n\n{TRAILER}\n")
+        for cmd in (f'/usr/bin/git commit -m "x\n\n{TRAILER}"',
+                    f'env X=1 git commit -m "x\n\n{TRAILER}"',
+                    f'git --no-pager commit -m "x\n\n{TRAILER}"',
+                    f'git --git-dir=.git commit -m "x\n\n{TRAILER}"',
+                    f"git commit -F{d}/msg",
+                    f"git commit -aF {d}/msg",
+                    f'git commit -m "$(cat {d}/msg)"',
+                    f'gh pr create --title t --body "$(cat {d}/msg)"',
+                    'git commit -m x --trailer "Co-Authored-By=Claude Opus 5 <noreply@anthropic.com>"',
+                    'git commit -m "feat: x\n\nGenerated with Claude Code"'):
+            self.assertTrue(denied(self.bash(cmd, cwd=d)[1]), cmd)
+
     def test_mention_outside_a_commit_passes(self):
         self.assertFalse(denied(self.bash(f'grep -r "{TRAILER}" .')[1]))
 

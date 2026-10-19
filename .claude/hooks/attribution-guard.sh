@@ -32,18 +32,31 @@ cmd="$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)"
 # git or gh in command position, so a script or heredoc that mentions one in
 # a string isn't judged (a python heredoc holding this guard's own test text
 # was the one refusal in 1,888 real calls before this).
-printf '%s' "$cmd" | grep -qE '(^|[;&|({`]|\$\()[[:space:]]*(git([[:space:]]+-[Cc][[:space:]]+[^[:space:]]+)*[[:space:]]+(commit|tag|notes)|gh[[:space:]]+(pr|issue|release)[[:space:]])' || exit 0
+# Wrappers (env VAR=x, command, exec, sudo, time), a full path to git, and
+# git's own global options (--no-pager, --git-dir=..., -C dir, -c k=v) all
+# still mean git commit. Break-it, 2026-10-19: /usr/bin/git commit,
+# env X=1 git commit, git --no-pager commit and git --git-dir=.git commit
+# all got through.
+printf '%s' "$cmd" | grep -qE '(^|[;&|({`]|\$\()[[:space:]]*((env|command|exec|sudo|time)[[:space:]]+([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*)*([^[:space:];&|]*/)?(git([[:space:]]+(-[Cc][[:space:]]+[^[:space:]]+|--?[A-Za-z][A-Za-z-]*(=[^[:space:]]+)?))*[[:space:]]+(commit|tag|notes)|gh[[:space:]]+(pr|issue|release)[[:space:]])' || exit 0
 # Same pattern as .githooks/commit-msg: a model's address or name and version
 # in a Co-Authored-By trailer, or the markdown "Generated with [Claude Code]".
-ATTR='co-authored-by:[^<]*<[^>]*(anthropic\.com|openai\.com|cursor\.(com|sh)|copilot)[^>]*>|co-authored-by:[[:space:]]*(claude|chatgpt|gpt|codex|gemini|copilot)([ -](opus|sonnet|haiku|fable|code|pro|flash|[0-9][0-9.]*))+[[:space:]]*<|generated with \[claude'
+# `--trailer "Co-Authored-By=..."` takes = as well as :, and the plain-text
+# "Generated with Claude Code" on a line of its own counts as much as the markdown one (break-it,
+# 2026-10-19).
+ATTR='co-authored-by[:=][^<]*<[^>]*(anthropic\.com|openai\.com|cursor\.(com|sh)|copilot)[^>]*>|co-authored-by[:=][[:space:]]*(claude|chatgpt|gpt|codex|gemini|copilot)([ -](opus|sonnet|haiku|fable|code|pro|flash|[0-9][0-9.]*))+[[:space:]]*<|generated with \[claude|^[^[:alnum:]]*generated with claude code[^[:alnum:]]*$'
 text="$cmd"
 # The message lives on disk: git -F/--file, gh --body-file. gh's -F shorthand
 # isn't read, since no gate word would name it.
 files="$(printf '%s' "$cmd" | grep -oE -- '--body-file[ =][^ ;&|]+' | sed -E 's/^--body-file[ =]//')"
 if printf '%s' "$cmd" | grep -qE '(^|[^a-z])(commit|tag|notes)([^a-z]|$)'; then
+  # -F/path with no space and a cluster like -aF path name the file too.
   files="$files
-$(printf '%s' "$cmd" | grep -oE -- '(-F|--file)[ =][^ ;&|]+' | sed -E 's/^(-F|--file)[ =]//')"
+$(printf '%s' "$cmd" | grep -oE -- '(^|[[:space:]])(-[a-zA-Z]*F|--file)([ =]+)?[^ ;&|-][^ ;&|]*' | sed -E 's/^[[:space:]]*(-[a-zA-Z]*F|--file)[ =]*//')"
 fi
+# A message built from a file at run time, -m "$(cat msg)" or
+# gh --body "$(< f)", is read from that file.
+files="$files
+$(printf '%s' "$cmd" | grep -oE '\$\((cat[[:space:]]+|<[[:space:]]*)[^)[:space:]]+\)' | sed -E 's/^\$\((cat[[:space:]]+|<[[:space:]]*)//; s/\)$//')"
 # Relative paths resolve against the call's cwd, and ~ expands. A path with
 # a space, or one after a cd in the same command, isn't followed; the
 # commit-msg hook still reads the message in the kit.

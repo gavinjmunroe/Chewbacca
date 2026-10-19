@@ -35,5 +35,13 @@ case "$MODE" in
     rm "$TEST_DIR/private/BACKLOG.md"
     run | grep -q 'No backlog on this machine'
     ;;
-  *) echo 'Expected open, dead, or absent' >&2; exit 2 ;;
+  inbox)
+    # Break-it, 2026-10-19: one row that is JSON but not an object killed the
+    # inbox, and --help searched the backlog for "--help".
+    mkdir -p "$TEST_DIR/home/.chewbacca"
+    printf '[1,2]\n{"said": 5}\n{"at": null, "said": "zebra quokka narwhal platypus wombat"}\n' \
+      > "$TEST_DIR/home/.chewbacca/asks.jsonl"
+    out="$(run inbox)" && [[ "$out" == *'zebra quokka'* ]] && run --help | grep -q 'backlog inbox'
+    ;;
+  *) echo 'Expected open, dead, absent or inbox' >&2; exit 2 ;;
 esac

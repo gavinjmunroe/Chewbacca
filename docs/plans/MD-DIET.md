@@ -43,6 +43,14 @@ number before and after in the commit message.
 
 ### 1. Tag and cut the obvious dead weight (target: -400 files)
 
+Progress 2026-10-19: tag `archive/pre-md-diet` pushed at 152d60e8's
+descendant 77ba95c0. 56 commands cut (2550967e), and the orphans with zero
+inbound refs and zero reads in 60 days: `docs/handoffs` (3),
+`docs/superpowers` (5), `plynn/docs/superpowers` (7), `library/prompts` (2),
+`library/research` (1). `library/methods` stays: `bin/consolidate` globs it as
+the set of rules already written. Left in this phase: `docs/plans` and
+`team/tasks`.
+
 - Tag `archive/pre-md-diet` on main before anything moves
 - `.claude/commands`: delete the 56 unused; keep `ship`. Anything a skill
   already covers is a duplicate anyway

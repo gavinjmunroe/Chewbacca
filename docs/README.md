@@ -125,7 +125,5 @@ in `docs/ROADMAP.md`; [BACKLOG.md](../BACKLOG.md) holds status;
 | Folder                                   | For                                                                                          |
 | ---------------------------------------- | -------------------------------------------------------------------------------------------- |
 | [mac/](mac/00-THE-MAP.md)                | The seven layers for controlling a Mac, benchmarks, permissions and workarounds              |
-| [superpowers/](superpowers/)             | Dated design specs and implementation plans (terminal loop, voice routing, dictation bubble) |
-| [handoffs/](handoffs/)                   | Session handoff notes from 2026-09-21 and 2026-09-22                                         |
 | [mined/](mined/goodnight000-verdicts.md) | Verdicts on mined repos, 2026-10-09                                                          |
 | [screens/](screens/)                     | Screenshots referenced by docs                                                               |

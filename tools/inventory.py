@@ -992,7 +992,7 @@ def cli_block(cli, packs):
         if k["note"]:
             lines += ["#"] + [f"# {n}" for n in k["note"]]
         lines += [
-            f'PACK_DIR="$HOME/{PACKS[k["name"]]["root"].relative_to(HOME)}"',
+            f'PACK_DIR="$HOME/{PACKS.get(k["name"], {}).get("root", HOME / "Projects" / k["name"]).relative_to(HOME)}"',
             f'PACK_SKIP="{skip}"',
         ]
         if k.get("only"):

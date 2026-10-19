@@ -101,7 +101,7 @@ def lines():
 
 def sentence(c):
     return (
-        f"One command installs **{c['commands']} slash commands, {c['skills_total']} skills "
+        f"One command installs **{c['commands']} slash command{'' if c['commands'] == 1 else 's'}, {c['skills_total']} skills "
         f"({c['skills_own']} written here, {c['skills_upstream']} cloned from upstream, "
         f"{c['skills_packed']} from {'a skill pack' if c['packs'] == 1 else str(c['packs']) + ' skill packs'}), {c['mcp']} MCP servers, {c['hooks']} hooks, "
         f"{c['subagents']} subagents, {c['cli']} command-line tools and {c['rules']} always-on "

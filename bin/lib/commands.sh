@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # chewbacca commands: list, search, or show a slash command.
 #
-# 57 of them, discoverable only by ls-ing a directory and opening files. The
+# Discoverable only by ls-ing a directory and opening files otherwise. The
 # kit's own argument is that you should rarely need one, which is not a reason
 # for the ones that exist to be unfindable.
 set -uo pipefail

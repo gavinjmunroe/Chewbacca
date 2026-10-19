@@ -107,7 +107,7 @@ gitignored Swift build output (`hud/.build`, `voice/.build`, `plynn/.build`).
 | `AGENTS.md` | Generated from `config/instructions/agent-neutral.md` for Codex and other agents. Never edit by hand. |
 | `.claude/rules/` | 14 standards files (git, security, writing, naming, typescript, review, context discipline, and so on). |
 | `.claude/hooks/` | About 49 bash hooks plus `lib.sh`. The enforcement layer. |
-| `.claude/commands/` | 57 slash commands (dev workflow, school, Mac, personal ops). |
+| `.claude/commands/` | `/ship`, the one slash command still typed; the other 56 went to the `archive/pre-md-diet` tag on 2026-10-19 (docs/plans/MD-DIET.md). |
 | `.claude/agents/` | 4 subagents: `code-reviewer`, `context-keeper`, `debugger`, `explorer`. |
 | `.claude/skills` | A symlink to `../skills`. |
 | `skills/` | About 50 first-party skills, each `skills/<name>/SKILL.md` plus `evals/` and sometimes `references/`. |

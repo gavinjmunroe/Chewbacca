@@ -22,9 +22,11 @@ Because most people who open it are pasting the link at Claude. It is a real
 security trade and [THREAT-MODEL.md](../reference/THREAT-MODEL.md) says so plainly, along
 with the clone-and-read alternative.
 
-**Do I have to learn 57 slash commands?**
-No. That is the point. You describe what you want and the right skill loads.
-The commands exist for when you want to be explicit.
+**Do I have to learn any slash commands?**
+No. You describe what you want and the right skill loads. One command ships,
+`/ship`, for when you want the quality gate by name. The other 56 were cut on
+2026-10-19 after 60 days with nobody typing them; the `archive/pre-md-diet`
+tag still has them.
 
 **Does it work on Linux or Windows?**
 No. Half of it is macOS automation. The standards and skills would port; the

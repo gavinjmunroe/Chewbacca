@@ -58,7 +58,7 @@ def build():
 BIN = build()
 if BIN is None:
     print("SKIP test_send_policy: no cargo, or its crates could not be fetched; every sink keeps its inline checks")
-    raise SystemExit(0)
+    raise SystemExit(77)
 os.environ["CHEWBACCA_SENDPOLICY"] = BIN
 os.environ.pop("CHEWBACCA_NO_SEND", None)
 

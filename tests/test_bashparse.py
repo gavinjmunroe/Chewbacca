@@ -51,7 +51,7 @@ def build():
 BIN = build()
 if BIN is None:
     print('SKIP test_bashparse: no cargo, or its crates could not be fetched, so no parser; the guards run their old reading')
-    raise SystemExit(0)
+    raise SystemExit(77)
 NONE = '/nonexistent/chewbacca-bashparse'
 
 

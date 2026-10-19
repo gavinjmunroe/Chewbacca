@@ -11,8 +11,8 @@
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BLENDER="$(command -v blender || echo /Applications/Blender.app/Contents/MacOS/Blender)"
-[ -x "$BLENDER" ] || { echo "SKIP blockout_ref: blender not installed"; exit 0; }
-command -v ffmpeg >/dev/null || { echo "SKIP blockout_ref: ffmpeg not installed"; exit 0; }
+[ -x "$BLENDER" ] || { echo "SKIP blockout_ref: blender not installed"; exit 77; }
+command -v ffmpeg >/dev/null || { echo "SKIP blockout_ref: ffmpeg not installed"; exit 77; }
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT

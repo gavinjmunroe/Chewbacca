@@ -134,7 +134,17 @@ group() { CURRENT="$1"; [ -n "$ONLY" ] && [ "$ONLY" != "$1" ] && return 1
 # check <name> <command...>   passes if the command exits 0
 check() {
   local name="$1"; shift
-  if "$@" >"$TMP/out" 2>"$TMP/err"; then
+  local rc=0
+  "$@" >"$TMP/out" 2>"$TMP/err" || rc=$?
+  # Exit 77 is a skip (the automake convention tests/live already uses). Ten
+  # test files printed SKIP and exited 0 when ffmpeg, cargo or a font was
+  # missing, and every one of those counted as a pass, test_send_policy
+  # among them (2026-10-19). A check that proved nothing is not a pass.
+  if [ "$rc" -eq 77 ]; then
+    skip "$name" "$(grep -m1 -i 'skip' "$TMP/out" | cut -c1-100)"
+    return 0
+  fi
+  if [ "$rc" -eq 0 ]; then
     PASS=$((PASS+1)); echo -e "  ${GRN}pass${NC}  $name"
   else
     FAIL=$((FAIL+1)); FAILURES+=("$CURRENT: $name")

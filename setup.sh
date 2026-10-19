@@ -1495,14 +1495,56 @@ export D1_SESSION_OPENER="$SESSION_OPENER"
 export D1_BYPASS_PERMS="$BYPASS_PERMS"
 
 python3 << 'PYEOF'
-import json, os, shlex
+import json, os, re, shlex
 
 settings_path = os.path.expanduser("~/.claude/settings.json")
-try:
-    with open(settings_path) as f:
-        settings = json.load(f)
-except Exception:
-    settings = {}
+# A settings.json this can't read is never replaced. Break-it, 2026-10-19: a
+# file with a BOM, a // comment or a trailing comma failed json.load, became
+# {}, and every user key was gone under "Settings written." Those three are
+# read through; anything else stops the install with the file untouched.
+def _tolerant_json(text):
+    text = text.lstrip("\ufeff")
+    out, i, n, in_str = [], 0, len(text), False
+    while i < n:
+        c = text[i]
+        if in_str:
+            out.append(c)
+            if c == "\\" and i + 1 < n:
+                out.append(text[i + 1]); i += 2; continue
+            if c == '"':
+                in_str = False
+        elif c == '"':
+            in_str = True; out.append(c)
+        elif text.startswith("//", i):
+            while i < n and text[i] != "\n":
+                i += 1
+            continue
+        elif text.startswith("/*", i):
+            j = text.find("*/", i + 2)
+            i = n if j < 0 else j + 2
+            continue
+        else:
+            out.append(c)
+        i += 1
+    cleaned = re.sub(r",(\s*[}\]])", r"\1", "".join(out))
+    return json.loads(cleaned)
+
+settings = {}
+if os.path.exists(settings_path):
+    with open(settings_path, encoding="utf-8", errors="replace") as f:
+        _raw = f.read()
+    if _raw.strip():
+        try:
+            settings = json.loads(_raw)
+        except ValueError:
+            try:
+                settings = _tolerant_json(_raw)
+                print("Read settings.json past a BOM, comments or trailing commas; it is rewritten as plain JSON.")
+            except ValueError as exc:
+                raise SystemExit(f"setup: ~/.claude/settings.json isn't valid JSON ({exc}). Nothing was changed; "
+                                 f"fix it or move it aside and run setup again.")
+    if not isinstance(settings, dict):
+        raise SystemExit("setup: ~/.claude/settings.json isn't a JSON object. Nothing was changed.")
 
 env = os.environ.get
 hooks_dir = env("D1_HOOKS") or os.path.expanduser("~/.claude/hooks")
@@ -1519,7 +1561,10 @@ for key, var in (("GITHUB_TOKEN", "D1_GITHUB_PAT"),
         settings["env"][key] = val
         print(f"Wrote credential to settings.json: env.{key}")
 
-perms = settings.setdefault("permissions", {})
+# "permissions": null crashed the install halfway (break-it, 2026-10-19).
+if not isinstance(settings.get("permissions"), dict):
+    settings["permissions"] = {}
+perms = settings["permissions"]
 # On unless --ask-permissions was passed (default since 2026-10-16, see the
 # BYPASS_PERMS default). The deny list below still blocks what has no undo.
 # AskUserQuestion is denied too, so an agent can't stop to pop a question card.

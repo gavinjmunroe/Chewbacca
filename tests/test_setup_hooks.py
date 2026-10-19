@@ -139,6 +139,29 @@ def main() -> int:
     check("the user's statusLine survives", kept.get("statusLine", {}).get("command") == "/opt/me/status.sh", str(kept.get("statusLine")))
     check("kit hooks still register next to the user's", "write-log.sh" in commands(kept, "PostToolUse"))
 
+    # A settings.json with a BOM, a // comment and a trailing comma keeps the
+    # user's keys; one that can't be read stops the run and stays untouched;
+    # "permissions": null no longer crashes (break-it, 2026-10-19).
+    odd = pathlib.Path(tempfile.mkdtemp())
+    (odd / ".claude").mkdir()
+    (odd / ".claude" / "settings.json").write_text(
+        '﻿{\n  // mine\n  "model": "my-model", "url": "http://x//y",\n  "permissions": null,\n}\n', encoding="utf-8")
+    kept = run(block, odd)
+    check("BOM, comment and trailing comma: the user's keys survive",
+          kept.get("model") == "my-model" and kept.get("url") == "http://x//y", str({k: kept.get(k) for k in ("model", "url")}))
+    check("permissions: null is replaced, not a crash", isinstance(kept.get("permissions"), dict))
+    bad = pathlib.Path(tempfile.mkdtemp())
+    (bad / ".claude").mkdir()
+    garbage = '{"model": "mine", oops'
+    (bad / ".claude" / "settings.json").write_text(garbage)
+    try:
+        run(block, bad)
+        refused = False
+    except AssertionError:
+        refused = True
+    check("an unreadable settings.json stops the run", refused)
+    check("and is left exactly as it was", (bad / ".claude" / "settings.json").read_text() == garbage)
+
     print(f"\n{PASSED} passed, {FAILED} failed")
     return 1 if FAILED else 0
 

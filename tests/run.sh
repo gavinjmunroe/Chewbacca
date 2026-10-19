@@ -879,7 +879,10 @@ if group "installer"; then
   check  "the install summary names who gets the prompts for the agent this Mac has" \
     bash "$ROOT/tests/prompts_go_to.sh" "$ROOT"
   check  "--help works" bash "$ROOT/setup.sh" --help
-  expect "--dry-run defaults bypass off" "bypass perms:    no" bash "$ROOT/setup.sh" --dry-run --name CI --repo-dir "$TMP/ci"
+  # Bypass became the default on 2026-10-16 (ffaa02c5, Caleb: permission
+  # prompts off on every surface); --ask-permissions keeps them.
+  expect "--dry-run defaults bypass on" "bypass perms:    yes" bash "$ROOT/setup.sh" --dry-run --name CI --repo-dir "$TMP/ci"
+  expect "--ask-permissions turns bypass off" "bypass perms:    no" bash "$ROOT/setup.sh" --dry-run --ask-permissions --name CI --repo-dir "$TMP/ci"
   check  "--dry-run writes nothing" bash -c "test ! -d '$TMP/ci'"
   expect "uninstall --dry-run says so" "Dry run" bash "$ROOT/uninstall.sh" --dry-run
   exits  "uninstall rejects an unknown flag" 2 bash "$ROOT/uninstall.sh" --nonsense

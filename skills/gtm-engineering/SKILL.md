@@ -157,8 +157,16 @@ rlly high response rate". The reply-rate lifts quoted for video (3x to 4x)
 come almost entirely from Loom and Vidyard selling video, and video links in a
 first cold email cost deliverability. So:
 
-- Email 1 stays plain text. Its last line offers the video ("Want a 60 second
-  video of what we'd change on yours?"), and a yes already counts as a reply.
+- Email 1 stays plain text with one ask. Superseded 10/18 for Firm Foundation:
+  offering the audit we already ran ("It's one of 8 fixes we'd suggest. Want
+  the full list? I'll send it over, free.") took 30 emails from 82-93 to 90-97
+  on gtme_jev, and a yes is deliverable the same day from pre-written lists.
+  The video moved to email 2 as one plain link to a page on the client's own
+  site (firmfoundation.tech/watch), never an attachment (the render was 49 MB).
+- Before linking any render, contact-sheet it (one frame every 4 s) and read
+  every frame. FF v21 still showed "(photo of people together outside, the
+  hero shot ...)" full screen at 26 s (2026-10-19). Then curl the link for a
+  200 before ok-ing the batch that carries it.
 - One video for every recipient by default. Caleb, 10/12, on a per-church
   opening cut from the audit: "nah we're not gonna custom make that no need
   to overengineer". Offer personalization once as an option, never as the plan.

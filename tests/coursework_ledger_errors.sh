@@ -27,5 +27,11 @@ printf 'term: "Fall 2026"\nassume_done_after_days: -5\n' > "$T/semester.yml"
 out=$(cw due --days 14); rc=$?
 [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q "negative" || no "a negative grace passed (rc $rc): $out"
 
+printf 'term: "Fall 2026"\n' > "$T/semester.yml"
+out=$(cw grade zzz); rc=$?
+[ "$rc" -ne 0 ] && grep -q 'no course matches "zzz"' <<< "$out" || no "an unknown course printed every course (rc $rc): $out"
+out=$(cw due --days abc); rc=$?
+[ "$rc" -ne 0 ] && grep -q "needs a number" <<< "$out" && ! grep -q "at numFlag" <<< "$out" || no "--days abc wasn't a clean error (rc $rc): $out"
+
 [ "$fail" = 0 ] && echo "  ok   BOM, duplicate key, impossible date and negative grace never hide a deadline"
 exit "$fail"

@@ -652,10 +652,13 @@ function cmdWeek(args) {
 
 function cmdAttendance(args) {
   const { courses } = loadLedger();
-  const target = findCourse(
-    courses,
-    args.find((a) => !a.startsWith("-")),
-  );
+  const asked = args.find((a) => !a.startsWith("-"));
+  const target = findCourse(courses, asked);
+  // A course that isn't in the ledger used to print every course with rc 0,
+  // which reads as an answer about the wrong class (break-it, 2026-10-19).
+  if (asked && !target) {
+    throw Object.assign(new Error(`no course matches "${asked}". Courses: ${courses.map((c) => c.code).join(", ")}`), { ledger: true });
+  }
   const list = target ? [target] : courses;
   const rows = list.map((course) => {
     const a = course.absences || {};
@@ -689,10 +692,13 @@ function cmdAttendance(args) {
 
 function cmdGrade(args) {
   const { courses } = loadLedger();
-  const target = findCourse(
-    courses,
-    args.find((a) => !a.startsWith("-")),
-  );
+  const asked = args.find((a) => !a.startsWith("-"));
+  const target = findCourse(courses, asked);
+  // A course that isn't in the ledger used to print every course with rc 0,
+  // which reads as an answer about the wrong class (break-it, 2026-10-19).
+  if (asked && !target) {
+    throw Object.assign(new Error(`no course matches "${asked}". Courses: ${courses.map((c) => c.code).join(", ")}`), { ledger: true });
+  }
   const list = target ? [target] : courses;
   const want = numFlag(args, "--target", null);
   const rows = list.map((course) => project(course, want));
@@ -997,7 +1003,11 @@ function numFlag(args, name, fallback) {
   const i = args.indexOf(name);
   if (i === -1 || i === args.length - 1) return fallback;
   const n = Number(args[i + 1]);
-  return Number.isFinite(n) ? n : fallback;
+  // `--days abc` silently became 14 (break-it, 2026-10-19).
+  if (!Number.isFinite(n)) {
+    throw Object.assign(new Error(`${name} needs a number, got "${args[i + 1]}"`), { ledger: true });
+  }
+  return n;
 }
 
 function flagValue(args, name) {
@@ -1092,4 +1102,11 @@ function main() {
   }
 }
 
-main();
+// A ledger or usage error is a sentence for the person, not a stack trace.
+try {
+  main();
+} catch (e) {
+  if (!e || !e.ledger) throw e;
+  console.error(`coursework: ${e.message}`);
+  process.exit(1);
+}

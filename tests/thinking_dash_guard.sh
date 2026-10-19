@@ -30,6 +30,24 @@ rm -f "$T/state/voice-flags.pending"
 mk "$T/b.jsonl" "old${D}turn" "clean thinking, commas only" "A reply${D}not thinking"
 printf '{"transcript_path":"%s"}' "$T/b.jsonl" | bash "$H"
 ok "an earlier turn and the reply don't count" '[ ! -e "$T/state/voice-flags.pending" ]'
+# PostToolUse mode: an overnight turn with no Stop still hears about it, once.
+# 2026-10-19: 40 minutes of one turn put 7 dashes in thinking, and the Stop
+# mode never ran.
+mid() { printf '{"transcript_path":"%s","hook_event_name":"PostToolUse","session_id":"s1"}' "$1" \
+  | THINKING_DASH_NO_THROTTLE=1 bash "$H"; }
+mk "$T/c.jsonl" "old turn" "load is high${D}checking it" "Fixed"
+out=$(mid "$T/c.jsonl"); rc=$?
+ok "mid-turn: tells the agent now" '[ "$rc" = 0 ] && printf "%s" "$out" | grep -q "THINKING just now (1)"'
+ok "mid-turn: never queues for the next turn" '[ ! -e "$T/state/voice-flags.pending" ]'
+out=$(mid "$T/c.jsonl")
+ok "mid-turn: the same dash is not reported twice" '[ -z "$out" ]'
+python3 -c 'import json,sys; open(sys.argv[1],"a").write("\n"+json.dumps({"type":"assistant","uuid":"u9","message":{"content":[{"type":"thinking","thinking":"next step"+sys.argv[2]+"again"}]}}))' "$T/c.jsonl" "$D"
+out=$(mid "$T/c.jsonl")
+ok "mid-turn: a new dash after the last look is reported" 'printf "%s" "$out" | grep -q "just now (1)"'
+out=$(printf '{"transcript_path":"%s","hook_event_name":"PostToolUse","session_id":"s2"}' "$T/c.jsonl" | bash "$H")
+out2=$(printf '{"transcript_path":"%s","hook_event_name":"PostToolUse","session_id":"s2"}' "$T/c.jsonl" | bash "$H")
+ok "mid-turn: throttled inside 20 seconds" '[ -n "$out" ] && [ -z "$out2" ]'
+
 printf 'garbage' | bash "$H"; rc=$?
 ok "bad input exits 0" '[ "$rc" = 0 ]'
 [ "$fail" -eq 0 ] && echo "thinking-dash-guard ok" || { echo "thinking-dash-guard: $fail failed"; exit 1; }

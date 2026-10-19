@@ -2187,6 +2187,10 @@ _register("Stop", hooks_dir + "/kit-debt.sh", timeout=15,
 # slop-guard reads the reply only; 80 thinking blocks in a day carried em
 # dashes he reads in the editor (2026-10-10). Feeds forward, never refuses.
 _register("Stop", hooks_dir + "/thinking-dash-guard.sh", timeout=5)
+# The same hook mid-turn: a 40 minute overnight turn on 2026-10-19 never
+# reached Stop, so 7 thinking dashes went unflagged while Caleb read them.
+# Throttled to one 2 MB tail read per 20 seconds (about 140 ms).
+_register("PostToolUse", hooks_dir + "/thinking-dash-guard.sh", timeout=5)
 _register("Stop", hooks_dir + "/stale-read-guard.sh", timeout=5,
           status="Checking no unfinished job was called silent...")
 

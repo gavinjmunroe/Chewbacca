@@ -180,7 +180,11 @@ VENDORED = {
 # so a pack collapses to a single row carrying its live count.
 PACKS = {
     "agent-scripts": {
-        "root": HOME / "Projects/agent-scripts",
+        # Moved to ~/code/refs in dd792c67, which hand-edited setup.sh's
+        # generated PACK_DIR and left this root behind, so the next generator
+        # run would have dropped all 49 skills from the catalog (caught by the
+        # shrink refusal, 2026-10-19). PACK_DIR is now rendered from this root.
+        "root": HOME / "code/refs/agent-scripts",
         "url": "https://github.com/steipete/agent-scripts",
         "description": "Peter Steinberger's shared agent skills: macOS, Swift, GitHub, release ops",
         # sync-skills, the pack's own installer, points ~/.claude/CLAUDE.md at the
@@ -988,7 +992,7 @@ def cli_block(cli, packs):
         if k["note"]:
             lines += ["#"] + [f"# {n}" for n in k["note"]]
         lines += [
-            f'PACK_DIR="$HOME/Projects/{k["name"]}"',
+            f'PACK_DIR="$HOME/{PACKS[k["name"]]["root"].relative_to(HOME)}"',
             f'PACK_SKIP="{skip}"',
         ]
         if k.get("only"):
@@ -1371,13 +1375,25 @@ def main():
     # real tools from the product and take setup.sh and REFERENCE.md with them.
     # Losing an entry is now a refusal that names what went missing.
     toolkit = REPO / "config/settings/toolkit.json"
-    prior = []
+    prior_doc = {}
     if toolkit.is_file():
         try:
-            prior = json.loads(toolkit.read_text(encoding="utf-8")).get("cli", [])
+            prior_doc = json.loads(toolkit.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
-            prior = []
+            prior_doc = {}
+    prior = prior_doc.get("cli", [])
     lost = {c["display"] for c in prior} - {c["display"] for c in cli}
+    # Skills, packs, plugins and marketplaces may not shrink either. Only CLIs
+    # were guarded, and on 2026-10-19 a break-it run from a home with one
+    # plugin and no skills cut 719 lines: all 8 upstream skills and a
+    # marketplace left setup.sh, toolkit.json and REFERENCE.md.
+    def names(items, key="name"):
+        return {i.get(key) if isinstance(i, dict) else i for i in (items or [])}
+    prior_skills = prior_doc.get("skills", {}) if isinstance(prior_doc.get("skills"), dict) else {}
+    lost |= {f"skill {n}" for n in names(prior_skills.get("upstream")) - {u["name"] for u in upstream}}
+    lost |= {f"pack {n}" for n in names(prior_doc.get("packs")) - {pk["name"] for pk in packs}}
+    lost |= {f"plugin {n}" for n in names(prior_doc.get("plugins"), "id") - names(plugins, "id") if n}
+    lost |= {f"marketplace {n}" for n in names(prior_doc.get("marketplaces")) - names(markets) if n}
     if lost and not os.environ.get("CHEWBACCA_ALLOW_CATALOG_SHRINK"):
         print(
             "refusing to write: these tools are in the published catalog and "
@@ -1502,6 +1518,11 @@ def main():
 
 
 if __name__ == "__main__":
+    # Any argument used to be ignored and the run wrote anyway: `--help` on
+    # 2026-10-19 rewrote four generated files. It takes no arguments.
+    if len(sys.argv) > 1:
+        print(__doc__)
+        sys.exit(0 if sys.argv[1] in ("-h", "--help") else 2)
     try:
         sys.exit(main())
     except Exception as exc:  # a broken generator must never block a session

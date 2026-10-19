@@ -180,6 +180,33 @@ if __name__ == "__main__":
         check("the refusal is logged", len(rows) == 1 and str(rows[0].get("changed", "")).startswith("refused:"), rows)
         check("the refusal names a parent process", bool(rows and rows[0].get("parent")), rows)
 
+# ── a thin machine can't shrink the catalog, and --help doesn't write ───────
+#
+# Break-it, 2026-10-19: in a full clone, a home with one plugin and no skills
+# ran `inventory.py --help`, and it wrote anyway: 719 lines out of setup.sh,
+# toolkit.json and REFERENCE.md, all 8 upstream skills among them.
+
+if __name__ == "__main__":
+    import subprocess as _sp
+    with tempfile.TemporaryDirectory() as td:
+        clone = pathlib.Path(td) / "clone"
+        _sp.run(["git", "clone", "-q", "--shared", str(ROOT), str(clone)], check=True)
+        # The generator under test is this checkout's, which may not be committed yet.
+        (clone / "tools/inventory.py").write_bytes((ROOT / "tools/inventory.py").read_bytes())
+        _sp.run(["git", "-C", str(clone), "update-index", "--assume-unchanged", "tools/inventory.py"], check=True)
+        home = pathlib.Path(td) / "home"
+        (home / ".claude").mkdir(parents=True)
+        (home / ".claude" / "settings.json").write_text('{"enabledPlugins": {"x@y": true}}')
+        env = dict(os.environ if "os" in dir() else __import__("os").environ, HOME=str(home))
+        env.pop("CHEWBACCA_SUITE", None)
+        r = _sp.run([sys.executable, str(clone / "tools/inventory.py"), "--help"], env=env, capture_output=True, text=True)
+        dirty = _sp.run(["git", "-C", str(clone), "status", "--porcelain"], capture_output=True, text=True).stdout
+        check("--help prints help and writes nothing", r.returncode == 0 and not dirty, (r.returncode, dirty[:200]))
+        r = _sp.run([sys.executable, str(clone / "tools/inventory.py")], env=env, capture_output=True, text=True)
+        dirty = _sp.run(["git", "-C", str(clone), "status", "--porcelain"], capture_output=True, text=True).stdout
+        check("a thin home is refused instead of shrinking the catalog", r.returncode == 2 and not dirty,
+              (r.returncode, r.stderr[-300:], dirty[:200]))
+
 # Guarded because the filename matches pytest's discovery pattern. Without
 # this, importing the module to collect it runs sys.exit and pytest aborts the
 # whole session with INTERNALERROR, taking every other test file down with it.

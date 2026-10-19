@@ -1624,6 +1624,7 @@ if group "hooks"; then
   check "route_tune follows its written rule and refuses under 50 rows" bash "$ROOT/tests/route_tune.sh"
   check "formatter handles a broken Node runtime" python3 "$ROOT/tests/test_formatter_runtime.py"
   check "hooks run python3 isolated from the session cwd" bash "$ROOT/tests/hook_python_isolated.sh"
+  check "every repo path a hook names exists" python3 "$ROOT/tests/hook_paths_exist.py"
   check "voice-check, drafts and voice-guard refuse a text that is not his" bash "$ROOT/tests/voice_check.sh"
   check "prayer-guard checks every visible block this turn" bash "$ROOT/tests/prayer_guard.sh"
   check "disk-guard prunes regenerable caches once when the disk runs low" bash "$ROOT/tests/disk_guard.sh"

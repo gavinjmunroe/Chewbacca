@@ -318,11 +318,22 @@ step "Downloading Chewbacca"
 # any top-level entry the new tree lacks, and the voice log, which is
 # gitignored inside a repo folder.
 carry_state() {
-  local prev="$1" new="$2" entry
+  local prev="$1" new="$2" entry name
   [ -d "$prev" ] || return 0
   for entry in "$prev"/* "$prev"/.[!.]*; do
     [ -e "$entry" ] || [ -L "$entry" ] || continue
-    [ -e "$new/${entry##*/}" ] || [ -L "$new/${entry##*/}" ] || mv "$entry" "$new/"
+    name="${entry##*/}"
+    if [ ! -e "$new/$name" ] && [ ! -L "$new/$name" ]; then
+      mv "$entry" "$new/"
+    elif [ -d "$entry" ] && [ ! -L "$entry" ] && [ -d "$new/$name" ] && [ ! -L "$new/$name" ] \
+      && [ "$name" != ".git" ]; then
+      # Both trees have this directory: keep everything the payload doesn't
+      # ship. Moving back only top-level names dropped every skill and tool
+      # the user had added under skills/ and bin/, and ~/.chewbacca/skills is
+      # the shared skill library: 215 entries on the author's Mac against 74
+      # shipped (break-it, 2026-10-19).
+      carry_state "$entry" "$new/$name"
+    fi
   done
   for entry in "$prev"/superassistant/*.jsonl; do
     [ -e "$entry" ] || continue

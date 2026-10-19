@@ -31,4 +31,20 @@ expect "top-level state files survive"        '[ -f "$new/context.json" ] && [ -
 expect "the voice log survives"               '[ "$(cat "$new/superassistant/questions.jsonl")" = said ]'
 expect "the new release wins over old files"  '[ "$(cat "$new/bin/tool")" = new ]'
 expect "a missing previous install is fine"   'carry_state "$tmp/none" "$new"'
+
+# Directories both trees have keep what the user added. Break-it, 2026-10-19:
+# only top-level names moved back, so a user's own skill, a linked pack skill
+# and a bin tool were deleted on update. ~/.chewbacca/skills is the shared
+# skill library: 215 entries on the author's Mac against 74 shipped.
+p2="$tmp/old2" n2="$tmp/new2"
+mkdir -p "$p2/skills/my-own-skill" "$p2/skills/shipped" "$p2/bin" "$tmp/packroot" "$n2/skills/shipped" "$n2/bin"
+echo mine > "$p2/skills/my-own-skill/SKILL.md"
+echo old > "$p2/skills/shipped/SKILL.md"; echo new > "$n2/skills/shipped/SKILL.md"
+ln -s "$tmp/packroot" "$p2/skills/linked-pack-skill"
+echo tool > "$p2/bin/my-tool"
+carry_state "$p2" "$n2"
+expect "a user's own skill survives"          '[ "$(cat "$n2/skills/my-own-skill/SKILL.md" 2>/dev/null)" = mine ]'
+expect "a linked pack skill survives"         '[ -L "$n2/skills/linked-pack-skill" ]'
+expect "a user's own bin tool survives"       '[ -f "$n2/bin/my-tool" ]'
+expect "a shipped skill takes the new copy"   '[ "$(cat "$n2/skills/shipped/SKILL.md")" = new ]'
 exit "$fail"

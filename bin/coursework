@@ -50,6 +50,10 @@ const c = {
 let RAW_LINES = [];
 
 function parseYaml(text, file) {
+  // A BOM made the first row indent 1, parseMap stopped before
+  // `deliverables:`, and `due` said "Nothing due" over real deadlines
+  // (break-it, 2026-10-19).
+  if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
   const lines = text.split("\n");
   RAW_LINES = lines;
   const rows = [];
@@ -153,6 +157,11 @@ function parseMap(rows, start, end, indent, file) {
     const m = text.match(/^([A-Za-z0-9_.\- ]+):(?:\s+(.*))?$/);
     if (!m) throw err(file, line, `expected "key: value", got "${text}"`);
     const key = m[1].trim();
+    // A second `deliverables:` silently replaced the first list, deadlines
+    // and all (break-it, 2026-10-19). A repeated key is an error now.
+    if (Object.prototype.hasOwnProperty.call(map, key)) {
+      throw err(file, line, `"${key}" appears twice in the same block; merge them`);
+    }
     const inline = (m[2] || "").trim();
     // Block scalars: "key: >-" folds the indented lines below into one string,
     // "key: |" keeps the line breaks. Policy text is prose and belongs in a
@@ -354,6 +363,10 @@ function loadLedger() {
     semester.assume_done_after_days !== "" &&
     Number.isFinite(Number(semester.assume_done_after_days))
   ) {
+    // A negative grace hid an item due in 2 days (break-it, 2026-10-19).
+    if (Number(semester.assume_done_after_days) < 0) {
+      throw err(semesterFile, 0, "assume_done_after_days can't be negative");
+    }
     GRACE_DAYS = Number(semester.assume_done_after_days);
   }
   const courses = [];
@@ -401,7 +414,11 @@ function parseDate(v) {
   const s = String(v).trim();
   const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!m) return null;
-  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  // new Date rolls 2027-02-30 over to Mar 2. An impossible date is no date,
+  // so `check` reports it instead of a deadline landing on the wrong day.
+  if (d.getMonth() !== Number(m[2]) - 1 || d.getDate() !== Number(m[3])) return null;
+  return d;
 }
 
 function today() {

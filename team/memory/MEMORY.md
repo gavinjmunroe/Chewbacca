@@ -401,3 +401,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_outbound_numbers_from_own_list: recount every stat in a region's sequence from its own audit CSV; SoCal step 2 cited 15 Dallas sites (10/18)
 - feedback_ff_video_in_outbound_2026_10_19: FF hero video goes in email 2 as a firmfoundation.tech/watch link; contact-sheet renders first (v21 had placeholder text), curl the link before a batch
 - feedback_guard_fix_replays_real_commands: replay a guard change over the 800 real commands in tests/fixtures/hookd-replay before landing; the 10/19 destructive-guard fix first refused npm cache clean --force
+- reference_landed_branches_look_unlanded: chewbacca land rebuilds commits, so git cherry calls landed branches unlanded; match subject and touched files before deleting or chasing one (10/19)

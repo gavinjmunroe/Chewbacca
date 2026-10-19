@@ -9,7 +9,9 @@ fail=0
 
 # Stdin and heredoc scripts (`python3 -`, `python3 <<`) put cwd on sys.path the
 # same way; destructive-guard ran `python3 - <<` until the 2026-10-09 review.
-bad="$(grep -nE 'python3 (-c|-([[:space:]]|$)|<<)' "$ROOT"/.claude/hooks/*.sh | grep -vE ':[0-9]+:[[:space:]]*#' | grep -vE 'python3 -I (-c|-|<<)' || true)"
+# A mention in backticks is prose about the command (a guard's docstring), not
+# a call; one turned main red on 2026-10-19.
+bad="$(grep -nE 'python3 (-c|-([[:space:]]|$)|<<)' "$ROOT"/.claude/hooks/*.sh | grep -vE ':[0-9]+:[[:space:]]*#' | grep -vE 'python3 -I (-c|-|<<)' | grep -vE '`python3 (-c|-)' || true)"
 if [ -n "$bad" ]; then
   echo "FAIL hooks call python3 -c without -I:"; echo "$bad"; fail=1
 else

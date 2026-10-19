@@ -1352,6 +1352,10 @@ def main():
     refusal = write_refusal()
     if refusal:
         print(f"inventory: refusing to write: {refusal}", file=sys.stderr)
+        # A refusal names its caller too. From 2026-10-09 to 10-19 the log
+        # held one write and no refusals, so a writer blocked by the guard
+        # stayed exactly as anonymous as the 10/06 one it was built to catch.
+        log_writer(f"refused: {refusal}")
         return 2
 
     upstream, vendored, packs = collect_skills()

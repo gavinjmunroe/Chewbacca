@@ -151,6 +151,35 @@ for rel in ("docs/reference/REFERENCE.md", "README.md", "config/settings/toolkit
     check(f"{rel} carries no em dash", "—" not in body)
     check(f"{rel} carries no leaked scalar marker", ">- " not in body and "| >-" not in body)
 
+# ── a refused write still names its caller (backlog 515) ─────────────────────
+#
+# The 10/06 rewrite was never attributed. The guard added on 10/09 refused
+# worktree and suite runs but logged only successful writes, so a refused
+# writer left no trace. This runs main() under CHEWBACCA_SUITE with the log
+# pointed at a temp dir and checks the refusal landed with a parent process.
+
+if __name__ == "__main__":
+    import json as _json
+    import os as _os
+
+    with tempfile.TemporaryDirectory() as logdir:
+        saved = {k: _os.environ.get(k) for k in ("CHEWBACCA_SUITE", "CHEWBACCA_LOG_DIR")}
+        _os.environ["CHEWBACCA_SUITE"] = "1"
+        _os.environ["CHEWBACCA_LOG_DIR"] = logdir
+        try:
+            rc = inv.main()
+        finally:
+            for k, v in saved.items():
+                if v is None:
+                    _os.environ.pop(k, None)
+                else:
+                    _os.environ[k] = v
+        logfile = pathlib.Path(logdir) / "inventory-writes.log"
+        rows = [_json.loads(l) for l in logfile.read_text().splitlines()] if logfile.exists() else []
+        check("a suite run is refused", rc == 2, f"rc={rc}")
+        check("the refusal is logged", len(rows) == 1 and str(rows[0].get("changed", "")).startswith("refused:"), rows)
+        check("the refusal names a parent process", bool(rows and rows[0].get("parent")), rows)
+
 # Guarded because the filename matches pytest's discovery pattern. Without
 # this, importing the module to collect it runs sys.exit and pytest aborts the
 # whole session with INTERNALERROR, taking every other test file down with it.

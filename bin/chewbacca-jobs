@@ -292,6 +292,8 @@ def submit(argv):
             cls = "net"
         elif a == "--build":
             cls = "build"
+        elif a in ("--title", "--after", "--writes") and (not argv or argv[0] == "--"):
+            sys.exit(f"jobs submit: {a} needs a value")
         elif a == "--title":
             title = argv.pop(0)
         elif a == "--after":
@@ -300,6 +302,10 @@ def submit(argv):
             wrote.append(os.path.realpath(os.path.expanduser(argv.pop(0))))
         elif a == "--once":
             once = True
+        else:
+            # `--heavvy` used to be dropped and the job ran at once as light,
+            # outside the load budget (break-it, 2026-10-19).
+            sys.exit(f"jobs submit: unknown option {a!r}; the class flags are --heavy, --build and --net")
     if not argv or argv[0] != "--" or len(argv) < 2:
         sys.exit("usage: chewbacca jobs submit [--heavy|--build|--net] [--title T] [--after ID]... [--writes DIR]... [--once] -- <command...>")
     for dep in after:
@@ -657,6 +663,11 @@ def retry(argv):
 def kill(argv):
     with write():
         j = get(argv[0])
+        # A finished job keeps its ending. Killing one rewrote "done" to
+        # "killed" and sent SIGTERM to a process group id that may now belong
+        # to something else (break-it, 2026-10-19).
+        if j["status"] in ENDED:
+            sys.exit(f"{j['id']} already {j['status']}, nothing to kill")
         if j["status"] == "paused":
             signal_group(j, signal.SIGCONT)
         j.update(status="killed", ended=time.time())

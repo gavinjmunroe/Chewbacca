@@ -188,4 +188,15 @@ check "someone comes back at load 40: it pauses" "$(status "$aw")" paused
 ab=$(MACHINE_PROFILE="$JOBS_DIR/away-battery.json" JOBS_LOAD=15 "$J" submit --heavy -- sleep 30 | cut -d' ' -f1)
 check "on battery, away or not: heavy waits at load 15" "$(status "$ab")" queued
 "$J" kill "$ab" >/dev/null
+
+# Break-it, 2026-10-19: `--heavvy` was dropped and the job ran at once as
+# light, and killing a finished job rewrote it to killed.
+out=$("$J" submit --heavvy -- sleep 3 2>&1); rc=$?
+check "a misspelled class flag is refused" "$rc" 1
+check "and names the flag" "$(printf '%s' "$out" | grep -c heavvy)" 1
+out=$("$J" submit --title -- true 2>&1); rc=$?
+check "--title with no value is refused, not a traceback" "$rc$(printf '%s' "$out" | grep -c Traceback)" 10
+"$J" kill "$id" >/dev/null 2>&1; rc=$?
+check "killing a finished job is refused" "$rc" 1
+check "and it stays done" "$(status "$id")" done
 exit "$fail"

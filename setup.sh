@@ -1579,6 +1579,22 @@ settings["alwaysThinkingEnabled"] = True
 
 h = settings.setdefault("hooks", {})
 
+# The user's own hooks survive. Several events below are assigned outright
+# (h["Stop"] = [...]), so on 2026-10-19 a break-it run from a temp home lost
+# the user's SessionStart, PostToolUse, PreToolUse, Stop, Notification and
+# UserPromptSubmit hooks and their statusLine. An entry is the kit's when a
+# command in it points into the kit's hooks dir, runs hookd, or is the
+# session opener; everything else is put back after the kit's are written.
+def _is_kit_entry(e):
+    for hk in (e.get("hooks") or []) if isinstance(e, dict) else []:
+        c = str(hk.get("command", ""))
+        if hooks_dir in c or "/.claude/hooks/" in c or "hookd" in c or "MANDATORY FIRST ACTION" in c:
+            return True
+    return False
+_user_hooks = {ev: [e for e in entries if isinstance(e, dict) and not _is_kit_entry(e)]
+               for ev, entries in list(h.items()) if isinstance(entries, list)}
+_user_status = settings.get("statusLine")
+
 
 def gated(command):
     """Route a guard that declares `# gate:` words through hookd.
@@ -2324,7 +2340,9 @@ if _pc:
     settings["autoMemoryDirectory"] = os.path.join(_pc, "memory")
 
 # One status line: model, directory, branch, context used, session cost.
-settings["statusLine"] = {"type": "command", "command": hooks_dir + "/statusline.sh"}
+if not (isinstance(_user_status, dict) and _user_status.get("command")
+        and "statusline.sh" not in str(_user_status.get("command"))):
+    settings["statusLine"] = {"type": "command", "command": hooks_dir + "/statusline.sh"}
 
 # Hooks this machine has opted out of, by basename, one per line in
 # ~/.chewbacca/skip-hooks or space-separated in D1_SKIP_HOOKS. Without this,
@@ -2435,6 +2453,11 @@ for _event in ("PreToolUse", "PostToolUse"):
     h[_event] = out
     for m in placed:
         print(f"{_event}: {len(groups[m])} gated guards on matcher {m or '*'} answer through one hookd")
+
+for _ev, _entries in _user_hooks.items():
+    for _e in _entries:
+        if _e not in h.setdefault(_ev, []):
+            h[_ev].append(_e)
 
 # The file now holds an Anthropic key and a GitHub PAT. Write it atomically so
 # a crash cannot truncate it, and 0600 so it is not world-readable.

@@ -123,6 +123,22 @@ def main() -> int:
     check("a skipped hook stays out after a re-run", "kit-autopush.sh" not in every and "model-route.sh" not in every, str(every))
     check("hooks not named in skip-hooks are untouched", "slop-guard.sh" in every and "write-log.sh" in every)
 
+    # The user's own hooks and status line survive, and a re-run doesn't
+    # duplicate them. Break-it, 2026-10-19: every event the block assigns
+    # outright lost the user's entries, and statusLine was replaced.
+    mine = pathlib.Path(tempfile.mkdtemp())
+    (mine / ".claude").mkdir()
+    own = {"hooks": {ev: [{"hooks": [{"type": "command", "command": f"/opt/me/{ev}.sh"}]}]
+                     for ev in ("SessionStart", "PostToolUse", "PreToolUse", "Stop", "Notification", "UserPromptSubmit")},
+           "statusLine": {"type": "command", "command": "/opt/me/status.sh"}}
+    (mine / ".claude" / "settings.json").write_text(json.dumps(own))
+    run(block, mine)
+    kept = run(block, mine)
+    for ev in own["hooks"]:
+        check(f"the user's own {ev} hook survives, once", commands(kept, ev).count(f"{ev}.sh") == 1, str(commands(kept, ev)))
+    check("the user's statusLine survives", kept.get("statusLine", {}).get("command") == "/opt/me/status.sh", str(kept.get("statusLine")))
+    check("kit hooks still register next to the user's", "write-log.sh" in commands(kept, "PostToolUse"))
+
     print(f"\n{PASSED} passed, {FAILED} failed")
     return 1 if FAILED else 0
 

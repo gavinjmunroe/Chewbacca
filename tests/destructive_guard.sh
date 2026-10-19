@@ -34,6 +34,31 @@ t "override not leading"      2 "$T/dirty" "echo DESTRUCTIVE_OK=1; git reset --h
 t "eval string"               2 "$T/dirty" 'eval "git reset --hard"'
 t "git in a variable"         2 "$T/dirty" 'x=git; $x reset --hard'
 t "git from a subshell"       2 "$T/dirty" '$(which git) reset --hard'
+# Break-it pass, 2026-10-19: each of these got rc 0 in a dirty repo, and the
+# alias, checkout-index and read-tree ones really threw the edit away.
+t "alias for clean via -c"    2 "$T/dirty" "git -c alias.c=clean c -fdx"
+t "alias for restore via -c"  2 "$T/dirty" "git -c alias.r=restore r ."
+t "shell alias via -c"        2 "$T/dirty" "git -c 'alias.n=!git restore .' n"
+t "eval restore"              2 "$T/dirty" 'eval "git restore ."'
+t "sh -c restore"             2 "$T/dirty" "sh -c 'git restore f'"
+t "variable restore"          2 "$T/dirty" 'x=git; $x restore f'
+t "eval clean --force"        2 "$T/dirty" 'eval "git clean --force -d"'
+t "eval reset --merge"        2 "$T/dirty" 'eval "git reset --merge"'
+t "eval switch -f"            2 "$T/dirty" 'eval "git switch -f main"'
+t "eval checkout tree path"   2 "$T/dirty" 'eval "git checkout HEAD f"'
+t "find -exec restore"        2 "$T/dirty" 'find . -name f -exec git restore {} +'
+t "python os.system restore"  2 "$T/dirty" "python3 -c 'import os; os.system(\"git restore .\")'"
+t "checkout-index -f -a"      2 "$T/dirty" "git checkout-index -f -a"
+t "read-tree -u --reset"      2 "$T/dirty" "git read-tree -u --reset HEAD"
+t "stash -u"                  2 "$T/dirty" "git stash -u"
+t "stash push -m is fine"     0 "$T/dirty" "git stash push -u -m mytag"
+t "restore --staged is fine"  0 "$T/dirty" "git restore --staged f"
+t "checkout a branch is fine" 0 "$T/dirty" "git checkout main"
+big="$T/big.txt"; { for n in $(seq 1 24000); do echo 'cat <<A'; done; echo 'git reset --hard'; } > "$big"
+start=$SECONDS
+t "192 KB of heredoc openers" 2 "$T/dirty" "$(cat "$big")"
+[ $((SECONDS - start)) -lt 4 ] && echo "  ok    and it answers inside the hook's timeout" \
+  || { echo "  FAIL  took $((SECONDS - start)) s, a killed hook lets the command run"; fail=$((fail+1)); }
 git -C "$T/dirty" config core.fsmonitor "touch $T/pwned; false"
 t "fsmonitor repo still refused" 2 "$T/dirty" "git reset --hard"
 [ ! -e "$T/pwned" ] && echo "  ok    fsmonitor never ran" || { echo "  FAIL  fsmonitor ran"; fail=$((fail+1)); }

@@ -3,7 +3,7 @@
 # Every refusal below needs a git verb it judges (worktree remove, checkout,
 # switch, restore, reset, clean, stash) in the text. Proven by
 # tools/hookd_replay.py: 0.167 s of CPU on every Bash call before (2026-10-12).
-# gate: worktree checkout switch restore reset clean stash
+# gate: worktree checkout switch restore reset clean stash read-tree checkout-index
 [ -z "${HOOKD_INNER:-}" ] && [ -x "$HOME/.local/bin/hookd" ] && exec "$HOME/.local/bin/hookd" gate "$0" "$@"
 # Timing, logging, a watchdog and an output cap. See lib.sh.
 # shellcheck source=/dev/null
@@ -64,6 +64,18 @@ cmd, sid, cwd = os.environ["DG_CMD"], os.environ["DG_SID"], os.environ["DG_CWD"]
 # reset, and the old regex dropped everything after the tag.
 SHELLS = ("bash", "sh", "zsh", "dash", "ksh", "fish", "eval", "source", ".", "xargs")
 lines, kept, i = cmd.split("\n"), [], 0
+# Where each stripped line sits, built once. The old check rebuilt the tail of
+# the line list for every heredoc opener: 24,000 lines of `cat <<A` before a
+# `git reset --hard` (192 KB) took past the hook's timeout, the hook was
+# killed, and a killed hook lets the command run (break-it, 2026-10-19).
+import bisect
+where_line = {}
+for idx, l in enumerate(lines):
+    where_line.setdefault(l.strip(), []).append(idx)
+def tag_after(tag, start):
+    idxs = where_line.get(tag, [])
+    k = bisect.bisect_left(idxs, start)
+    return k < len(idxs)
 while i < len(lines):
     line = lines[i]
     kept.append(line)
@@ -71,8 +83,7 @@ while i < len(lines):
     # Not a here-string (<<<) and not arithmetic: a heredoc only when its
     # terminator line really follows. Otherwise nothing is dropped.
     for tag in re.findall(r"(?<!<)<<(?!<)-?\s*['\"]?([A-Za-z_]\w*)['\"]?", line):
-        rest = [l.strip() for l in lines[i:]]
-        if tag not in rest:
+        if not tag_after(tag, i):
             continue
         opener = re.split(r"&&|\|\||;|\|", line.split("<<", 1)[0])[-1].split()
         # Fed to a shell directly or through a pipe: the body runs.
@@ -178,7 +189,23 @@ where = cwd
 # so a verb phrase in a piece it did not parse as that very git call decides
 # on every directory the text names, and on the session's cwd. Quotes are
 # removed first, so 'git reset --ha""rd' is still the phrase.
-PHRASE = re.compile(r"\b(reset\s+(?:\S+\s+)*--hard|checkout\s+(?:--(?=\s)|\.(?=\s|$|[;)])|-f\b|--force\b)|clean\s+-\w*f|stash\s+(?:drop|clear))")
+# Widened 2026-10-19 after a break-it pass ran each of these through eval,
+# sh -c, $x, find -exec and python os.system and got rc 0 in a dirty repo:
+# restore without --staged, clean --force, reset --merge/--keep, switch -f,
+# checkout <tree> <path>, checkout-index -f, read-tree --reset, stash -u.
+# The new verbs need git (or a $var, or a closing paren) right before them:
+# replayed over 800 real commands, the bare phrases refused `npm cache clean
+# --force` and a team comment saying "the fixed checkout this morning".
+PHRASE = re.compile(r"(\breset\s+(?:\S+\s+)*--hard|\bcheckout\s+(?:--(?=\s)|\.(?=\s|$|[;)])|-f\b|--force\b)|\bclean\s+-\w*f|\bstash\s+(?:drop|clear)"
+                    r"|(?:\bgit|\$\{?\w+\}?|\))(?:\s+-[cC]\s+\S+)*\s+"
+                    r"(?:reset\s+(?:\S+\s+)*--(?:merge|keep)"
+                    r"|checkout\s+(?!-)[^\s;&|]+\s+(?:--\s+)?(?!-)[^\s;&|]+"
+                    r"|restore\b(?![^;&|\n]*--staged)"
+                    r"|clean\s+(?:\S+\s+)*--force"
+                    r"|switch\s+(?:\S+\s+)*(?:-f\b|--force|--discard-changes)"
+                    r"|checkout-index\s+(?:\S+\s+)*(?:-\w*f|--force)"
+                    r"|read-tree\s+(?:\S+\s+)*--reset"
+                    r"|stash\s+(?:-u\b|--include-untracked|-a\b|--all)))")
 dequote = lambda text: re.sub(r"[\"'\\]", "", text)
 hidden = 0  # verb phrases no parsed git call accounts for
 # Variables: `W=/tmp/wt; git -C "$W" reset --hard` judges /tmp/wt. On
@@ -241,6 +268,7 @@ for seg in segments:
         hidden += found
         continue
     here = where
+    aliases = {}
     # GIT_DIR / GIT_WORK_TREE in front of git move it somewhere else.
     for a in assigned:
         key, _, value = a.partition("=")
@@ -254,6 +282,11 @@ for seg in segments:
         elif a[0] in ("-c", "--git-dir", "--work-tree", "--namespace", "--exec-path") and len(a) > 1:
             if a[0] == "--work-tree":
                 here = resolve(a[1], here)
+            # `git -c alias.c=clean c -fdx` ran clean under the name c and
+            # deleted an untracked file (break-it, 2026-10-19).
+            m = re.match(r"alias\.([^=]+)=(.*)", a[1], re.S) if a[0] == "-c" else None
+            if m:
+                aliases[m.group(1)] = m.group(2)
             a = a[2:]
         elif a[0].startswith("--work-tree="):
             here, a = resolve(a[0].split("=", 1)[1], here), a[1:]
@@ -262,6 +295,19 @@ for seg in segments:
     targets.add(here)
     if not a:
         hidden += found
+        continue
+    if a[0] in aliases:
+        expansion = aliases[a[0]].lstrip("!")
+        try:
+            exp = shlex.split(expansion)
+        except ValueError:
+            exp = expansion.split()
+        if exp and os.path.basename(exp[0]) == "git":
+            exp = exp[1:]
+        a = exp + a[1:]
+        # A shell alias (!...) can run anything; its phrases count as hidden.
+        hidden += len(PHRASE.findall(dequote(expansion)))
+    if not a:
         continue
     verb = a[0]
     # 1. another session's worktree
@@ -281,7 +327,10 @@ for seg in segments:
         or (verb == "restore" and "--staged" not in a)
         or (verb == "reset" and ("--hard" in a or "--merge" in a or "--keep" in a))
         or (verb == "clean" and any(x.startswith("-") and "f" in x for x in a[1:]))
-        or (verb == "stash" and (len(a) == 1 or a[1] in ("drop", "clear") or (a[1] == "push" and "-m" not in a)))
+        or (verb == "stash" and (len(a) == 1 or a[1] in ("drop", "clear")
+                                 or ((a[1] == "push" or a[1].startswith("-")) and "-m" not in a and "--message" not in a)))
+        or (verb == "checkout-index" and any(x in ("-f", "--force") or (x.startswith("-") and not x.startswith("--") and "f" in x) for x in a[1:]))
+        or (verb == "read-tree" and "--reset" in a)
     )
     # This call accounts for at most one phrase in its own text; any other
     # phrase in the piece ($(...), an alias) is hidden.
@@ -309,6 +358,14 @@ if hidden or (not simple and PHRASE.search(dequote(body))):
             raise SystemExit
 PY
 )
+RC=$?
+# A crash in the reader used to print nothing, and nothing means allow. A
+# reader that can't finish on a command naming one of the gate verbs refuses
+# instead (break-it, 2026-10-19).
+if [ "$RC" -ne 0 ] && [ -z "$REASON" ] \
+   && printf '%s' "$CMD" | grep -qE '(^|[^[:alnum:]_-])(worktree|checkout|switch|restore|reset|clean|stash|read-tree|checkout-index)([^[:alnum:]_-]|$)'; then
+  REASON="the guard couldn't read this command (exit $RC), and it names a git verb that can throw away work."
+fi
 [ -n "$REASON" ] || exit 0
 {
   echo "destructive-guard: refusing. $REASON"

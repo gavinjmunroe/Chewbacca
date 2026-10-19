@@ -175,14 +175,38 @@ def places(query: str) -> list[dict]:
 
 def resolve(question: str, about: str = "", fetch=fetch_json, context: str = "") -> dict:
     answers, checked = [], []
+    about = " ".join((about or "").split())
     if about:
-        checked.append("Contacts")
-        answers += contact_card(about)
-        checked.append("people brief")
-        context += run(["people", "brief", about])
+        # Only name a source that actually ran: with mac and people missing,
+        # the reply still said "Checked: Contacts, people brief" (break-it,
+        # 2026-10-19).
+        if shutil.which("mac"):
+            checked.append("Contacts")
+            answers += contact_card(about)
+        if shutil.which("people"):
+            checked.append("people brief")
+            context += run(["people", "brief", about])
         checked.append("second brain")
-        context += "\n".join(brain_lines([about.split()[-1], about.split()[0]]))
-        for r in brain_lines([about.split()[-1], about.split()[0]], limit=3, keep=street_in):
+        # The whole name, in order. Any line holding both words in any order
+        # answered "Gavin Munroe" with Zed Munroe's address from a line that
+        # named both (break-it, 2026-10-19).
+        # contacts.csv keeps first and last name in separate leading fields,
+        # so a row whose first field is the first name and one of the next
+        # three is the last name counts too.
+        parts = about.split()
+        named = re.compile(r"\b" + r"\s+".join(map(re.escape, parts)) + r"\b", re.I)
+
+        def names_them(line):
+            if named.search(line):
+                return True
+            if len(parts) > 1 and "," in line:
+                fields = [f.strip().strip('"').lower() for f in line.split(",")[:4]]
+                return fields[0] == parts[0].lower() and parts[-1].lower() in fields[1:]
+            return False
+
+        context += "\n".join(brain_lines([parts[-1], parts[0]], keep=names_them))
+        for r in brain_lines([parts[-1], parts[0]], limit=3,
+                             keep=lambda l: names_them(l) and bool(street_in(l))):
             m = re.search(STREET.pattern + r"[^|\n\"]{0,40}?\b\d{5}\b", r, re.I)
             answers.append({"answer": (m.group(0) if m else street_in(r)).strip(), "source": "second brain"})
     street = street_in(question)

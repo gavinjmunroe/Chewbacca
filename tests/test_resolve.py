@@ -63,6 +63,44 @@ class Resolve(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertIn("12 Main St", rows[0])
 
+    def _brain(self, text, csv=""):
+        tmp = Path(tempfile.mkdtemp())
+        (tmp / "core").mkdir(parents=True)
+        (tmp / "core" / "people.md").write_text(text)
+        if csv:
+            (tmp / "chewbacca" / "agents").mkdir(parents=True)
+            (tmp / "chewbacca" / "agents" / "contacts.csv").write_text(csv)
+        return tmp
+
+    def _resolve(self, brain, about, path="/usr/bin:/bin"):
+        old, old_path = resolve.BRAIN, os.environ.get("PATH", "")
+        resolve.BRAIN, os.environ["PATH"] = brain, path
+        try:
+            return resolve.resolve("their address", about, fetch=census({}))
+        finally:
+            resolve.BRAIN, os.environ["PATH"] = old, old_path
+
+    def test_another_person_who_shares_a_surname_is_not_the_answer(self):
+        # Break-it, 2026-10-19: a line naming both words in another order gave
+        # "Gavin Munroe" his cousin Zed's address.
+        brain = self._brain("Gavin Munroe lives at 2849 Summerdale Dr Dallas TX 75287\n"
+                            "Zed Munroe, Gavin's cousin, 12 Oak St Beverly Hills CA 90210\n")
+        got = " ".join(a["answer"] for a in self._resolve(brain, "Gavin Munroe")["answers"])
+        self.assertIn("2849 Summerdale", got)
+        self.assertNotIn("12 Oak St", got)
+
+    def test_a_contacts_row_with_split_name_fields_still_counts(self):
+        brain = self._brain("", csv='Dana,"",Ruiz,"","","","",+15555550100,"","","12 Main St Austin TX 78701",""\n')
+        got = " ".join(a["answer"] for a in self._resolve(brain, "Dana Ruiz")["answers"])
+        self.assertIn("12 Main St", got)
+
+    def test_checked_names_only_sources_that_ran_and_blank_about_is_fine(self):
+        brain = self._brain("nothing here\n")
+        r = self._resolve(brain, "Nobody Atall")
+        self.assertNotIn("Contacts", r["checked"])
+        self.assertNotIn("people brief", r["checked"])
+        self._resolve(brain, "   ")  # was an IndexError
+
 
 if __name__ == "__main__":
     unittest.main()

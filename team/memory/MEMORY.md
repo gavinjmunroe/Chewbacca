@@ -404,3 +404,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - reference_landed_branches_look_unlanded: chewbacca land rebuilds commits, so git cherry calls landed branches unlanded; match subject and touched files before deleting or chasing one (10/19)
 - project_semyon_onramp_2026_10_17: Semyon (backend, installer and guard tasks) onboarding one pager to Chewbacca and the Clay bridge, in Downloads; written 10/17, not sent
 - feedback_launch_guard_reading_clay_files: launch-guard refuses shell reads that mention Clay plus echo, xargs or python -c; read those files with the Read tool or one plain grep
+- project_firm_foundation_site_motion_split: FF site what-we-do panels are scroll, click and timed; Monday is the only Apple-style part (2026-10-17 call)

@@ -8,6 +8,7 @@ import pathlib
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -265,6 +266,27 @@ class TeamTest(unittest.TestCase):
         self.assertIn("kept 1", out)
         left = [t["title"] for t in json.loads(self.run_team(self.a, "board", "--json")[1])]
         self.assertEqual(left, ["Hand made", "Accurate skill routing"])
+
+    def test_unimport_refuses_an_empty_prefix_and_spares_hand_made_tasks(self):
+        # Break-it, 2026-10-19: `team unimport ""` matched every task and
+        # deleted CHW-1, made by hand with `team add`, never imported.
+        self.run_team(self.a, "add", "Hand made", "--status", "inbox")
+        code, _, err = self.run_team(self.a, "unimport", "")
+        self.assertNotEqual(code, 0)
+        self.assertIn("prefix", err)
+        left = [t["title"] for t in json.loads(self.run_team(self.a, "board", "--json")[1])]
+        self.assertEqual(left, ["Hand made"])
+
+    def test_a_commit_older_than_the_task_does_not_close_it(self):
+        # Break-it, 2026-10-19: "fixes CHW-1" pushed before CHW-1 existed
+        # closed the brand-new task as done with that old sha as proof.
+        self.code_commit("fix: unrelated old work, fixes CHW-1")
+        time.sleep(1.1)
+        self.run_team(self.a, "add", "Brand new task", "--status", "todo")
+        self.run_team(self.a, "sync")
+        task = team.parse(self.remote_file("team/tasks/CHW-1.md"))
+        self.assertEqual(task["status"], "todo")
+        self.assertFalse(task["proof"])
 
     def code_commit(self, message):
         git(self.b, "pull", "-q", "--rebase", "origin", "main")

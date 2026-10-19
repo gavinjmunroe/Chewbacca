@@ -519,30 +519,45 @@ def repo_web_url(repo):
 
 def link_commits(repo):
     """Log recent commits onto the tasks they mention. Returns how many task updates landed."""
-    out = repo.git("log", f"-{LINK_WINDOW}", "--format=%H%x1f%an%x1f%ad%x1f%s%x1f%b%x1e", "--date=short",
+    out = repo.git("log", f"-{LINK_WINDOW}", "--format=%H%x1f%an%x1f%ad%x1f%ct%x1f%s%x1f%b%x1e", "--date=short",
                    repo.ref, check=False)
     commits = []
     for rec in out.split("\x1e"):
         parts = rec.strip("\n").split("\x1f")
-        if len(parts) < 5:
+        if len(parts) < 6:
             continue
-        sha, author, date, subject, body = parts[:5]
+        sha, author, date, ct, subject, body = parts[:6]
         refs, closing = parse_commit_refs(subject, body)
         if refs:
-            commits.append((sha, author, date, subject, refs, closing))
+            commits.append((sha, author, date, int(ct or 0), subject, refs, closing))
     if not commits:
         return 0
     members = load_members(repo)
     base = repo_web_url(repo)
     result = {"n": 0}
 
+    # A commit older than the task can't be about it. "fixes CHW-3" pushed
+    # before CHW-3 existed closed the brand-new CHW-3 as done with that sha as
+    # proof (break-it, 2026-10-19). A task's birth is the commit that added
+    # its file.
+    born = {}
+
+    def born_at(tid):
+        if tid not in born:
+            t = repo.git("log", "--diff-filter=A", "--format=%ct", "-1", repo.ref, "--",
+                         f"{TASK_DIR}/{tid}.md", check=False).strip()
+            born[tid] = int(t) if t.isdigit() else 0
+        return born[tid]
+
     def changes():
         tasks = {t["id"]: t for t in repo.tasks()}
         touched = set()
-        for sha, author, date, subject, refs, closing in reversed(commits):  # oldest first
+        for sha, author, date, ct, subject, refs, closing in reversed(commits):  # oldest first
             who = next((m["name"] for m in members if author.lower() in
                         {(m.get("name") or "").lower(), (m.get("github") or "").lower()}), author)
             for tid in sorted(refs):
+                if tid in tasks and ct < born_at(tid):
+                    continue
                 if tid in tasks and apply_commit(tasks[tid], sha, who, subject,
                                                  f"{base}/commit/{sha}" if base else sha, tid in closing, date):
                     touched.add(tid)
@@ -614,11 +629,16 @@ def remove_imported(repo, prefix):
     """Undo: delete only tasks whose source starts with `prefix` and nobody has touched
     (still in the inbox, unassigned, one activity line). Touched ones are kept."""
     result = {"removed": 0, "kept": 0}
+    # "" matched every task, so `team unimport ""` deleted hand-made tasks that
+    # were never imported (break-it, 2026-10-19). Only a real prefix, and only
+    # tasks that came from an import (they carry a source), are candidates.
+    if not (prefix or "").strip():
+        raise TeamError("unimport needs the source prefix an import used, like \"BACKLOG.md\"")
 
     def changes():
         out, kept = {}, 0
         for t in repo.tasks():
-            if not t["source"].startswith(prefix):
+            if not t["source"] or not t["source"].startswith(prefix):
                 continue
             if t["status"] == "inbox" and not t["owner"] and len(t["activity"]) <= 1:
                 out[f"{TASK_DIR}/{t['id']}.md"] = None

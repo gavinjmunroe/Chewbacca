@@ -189,6 +189,12 @@ class Guards(unittest.TestCase):
         shutil.rmtree(cls.tmp, ignore_errors=True)
 
     def pair(self, name, cmd, cwd=None, **env):
+        # load-guard's limit is a share of the Mac since 206fa729, raised when
+        # nobody is at the keyboard, so an overnight run read load 12 as calm
+        # and twelve cases failed (2026-10-19). Pin the reference Mac with
+        # someone at it, as tests/load-guard-test.sh does.
+        if name == "load-guard.sh":
+            env.setdefault("MACHINE_PROFILE", str(ROOT / "tests/fixtures/machine/reference-14core.json"))
         return guard(name, cmd, False, cwd, **env), guard(name, cmd, True, cwd, **env)
 
     # Real refusals from 2026-10-05..12, trimmed and with private paths

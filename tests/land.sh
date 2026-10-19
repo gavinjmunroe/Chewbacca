@@ -170,4 +170,15 @@ out=$(python3 -I "$LAND" --paths rm.txt -m "feat: N" 2>&1) && fail "a copy holdi
 cd "$T/check" && git pull -q
 [ "$(tr '\n' ' ' < rm.txt)" = "p r s " ] || fail "a refused land changed main: $(tr '\n' ' ' < rm.txt)"
 
+# A stale clone that never had a file must not delete it. On 2026-10-19 a
+# break-it pass had another tab push new.txt, then a clone from before that
+# ran `land --paths new.txt`: it printed success and main lost the file.
+git clone -q "$T/origin.git" "$T/stale-new"
+cd "$T/seed" && git pull -q && echo "another tab's work" > new.txt && python3 tools/checksums.py && git add -A && git commit -qm new && git push -q origin main
+cd "$T/stale-new"
+out=$(python3 -I "$LAND" --paths new.txt -m "chore: typo path" 2>&1) && fail "a stale clone deleted another tab's new file: $out"
+echo "$out" | grep -q "never had it" || fail "stale-path refusal said: $out"
+cd "$T/check" && git pull -q
+[ "$(cat new.txt)" = "another tab's work" ] || fail "new.txt changed on main"
+
 echo ok

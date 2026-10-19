@@ -245,7 +245,7 @@ def main():
         run(["git", "worktree", "add", "-q", "--detach", wt, target], src)
         try:
             if a.paths:
-                missing, clashes, verbatim = [], [], {}
+                missing, clashes, verbatim, unseen = [], [], {}, []
                 try:
                     with open(landed_record(src)) as f:
                         record = json.load(f)
@@ -272,8 +272,15 @@ def main():
                     elif os.path.exists(d):
                         # Deleted on disk: land the deletion, unless someone
                         # changed the file on main since this checkout saw it.
+                        # A file this checkout never had (not in the merge
+                        # base) isn't a deletion, it's another tab's new file:
+                        # a stale clone landing a typo path deleted one from
+                        # main and printed success (break-it, 2026-10-19).
+                        if old is None:
+                            unseen.append(p)
+                            continue
                         with open(d, "rb") as f:
-                            if old is not None and f.read() != old:
+                            if f.read() != old:
                                 clashes.append(p)
                             else:
                                 os.remove(d)
@@ -281,6 +288,9 @@ def main():
                         missing.append(p)
                 if missing:
                     raise SystemExit(f"land: not found anywhere: {', '.join(missing)}")
+                if unseen:
+                    raise SystemExit(f"land: {', '.join(unseen)} is on {target} but this checkout never had it, "
+                                     f"so landing it would delete another tab's file; check the path")
                 if clashes:
                     raise SystemExit(f"land: {', '.join(clashes)} changed on {target} in the same lines as your copy; "
                                      f"pull those lines in and run land again")

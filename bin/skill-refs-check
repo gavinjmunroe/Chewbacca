@@ -43,7 +43,7 @@ history host if jq kill killall launchctl less ln log ls lsof make man mdfind
 mdls mkdir mktemp mv nc nohup npm npx node open openssl osascript pbcopy
 pbpaste pgrep pip pip3 pkill plutil printf ps pwd python python3 read readlink
 realpath rm rmdir rsync say scp screencapture sed seq set sh shasum shift
-sips sleep sort source sqlite3 ssh stat sudo swift swiftc tail tar tccutil tee
+sfltool sips sleep sort source sqlite3 ssh stat sudo swift swiftc tail tar tccutil tee
 test time timeout tmutil touch tr trap true type ulimit umask uname uniq unset
 unzip uptime vm_stat wait wc which while whoami xargs xattr xcodebuild xcrun
 yes zip zsh do done then else fi case esac in function local return export

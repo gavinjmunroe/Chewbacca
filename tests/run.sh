@@ -874,6 +874,8 @@ fi
 if group "installer"; then
   check  "install.sh keeps a copy of every file of the user's it replaces" \
     bash "$ROOT/tests/install_backup.sh" "$ROOT"
+  check  "uninstall removes every kit hook and only the kit's own files" \
+    bash "$ROOT/tests/uninstall_scope.sh" "$ROOT"
   check  "the install summary names who gets the prompts for the agent this Mac has" \
     bash "$ROOT/tests/prompts_go_to.sh" "$ROOT"
   check  "--help works" bash "$ROOT/setup.sh" --help

@@ -45,7 +45,7 @@ if [ -f "$CLAUDE_DIR/settings.json" ]; then
   BACKUP="$CLAUDE_DIR/settings.json.pre-uninstall"
   [ "$DRY" -eq 0 ] && cp "$CLAUDE_DIR/settings.json" "$BACKUP"
   [ "$DRY" -eq 0 ] && ok "current settings copied to $(basename "$BACKUP")"
-  DRY="$DRY" python3 - "$CLAUDE_DIR/settings.json" <<'PYEOF'
+  DRY="$DRY" KIT_HOOKS="$SCRIPT_DIR/.claude/hooks" python3 - "$CLAUDE_DIR/settings.json" <<'PYEOF'
 import json, os, sys
 
 path = sys.argv[1]
@@ -65,10 +65,17 @@ if perms.get("defaultMode") == "bypassPermissions":
     perms["defaultMode"] = "default"
     removed.append("permissions.defaultMode -> default (Claude asks again)")
 
-# Only hooks pointing at scripts this kit installed.
-OURS = ("slop-guard.sh", "prayer-guard.sh", "session-context.sh", "format-and-sync.sh",
-        "stop-check.sh", "env-guard.sh", "coursework-context.sh",
-        "sync-to-d1.sh", "statusline.sh")
+# Only hooks pointing at scripts this kit installed. The list was nine names,
+# so after setup then uninstall 89 of 90 registrations pointed at deleted
+# scripts (break-it, 2026-10-19). It's every hook the kit ships, plus hookd,
+# which dispatches the gated ones.
+_kit_hooks = os.environ.get("KIT_HOOKS", "")
+OURS = tuple(sorted({f for f in (os.listdir(_kit_hooks) if os.path.isdir(_kit_hooks) else [])
+                     if f.endswith(".sh")} | {"slop-guard.sh", "prayer-guard.sh", "session-context.sh",
+                     "format-and-sync.sh", "stop-check.sh", "env-guard.sh", "coursework-context.sh",
+                     "sync-to-d1.sh", "statusline.sh"}))
+# Matched as /<name>, so a kit hook called git.sh never claims a user's my-git.sh.
+OURS = tuple("/" + o for o in OURS) + ("/.local/bin/hookd",)
 hooks = s.get("hooks") or {}
 for event in list(hooks):
     kept = []
@@ -93,6 +100,11 @@ for entry in list(hooks.get("UserPromptSubmit") or []):
         removed.append("hooks.UserPromptSubmit -> session opener")
 if not hooks.get("UserPromptSubmit"):
     hooks.pop("UserPromptSubmit", None)
+
+# setup turns this on with bypass mode; left behind, Claude never warns again.
+if s.get("skipDangerousModePermissionPrompt") is True:
+    s.pop("skipDangerousModePermissionPrompt")
+    removed.append("skipDangerousModePermissionPrompt")
 
 if isinstance(s.get("statusLine"), dict) and "statusline.sh" in json.dumps(s["statusLine"]):
     s.pop("statusLine")
@@ -164,7 +176,16 @@ for kind in skills commands rules agents output-styles hooks; do
     name="$(basename "$item")"
     target="$CLAUDE_DIR/$kind/$name"
     [ -e "$target" ] || continue
-    if [ "$DRY" -eq 1 ]; then ok "would remove $kind/$name"; else rm -rf "$target" && ok "removed $kind/$name"; fi
+    # Only what is still the kit's copy. A user's own security.md or
+    # code-reviewer.md, or one they edited, shares a name with a shipped file
+    # and was deleted even on a machine that never ran setup (break-it,
+    # 2026-10-19). Those are kept and named.
+    if [ -L "$target" ] || { [ -d "$item" ] && diff -rq "$item" "$target" >/dev/null 2>&1; } \
+       || { [ -f "$item" ] && cmp -s "$item" "$target"; }; then
+      if [ "$DRY" -eq 1 ]; then ok "would remove $kind/$name"; else rm -rf "$target" && ok "removed $kind/$name"; fi
+    else
+      skip "kept $kind/$name: it differs from the kit's copy, so it's yours or you edited it"
+    fi
   done
 done
 # Pack skills are symlinks into a clone. Remove the links, keep the clone.

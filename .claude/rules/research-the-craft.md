@@ -58,6 +58,22 @@ Before producing, answer: **what do the people who do this for a living say
 separates a good one from a bad one?** No answer means the research step was
 skipped.
 
+## Recreating something from a film: frames before code
+
+When the brief is "make it look like the movie", the first move is to get the
+actual frames: download the clip (`yt-dlp --cookies-from-browser chrome` when
+the plain download says unavailable), tile it at 2 to 6 fps around the moment,
+and read the primary paper if one exists, before writing a line. Then put your
+render next to the matching frame and compare, every iteration.
+
+On 2026-10-19 a Big Hero 6 microbot sim was built three times from a written
+summary instead. Caleb: "It looks garbage and nothing like the movie", then
+"Bro donwload the vid what ru doing", then, after the +1 moment was rebuilt as
+a collapse it never was, "the +1 bot didn't make it collapse!!!! ... watch the
+vid", then "Make sure you use our research, especially the research paper!!!!!!"
+and "a hand is not cubical lmao". The version that held up came from the
+downloaded clip, the SIGGRAPH PDF and side-by-side frame checks.
+
 ## Never one-shot creative work
 
 Anything creative, meaning an essay section, a personal statement, a script, a

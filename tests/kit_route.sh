@@ -90,5 +90,28 @@ out=$(run "$TMP/decoy.txt")
 if [ -z "$out" ]; then ok "silent on cover plus letter with no application"
 else no "routed a landlord letter into: $(printf '%s' "$out" | head -c 120)"; fi
 
+# A kit has to be named. 2026-10-17 to 10-19: 25 of 28 routes sent Firm
+# Foundation video sessions to colin-kit on "intro vid" and "rough cut", words
+# from its use-when line, with Colin never mentioned.
+mkdir -p "$TMP/colin-kit"
+cat > "$TMP/colin-kit/.kit" <<'K'
+name: colin-kit
+use-when: colin, iya portfolio, intro vid, the third lap, slideroom, usc early action, my portfolio pieces, rough cut, what do I do today, open loops, college apps, nov 1
+status: ready
+K
+printf '#!/bin/sh\nprintf "%%s\\n" "%s/apply-kit" "%s/accommodations-kit" "%s/colin-kit"\n' "$TMP" "$TMP" "$TMP" > "$TMP/bin/kits"
+printf 'The scrap paper popping in and out in the intro vid is bad, the rough cut needs smoother section to section transitions\n' > "$TMP/ffvid.txt"
+out=$(run "$TMP/ffvid.txt")
+if [ -z "$out" ]; then ok "silent on video work that never names Colin"
+else no "routed video work into: $(printf '%s' "$out" | head -c 120)"; fi
+printf 'Colin needs his iya portfolio pieces sorted before nov 1\n' > "$TMP/colin.txt"
+out=$(run "$TMP/colin.txt")
+if printf '%s' "$out" | grep -q 'colin-kit'; then ok "routes when the kit is named"
+else no "missed a prompt that names Colin"; fi
+printf 'apply the fix to the hook and rerun the tests\n' > "$TMP/applyfix.txt"
+out=$(run "$TMP/applyfix.txt")
+if [ -z "$out" ]; then ok "silent on apply as a plain verb"
+else no "routed apply-the-fix into: $(printf '%s' "$out" | head -c 120)"; fi
+
 printf '\n  %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -260,10 +260,22 @@ for k in loaded:
     density = len(hits) / max(len(prompt_stems), 1)
     dense = len(hits) >= 3 and density >= 0.04
 
-    strong = (
+    # The kit has to be NAMED. Measured 2026-10-19 on verdicts.tsv: 28 routes
+    # in two days, about 2 right. 25 sent Firm Foundation video sessions to
+    # colin-kit, because its use-when carries "intro vid" and "rough cut", and
+    # pasted briefs and continuation summaries hit apply-kit and
+    # accommodations-kit on scattered English. Matching a kit by topic is the
+    # model's call: the SessionStart briefing lists every kit with its use-when
+    # line. This hook only nudges when the prompt says the kit's own name
+    # ("colin", "apply", "accommodation") plus one more of its words, so
+    # "apply the fix" stays silent and "apply to three clubs, essay" routes.
+    name_stems = stems(name.replace("-", " ")) - {"kit", "proje"}
+    named = bool(prompt_stems & name_stems)
+    strong = named and (
         (phrase_hit and len(hits) >= 2)
         or len(distinctive) >= 2
         or dense
+        or len(hits) >= 1
     )
     if not strong:
         continue

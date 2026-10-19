@@ -91,7 +91,7 @@ REFERENCE PARAMETERS, starting points to verify on the current design:
   No drop shadows in dark UI: a four-step surface ladder plus 1px hairlines.
 
 BEFORE BUILDING:
-- Name the stance and what it refuses (tools/stances.py has six). A page
+- Name the stance and what it refuses (apps/ux-engine/tools/stances.py has six). A page
   committed to none is what reads as derivative.
 - research/12: subtraction is not generated as a candidate unless you say so.
   Removal is free and costs nothing. Uncued, people subtract 41% of the time;

@@ -162,6 +162,29 @@ def main() -> int:
     check("an unreadable settings.json stops the run", refused)
     check("and is left exactly as it was", (bad / ".claude" / "settings.json").read_text() == garbage)
 
+    # A dotfiles symlink stays a symlink, and a read-only file is left alone.
+    linked = pathlib.Path(tempfile.mkdtemp())
+    (linked / ".claude").mkdir()
+    (linked / "dotfiles").mkdir()
+    (linked / "dotfiles" / "settings.json").write_text('{"model": "mine"}')
+    (linked / ".claude" / "settings.json").symlink_to(linked / "dotfiles" / "settings.json")
+    after = run(block, linked)
+    check("a symlinked settings.json stays a symlink", (linked / ".claude" / "settings.json").is_symlink())
+    check("and its target got the update", after.get("model") == "mine" and "hooks" in json.loads(
+        (linked / "dotfiles" / "settings.json").read_text()))
+    ro = pathlib.Path(tempfile.mkdtemp())
+    (ro / ".claude").mkdir()
+    (ro / ".claude" / "settings.json").write_text('{"model": "mine"}')
+    os.chmod(ro / ".claude" / "settings.json", 0o444)
+    try:
+        run(block, ro)
+        refused = False
+    except AssertionError:
+        refused = True
+    check("a read-only settings.json stops the run", refused)
+    check("and keeps its content and mode", (ro / ".claude" / "settings.json").read_text() == '{"model": "mine"}'
+          and (os.stat(ro / ".claude" / "settings.json").st_mode & 0o777) == 0o444)
+
     print(f"\n{PASSED} passed, {FAILED} failed")
     return 1 if FAILED else 0
 

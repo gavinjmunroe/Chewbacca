@@ -2518,11 +2518,18 @@ for _ev, _entries in _user_hooks.items():
 
 # The file now holds an Anthropic key and a GitHub PAT. Write it atomically so
 # a crash cannot truncate it, and 0600 so it is not world-readable.
-tmp_path = settings_path + ".tmp"
+# Through a symlink to its target (a dotfiles repo keeps settings.json there;
+# os.replace on the link swapped it for a plain file), and never over a file
+# the user made read-only (break-it, 2026-10-19).
+real_settings = os.path.realpath(settings_path)
+if os.path.exists(real_settings) and not os.access(real_settings, os.W_OK):
+    raise SystemExit(f"setup: {real_settings} is read-only, so it was left as it is. "
+                     "Make it writable and run setup again to update it.")
+tmp_path = real_settings + ".tmp"
 with open(tmp_path, "w") as f:
     json.dump(settings, f, indent=2)
 os.chmod(tmp_path, 0o600)
-os.replace(tmp_path, settings_path)
+os.replace(tmp_path, real_settings)
 
 print("Settings written.")
 PYEOF

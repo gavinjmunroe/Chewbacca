@@ -529,8 +529,20 @@ ensure_terminal_shell_guard() {
     if grep -qF "$TERMINAL_GUARD_MARK" "$rc" 2>/dev/null; then
       had=1
       tmp="$(mktemp)" || return 0
-      awk -v s="$TERMINAL_GUARD_MARK" -v e="$TERMINAL_GUARD_END" \
-        'index($0,s){f=1; next} f{ if (index($0,e)) f=0; next } {print}' "$rc" > "$tmp"
+      # The first version (29bb83ee) wrote no end marker; its block ends at
+      # its one `fi`. Stripping to an end marker that isn't there deleted the
+      # rest of the user's rc (break-it, 2026-10-19), so without one the strip
+      # stops at that `fi`. Blank lines right before the block go with it, or
+      # every refresh added one. A copy of the rc is kept either way.
+      local hasend=0
+      grep -qF "$TERMINAL_GUARD_END" "$rc" 2>/dev/null && hasend=1
+      cp -p "$rc" "$rc.chewbacca-bak"
+      awk -v s="$TERMINAL_GUARD_MARK" -v e="$TERMINAL_GUARD_END" -v hasend="$hasend" '
+        index($0,s) { f=1; blank=""; next }
+        f { if (hasend ? index($0,e) : ($0 ~ /^fi[[:space:]]*$/)) f=0; next }
+        /^[[:space:]]*$/ { blank = blank $0 "\n"; next }
+        { printf "%s", blank; blank=""; print }
+        END { printf "%s", blank }' "$rc" > "$tmp"
       cat "$tmp" > "$rc"
       rm -f "$tmp"
     fi

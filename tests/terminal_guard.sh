@@ -57,5 +57,31 @@ session=$(env -i PATH="$PATH" HOME="$HOMEDIR" CLAUDE_CODE_MESSAGING_SOCKET=/tmp/
   bash -c "source '$HOMEDIR/.zshrc'; env | grep -cE '^(CLAUDECODE|CLAUDE_CODE_)'")
 [ "$session" = 3 ] || fail "a tool shell lost its session variables: $session of 3 left"
 
+# A third run changes nothing: each refresh used to add one blank line.
+before=$(cksum < "$HOMEDIR/.zshrc")
+install_guard
+[ "$(cksum < "$HOMEDIR/.zshrc")" = "$before" ] || fail "a re-run changed the rc file (blank line drift)"
+
+# The first version (29bb83ee) had no end marker. Refreshing it used to strip
+# from the marker to the end of the file, taking everything after it
+# (break-it, 2026-10-19).
+cat > "$HOMEDIR/.zshrc" <<'OLD'
+export BEFORE=1
+
+# Added by Chewbacca: a window is not a Claude Code child session
+# A Terminal.app launched from inside a Claude Code session passes the session's
+if [ "$(ps -o comm= -p "$PPID" 2>/dev/null)" = "login" ]; then
+  unset FORCE_COLOR COLORTERM CLICOLOR_FORCE CLAUDECODE
+  unset _chewbacca_var
+fi
+export AFTER_THE_OLD_GUARD=1
+alias ll='ls -la'
+OLD
+install_guard
+grep -q 'AFTER_THE_OLD_GUARD' "$HOMEDIR/.zshrc" || fail "refreshing the old guard deleted the lines after it"
+grep -q "alias ll=" "$HOMEDIR/.zshrc" || fail "refreshing the old guard deleted the user's alias"
+[ "$(grep -c 'Added by Chewbacca: a window' "$HOMEDIR/.zshrc")" = 1 ] || fail "old guard not replaced exactly once"
+[ -f "$HOMEDIR/.zshrc.chewbacca-bak" ] || fail "no backup of the rc before rewriting it"
+
 [ "$FAILED" = 0 ] && note "guard installs once, cleans Terminal.app, spares iTerm and tool shells"
 exit "$FAILED"

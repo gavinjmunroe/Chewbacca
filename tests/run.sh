@@ -401,6 +401,7 @@ if group "doctor"; then
   check  "--json is valid JSON" bash -c "bash '$ROOT/doctor.sh' --json | python3 -m json.tool"
   check  "--json stays valid JSON when a leak is found" bash "$ROOT/tests/test_doctor_json_leak.sh"
   check  "a CLAUDE.md with no @ imports is reported, not passed" bash "$ROOT/tests/test_doctor_zero_imports.sh"
+  check  "a registered hook whose script is missing fails doctor" bash "$ROOT/tests/test_doctor_missing_hooks.sh" "$ROOT"
   check  "a runtime install is judged as one: skipped parts counted and named, every printed command exists" bash "$ROOT/tests/test_doctor_runtime_profile.sh"
   expect "--json carries severities" '"severity"' bash -c "bash '$ROOT/doctor.sh' --json"
   expect "--json carries sections" '"section"' bash -c "bash '$ROOT/doctor.sh' --json"
@@ -797,6 +798,7 @@ if group "tools"; then
   check  "the export leaks no @imports" bash -c "! grep -q '^@' '$TMP/AGENTS.md'"
   check  "slop check holds the line" python3 "$ROOT/bin/slop-check" "$ROOT/docs" "$ROOT/skills" --max 60
   check  "code-slop scores its own tests" python3 "$ROOT/tests/test_code_slop.py"
+  check  "code-slop sees new and non-ASCII files, slop-check sees every prose suffix and honors verbatim only in frontmatter" bash "$ROOT/tests/slop_gates_scope.sh" "$ROOT"
   check  "inventory parses frontmatter and holds house style" python3 "$ROOT/tests/test_inventory.py"
   check  "amber-mcp imports 10,000 contacts deduplicated, one user per store" python3 "$ROOT/tests/test_amber_mcp.py"
   check  "site finds what the kit knows and snaps a page by role" python3 "$ROOT/tests/test_site.py"

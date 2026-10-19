@@ -298,6 +298,38 @@ sys.exit(0 if d.get('hooks', {}).get('$event') else 1)
   fi
 done
 
+# Every script a registered hook command names has to exist. Break-it,
+# 2026-10-19: deleting one hook script, or all 90, left the fail count
+# unchanged, and the check above printed "Stop wired (not via stop-check.sh)"
+# while settings.json still ran the missing file on every turn. A missing
+# script fails open: the hook errors and the action goes ahead.
+MISSING_HOOKS="$(python3 - <<'PY' 2>/dev/null
+import json, os, pathlib, re
+p = pathlib.Path.home() / ".claude/settings.json"
+try:
+    d = json.loads(p.read_text())
+except Exception:
+    raise SystemExit
+home = str(pathlib.Path.home())
+missing = set()
+for event, groups in (d.get("hooks") or {}).items():
+    for g in groups or []:
+        for h in (g or {}).get("hooks", []) if isinstance(g, dict) else []:
+            cmd = str(h.get("command", "")).replace("$HOME", home).replace("${HOME}", home)
+            for path in re.findall(r"(?:~|/)[^\s'\";|&]+\.(?:sh|py)\b", cmd):
+                path = os.path.expanduser(path)
+                if not os.path.exists(path):
+                    missing.add(path.replace(home, "~"))
+print("\n".join(sorted(missing)))
+PY
+)"
+if [ -n "$MISSING_HOOKS" ]; then
+  bad "$(printf '%s\n' "$MISSING_HOOKS" | wc -l | tr -d ' ') registered hook script(s) are missing, so those hooks error and let everything through: $(printf '%s' "$MISSING_HOOKS" | head -3 | tr '\n' ' ')" \
+      "run setup.sh to put them back, or remove their entries from ~/.claude/settings.json" major
+else
+  ok "every registered hook script exists"
+fi
+
 # A hook that emits malformed JSON is worse than one that emits nothing.
 if [ -x "$CLAUDE_DIR/hooks/env-guard.sh" ]; then
   OUT="$(echo '{"tool_input":{"file_path":"/tmp/probe/.env"}}' | "$CLAUDE_DIR/hooks/env-guard.sh" 2>/dev/null)"

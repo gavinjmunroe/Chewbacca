@@ -458,9 +458,13 @@ def is_ignored(path, pats):
 
 
 def is_verbatim(text):
-    """Frontmatter opt-out, for a single file with no useful directory."""
-    head = text[:400]
-    return bool(re.search(r"^\s*verbatim:\s*true\s*$", head, re.M))
+    """Frontmatter opt-out, for a single file with no useful directory.
+
+    Only inside a leading --- block. Matching any line in the first 400
+    characters let "Intro.\nverbatim: true\n<slop>" skip the gate (break-it,
+    2026-10-19)."""
+    m = re.match(r"\ufeff?---\s*\n(.*?)\n---\s*(?:\n|$)", text, re.S)
+    return bool(m and re.search(r"^\s*verbatim:\s*true\s*$", m.group(1), re.M))
 
 
 def is_code(path, text):
@@ -516,7 +520,11 @@ def main():
     for f in a.files:
         pth = pathlib.Path(f)
         if pth.is_dir():
-            paths.extend(sorted(q for q in pth.rglob("*.md") if q.is_file()))
+            # Any case, and the other prose suffixes: README.MD, .markdown and
+            # .mdx scoring 31 each passed a directory scan with nothing
+            # printed (break-it, 2026-10-19).
+            paths.extend(sorted(q for q in pth.rglob("*") if q.is_file()
+                                and q.suffix.lower() in (".md", ".markdown", ".mdx")))
         else:
             paths.append(pth)
     for pth in paths:

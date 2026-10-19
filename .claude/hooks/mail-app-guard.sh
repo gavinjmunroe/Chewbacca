@@ -26,9 +26,25 @@ tool="$(printf '%s' "$payload" | jq -r '.tool_name // empty' 2>/dev/null)"
 cmd="$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null)"
 [ -n "$cmd" ] || exit 0
 
-# `mac mail ...` at a command start, or after ; && || | ( or a newline.
-if printf '%s' "$cmd" | grep -qE '(^|[;&|(`]|\$\(|[[:space:]]then[[:space:]]|[[:space:]]do[[:space:]])[[:space:]]*(command[[:space:]]+)?mac[[:space:]]+mail([[:space:]]|$)' \
-  || printf '%s' "$cmd" | grep -qiE 'tell application "Mail"|Library/Mail/V[0-9]+/MailData'; then
+# Words a command only prints or stores (echo, a commit message, a heredoc
+# to a file) are blanked first, as destructive-guard does, so naming the
+# command in prose isn't a call. What's left is read with quotes and
+# backslashes removed, so `bash -c '...'`, `env X=1 ...`, a full path to mac
+# and `mac "mail" send` all read as the call they are. Break-it, 2026-10-19:
+# those shapes, `tell app`, the bundle id and JXA's Application("Mail") all
+# got through, and `mac mail send` really sends.
+BP="${CHEWBACCA_BASHPARSE:-$HOME/.local/bin/chewbacca-bashparse}"
+if [ -x "$BP" ] && masked="$(printf '%s' "$cmd" | "$BP" --mask data 2>/dev/null)" && [ -n "$masked" ]; then
+  cmd="$masked"
+fi
+flat="$(printf '%s' "$cmd" | tr -d "\"'\\\\")"
+# mac has to be in command position: a line start, after ; & | ( ` $( then do,
+# after a wrapper (env, sudo, time, nice, xargs, command, exec, eval, with
+# their flags and VAR=x), or right after -c. `grep -rn "mac mail" docs/` stays
+# a search.
+POS='(^|[;&|({`]|\$\(|[[:space:]](then|do)|(^|[[:space:]])(env|sudo|time|nice|xargs|command|exec|eval)([[:space:]]+(-[^[:space:]]+|[0-9]+|[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*))*|[[:space:]]-c)'
+if printf '%s' "$flat" | grep -qE "${POS}[[:space:]]*([^[:space:];&|]*/)?mac[[:space:]]+mail([[:space:]]|\$)" \
+  || printf '%s' "$cmd" | grep -qiE 'tell (application|app) "Mail"|application id "com\.apple\.mail"|Application\(.Mail.\)|Library/Mail/V[0-9]+/MailData'; then
   cat >&2 <<'EOF'
 mail-app-guard: refusing Mail.app. Email goes through the Gmail API.
 

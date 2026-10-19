@@ -16,6 +16,19 @@ t "after a cd"              2 'cd ~ && mac mail unread --json'
 t "inside a substitution"   2 'x=$(mac mail search "Ryan" --json)'
 t "AppleScript to Mail"     2 "osascript -e 'tell application \"Mail\" to get unread count of inbox'"
 t "the Mail.app store"      2 'sqlite3 ~/Library/Mail/V10/MailData/Envelope\ Index "select 1"'
+# Break-it, 2026-10-19: each of these got through, and mac mail send sends.
+t "full path to mac"        2 '/Users/x/.local/bin/mac mail send --to a@b.c --body hi'
+t "behind env"              2 'env FOO=1 mac mail send --to a@b.c'
+t "behind sudo"             2 'sudo mac mail unread'
+t "behind time and nice"    2 'time nice -n 10 mac mail unread'
+t "inside bash -c"          2 "bash -c 'mac mail send --to a@b.c'"
+t "inside eval"             2 "eval 'mac mail unread'"
+t "through xargs"           2 'echo x | xargs mac mail search'
+t "inside a group"          2 '{ mac mail unread; }'
+t "quoted verb"             2 'mac "mail" send --to a@b.c'
+t "tell app Mail"           2 "osascript -e 'tell app \"Mail\" to send'"
+t "the bundle id"           2 "osascript -e 'tell application id \"com.apple.mail\" to send'"
+t "JXA"                     2 "osascript -l JavaScript -e 'Application(\"Mail\").send()'"
 echo "SHOULD ALLOW (exit 0):"
 t "gmail through the kit"   0 'chewbacca email'
 t "connect an inbox"        0 'chewbacca email add calebnew@usc.edu'

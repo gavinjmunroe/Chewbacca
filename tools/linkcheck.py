@@ -6,9 +6,11 @@ repo-root-relative paths while living in docs/, so every link to a skill, a
 template or a snippet was missing ../. The file reads fine and every link is
 dead, which is why nobody noticed.
 
-Exits 1 on the first broken link so it can gate a commit.
+Collects every broken link and exits 1 if there is one, so it can gate a commit.
+A %20 in a target is a space, and links inside fenced code blocks are examples,
+not links: both were reported broken (break-it, 2026-10-19).
 """
-import pathlib, re, sys
+import pathlib, re, sys, urllib.parse
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SKIP = re.compile(r"^(https?:|#|mailto:|/)")
@@ -21,8 +23,9 @@ def main():
             text = md.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
+        text = re.sub(r"^(```|~~~).*?^\1[^\n]*$", "", text, flags=re.S | re.M)
         for m in re.finditer(r"\[([^\]]*)\]\(([^)\s]+)\)", text):
-            target = m.group(2).split("#")[0]
+            target = urllib.parse.unquote(m.group(2).split("#")[0])
             if not target or SKIP.match(target):
                 continue
             if not (md.parent / target).exists():

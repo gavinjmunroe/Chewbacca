@@ -1409,6 +1409,8 @@ if group "installer"; then
   # prose reads fine and every link is dead, which is why it survived.
   check  "every relative link in the docs resolves" \
     python3 "$ROOT/tools/linkcheck.py"
+  check  "linkcheck decodes %20, skips code fences and still fails a broken link" \
+    bash "$ROOT/tests/linkcheck_cases.sh" "$ROOT"
 
   # 2026-10-09: docs/ had grown to 76 flat files mixing guides, specs and
   # dated plans. Sorted into guide/, reference/ and plans/ under one index;

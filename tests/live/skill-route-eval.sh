@@ -38,5 +38,8 @@ ok "held-out recall at least 23.9% (measured 2026-10-17)"            at_least re
 ok "typed no-skill prompts get a skill at most 34.7% of the time"     at_most false_fire_none_typed 34.7
 ok "machine traffic never gets a nudge or gate"                       at_most false_fire_notification 0
 ok "p95 hook time at most 2500ms (the Mac runs at load 30 to 100)"    at_most p95_ms 2500
+# The floors can fail: a precision floor above 100% must die. Without this
+# line the suite's "every live check has a mutant" stayed red (2026-10-19).
+mutant "a precision floor of 101% is not met" at_least precision 101
 cat "$LIVE_SCRATCH/held.json"
 finish

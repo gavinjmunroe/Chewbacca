@@ -383,7 +383,16 @@ chmod +x "$HOME_DIR"/*.sh "$HOME_DIR"/bin/* 2>/dev/null || true
 # it catches a truncated download, a proxy that rewrote something, and a
 # mirror that is not what it claims. What it actually buys is written down in
 # docs/reference/THREAT-MODEL.md.
-if [ -f "$HOME_DIR/SHA256SUMS.txt" ] && command -v shasum >/dev/null 2>&1; then
+# A payload with no manifest is the truncated download this gate exists for.
+# It used to skip verification and install whatever came (break-it,
+# 2026-10-19).
+if [ ! -f "$HOME_DIR/SHA256SUMS.txt" ]; then
+  bad "The download has no SHA256SUMS.txt, so nothing in it can be checked."
+  echo "      Stopping. Try again, or report this: https://github.com/$REPO/issues"
+  restore_previous
+  exit 1
+fi
+if command -v shasum >/dev/null 2>&1; then
   MISMATCH=0
   VERIFIED=0
   while IFS= read -r line; do

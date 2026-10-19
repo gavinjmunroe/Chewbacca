@@ -1336,6 +1336,7 @@ if group "installer"; then
   done
   exits "an unknown flag stops before installation" 2 bash "$ROOT/start.sh" --nonsense --dry-run
   check  "an update through start.sh keeps the state in ~/.chewbacca" bash "$ROOT/tests/start_carry_state.sh"
+  check  "start.sh refuses a download with no checksum manifest" bash "$ROOT/tests/start_manifest_required.sh" "$ROOT"
   check  "the double-click Setup app installs with no Terminal and no password" bash "$ROOT/tests/setup_app.sh" "$ROOT"
   check  "setup links every tool Kyber.app runs from ~/.local/bin" bash "$ROOT/tests/kyber_tools_linked.sh"
   # --version used to silently mean "pin to this tag", so it ate the next

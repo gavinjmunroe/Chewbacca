@@ -117,6 +117,11 @@ def region(readme):
 
 def main():
     arg = sys.argv[1] if len(sys.argv) > 1 else ""
+    # Anything but --json or --check used to mean "rewrite": --help, --dry-run
+    # and a typo all wrote the README (break-it, 2026-10-19).
+    if arg not in ("", "--json", "--check"):
+        print(__doc__)
+        return 0 if arg in ("-h", "--help") else 2
     c = counts()
     if arg == "--json":
         print(json.dumps(c, indent=2))

@@ -21,6 +21,15 @@ sooner may show its warning and need another launch through the command above.
 No exam controls are modified. Other prohibited apps and sharing services may
 still need to close according to the browser's own prompts.
 
+After installing, turn on Full Disk Access for
+`/Library/Application Support/LockDown ARD Switch/lockdown-ard-switch`. Without it
+kickstart can neither remove nor write `RemoteManagement.launchd`, the log says
+"Apple did not deactivate Remote Management", and launchd restarts ARDAgent at
+once. Adding it to the list is not enough: on 2026-10-19 it was listed with the
+toggle off (TCC `auth_value` 0) and nothing worked until the switch went on.
+Verified that night: open paused ARD within a second, quitting the browser
+restored the file and ARDAgent came back.
+
 `chewbacca lockdown uninstall` restores any pending state before removing only
 this service. Close LockDown Browser before uninstalling.
 

@@ -4,6 +4,8 @@
   orphan-reap            list orphans (nothing is touched)
   orphan-reap --kill     stop them (SIGTERM)
   orphan-reap --json     machine-readable list
+  orphan-reap --kill --pressure   also unload idle Ollama models when swap is full and memory is low
+  orphan-reap --min-age SEC       only reap roots at least this old (the daemon timer passes 7200)
 
 WHY. 2026-10-10. Caleb force-quit Claude because the Mac was unusable. After
 the restart, a Clay crawler (`clay-map crawl --resume`) a dead tab had started
@@ -17,8 +19,18 @@ WHAT COUNTS. A process whose parent is launchd (ppid 1) AND that a tab started:
   - a kit job started detached: anything run from `.claude/worktrees/agent-`,
     or clay-map, clay-go, ingest_all.py, yt-bulk, yt-transcript, mlx_whisper,
     or a headless Blender/Nalana render (`-b`)
+  - a test's throwaway kit server, run from a Python mkdtemp dir
+    (`$TMPDIR/tmpXXXX/kit/...` or `.../snapshots/...`)
 launchd's own jobs (people sync, messages refresh) also have ppid 1, but they
 match none of these, so they're never touched.
+
+WHY IT ALSO RUNS ON A TIMER. 2026-10-19, 5:52pm: all three Claude tabs crawled
+at load 110 with 10.6 of 12.3 GB swap used. Twelve `kit/bin/web.py` servers
+from tests/test_chewbacca_daemon.py had sat orphaned for 14 to 16 hours, and
+three Ollama embedding models (mxbai-embed-large, nomic-embed-text,
+embeddinggemma, about 1.7 GB) stayed resident on 2h and 30m keep_alives. This
+had only run at SessionStart, and with tabs open for hours it never fired.
+setup.sh now registers it with the daemon every 5 minutes with --pressure.
 """
 import json
 import os
@@ -30,32 +42,73 @@ import sys
 TAB_JOB = re.compile(
     r"\.claude/shell-snapshots/|\.claude/worktrees/agent-|\bclay-map\b|\bclay-go\b"
     r"|ingest_all\.py|\byt-bulk\b|\byt-transcript\b|mlx_whisper"
-    r"|(Blender|Nalana)\.app/Contents/MacOS/\w+(\s.*)?\s-b(\s|$)")
+    r"|(Blender|Nalana)\.app/Contents/MacOS/\w+(\s.*)?\s-b(\s|$)"
+    r"|/T/tmp[\w-]+/(kit|snapshots)/")
+
+# --pressure unloads Ollama models only when both hold. One observation each,
+# 2026-10-19: during the slowdown swap was 87% used and free memory 34%; ten
+# minutes after the cleanup swap was STILL 87% while free memory was 54%, so
+# swap alone stays high long after the pressure is gone and would unload the
+# models every 5 minutes for nothing.
+SWAP_LIMIT = 0.80
+FREE_LIMIT = 40  # kern.memorystatus_level, percent of memory free
+# The timer only reaps a root this old. A live tab's own `nohup ... &` job also
+# sits at ppid 1, and a daemon test's service does mid-test, so a young one may
+# still be watched. The 2026-10-19 leaks were 14 to 16 hours old; 2 hours is
+# guessed, never measured. SessionStart passes no --min-age and reaps at once.
+DEFAULT_MIN_AGE = 7200
+
+
+def ollama_base():
+    """OLLAMA_HOST the way Ollama reads it: scheme and port optional, 11434 default."""
+    from urllib.parse import urlsplit
+    raw = os.environ.get("OLLAMA_HOST", "").strip() or "127.0.0.1"
+    u = urlsplit(raw if "://" in raw else "http://" + raw)
+    host = u.hostname or "127.0.0.1"
+    return f"{u.scheme or 'http'}://{host}:{u.port or 11434}"
+
+
+OLLAMA = ollama_base()
+ETIME = re.compile(r"^(?:(\d+)-)?(?:(\d+):)?(\d+):(\d+)$")
+
+
+def seconds(etime):
+    m = ETIME.match(etime)
+    if not m:
+        return None
+    d, h, mi, se = (int(x or 0) for x in m.groups())
+    return ((d * 24 + h) * 60 + mi) * 60 + se
 
 
 def processes():
     # ORPHAN_REAP_PS lets tests feed a fixed table instead of the live one.
     fixture = os.environ.get("ORPHAN_REAP_PS")
     text = open(fixture).read() if fixture else subprocess.run(
-        ["ps", "-Ao", "pid=,ppid=,command="], capture_output=True, text=True).stdout
+        ["ps", "-Ao", "pid=,ppid=,etime=,command="], capture_output=True, text=True).stdout
     rows = []
     for line in text.splitlines():
-        parts = line.split(None, 2)
-        if len(parts) == 3 and parts[0].isdigit() and parts[1].isdigit():
-            rows.append((int(parts[0]), int(parts[1]), parts[2]))
+        parts = line.split(None, 3)
+        if len(parts) < 3 or not parts[0].isdigit() or not parts[1].isdigit():
+            continue
+        # Rows carry an elapsed time when ps gave one; fixture rows may not,
+        # and an unknown age counts as old.
+        age = seconds(parts[2]) if len(parts) == 4 else None
+        command = parts[3] if age is not None else " ".join(parts[2:])
+        rows.append((int(parts[0]), int(parts[1]), command, age))
     return rows
 
 
-def orphans(rows):
+def orphans(rows, min_age=0):
     me = {os.getpid(), os.getppid()}
     children = {}
-    for pid, ppid, _ in rows:
+    for pid, ppid, _, _ in rows:
         children.setdefault(ppid, []).append(pid)
-    cmd = {pid: c for pid, _, c in rows}
+    cmd = {pid: c for pid, _, c, _ in rows}
     # A `chewbacca-jobs _run` supervisor is the machine queue's, not a tab's: it's meant
     # to outlive the tab that submitted it.
-    roots = [pid for pid, ppid, c in rows if ppid == 1 and TAB_JOB.search(c)
-             and "bin/chewbacca-jobs _run" not in c and pid not in me]
+    roots = [pid for pid, ppid, c, age in rows if ppid == 1 and TAB_JOB.search(c)
+             and "bin/chewbacca-jobs _run" not in c and pid not in me
+             and (age is None or age >= min_age)]
     found, stack = [], list(roots)
     while stack:
         pid = stack.pop()
@@ -66,8 +119,80 @@ def orphans(rows):
     return [(pid, cmd.get(pid, "")) for pid in found]
 
 
+def sysctl(name):
+    # Full path: the daemon's PATH has no /usr/sbin, and a bare "sysctl" raised
+    # FileNotFoundError there in review (2026-10-19).
+    try:
+        return subprocess.run(["/usr/sbin/sysctl", "-n", name],
+                              capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def swap_share():
+    """Used/total swap as a fraction, or 0 when it can't be read."""
+    fixture = os.environ.get("ORPHAN_REAP_SWAP")
+    text = fixture if fixture is not None else sysctl("vm.swapusage")
+    total = re.search(r"total\s*=\s*([\d.]+)M", text)
+    used = re.search(r"used\s*=\s*([\d.]+)M", text)
+    if not total or not used or float(total.group(1)) <= 0:
+        return 0.0
+    return float(used.group(1)) / float(total.group(1))
+
+
+def free_level():
+    """Percent of memory free (kern.memorystatus_level), or 100 when unknown."""
+    fixture = os.environ.get("ORPHAN_REAP_FREE")
+    text = fixture if fixture is not None else sysctl("kern.memorystatus_level")
+    try:
+        return int(text.strip())
+    except ValueError:
+        return 100
+
+
+def ollama_call(path, body=None):
+    import urllib.request
+    req = urllib.request.Request(OLLAMA + path, data=json.dumps(body).encode() if body else None,
+                                 headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=5) as r:
+        return json.loads(r.read() or b"{}")
+
+
+def loaded_models():
+    fixture = os.environ.get("ORPHAN_REAP_OLLAMA")
+    try:
+        data = json.load(open(fixture)) if fixture else ollama_call("/api/ps")
+        return [m.get("name") or m.get("model") for m in data.get("models", [])
+                if isinstance(m, dict) and (m.get("name") or m.get("model"))]
+    except Exception:  # best-effort probe: Ollama absent, or something else on the port
+        return []
+
+
+def relieve_pressure(kill):
+    """Unload every resident Ollama model when swap is past SWAP_LIMIT and free
+    memory is at or under FREE_LIMIT. They reload on the next call, which costs
+    that call a cold start (seconds), far less than every tab paging to disk."""
+    if swap_share() < SWAP_LIMIT or free_level() > FREE_LIMIT:
+        return [], []
+    models = loaded_models()
+    if not kill or os.environ.get("ORPHAN_REAP_OLLAMA"):
+        return models, []
+    done, failed = [], []
+    for m in models:
+        try:
+            ollama_call("/api/generate", {"model": m, "keep_alive": 0})
+            done.append(m)
+        except Exception:
+            failed.append(m)
+    return done, failed
+
+
 def main():
-    found = orphans(processes())
+    min_age = 0
+    if "--min-age" in sys.argv:
+        i = sys.argv.index("--min-age")
+        min_age = int(sys.argv[i + 1]) if i + 1 < len(sys.argv) else DEFAULT_MIN_AGE
+    found = orphans(processes(), min_age)
     if "--json" in sys.argv:
         print(json.dumps([{"pid": p, "command": c} for p, c in found]))
     else:
@@ -80,6 +205,14 @@ def main():
                 os.kill(p, signal.SIGTERM)
             except ProcessLookupError:
                 pass
+    if "--pressure" in sys.argv:
+        unloaded, failed = relieve_pressure("--kill" in sys.argv)
+        if "--json" not in sys.argv:
+            verb = "unloaded" if "--kill" in sys.argv else "would unload"
+            if unloaded:
+                print(f"memory pressure: {verb} Ollama models {', '.join(unloaded)}")
+            if failed:
+                print(f"memory pressure: could not unload {', '.join(failed)}")
 
 
 if __name__ == "__main__":

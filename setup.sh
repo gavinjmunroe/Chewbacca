@@ -3239,6 +3239,15 @@ if command -v brew &>/dev/null; then
   _daemon register jobs --every 30 -- /usr/bin/python3 "$_svc_root/bin/chewbacca-jobs" tick &&
     log "machine job queue ticking every 30 s" || warn "could not schedule the job queue"
 
+  # Orphan sweep every 5 minutes, plus an Ollama unload once swap passes 80%.
+  # 2026-10-19: three tabs crawled at load 110 with swap 87% full, from twelve
+  # test servers orphaned for 14 hours and 1.7 GB of idle embedding models. The
+  # SessionStart hook alone never fired, because the tabs stayed open all day.
+  # --min-age spares a live tab's own detached job: on a timer, ppid 1 alone
+  # doesn't prove its tab is gone.
+  _daemon register orphan-reap --every 300 --nice 10 -- /usr/bin/python3 "$_svc_root/bin/orphan-reap" --kill --pressure --min-age 7200 &&
+    log "orphan sweep every 5 minutes" || warn "could not schedule the orphan sweep"
+
   # Agent alerts on the HUD: once a minute `kyber-sessions watch` toasts a tab
   # that newly waits on a permission, a run started from the glass that
   # finished, and a tab that died on a usage limit. 2026-10-10: two Desktop

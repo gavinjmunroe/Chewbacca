@@ -310,6 +310,11 @@ class KitSandbox(unittest.TestCase):
             except OSError:
                 pass
             p.wait(timeout=5)
+        # A daemon killed mid-test leaves its services orphaned under launchd.
+        # 2026-10-19: twelve kit/bin/web.py servers from these tests were still
+        # running 14 to 16 hours later. Anything still running from this
+        # sandbox is a leak, so stop it before the directory goes.
+        subprocess.run(["/usr/bin/pkill", "-f", str(self.tmp)], capture_output=True)
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def point(self, sha, age_s=0):

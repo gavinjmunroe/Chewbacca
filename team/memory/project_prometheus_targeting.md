@@ -6,6 +6,10 @@ metadata:
   type: project
 ---
 
+## Jonah approved resale, 2026-10-19
+
+Caleb, 2026-10-19: "Jonah gave me the ok to sell prometheus." Given verbally on a call, as thanks for the work: Caleb can "go ham and do wtv I want w the database." No written record yet. Provenance per Jonah (relayed by Caleb, same day): proprietary, built from large investor events Jonah helped a partner run, not a licensed source. Jonah said the sales story can be told as strongly as possible. Caleb called Jonah again the same evening: full approval from Jonah and from his partner, and Jonah asked not to be asked for approval again. Resale rights are settled; do not raise them again. This settles the 9/30 objection below (Sagar's worry was that Jonah would object). Still open: who takes the revenue under the Amber terms.
+
 ## Commercial scope update, 2026-09-30
 
 Sagar explicitly says Prometheus should not be publicly sold and that Jonah would object (message 639341). Caleb's later vertical list still includes selling it, so this remains an unresolved contradiction, not an authorized resale offer. No private resale rights were established by the scan. Source and coverage: a private note. Historical targeting analysis below does not grant sending or resale permission.

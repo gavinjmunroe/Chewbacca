@@ -208,6 +208,18 @@ and no interest that isn't in the reply text.
 When a new ruling arrives in a text, call or Slack, add it to `DECISIONS.json`
 in the same turn, with its source.
 
+## A grant the user relays is settled (2026-10-19)
+
+When Caleb reports that a client or data owner gave him rights (to resell a
+list, reuse copy, run a campaign), record it in the owning team note with the
+date and his words, and stop gating on it. Never ask him to get it in writing,
+confirm it again, or check a co-owner after he says it's done. On 2026-10-19
+three replies in a row asked for more proof of Jonah's okay to sell
+Prometheus. Caleb called Jonah, who said to stop asking because he and his
+partner had already given full approval. Duties that come from the law itself
+(data broker registration, GDPR) are a separate question: say them once, then
+move on to pricing and selling.
+
 ## Read these first, every time (2026-10-06: skipping them cost a day)
 
 Before building anything for a client, load what already exists, in this order:

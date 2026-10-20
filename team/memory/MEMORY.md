@@ -408,3 +408,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - project_togari_code_lives_in_chewbacca: All Togari code is in chewbacca/togari (platform/ is live); clients never use a Togari repo; two leaked keys need rotating
 - reference_sharing_a_claude_setup: Give a friend the setup as a prompt md + idempotent install.sh merging into their ~/.claude, never chewbacca setup.sh (Colin, 10/19)
 - feedback_slow_mac_is_memory_not_cpu: A slow Mac was swap plus leaked processes, not CPU; orphan-reap sweeps every 5 min with --pressure (load 110, 10/19)
+- feedback_chewbacca_main_only: Chewbacca keeps one branch, main, locally and on GitHub; detached worktrees plus chewbacca land, never push a branch (Caleb, 10/19)

@@ -75,12 +75,17 @@ working tree and the real index stay untouched. The team memory index format is
 ## One task, one worktree
 
 **Never edit a checkout another session might be using.** Start each task in
-its own worktree on a short branch cut from the latest main:
+its own worktree, detached at the latest main, and land with `chewbacca land`:
 
 ```bash
-git fetch upstream main
-git worktree add -b fix/slug ../wt-slug upstream/main   # or EnterWorktree in Claude Code
+git fetch origin main
+git worktree add --detach ../wt-slug origin/main
 ```
+
+**Chewbacca has one branch: main.** Caleb, 2026-10-19: "Chewbacca should only
+ever have 1 branch: main". That day there were 28 local and 12 GitHub branches,
+every one already landed. Never push a branch to origin, and delete any local
+branch (EnterWorktree's `claude/*` included) the moment its commits land.
 
 On 2026-10-05 the shared `~/Chewbacca` checkout sat 18 commits behind main
 holding another session's edits, eleven stray worktrees had piled up, and a

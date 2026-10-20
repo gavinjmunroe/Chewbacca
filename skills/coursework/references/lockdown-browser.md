@@ -19,3 +19,20 @@ machine before believing it:
 
 Never touch exam controls or try to get around the browser's checks. This is
 only about getting it to open.
+
+## Blocklisted apps froze the Mac (2026-10-19)
+
+LockDown listed ~70 processes (Claude, Slack, Spotify, Loom, Ollama,
+llama-server, node_repl) and "Close Applications and Continue" froze the Mac
+at load 7 with an iOS simulator up. It needed a hard restart. Caleb: "It didn't
+work bro it froze and then I had to restart my computer".
+
+- Before a LockDown quiz, he opens /Applications/Quiz Mode.app
+  (`tools/lockdown_ard/quiz-mode.sh`, `--dry-run` lists targets). It quits those
+  apps politely, shuts simulators, then opens nothing. He launches from Brightspace.
+- Never click "Close Applications" for him: it kills Claude. Name it as his click.
+- "Stuck" on a blank tab may be this dialog hidden behind the window. Screenshot
+  before calling it a hang.
+- Remote Management is paused and restored by the watcher in
+  docs/reference/LOCKDOWN.md. Its helper needs the Full Disk Access toggle ON,
+  being listed with the switch off did nothing.

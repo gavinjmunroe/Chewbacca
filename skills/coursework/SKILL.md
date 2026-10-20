@@ -153,6 +153,22 @@ reopen Chrome. A real sign-out opens nothing: say `BLOCKED: Brightspace needs
 a sign-in in Chrome` and they do it when they choose. Never open a tab to
 "renew" anything.
 
+## A homework list for a performance class carries the material
+
+A list of what to practice or record (guitar videos, a recital set) is used
+with the instrument in hand, so each item gets the thing to play under its
+title, not just a page number. The class slides usually already hold the book
+excerpt: find the slide by its "p.53, Ex. 9-5" label with `pdftotext` per
+page, render it with `pdftoppm -r 200`, and crop to the white music area.
+Order assignments oldest first, the way they're worked through. Before
+building, pull new slides with `chewbacca usc lockin --apply`, since a class
+after the last pull can add an item. Say which items the slides only show in
+part.
+
+Caleb, 2026-10-19, on a titles-only guitar list: "put the sheet music on there
+too I don't wanna have to open my book", then "make assignment 1 first and then
+assignment 5 last".
+
 ## The ledger
 
 Lives in `$COURSEWORK_DIR` (default `~/coursework`), plain YAML in git:

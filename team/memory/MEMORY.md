@@ -406,3 +406,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_launch_guard_reading_clay_files: launch-guard refuses shell reads that mention Clay plus echo, xargs or python -c; read those files with the Read tool or one plain grep
 - project_firm_foundation_site_motion_split: FF site what-we-do panels are scroll, click and timed; Monday is the only Apple-style part (2026-10-17 call)
 - project_togari_code_lives_in_chewbacca: All Togari code is in chewbacca/togari (platform/ is live); clients never use a Togari repo; two leaked keys need rotating
+- reference_sharing_a_claude_setup: Give a friend the setup as a prompt md + idempotent install.sh merging into their ~/.claude, never chewbacca setup.sh (Colin, 10/19)

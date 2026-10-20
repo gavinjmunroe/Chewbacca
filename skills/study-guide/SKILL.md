@@ -34,6 +34,22 @@ chord drills were all quizzes: "idk any of the chords". When time is short, the
 items on the exam come first and in the order they're performed, and a day
 plan on the page shifts from the real start time when he's behind.
 
+The rule holds for a site that already exists too. On 2026-10-19, the night
+before the ACAD 185 midterm, he got pointed at `marketing-midterm.up.railway.app`,
+a recall-only practice set built 10/11, and wrote "It shouldn't ask me for who
+what why etc when I know NOTHING". Before sending him to any existing guide or
+site, open it and check it against this section. What held up that night:
+
+- Chunk by week in class order: read a week's cards, say each back from the
+  title, then that week's practice questions, then the next week. 29 cards
+  read in a row blur by the middle.
+- No walls of text ("make it not a fat wall of text"): one plain sentence for
+  what it is, then short bullets for why and how.
+- Math drills reveal the answer and formula after two misses so he never stalls.
+- His time window goes on the page as a schedule with a live on-pace or behind
+  bar, and it moves when he says the start slipped ("starting at 8pm now plz
+  adjust").
+
 ## Making one
 
 ```sh

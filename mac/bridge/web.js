@@ -100,10 +100,113 @@ const PORT = parseInt(
 );
 // One debug dir per source profile. Sharing one dir across profiles silently
 // served whichever account was copied first.
-const PROFILE = path.join(
-  os.tmpdir(),
-  "chewie-chrome-" + SRC_PROFILE.replace(/\W+/g, "-").toLowerCase(),
-);
+// CHEWIE_WEB_DIR is for tests: an existing dir is used as is, never seeded.
+const PROFILE =
+  process.env.CHEWIE_WEB_DIR ||
+  path.join(
+    os.tmpdir(),
+    "chewie-chrome-" + SRC_PROFILE.replace(/\W+/g, "-").toLowerCase(),
+  );
+
+// A bridge Chrome nobody is using shuts itself down. On 2026-10-19 the Default
+// and Profile 1 bridge Chromes were still up 6 and 7.5 hours after their last
+// call, one holding 20 renderers, while the Mac sat at load 280 with 11 of 12 GB
+// of swap used. 15 minutes covers a working session's gaps between calls and
+// is otherwise a guess; CHEWIE_WEB_IDLE_S changes it.
+const IDLE_S = parseInt(process.env.CHEWIE_WEB_IDLE_S || "900", 10);
+// Every `read <url>` opened a new tab and none ever closed (the 20 renderers
+// above). Four keeps the last few pages for a follow-up click or fill.
+const MAX_TABS = parseInt(process.env.CHEWIE_WEB_MAX_TABS || "4", 10);
+const STAMP = path.join(PROFILE, ".chewie-last-used");
+const WATCH_PID = path.join(PROFILE, ".chewie-watch.pid");
+
+function touchStamp() {
+  // Never creates PROFILE: ensureChrome seeds the logins only into a dir that
+  // doesn't exist yet.
+  try {
+    if (fs.existsSync(PROFILE)) fs.writeFileSync(STAMP, String(Date.now()));
+  } catch {
+    /* an unwritable stamp only means the watcher sees the launch time */
+  }
+}
+
+function idleSeconds() {
+  try {
+    return (Date.now() - fs.statSync(STAMP).mtimeMs) / 1000;
+  } catch {
+    return Infinity;
+  }
+}
+
+function alive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function watcherRunning() {
+  try {
+    const pid = parseInt(fs.readFileSync(WATCH_PID, "utf8"), 10);
+    return pid > 0 && alive(pid);
+  } catch {
+    return false;
+  }
+}
+
+// One watcher per bridge Chrome, also adopted by a Chrome launched before the
+// watcher existed. It carries the same profile and port in its env.
+function startWatcher() {
+  if (watcherRunning()) return;
+  const w = spawn(process.execPath, [__filename, "idle-watch"], {
+    detached: true,
+    stdio: "ignore",
+    env: {
+      ...process.env,
+      CHEWIE_CHROME_PROFILE: SRC_PROFILE,
+      CHEWIE_CDP_PORT: String(PORT),
+    },
+  });
+  w.unref();
+}
+
+async function idleWatch() {
+  if (watcherRunning()) return;
+  fs.writeFileSync(WATCH_PID, String(process.pid));
+  try {
+    for (;;) {
+      await new Promise((r) => setTimeout(r, Math.min(30, IDLE_S) * 1000));
+      if (!(await debuggerUp())) return;
+      if (idleSeconds() > IDLE_S) {
+        await closeBridgeChrome();
+        return;
+      }
+    }
+  } finally {
+    try {
+      if (fs.readFileSync(WATCH_PID, "utf8") === String(process.pid))
+        fs.unlinkSync(WATCH_PID);
+    } catch {
+      /* already gone */
+    }
+  }
+}
+
+// Close the oldest page tabs so a new one keeps the total at MAX_TABS.
+async function trimTabs() {
+  try {
+    const pages = (await CDP.List({ port: PORT })).filter(
+      (t) => t.type === "page",
+    );
+    // CDP lists the most recently opened page first.
+    for (const t of pages.slice(Math.max(0, MAX_TABS - 1)))
+      await CDP.Close({ port: PORT, id: t.id });
+  } catch {
+    /* a tab that won't close is still better than no read */
+  }
+}
 
 function debuggerUp() {
   return new Promise((res) => {
@@ -237,8 +340,12 @@ async function closeBridgeChrome() {
 }
 
 async function ensureChrome() {
+  touchStamp();
   if (await debuggerUp()) {
-    if (VISIBLE || (await runningHeadless())) return;
+    if (VISIBLE || (await runningHeadless())) {
+      startWatcher();
+      return;
+    }
     await closeBridgeChrome();
   }
   if (!fs.existsSync(CHROME)) fail("Google Chrome not found at " + CHROME);
@@ -288,7 +395,11 @@ async function ensureChrome() {
   });
   child.unref();
   for (let i = 0; i < 40; i++) {
-    if (await debuggerUp()) return;
+    if (await debuggerUp()) {
+      touchStamp();
+      startWatcher();
+      return;
+    }
     await new Promise((r) => setTimeout(r, 250));
   }
   fail("Chrome debug port never came up on " + PORT);
@@ -317,6 +428,7 @@ async function withTab(fn, targetUrl) {
         );
       client = await CDP({ port: PORT, target: tgt });
     } else if (targetUrl) {
+      await trimTabs();
       const tgt = await CDP.New({ port: PORT, url: targetUrl });
       client = await CDP({ port: PORT, target: tgt });
     } else {
@@ -327,6 +439,7 @@ async function withTab(fn, targetUrl) {
     return await fn({ Page, Runtime, DOM, Input, client });
   } finally {
     if (client) await client.close();
+    touchStamp();
   }
 }
 
@@ -383,6 +496,22 @@ async function main() {
     case "launch-args": {
       // What the bridge would start Chrome with; for tests, starts nothing.
       out(launchArgs());
+      break;
+    }
+    case "idle-watch": {
+      // Started by ensureChrome; closes this profile's bridge Chrome once idle.
+      await idleWatch();
+      process.exit(0);
+    }
+    case "close": {
+      // Shut this profile's bridge Chrome now. Another profile: set CHEWIE_CHROME_PROFILE.
+      const was = await debuggerUp();
+      await closeBridgeChrome();
+      out(
+        was
+          ? `closed the bridge Chrome on ${PORT}`
+          : `no bridge Chrome on ${PORT}`,
+      );
       break;
     }
     case "frames": {
@@ -477,7 +606,8 @@ async function main() {
     }
     default:
       out(
-        "usage: chewie web {read|eval|click|fill|goto|tabs|profiles} ...\n" +
+        "usage: chewie web {read|eval|click|fill|goto|tabs|profiles|close} ...\n" +
+          `  an idle bridge Chrome closes itself after ${IDLE_S}s (CHEWIE_WEB_IDLE_S).\n` +
           "  CHEWIE_CHROME_PROFILE picks the account, by dir, name or email.\n" +
           "  it defaults to Default, which is often the wrong one. run: chewie web profiles",
       );

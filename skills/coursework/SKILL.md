@@ -396,6 +396,10 @@ The ledger goes stale in exactly three ways, and all three are silent:
   thing was submitted and exactly when; `references/lms-ingest.md` has the D2L
   endpoint. Asking surfaces what they happen to remember, which is the big
   assignment, not the small one sitting on the same line of the syllabus.
+  The same goes for anything due TODAY: on 2026-10-19 a reply told him to
+  take BISC quiz #6 because the ledger said `todo`, and he wrote "I alr did
+  the bisc quiz". Run `brightspace grades` (or the quiz submission read)
+  before naming a quiz or dropbox as still to do.
 - **A date moves in an announcement or a class slide** and the ledger still
   carries the syllabus or prompt-PDF date. Before calling anything due on a
   day, read the last two weeks of announcements (`/le/1.67/<ou>/news/`, full

@@ -1,0 +1,199 @@
+====================================================================================================
+PEOPLERANK v2 REGRESSION DIAGNOSTIC
+Input:  data/austin-18.json
+Mode:   BLIND (post-event stripped)
+People: V1=9  V2=9
+====================================================================================================
+
+READINESS PER PERSON  (V1 vs V2)
+====================================================================================================
+Name                                  V1_read   V2_read     DELTA   V1_brav_src   V2_brav_src
+----------------------------------------------------------------------------------------------------
+Financial Analyst                       54.00     54.00     +0.00         0.750         0.750
+Paralegal                               54.00     54.00     +0.00         0.450         0.450
+Entrepreneur in Real Est…               49.62     49.62     +0.00         0.631         0.631
+Dancer                                  47.88     47.88     +0.00         0.444         0.444
+Pricing-finance                         47.38     47.38     +0.00         0.519         0.519
+PhD student                             45.62     45.62     +0.00         0.431         0.431
+Bartender                               43.88     43.88     +0.00         0.444         0.444
+Music                                   38.38     38.38     +0.00         0.169         0.169
+Designer                                37.12     37.12     +0.00         0.206         0.206
+
+  V1_brav_src = bravery computed from socialBravery field ONLY
+  V2_brav_src = bravery computed from full personality_text blob
+
+V1 vs V2 SCORE DIFF  (sorted by V1 rank)
+====================================================================================================
+PAIR                                              V1_SCORE  V2_SCORE   DELTA  V1_RANK  V2_RANK
+----------------------------------------------------------------------------------------------------
+Dancer (Slackliner & A <-> Entrepreneur (RE & E)     13.56     12.26   -1.30       #1       #1
+Financial Analyst <-> Paralegal                       6.82      6.79   -0.03       #2       #2
+Financial Analyst <-> Dancer (Slackliner & A          6.47      6.57   +0.10       #3       #3
+PhD student <-> Pricing-finance                       6.10      5.80   -0.30       #4       #5
+Dancer (Slackliner & A <-> Pricing-finance            6.07      5.44   -0.63       #5       #8
+Paralegal <-> Pricing-finance                         6.06      5.34   -0.72       #6      #10
+PhD student <-> Paralegal                             5.96      6.03   +0.07       #7       #4
+Financial Analyst <-> PhD student                     5.82      5.71   -0.11       #8       #6
+Financial Analyst <-> Pricing-finance                 5.54      5.35   -0.19       #9       #9
+Bartender <-> Paralegal                               5.53      4.68   -0.85      #10      #16
+Paralegal <-> Dancer (Slackliner & A                  5.51      5.31   -0.20      #11      #11
+Bartender <-> PhD student                             5.50      5.46   -0.04      #12       #7
+Financial Analyst <-> Designer                        5.35      4.36   -0.99      #13      #19
+PhD student <-> Dancer (Slackliner & A                5.31      4.99   -0.32      #14      #12
+Bartender <-> Pricing-finance                         5.28      4.73   -0.55      #15      #15
+Financial Analyst <-> Bartender                       5.20      4.94   -0.26      #16      #13
+Designer <-> Paralegal                                5.07      4.10   -0.97      #17      #24
+PhD student <-> Designer                              5.04      4.80   -0.24      #18      #14
+Bartender <-> Dancer (Slackliner & A                  4.92      4.39   -0.53      #19      #18
+Bartender <-> Designer                                4.87      4.22   -0.65      #20      #21
+Financial Analyst <-> Entrepreneur (RE & E)           4.79      4.40   -0.39      #21      #17
+Designer <-> Pricing-finance                          4.71      4.12   -0.59      #22      #23
+Paralegal <-> Music (C C E & poetry)                  4.62      4.34   -0.28      #23      #20
+Pricing-finance <-> Music (C C E & poetry)            4.31      3.99   -0.32      #24      #26
+PhD student <-> Music (C C E & poetry)                4.26      4.20   -0.06      #25      #22
+Designer <-> Music (C C E & poetry)                   4.26      3.81   -0.45      #26      #28
+Designer <-> Dancer (Slackliner & A                   4.24      3.73   -0.51      #27      #30
+Paralegal <-> Entrepreneur (RE & E)                   3.98      3.58   -0.40      #28      #32
+Bartender <-> Music (C C E & poetry)                  3.95      3.71   -0.24      #29      #31
+PhD student <-> Entrepreneur (RE & E)                 3.94      3.54   -0.40      #30      #33
+Dancer (Slackliner & A <-> Music (C C E & poetry)      3.89      3.86   -0.03      #31      #27
+Pricing-finance <-> Entrepreneur (RE & E)             3.89      3.99   +0.10      #32      #25
+Financial Analyst <-> Music (C C E & poetry)          3.81      3.73   -0.08      #33      #29
+Bartender <-> Entrepreneur (RE & E)                   3.59      3.27   -0.32      #34      #34
+Designer <-> Entrepreneur (RE & E)                    3.10      2.84   -0.26      #35      #36
+Entrepreneur (RE & E) <-> Music (C C E & poetry)      2.97      3.16   +0.19      #36      #35
+
+COMPONENT BREAKDOWNS  (pairs where |score delta| > 2 OR |rank delta| > 3)
+====================================================================================================
+
+Paralegal <-> Pricing-finance  (V1 #6 / V2 #10)
+----------------------------------------------------------------------------------------------------
+  V1: R=0.474 x C=0.281 x T=0.350 x B=1.30 = score 6.06
+  V2: R=0.474 x C=0.248 x T=0.350 x B=1.30 = score 5.34
+  (readiness A: V1=54.0  V2=54.0)
+  (readiness B: V1=47.4  V2=47.4)
+  (vec_sim:  V1=0.1506  V2=0.1116)
+  (struct:   V1=0.5850  V2=0.5650)
+  (trust:    V1=0.35 [Co-attended this dinner]  V2=0.35 [Co-attended this dinner])
+  Biggest delta: C changed by -0.033
+
+Bartender <-> Paralegal  (V1 #10 / V2 #16)
+----------------------------------------------------------------------------------------------------
+  V1: R=0.439 x C=0.277 x T=0.350 x B=1.30 = score 5.53
+  V2: R=0.439 x C=0.234 x T=0.350 x B=1.30 = score 4.68
+  (readiness A: V1=43.9  V2=43.9)
+  (readiness B: V1=54.0  V2=54.0)
+  (vec_sim:  V1=0.1721  V2=0.1049)
+  (struct:   V1=0.5215  V2=0.5365)
+  (trust:    V1=0.35 [Co-attended this dinner]  V2=0.35 [Co-attended this dinner])
+  Biggest delta: C changed by -0.043
+
+Bartender <-> PhD student  (V1 #12 / V2 #7)
+----------------------------------------------------------------------------------------------------
+  V1: R=0.439 x C=0.276 x T=0.350 x B=1.30 = score 5.50
+  V2: R=0.439 x C=0.273 x T=0.350 x B=1.30 = score 5.46
+  (readiness A: V1=43.9  V2=43.9)
+  (readiness B: V1=45.6  V2=45.6)
+  (vec_sim:  V1=0.1357  V2=0.1386)
+  (struct:   V1=0.6024  V2=0.5874)
+  (trust:    V1=0.35 [Co-attended this dinner]  V2=0.35 [Co-attended this dinner])
+  Biggest delta: C changed by -0.002
+
+Financial Analyst <-> Designer  (V1 #13 / V2 #19)
+----------------------------------------------------------------------------------------------------
+  V1: R=0.371 x C=0.317 x T=0.350 x B=1.30 = score 5.35
+  V2: R=0.371 x C=0.258 x T=0.350 x B=1.30 = score 4.36
+  (readiness A: V1=54.0  V2=54.0)
+  (readiness B: V1=37.1  V2=37.1)
+  (vec_sim:  V1=0.2231  V2=0.1332)
+  (struct:   V1=0.5348  V2=0.5498)
+  (trust:    V1=0.35 [Co-attended this dinner]  V2=0.35 [Co-attended this dinner])
+  Biggest delta: C changed by -0.058
+
+Designer <-> Paralegal  (V1 #17 / V2 #24)
+----------------------------------------------------------------------------------------------------
+  V1: R=0.371 x C=0.300 x T=0.350 x B=1.30 = score 5.07
+  V2: R=0.371 x C=0.243 x T=0.350 x B=1.30 = score 4.10
+  (readiness A: V1=37.1  V2=37.1)
+  (readiness B: V1=54.0  V2=54.0)
+  (vec_sim:  V1=0.2112  V2=0.1227)
+  (struct:   V1=0.5073  V2=0.5223)
+  (trust:    V1=0.35 [Co-attended this dinner]  V2=0.35 [Co-attended this dinner])
+  Biggest delta: C changed by -0.057
+
+PhD student <-> Designer  (V1 #18 / V2 #14)
+----------------------------------------------------------------------------------------------------
+  V1: R=0.371 x C=0.299 x T=0.350 x B=1.30 = score 5.04
+  V2: R=0.371 x C=0.284 x T=0.350 x B=1.30 = score 4.80
+  (readiness A: V1=45.6  V2=45.6)
+  (readiness B: V1=37.1  V2=37.1)
+  (vec_sim:  V1=0.1746  V2=0.1605)
+  (struct:   V1=0.5882  V2=0.5732)
+  (trust:    V1=0.35 [Co-attended this dinner]  V2=0.35 [Co-attended this dinner])
+  Biggest delta: C changed by -0.014
+
+Financial Analyst <-> Entrepreneur (RE & E)  (V1 #21 / V2 #17)
+----------------------------------------------------------------------------------------------------
+  V1: R=0.496 x C=0.212 x T=0.350 x B=1.30 = score 4.79
+  V2: R=0.496 x C=0.195 x T=0.350 x B=1.30 = score 4.40
+  (readiness A: V1=54.0  V2=54.0)
+  (readiness B: V1=49.6  V2=49.6)
+  (vec_sim:  V1=0.1095  V2=0.0911)
+  (struct:   V1=0.4523  V2=0.4373)
+  (trust:    V1=0.35 [Co-attended this dinner]  V2=0.35 [Co-attended this dinner])
+  Biggest delta: C changed by -0.017
+
+Paralegal <-> Entrepreneur (RE & E)  (V1 #28 / V2 #32)
+----------------------------------------------------------------------------------------------------
+  V1: R=0.496 x C=0.176 x T=0.350 x B=1.30 = score 3.98
+  V2: R=0.496 x C=0.158 x T=0.350 x B=1.30 = score 3.58
+  (readiness A: V1=54.0  V2=54.0)
+  (readiness B: V1=49.6  V2=49.6)
+  (vec_sim:  V1=0.0697  V2=0.0506)
+  (struct:   V1=0.4248  V2=0.4098)
+  (trust:    V1=0.35 [Co-attended this dinner]  V2=0.35 [Co-attended this dinner])
+  Biggest delta: C changed by -0.018
+
+Dancer (Slackliner & A Y) <-> Music (C C E & poetry)  (V1 #31 / V2 #27)
+----------------------------------------------------------------------------------------------------
+  V1: R=0.384 x C=0.223 x T=0.350 x B=1.30 = score 3.89
+  V2: R=0.384 x C=0.221 x T=0.350 x B=1.30 = score 3.86
+  (readiness A: V1=47.9  V2=47.9)
+  (readiness B: V1=38.4  V2=38.4)
+  (vec_sim:  V1=0.0881  V2=0.0795)
+  (struct:   V1=0.5372  V2=0.5522)
+  (trust:    V1=0.35 [Co-attended this dinner]  V2=0.35 [Co-attended this dinner])
+  Biggest delta: C changed by -0.002
+
+Pricing-finance <-> Entrepreneur (RE & E)  (V1 #32 / V2 #25)
+----------------------------------------------------------------------------------------------------
+  V1: R=0.474 x C=0.180 x T=0.350 x B=1.30 = score 3.89
+  V2: R=0.474 x C=0.185 x T=0.350 x B=1.30 = score 3.99
+  (readiness A: V1=47.4  V2=47.4)
+  (readiness B: V1=49.6  V2=49.6)
+  (vec_sim:  V1=0.0641  V2=0.0708)
+  (struct:   V1=0.4519  V2=0.4519)
+  (trust:    V1=0.35 [Co-attended this dinner]  V2=0.35 [Co-attended this dinner])
+  Biggest delta: C changed by +0.005
+
+Financial Analyst <-> Music (C C E & poetry)  (V1 #33 / V2 #29)
+----------------------------------------------------------------------------------------------------
+  V1: R=0.384 x C=0.218 x T=0.350 x B=1.30 = score 3.81
+  V2: R=0.384 x C=0.213 x T=0.350 x B=1.30 = score 3.73
+  (readiness A: V1=54.0  V2=54.0)
+  (readiness B: V1=38.4  V2=38.4)
+  (vec_sim:  V1=0.0818  V2=0.0688)
+  (struct:   V1=0.5360  V2=0.5510)
+  (trust:    V1=0.35 [Co-attended this dinner]  V2=0.35 [Co-attended this dinner])
+  Biggest delta: C changed by -0.005
+
+ACCURACY SUMMARY
+====================================================================================================
+  V1 top-10 accuracy: 8/10
+  V2 top-10 accuracy: 8/10
+  Mutual picks total: 2
+
+  Mutual pair ranks:
+    PAIR                                                           V1_RANK   V2_RANK
+    Bartender <-> PhD student                                          #12        #7
+    PhD student <-> Dancer (Slackliner & A Y)                          #14       #12

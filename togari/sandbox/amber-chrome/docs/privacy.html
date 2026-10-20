@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Amber LinkedIn: Privacy Policy</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',sans-serif;background:#0a0a0a;color:#e4e4e7;line-height:1.65;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:760px;margin:0 auto;padding:64px 24px 96px}
+  .brand{display:flex;align-items:center;gap:10px;margin-bottom:40px}
+  .brand-mark{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#fbbf24,#f59e0b);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#0a0a0a}
+  .brand-name{font-size:14px;font-weight:600;color:#fafafa}
+  h1{font-size:36px;font-weight:600;letter-spacing:-.02em;color:#fafafa;margin-bottom:8px}
+  .meta{font-size:13px;color:#71717a;margin-bottom:40px}
+  h2{font-size:20px;font-weight:600;color:#fafafa;margin:36px 0 12px;letter-spacing:-.01em}
+  p{font-size:15px;color:#d4d4d8;margin-bottom:12px}
+  code{font-family:'SF Mono',Menlo,Monaco,monospace;font-size:13px;background:#18181b;border:1px solid #27272a;border-radius:5px;padding:1px 6px;color:#fafafa}
+  ul{margin:8px 0 16px 0;padding-left:22px}
+  li{font-size:15px;color:#d4d4d8;margin-bottom:6px}
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:14px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid #27272a;vertical-align:top}
+  th{font-weight:600;color:#fafafa;background:#111114}
+  td{color:#d4d4d8}
+  a{color:#fcd34d;text-decoration:none}
+  a:hover{color:#fde68a;text-decoration:underline}
+  .footer{margin-top:64px;padding-top:24px;border-top:1px solid #27272a;font-size:13px;color:#71717a}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="brand">
+  <div class="brand-mark">A</div>
+  <div class="brand-name">Amber LinkedIn</div>
+</div>
+
+<h1>Privacy Policy</h1>
+<div class="meta">Last updated: 2026-05-27</div>
+
+<p>Amber LinkedIn is a Chrome extension published by Blue Modern Advisory ("we"). It exists for one purpose: to let you sync your LinkedIn connections into Amber without manually copying browser cookies into our dashboard, and to let you re-sync at any time from the extension popup.</p>
+<p>This page describes exactly what the extension reads, where it sends that data, and how to remove it.</p>
+
+<h2>What the extension reads</h2>
+<p>When you click "Sync" or "Re-sync now" in the extension popup, or when the Amber dashboard at <code>medha-frontend-production-5f4f.up.railway.app</code> asks the extension to sync on your behalf, the extension reads two LinkedIn session cookies from your browser:</p>
+<ul>
+  <li><code>li_at</code>: LinkedIn's session token</li>
+  <li><code>JSESSIONID</code>: LinkedIn's anti-CSRF token</li>
+</ul>
+<p>The extension does NOT read any other cookies, page content, browsing history, form data, or files on your computer.</p>
+
+<h2>What we do with it</h2>
+<p>The extension POSTs those two cookie values, plus your Amber authentication token, to a single endpoint on the Amber backend: <code>https://medha-id-production.up.railway.app/v1/oauth/linkedin/cookies</code>. The transmission is HTTPS-encrypted.</p>
+<p>The Amber backend uses the cookies to fetch your LinkedIn connections via LinkedIn's authenticated APIs, then stores those connections in your private Amber relationship graph. The cookies themselves are stored encrypted at rest and are only decrypted at sync time.</p>
+
+<h2>What we do NOT do</h2>
+<ul>
+  <li>We do not share your cookies with any third party.</li>
+  <li>We do not sell your data.</li>
+  <li>We do not transmit your cookies to any host outside the allowlist baked into the extension's source code:
+    <ul>
+      <li><code>https://medha-id-production.up.railway.app</code></li>
+    </ul>
+  </li>
+  <li>We do not use your cookies to take any action on LinkedIn on your behalf beyond reading your connections.</li>
+</ul>
+
+<h2>Where the data lives</h2>
+<table>
+  <thead>
+    <tr><th>Data</th><th>Location</th><th>Retention</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>LinkedIn <code>li_at</code> and <code>JSESSIONID</code></td><td>Amber backend encrypted secret storage, scoped to your Amber user ID</td><td>Until you disconnect (then deleted within 24h)</td></tr>
+    <tr><td>Derived connection records (names, profile URLs, titles)</td><td>Amber's per-user relationship graph</td><td>Until you delete your Amber account</td></tr>
+    <tr><td>Local state (sign-in token, connection flag, last-sync time, last-count)</td><td>Your browser's <code>chrome.storage.local</code></td><td>Until you uninstall the extension or sign out</td></tr>
+  </tbody>
+</table>
+
+<h2>How to remove the data</h2>
+<ul>
+  <li><strong>From the extension:</strong> uninstall it from <code>chrome://extensions</code>. This wipes the locally cached sign-in token, connection flag, and last-sync metadata.</li>
+  <li><strong>From the Amber backend:</strong> open the Amber dashboard, revoke the LinkedIn connection, or contact Amber support to delete your relationship graph.</li>
+  <li><strong>From LinkedIn:</strong> logging out of LinkedIn invalidates the cookies; the extension can no longer use them.</li>
+</ul>
+
+<h2>Contact</h2>
+<p>Questions or data deletion requests: contact Blue Modern Advisory through the Amber dashboard at <a href="https://medha-frontend-production-5f4f.up.railway.app">medha-frontend-production-5f4f.up.railway.app</a>.</p>
+
+<div class="footer">
+  Source: <a href="https://github.com/amber-organization/amber-chrome">github.com/amber-organization/amber-chrome</a>
+</div>
+
+</div>
+</body>
+</html>

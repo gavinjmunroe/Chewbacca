@@ -1,0 +1,226 @@
+TOGARI-CLAY — REPO CONTEXT FOR LLM PROMPTING
+==============================================
+Last updated: 2026-05-04
+
+PURPOSE
+-------
+togari-clay is a GTM (Go-To-Market) MCP server focused on the Opportunity Engine —
+continuous signal monitoring and one-time contact data pulls for Blue Modern Advisory's
+healthcare sales operations. Built on the Model Context Protocol (MCP), it integrates
+Clay, Exa, Gmail, Slack, Stripe, and BigQuery into an automated prospecting pipeline.
+
+TECH STACK
+----------
+- Runtime: Node.js 20+, TypeScript strict mode
+- Protocol: MCP (Model Context Protocol) via @modelcontextprotocol/sdk
+- AI: Anthropic Claude API (@anthropic-ai/sdk) for outreach drafting, classification
+- Database: Google BigQuery (project: midyear-glazing-485303-u3, dataset: togari_data_lake)
+- Validation: Zod schemas throughout
+- Build: esbuild (custom build.mjs), outputs CommonJS to dist/
+- Deploy: Railway (railway.json), supports stdio + HTTP/SSE transports
+- Shared infra: @togari/admin (local package in packages/togari-admin/ — JWT auth, event streaming, Sentry, rate limiting)
+
+DIRECTORY STRUCTURE
+-------------------
+togari-opportunity/
+├── src/
+│   ├── index.ts                  # MCP server entry point; registers all agents, webhooks, REST API
+│   ├── agents/
+│   │   ├── index.ts              # registerAllAgents() barrel (registers opportunity-notifications only)
+│   │   └── opportunity-notifications/ # Opportunity Engine: 8 MCP tools for signals + data pulls
+│   │       ├── types.ts          # Subscription, DataPullRequest, SignalResult, Zod schemas + enums
+│   │       ├── subscription-manager.ts # BigQuery CRUD for subscriptions (V2 fields)
+│   │       ├── enrichment-pipeline.ts  # Signal query pipeline + Exa/Clay enrichment
+│   │       ├── data-pull-pipeline.ts   # One-time data pull: NL→SQL, enrich, CSV, GCS, Stripe
+│   │       ├── outreach-drafter.ts     # Claude API outreach generation
+│   │       ├── notification-sender.ts  # Email (Gmail) + Slack dispatch
+│   │       └── index.ts               # 8 MCP tool registrations
+│   ├── config/
+│   │   ├── server-config.ts      # McpConfig interface; secrets from GCP Secret Manager + env
+│   │   ├── channels.ts           # 15 channel definitions with theology frames
+│   │   ├── personas.ts           # 3 buyer personas (VP RevOps, Head Strategy, CCO)
+│   │   ├── guardrails.ts         # CAN-SPAM, HIPAA, blacklist, volume rules, theology validation
+│   │   └── team.ts               # Team members with roles + meeting routing
+│   ├── schemas/                  # Zod runtime validation (9 files)
+│   │   ├── enums.ts              # Personas, channels, theology frames, stages, team
+│   │   ├── email-templates.ts    # Email draft/review schemas
+│   │   ├── pipeline-state.ts     # Deal and pipeline schemas
+│   │   ├── signal-package.ts     # Signal generation schema
+│   │   ├── opportunity-engine.ts # Signal subscription + data pull Zod schemas
+│   │   └── ...                   # relationship-record, meeting-brief, content-brief, conscience-report
+│   ├── services/providers/       # External API integrations
+│   │   ├── tool-provider.ts      # ToolProvider interface + BaseToolProvider
+│   │   ├── tool-registry.ts      # Central registry with circuit breakers
+│   │   ├── exa-provider.ts       # Web search (100 calls/day)
+│   │   ├── clay-provider.ts      # Company/contact enrichment (10 calls/min)
+│   │   ├── structify-provider.ts # Data normalization
+│   │   ├── gmail-provider.ts     # Gmail with OAuth refresh
+│   │   └── calendar-provider.ts  # Google Calendar with OAuth refresh
+│   ├── prompts/                  # LLM prompt builders
+│   │   ├── email-generation.ts   # Persona-specific email prompts
+│   │   ├── signal-generation.ts  # 4-step signal package builder
+│   │   ├── reply-classification.ts
+│   │   └── meeting-brief.ts
+│   ├── routes/                   # REST API + webhooks
+│   │   ├── direct-api.ts         # JWT-protected: deals, contacts, pipeline, data-pulls
+│   │   ├── webhooks.ts           # /framer-subscription, /data-pull, /stripe, /clay-results
+│   │   ├── slack.ts              # Slack channel creation; adds Maggie + Sagar to new client channels
+│   │   └── slack-events.ts       # Slack Events API (url_verification, team_join); raw body for HMAC
+│   ├── tools/
+│   │   └── query-contacts.ts     # Natural language → BigQuery SQL tool
+│   ├── cron/
+│   │   └── daily-notifications.ts # Frequency-aware cron: daily/weekly/biweekly signal scans
+│   └── tests/
+│       └── governance.test.ts    # Governance test suite
+├── packages/
+│   └── togari-admin/             # Local stub for @togari/admin shared infra
+├── products/                     # Standalone GTM products
+│   ├── PRODUCTS.md
+│   ├── new-loom/                 # Loom replacement with BMA Transform
+│   │   ├── backend/src/          # Express API (port 4200), ElevenLabs voice synthesis
+│   │   ├── chrome-extension/     # Manifest V3 extension for screen recording
+│   │   ├── macos-app/            # SwiftUI ScreenCaptureKit app
+│   │   └── shared/src/           # Shared TypeScript types
+│   └── internal-fireflies/       # Meeting intelligence (Fireflies.ai replacement)
+│       ├── backend/src/          # Express API (port 4300), GPT-4o analysis, calendar watcher
+│       └── shared/src/           # Shared types + Zod schemas
+├── sql/
+│   ├── create_tables.sql         # Initial BigQuery schemas (contacts, deals, audit logs)
+│   ├── migrate_togari_to_data_lake.sql # Legacy data migration
+│   ├── migrations/
+│   │   ├── 001_audit_log_add_columns.sql
+│   │   ├── 003_opportunity_subscriptions.sql # Subscription + notification_history tables
+│   │   ├── 004_opportunity_engine_v2.sql     # V2: signal_query cols, data_pull_requests, signal_results
+│   │   ├── 005_clay_enrichment_results.sql   # Clay enrichment result tracking
+│   │   └── 006_add_target_companies.sql      # Target companies field on subscriptions
+│   └── security/
+│       ├── 01_row_access_policies.sql  # Tenant isolation via client_id
+│       ├── 02_grant_new_tenant.sql     # New tenant onboarding
+│       └── 03_test_isolation.sql       # Isolation verification tests
+├── scripts/                      # Dev/test scripts
+│   ├── preview-sql.ts
+│   ├── test-data-pull.ts
+│   ├── test-subscription.sh
+│   └── test-welcome-email.mjs
+├── public/assets/                # Static assets
+├── infra/
+│   └── monitoring-setup.sh       # GCP Pub/Sub, Cloud Monitoring dashboard, alert policies
+├── docs/
+│   └── repo-context.txt          # This file
+├── build.mjs                     # esbuild: 2 entry points → dist/index.cjs + dist/cron/daily-notifications.cjs
+├── railway.json                  # Railway deployment (NIXPACKS, node dist/index.cjs)
+├── package.json                  # Dependencies: @modelcontextprotocol/sdk, @anthropic-ai/sdk, @google-cloud/bigquery, express, zod
+├── tsconfig.json                 # TypeScript strict, ES2020, CommonJS
+├── CLAUDE.md                     # Architecture overview + weekly check-in workflow
+└── BUILDOUT.md                   # Buildout status
+
+KEY ARCHITECTURAL PATTERNS
+--------------------------
+1. MCP Tool Registration:
+   server.tool(name, description, zodSchema, asyncHandler)
+   Each agent file exports a register function that takes McpServer.
+
+2. Provider Pattern (services/providers/):
+   ToolProvider interface → BaseToolProvider → concrete providers (Clay, Exa, etc.)
+   Central ToolRegistry with circuit breakers and rate limiting per provider.
+
+3. BigQuery as Source of Truth:
+   All persistent state in BigQuery. Parameterized queries throughout.
+   Row-level security with client_id tenant isolation.
+
+4. Governance Layer:
+   Theology-aware content validation, Six Dimensions health framework.
+   CAN-SPAM/HIPAA compliance checks. Email blacklist. Volume limits.
+
+5. Dual Transport:
+   MCP server supports stdio (Claude Desktop) and HTTP/SSE (web clients).
+   Express app handles webhooks + REST API alongside MCP.
+
+EXTERNAL INTEGRATIONS
+---------------------
+- Clay API: Company/contact enrichment, webhook ingest, HTTP API callbacks (10 calls/min, Enterprise tier)
+  NOTE: Clay does NOT support programmatic table creation, "Find Companies" search, or "Job Posting" signal via API. These require Clay UI.
+- Exa API: Web search for companies, job postings, recruiter LinkedIn profiles (100 calls/day)
+- Structify API: Data normalization
+- Gmail API: Email sending, thread reading (OAuth)
+- Google Calendar API: Calendar sync (OAuth)
+- Slack API: Bot messaging, thread replies
+- Stripe API: Checkout sessions, webhook events for payment status
+- Anthropic Claude API: Outreach drafting, reply classification (claude-sonnet-4-6)
+- Fireflies.ai: Meeting transcripts (ingest + normalization)
+- GCP Secret Manager: Production secrets
+- GCP Cloud Monitoring + Pub/Sub: Observability, event streaming
+
+OPPORTUNITY ENGINE V2 (NEWEST SUBSYSTEM)
+-----------------------------------------
+Two-product architecture:
+
+A) Signal Subscriptions — continuous monitoring:
+   - Clients describe target via natural language query (e.g. "healthcare companies hiring data engineers in Texas")
+   - Claude parses NL → structured params (industries, titles, locations, company sizes)
+   - Exa web search discovers matching contacts + companies
+   - Clay enriches contacts (email, phone, LinkedIn, company data)
+   - New contacts stored in togari_structured_contacts, deduped by email
+   - Frequency: daily / weekly / biweekly (configurable per subscription)
+   - Notifications via Email, Slack, or both
+   - Stripe metered billing: Starter $40/mo (50), Standard $60/mo (100), Professional $80/mo (200), Enterprise $150/mo (500)
+
+B) One-Time Data Pulls — ad hoc contact list exports:
+   - Client submits NL query + desired count (up to 10,000)
+   - Pipeline: NL→BigQuery SQL against togari_structured_contacts datalake
+   - Shortfall enriched via Exa + Clay
+   - CSV generated and uploaded to GCS
+   - Stripe one-time payment (tiered: $0.50/contact first 250, $0.30 for 251-1000, $0.20 for 1001+)
+   - Download link emailed when ready
+
+Webhook flow: Framer form → /webhooks/framer-subscription OR /webhooks/data-pull → Stripe Checkout → /webhooks/stripe → cron or async processing
+8 MCP tools: signal_create/list/update_subscription, signal_trigger_scan, signal_get_results, create/get/list_data_pulls
+3 REST endpoints: POST/GET /api/data-pulls, GET /api/data-pulls/:pull_id
+
+BIGQUERY TABLES
+---------------
+- contacts — prospect/contact records
+- togari_structured_contacts — enriched contact datalake (name, email, title, company, LinkedIn, phone)
+- deals — pipeline deals with stage tracking
+- audit_log — all system actions for compliance
+- opportunity_subscriptions — notification engine subscriptions (V2: signal_query, monitor_frequency, companies_limit)
+- notification_history — delivery records with cost tracking
+- data_pull_requests — one-time data pull tracking (status, CSV URL, cost)
+- signal_results — signal query result history (matched contacts, Exa results)
+- signal_subscriptions — VIEW aliasing opportunity_subscriptions
+
+ENV VARS (KEY)
+--------------
+GCP_PROJECT_ID, GCP_CREDENTIALS_BASE64, BIGQUERY_DATASET, EXA_API_KEY, CLAY_API_KEY,
+ANTHROPIC_API_KEY, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, SLACK_BOT_TOKEN,
+GMAIL_ACCESS_TOKEN, GMAIL_REFRESH_TOKEN, FRAMER_WEBHOOK_SECRET, CRON_SECRET,
+CLAY_RESULTS_WEBHOOK_SECRET
+
+BUILD + RUN
+-----------
+npm install && node build.mjs
+Outputs: dist/index.cjs (main server), dist/cron/daily-notifications.cjs (cron job)
+Deploy: Railway with NIXPACKS builder
+
+NOT YET BUILT
+-------------
+The following subsystems are designed (see BUILDOUT.md) but do not exist in this repo yet:
+
+Infrastructure:
+- src/lib/ — production resilience layer: circuit-breaker, retry with backoff, structured errors
+- src/events/ — Cloud Pub/Sub event publishing (6 typed events on deal/contact mutations)
+- src/middleware/ — JWT auth middleware, rate limiter (currently auth is handled by @togari/admin stub)
+- src/framer/ — embeddable subscription modal HTML for the marketing site
+
+REST API gaps:
+- /api/deals (GET/POST/PATCH) — deal CRUD endpoints
+- /api/contacts/search — contact search endpoint
+- /api/pipeline/kanban — kanban view endpoint
+(Only /api/data-pulls and /webhooks/* are implemented)
+
+FEATURES
+- Email sending for signals
+- Sending a list of companies to subscribers for the job opportunity engine
+
+NOT YET FINISHED
+- One time data pull, exa query is not returning production ready contacts

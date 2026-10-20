@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "Amber LinkedIn",
+  "short_name": "Amber",
+  "version": "1.0.0",
+  "description": "One-click LinkedIn sync for Amber. Re-import your connections any time, no DevTools, no copy-paste.",
+  "author": "Blue Modern Advisory",
+  "homepage_url": "https://www.justarock.ai",
+  "minimum_chrome_version": "114",
+
+  "permissions": ["cookies", "storage"],
+
+  "host_permissions": [
+    "https://www.linkedin.com/*",
+    "https://linkedin.com/*",
+    "https://medha-id-production.up.railway.app/*"
+  ],
+
+  "externally_connectable": {
+    "matches": [
+      "https://www.justarock.ai/*",
+      "https://justarock.ai/*",
+      "https://medha-frontend-production-5f4f.up.railway.app/*",
+      "https://medha-id-production.up.railway.app/*"
+    ]
+  },
+
+  "background": {
+    "service_worker": "background.js"
+  },
+
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

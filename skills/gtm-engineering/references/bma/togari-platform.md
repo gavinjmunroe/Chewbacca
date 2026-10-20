@@ -4,6 +4,8 @@ Maintainer-only map into a private repo. The usable knowledge lives in
 [scoring.md](scoring.md), [vendor-recipes.md](vendor-recipes.md),
 [outbound-rules.md](outbound-rules.md) and [reply-handling.md](reply-handling.md).
 
+**The whole repo now lives in Chewbacca at [togari/platform/](../../../../togari/platform/README.md)**, with every other Togari repo beside it ([togari/README.md](../../../../togari/README.md)). Caleb, 2026-10-19: "For chewbs clients we will not be using the togari repo to keep things clean, so literally all things needed from togari should be in chewbs". So for a Chewbacca client, read, port and deploy from `togari/`, never from a Togari clone or the togari-bma-prod MCP. To refresh the copy, take the remote's main, never the local checkout: on 2026-10-19 `~/code/work/bma/togari-platform` was 61 commits behind its own origin/main. Scan before landing: that copy turned up a live Anthropic key, a live Structify key, two real Clay webhook URLs and 119 real 48North prospects.
+
 Harvested 2026-10-09 from `bluemodernadvisory/togari-platform` at `4308237` (2026-10-09; the ported reply functions were rechecked unchanged at `8d7ad77` on 2026-10-10), local clone `~/code/work/bma/togari-platform`. It is the live Togari bot on Railway, so pushing to it deploys: never push from a Chewbacca session unless the task says to. Line numbers drift; re-open the file before quoting one.
 
 ## Summary

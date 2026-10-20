@@ -1,0 +1,1 @@
+Generate PNG icons by opening generate-icons.html in a browser, or run: npx ts-node generate-icons.ts

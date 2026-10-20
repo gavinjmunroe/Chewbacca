@@ -72,9 +72,12 @@ while IFS= read -r f; do
     *.sh) run "bash -n $f" bash -n "$f" ;;
     *.py) run "compile $f" python3 -m py_compile "$f" ;;
     *.*) ;;
+    # Only a shebang names the interpreter. Matching "python" anywhere on line
+    # one compiled togari/search/Dockerfile ("FROM python:3.11-slim") as Python
+    # and refused the Togari land three times on 2026-10-19.
     *) case "$first" in
-         *python*) run "compile $f" python3 -m py_compile "$f" ;;
-         *bash*|*/sh) run "bash -n $f" bash -n "$f" ;;
+         '#!'*python*) run "compile $f" python3 -m py_compile "$f" ;;
+         '#!'*bash*|'#!'*/sh) run "bash -n $f" bash -n "$f" ;;
        esac ;;
   esac
 done <<< "$CHANGED"

@@ -1,0 +1,670 @@
+diff --git a/src/agents/smartlead-responder/__tests__/zeutara-clay-reply-send.test.ts b/src/agents/smartlead-responder/__tests__/zeutara-clay-reply-send.test.ts
+index 12fe1b8..2161615 100644
+--- a/src/agents/smartlead-responder/__tests__/zeutara-clay-reply-send.test.ts
++++ b/src/agents/smartlead-responder/__tests__/zeutara-clay-reply-send.test.ts
+@@ -46,7 +46,9 @@ vi.mock("../../../integrations/clay/campaign-read", () => ({
+       .map((c, i) => ({
+         messageId: `sent-${i}`,
+         type: "SENT",
++        from: "jonah+campaign@zeutaraventures.com",
+         time: "2026-10-14T19:00:00Z",
++        subject: "Re: Question",
+         body: c.body.email_body || c.body.body || c.body.reply_body,
+       })),
+   ],
+@@ -128,6 +130,7 @@ afterEach(() => {
+   delete process.env.REPLYBOT_ZEUTARA_CLAY_REPLY_URL;
+   delete process.env.REPLYBOT_SERIF_CLAY_REPLY_URL;
+   delete process.env.ZEUTARA_REPLY_GUIDE_URL;
++  delete process.env.VANTAGE_CREATURE_TOKEN;
+ });
+ 
+ function buttonValue(cardBody: any, actionId: string): any {
+@@ -286,6 +289,22 @@ describe("Zeutara replies route through Clay", () => {
+     );
+   });
+ 
++  it("logs the actual Clay sender and receipt time to Vantage", async () => {
++    process.env.VANTAGE_CREATURE_TOKEN = "test-token";
++    await processSmartleadWebhook(VERDICT, "zeutara");
++    const value = cardValue(lastCard()!.body);
++
++    calls = [];
++    await press("smartlead_send", value, LIVE_CHANNEL);
++
++    const logged = calls.find((c) => c.url.endsWith("/togari/sent"));
++    expect(logged?.body).toMatchObject({
++      to_email: "partner@fund.vc",
++      from_email: "jonah+campaign@zeutaraventures.com",
++      sent_at: "2026-10-14T19:00:00Z",
++    });
++  });
++
+   it("refuses to send without the campaign keys, with no Gmail to fall back to", async () => {
+     await processSmartleadWebhook(
+       { ...VERDICT, lead_id: 0, campaign_id: 0 },
+diff --git a/src/agents/smartlead-responder/slack-actions.ts b/src/agents/smartlead-responder/slack-actions.ts
+index 8eac27d..d4b7d5c 100644
+--- a/src/agents/smartlead-responder/slack-actions.ts
++++ b/src/agents/smartlead-responder/slack-actions.ts
+@@ -315,6 +315,7 @@ export async function sendReplyEmail(
+   msg: OutboundReply,
+ ): Promise<void> {
+   let before: ThreadMessage[] = [];
++  let confirmedSent: ThreadMessage | undefined;
+   const verify =
+     client.clientId === "zeutara" && resolveSendMethod(client, msg) === "clay";
+   try {
+@@ -374,6 +375,7 @@ export async function sendReplyEmail(
+           "Reply delivered; follow-up scheduling awaits recovery",
+         );
+       });
++    confirmedSent = sent;
+   }
+   // The campaign calendar stops counting this prospect as waiting on an
+   // answer. Every path that emails a prospect comes through here: card
+@@ -390,16 +392,21 @@ export async function sendReplyEmail(
+   if (vantageEnabled(client.clientId)) {
+     await vantageLogSent({
+       to_email: msg.to,
+-      from_email: client.sender?.email || "",
+-      subject: msg.subject,
+-      text: msg.body,
+-      sent_at: new Date().toISOString(),
+-    }).catch((err) =>
++      from_email: confirmedSent?.from || client.sender?.email || "",
++      subject: confirmedSent?.subject || msg.subject,
++      text: confirmedSent?.body || msg.body,
++      sent_at: confirmedSent?.time || new Date().toISOString(),
++    }).catch((err) => {
+       logger.warn("vantage.log_sent_failed", {
+         to: msg.to,
+         error: String(err),
+-      }),
+-    );
++      });
++      // Clay has confirmed delivery. Keep the queue entry unresolved so
++      // result recovery retries the log without sending another email.
++      throw new ReplyDeliveryUnknown(
++        "Reply delivered; Vantage log awaits recovery",
++      );
++    });
+   }
+ }
+ 
+diff --git a/src/replies/__tests__/autopilot.test.ts b/src/replies/__tests__/autopilot.test.ts
+index 20340d4..13cf64c 100644
+--- a/src/replies/__tests__/autopilot.test.ts
++++ b/src/replies/__tests__/autopilot.test.ts
+@@ -212,6 +212,13 @@ describe("dates", () => {
+ 
+ describe("follow-up sweep", () => {
+   it("retries a proven pre-send failure but holds ambiguous delivery", async () => {
++    history = [
++      {
++        type: "REPLY",
++        time: "2026-10-05T18:00:00Z",
++        body: "Can you share more about the round?",
++      },
++    ];
+     queryRows = [
+       {
+         id: "zeutara:r1",
+@@ -238,6 +245,13 @@ describe("follow-up sweep", () => {
+     expect(writes.at(-1)?.params.status).toBe("delivery_unknown");
+   });
+   it("sends a due follow-up in the thread through the Clay send and marks it sent", async () => {
++    history = [
++      {
++        type: "REPLY",
++        time: "2026-10-05T18:00:00Z",
++        body: "Can you share more about the round?",
++      },
++    ];
+     queryRows = [
+       {
+         id: "zeutara:r1",
+diff --git a/src/replies/__tests__/conversation-cycle.test.ts b/src/replies/__tests__/conversation-cycle.test.ts
+index 77b911e..03ac0a4 100644
+--- a/src/replies/__tests__/conversation-cycle.test.ts
++++ b/src/replies/__tests__/conversation-cycle.test.ts
+@@ -8,6 +8,7 @@ vi.mock("../../bigquery/client", () => ({
+ }));
+ import {
+   cycleDue,
++  followupDisposition,
+   followupObsolete,
+   scheduleConversationFollowup,
+ } from "../conversation-cycle";
+@@ -27,6 +28,46 @@ beforeEach(() => {
+   mocks.query.mockResolvedValue({ rows: [{ attempt: 0 }] });
+ });
+ describe("conversation ownership", () => {
++  it("does not nudge a pass, a later condition, or a form request", () => {
++    const reply = (body: string): ThreadMessage[] => [
++      {
++        messageId: "r1",
++        type: "REPLY",
++        body,
++        subject: "Re: Deal",
++        from: "lead@test.com",
++        time: inbound,
++      },
++    ];
++    expect(
++      followupDisposition(reply("We have a conflict. Going to pass here")),
++    ).toBe("cancel");
++    expect(
++      followupDisposition(
++        reply(
++          "Happy to chat once they identify a lead, until then I have to pass",
++        ),
++      ),
++    ).toBe("handoff");
++    expect(
++      followupDisposition(
++        reply("Please submit through our founder intake form"),
++      ),
++    ).toBe("handoff");
++    expect(
++      followupDisposition(reply("Happy to meet the founder. What times work?")),
++    ).toBe("handoff");
++    expect(
++      followupDisposition(reply("Can you share more about the round?")),
++    ).toBe("handoff");
++    expect(
++      followupDisposition([
++        ...reply("Can you share more about the round?"),
++        { ...sent, time: "2026-10-15T18:00:00Z" },
++      ]),
++    ).toBe("send");
++    expect(followupDisposition([])).toBe("handoff");
++  });
+   it("schedules across weekends and cancels obsolete work on newer activity", () => {
+     expect(cycleDue(new Date(sent.time)).toISOString()).toBe(
+       "2026-10-20T14:00:00.000Z",
+diff --git a/src/replies/__tests__/followup-recovery.test.ts b/src/replies/__tests__/followup-recovery.test.ts
+index 5037483..cad915d 100644
+--- a/src/replies/__tests__/followup-recovery.test.ts
++++ b/src/replies/__tests__/followup-recovery.test.ts
+@@ -17,6 +17,7 @@ vi.mock("../../integrations/clay/campaign-read", () => ({
+ vi.mock("../conversation-cycle", () => ({
+   scheduleConversationFollowup: mocks.schedule,
+   followupAttempt: () => 0,
++  followupDisposition: () => "send",
+ }));
+ import { reconcileFollowups } from "../followup-recovery";
+ import { getReplybotClient } from "../../agents/replybot/client-config";
+diff --git a/src/replies/__tests__/outcome-check.test.ts b/src/replies/__tests__/outcome-check.test.ts
+index 83ce42b..6bc408a 100644
+--- a/src/replies/__tests__/outcome-check.test.ts
++++ b/src/replies/__tests__/outcome-check.test.ts
+@@ -3,9 +3,17 @@ import { describe, expect, it, vi } from "vitest";
+ // 2026-10-13: four investors sat at "done" for a week with no answer.
+ const replies: any[] = [];
+ const followups: Array<{ email: string; hours: number; reason: string }> = [];
+-const openReplies: Array<{ email: string; hours: number; reason: string }> = [];
++const openReplies: Array<{
++  email: string;
++  hours: number;
++  reason: string;
++  leadId?: number;
++  campaignId?: number;
++}> = [];
++const threadHistory: any[] = [];
+ vi.mock("../../integrations/cl" + "ay/campaign-read", () => ({
+   inboxReplies: async () => replies,
++  thread: async () => threadHistory,
+ }));
+ vi.mock("../inbox-poller", () => ({ takeLease: async () => true }));
+ vi.mock("../store", () => ({
+@@ -27,6 +35,49 @@ const r = (email: string, lastSent: string, lastReply: string, category = 0) =>
+   });
+ 
+ describe("outcome check", () => {
++  it("does not call an answered or passed investor stuck because a review row is stale", async () => {
++    replies.length = 0;
++    threadHistory.length = 0;
++    openReplies.push({
++      email: "answered@x.com",
++      hours: 72,
++      reason: "reply awaiting_review",
++      leadId: 1,
++      campaignId: 2,
++    });
++    threadHistory.push(
++      {
++        type: "REPLY",
++        time: "2026-10-08T11:00:00Z",
++        body: "Can you share the deck?",
++      },
++      { type: "SENT", time: "2026-10-09T11:00:00Z", body: "Here it is" },
++    );
++    try {
++      expect(await findStuck("zeutara", NOW)).toEqual([]);
++    } finally {
++      openReplies.length = 0;
++      threadHistory.length = 0;
++    }
++  });
++  it("reads an unlabelled inbox reply before calling a pass stuck", async () => {
++    replies.length = 0;
++    threadHistory.length = 0;
++    r("pass@x.com", "2026-10-07T00:00:00Z", "2026-10-08T11:00:00Z");
++    replies[0].emailCampaignId = 2;
++    replies[0].emailLeadId = 1;
++    threadHistory.push({
++      type: "REPLY",
++      time: "2026-10-08T11:00:00Z",
++      body: "We have a conflict of interest and will pass",
++    });
++    try {
++      expect(await findStuck("zeutara", NOW)).toEqual([]);
++    } finally {
++      replies.length = 0;
++      threadHistory.length = 0;
++    }
++  });
+   it("reports a waiting review card missing from the inbox snapshot", async () => {
+     replies.length = 0;
+     openReplies.push({
+diff --git a/src/replies/__tests__/result-recovery.test.ts b/src/replies/__tests__/result-recovery.test.ts
+index c7439e6..9765481 100644
+--- a/src/replies/__tests__/result-recovery.test.ts
++++ b/src/replies/__tests__/result-recovery.test.ts
+@@ -73,4 +73,16 @@ describe("reply reconciliation", () => {
+       "delivery_unknown",
+     );
+   });
++  it("closes a failed card when the investor's latest reply is a pass", async () => {
++    mocks.pending.mockResolvedValue([{ ...row, state: "failed" }]);
++    mocks.thread.mockResolvedValue([
++      {
++        type: "REPLY",
++        body: "We have a conflict and will pass",
++        time: "2026-10-14T20:00:00Z",
++      },
++    ]);
++    await reconcileReplyResults(getReplybotClient("zeutara")!);
++    expect(mocks.state).toHaveBeenCalledWith("r1", "failed", "done");
++  });
+ });
+diff --git a/src/replies/autopilot.ts b/src/replies/autopilot.ts
+index c66a25c..3153d0f 100644
+--- a/src/replies/autopilot.ts
++++ b/src/replies/autopilot.ts
+@@ -35,7 +35,11 @@ import {
+ import type { ReplyIngestPayload } from "./types";
+ import { ReplyPreflightError } from "./delivery";
+ import { thread } from "../integrations/clay/campaign-read";
+-import { followupAttempt, followupObsolete } from "./conversation-cycle";
++import {
++  followupAttempt,
++  followupDisposition,
++  followupObsolete,
++} from "./conversation-cycle";
+ 
+ const logger = createLogger("replies/autopilot");
+ const PROJECT_ID = process.env.GCP_PROJECT_ID || "midyear-glazing-485303-u3";
+@@ -417,6 +421,18 @@ export async function sweepFollowups(
+           );
+           continue;
+         }
++        const disposition = followupDisposition(history);
++        if (disposition !== "send") {
++          await bq().executeWrite(
++            `UPDATE ${followupsTable()} SET status = @status WHERE id = @id AND status = 'sending'`,
++            {
++              id: r.id,
++              status:
++                disposition === "cancel" ? "cancelled" : "handoff_required",
++            },
++          );
++          continue;
++        }
+         const prior = [...history]
+           .reverse()
+           .find((message) => message.type === "SENT");
+diff --git a/src/replies/conversation-cycle.ts b/src/replies/conversation-cycle.ts
+index f068377..c98b0aa 100644
+--- a/src/replies/conversation-cycle.ts
++++ b/src/replies/conversation-cycle.ts
+@@ -2,6 +2,7 @@ import crypto from "node:crypto";
+ import { BigQueryClient } from "../bigquery/client";
+ import type { ReplybotClientConfig } from "../agents/replybot/client-config";
+ import type { ThreadMessage } from "../integrations/clay/campaign-read";
++import { replyIntent } from "../agents/smartlead-responder/reply-intent";
+ 
+ const PROJECT = process.env.GCP_PROJECT_ID || "midyear-glazing-485303-u3";
+ const TABLE = `\`${PROJECT}.togari_data_lake.reply_followups\``;
+@@ -41,6 +42,40 @@ export function followupObsolete(
+   );
+ }
+ 
++/** A scheduled nudge must still make sense after reading the investor's words. */
++export function followupDisposition(
++  messages: ThreadMessage[],
++): "send" | "cancel" | "handoff" {
++  const latest = messages
++    .filter((message) => message.type === "REPLY")
++    .sort((a, b) => Date.parse(b.time) - Date.parse(a.time))[0];
++  if (!latest) return "handoff";
++  const body = latest.body
++    .replace(/<br\s*\/?\s*>|<\/p>/gi, "\n")
++    .replace(/<[^>]*>/g, " ")
++    .replace(/&gt;/gi, ">")
++    .replace(/&amp;/gi, "&");
++  const kind = replyIntent(body).kind;
++  if (
++    ["pass", "unsubscribe", "ignore", "new_address", "referral"].includes(kind)
++  )
++    return "cancel";
++  // A meeting request needs actual availability and coordination. A generic
++  // nudge can lose a ready investor, so keep it visible as a handoff.
++  if (["form", "later", "interested", "unclear"].includes(kind))
++    return "handoff";
++  if (
++    ["question", "deck"].includes(kind) &&
++    !messages.some(
++      (message) =>
++        message.type === "SENT" &&
++        Date.parse(message.time) > Date.parse(latest.time),
++    )
++  )
++    return "handoff";
++  return "send";
++}
++
+ /** A send stays an open conversation until a response or explicit handoff. */
+ export async function scheduleConversationFollowup(
+   client: ReplybotClientConfig,
+diff --git a/src/replies/followup-recovery.ts b/src/replies/followup-recovery.ts
+index cc31bb1..bf3aab0 100644
+--- a/src/replies/followup-recovery.ts
++++ b/src/replies/followup-recovery.ts
+@@ -4,6 +4,7 @@ import type { ReplybotClientConfig } from "../agents/replybot/client-config";
+ import { thread } from "../integrations/clay/campaign-read";
+ import {
+   followupAttempt,
++  followupDisposition,
+   scheduleConversationFollowup,
+ } from "./conversation-cycle";
+ import { createLogger } from "../observability/logger";
+@@ -47,6 +48,7 @@ export async function reconcileFollowups(
+           campaignId,
+           leadId,
+         );
++        const disposition = followupDisposition(messages);
+         const sent = messages
+           .filter(
+             (m) =>
+@@ -62,18 +64,19 @@ export async function reconcileFollowups(
+           sent &&
+           (!inbound || Date.parse(sent.time) > Date.parse(inbound.time))
+         ) {
+-          await scheduleConversationFollowup(
+-            client,
+-            {
+-              to: String(row.lead_email),
+-              leadId,
+-              campaignId,
+-              leadName: String(row.lead_name || ""),
+-              followupAttempt: followupAttempt(String(row.id)),
+-            },
+-            sent,
+-            inbound?.time || String(row.created_at),
+-          );
++          if (disposition === "send")
++            await scheduleConversationFollowup(
++              client,
++              {
++                to: String(row.lead_email),
++                leadId,
++                campaignId,
++                leadName: String(row.lead_name || ""),
++                followupAttempt: followupAttempt(String(row.id)),
++              },
++              sent,
++              inbound?.time || String(row.created_at),
++            );
+           if (vantageEnabled(client.clientId))
+             await vantageLogSent({
+               to_email: String(row.lead_email),
+@@ -104,6 +107,19 @@ export async function reconcileFollowups(
+           );
+           continue;
+         }
++        if (disposition !== "send") {
++          await bq.executeWrite(
++            `UPDATE ${table} SET status = @status
++            WHERE id = @id AND client_id = @clientId AND status IN ('sending', 'delivery_unknown', 'failed')`,
++            {
++              id: String(row.id),
++              clientId: client.clientId,
++              status:
++                disposition === "cancel" ? "cancelled" : "handoff_required",
++            },
++          );
++          continue;
++        }
+       }
+       // Rotate unresolved rows so missing identities cannot monopolize the batch.
+       await bq.executeWrite(
+diff --git a/src/replies/outcome-check.ts b/src/replies/outcome-check.ts
+index ded591a..591acc0 100644
+--- a/src/replies/outcome-check.ts
++++ b/src/replies/outcome-check.ts
+@@ -14,8 +14,10 @@
+  * channel (Sagar, 2026-10-03: no process chatter in client channels).
+  */
+ import { getReplybotClient } from "../agents/replybot/client-config";
+-import { inboxReplies } from "../integrations/clay/campaign-read";
+-import { SETTLED_CATEGORIES } from "../routes/client-dashboard";
++import { inboxReplies, thread } from "../integrations/clay/campaign-read";
++import type { ThreadMessage } from "../integrations/clay/campaign-read";
++import { replyIntent } from "../agents/smartlead-responder/reply-intent";
++import { htmlToText, SETTLED_CATEGORIES } from "../routes/client-dashboard";
+ import { slackBotTokenFor } from "../transports/slack/installations";
+ import { takeLease } from "./inbox-poller";
+ import {
+@@ -41,6 +43,23 @@ export interface Stuck {
+   reason?: string;
+ }
+ 
++function threadSettled(messages: ThreadMessage[]): boolean {
++  const latestReply = messages
++    .filter((message) => message.type === "REPLY")
++    .sort((a, b) => Date.parse(b.time) - Date.parse(a.time))[0];
++  if (!latestReply) return false;
++  if (
++    messages.some(
++      (message) =>
++        message.type === "SENT" &&
++        Date.parse(message.time) > Date.parse(latestReply.time),
++    )
++  )
++    return true;
++  const kind = replyIntent(htmlToText(String(latestReply.body || ""))).kind;
++  return ["pass", "unsubscribe", "ignore", "later"].includes(kind);
++}
++
+ export async function findStuck(
+   clientId: string,
+   now = Date.now(),
+@@ -72,8 +91,38 @@ export async function findStuck(
+     clientId,
+     waiting.map((r) => r.leadEmail),
+   );
+-  const unanswered = waiting
+-    .filter((r) => !settled.has(r.leadEmail.toLowerCase()))
++  const candidates = waiting.filter(
++    (r) => !settled.has(r.leadEmail.toLowerCase()),
++  );
++  const unresolved = [] as typeof candidates;
++  // Read the words even when Clay left the category unset. Bounded batches
++  // keep the daily check from hitting Clay with every thread at once.
++  for (let offset = 0; offset < candidates.length; offset += 5) {
++    const batch = candidates.slice(offset, offset + 5);
++    const keep = await Promise.all(
++      batch.map(async (reply) => {
++        if (!reply.emailCampaignId || !reply.emailLeadId) return true;
++        try {
++          return !threadSettled(
++            await thread(
++              clientId,
++              live.clayWorkspaceId,
++              reply.emailCampaignId,
++              reply.emailLeadId,
++            ),
++          );
++        } catch (error) {
++          logger.warn("outcome_check.thread_unavailable", {
++            clientId,
++            error: String(error),
++          });
++          return true;
++        }
++      }),
++    );
++    unresolved.push(...batch.filter((_, index) => keep[index]));
++  }
++  const unanswered = unresolved
+     .map((r) => ({
+       email: r.leadEmail,
+       company: (r.campaignName.split("|")[1] || "").trim(),
+@@ -87,7 +136,47 @@ export async function findStuck(
+     stalledReplyItems(clientId),
+     stalledFollowups(clientId),
+   ]);
+-  for (const item of [...openReplies, ...followups]) {
++  for (const item of openReplies) {
++    const snapshot = all.find(
++      (reply) =>
++        reply.leadEmail.toLowerCase() === item.email.toLowerCase() &&
++        (!item.leadId || reply.emailLeadId === item.leadId) &&
++        (!item.campaignId || reply.emailCampaignId === item.campaignId),
++    );
++    if (
++      snapshot &&
++      (SETTLED_CATEGORIES.has(snapshot.category) ||
++        (snapshot.lastSent &&
++          snapshot.lastReply &&
++          Date.parse(snapshot.lastSent) > Date.parse(snapshot.lastReply)))
++    )
++      continue;
++    if (item.leadId && item.campaignId) {
++      try {
++        const messages = await thread(
++          clientId,
++          live.clayWorkspaceId,
++          item.campaignId,
++          item.leadId,
++        );
++        if (threadSettled(messages)) continue;
++      } catch (error) {
++        logger.warn("outcome_check.thread_unavailable", {
++          clientId,
++          error: String(error),
++        });
++      }
++    }
++    const key = item.email.toLowerCase();
++    const existing = merged.get(key);
++    merged.set(key, {
++      email: item.email,
++      company: existing?.company || "",
++      hours: Math.max(existing?.hours || 0, Number(item.hours) || 0),
++      reason: [existing?.reason, item.reason].filter(Boolean).join(", "),
++    });
++  }
++  for (const item of followups) {
+     const key = item.email.toLowerCase();
+     const existing = merged.get(key);
+     merged.set(key, {
+diff --git a/src/replies/result-recovery.ts b/src/replies/result-recovery.ts
+index f8908b7..7dffb0a 100644
+--- a/src/replies/result-recovery.ts
++++ b/src/replies/result-recovery.ts
+@@ -5,6 +5,8 @@ import { createLogger } from "../observability/logger";
+ import { scheduleConversationFollowup } from "./conversation-cycle";
+ import { vantageEnabled, vantageLogSent } from "./vantage";
+ import { reconcileFollowups } from "./followup-recovery";
++import { replyIntent } from "../agents/smartlead-responder/reply-intent";
++import { htmlToText } from "../routes/client-dashboard";
+ 
+ const logger = createLogger("ReplyRecovery");
+ 
+@@ -80,6 +82,16 @@ export async function reconcileReplyResults(
+           });
+         await reconcileResultState(row.row_id, row.state, "done");
+       } else {
++        const latestReply = messages
++          .filter((message) => message.type === "REPLY")
++          .sort((a, b) => Date.parse(b.time) - Date.parse(a.time))[0];
++        const kind = latestReply
++          ? replyIntent(htmlToText(String(latestReply.body || ""))).kind
++          : null;
++        if (kind && ["pass", "unsubscribe", "ignore", "later"].includes(kind)) {
++          await reconcileResultState(row.row_id, row.state, "done");
++          continue;
++        }
+         const state =
+           row.state === "delivery_unknown" || row.state === "needs_draft"
+             ? row.state
+diff --git a/src/replies/store.ts b/src/replies/store.ts
+index 49b0134..2e45fd0 100644
+--- a/src/replies/store.ts
++++ b/src/replies/store.ts
+@@ -356,12 +356,20 @@ export async function stalledFollowups(
+ }
+ 
+ /** Cards and failed replies can be absent from the campaign inbox snapshot. */
++export interface StalledReplyItem {
++  email: string;
++  hours: number;
++  reason: string;
++  leadId: number;
++  campaignId: number;
++}
++
+ export async function stalledReplyItems(
+   clientId: string,
+-): Promise<Array<{ email: string; hours: number; reason: string }>> {
++): Promise<StalledReplyItem[]> {
+   const { rows } = await moduleBq().executeQuery(
+     `WITH open_replies AS (
+-       SELECT from_address AS email, state,
++       SELECT from_address AS email, state, lead_id, campaign_id,
+          TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), COALESCE(received_at, created_at), HOUR) AS hours,
+          ROW_NUMBER() OVER (PARTITION BY LOWER(from_address)
+            ORDER BY COALESCE(received_at, created_at) DESC) AS latest
+@@ -371,11 +379,18 @@ export async function stalledReplyItems(
+          AND NOT STARTS_WITH(IFNULL(category, ''), 'autopilot:')
+          AND COALESCE(received_at, created_at) < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 15 MINUTE)
+      )
+-     SELECT email, hours, CONCAT('reply ', state) AS reason
++     SELECT email, hours, CONCAT('reply ', state) AS reason,
++       lead_id AS leadId, campaign_id AS campaignId
+      FROM open_replies WHERE latest = 1`,
+     { clientId },
+   );
+-  return rows as Array<{ email: string; hours: number; reason: string }>;
++  return rows.map((row) => ({
++    email: String(row.email || ""),
++    hours: Number(row.hours) || 0,
++    reason: String(row.reason || ""),
++    leadId: Number(row.leadId) || 0,
++    campaignId: Number(row.campaignId) || 0,
++  }));
+ }
+ 
+ export async function pendingResults(
+@@ -386,7 +401,7 @@ export async function pendingResults(
+        CAST(COALESCE(received_at, created_at) AS STRING) AS received_at
+      FROM ${replyItemsTable()}
+      WHERE client_id = @clientId
+-       AND state IN ('done', 'processing', 'delivery_unknown', 'awaiting_review', 'needs_draft')
++       AND state IN ('done', 'processing', 'failed', 'delivery_unknown', 'awaiting_review', 'needs_draft')
+        AND NOT STARTS_WITH(IFNULL(category, ''), 'autopilot:')
+        AND updated_at < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 15 MINUTE)
+      ORDER BY updated_at LIMIT 20`,

@@ -1,0 +1,23 @@
+[
+  {
+    "engagement_id": "eng_springdale_2026q2",
+    "tenant_id": "48n",
+    "client_firm_name": "Springdale Capital",
+    "client_firm_id": null,
+    "engagement_name": "Spring Break",
+    "description": "Buy-side commercial landscaping rollup in NC, VA, TN. $5M-$50M revenue, owner-operator targets, no current PE backing.",
+    "status": "active",
+    "started_at": "2026-04-15",
+    "ended_at": null,
+    "primary_owner_id": "u_kevin",
+    "created_at": "2026-05-08T19:40:58.686Z",
+    "updated_at": "2026-05-08T19:40:58.686Z",
+    "metrics": {
+      "theses_count": 1,
+      "companies_count": 41,
+      "meetings_booked": 3,
+      "in_loi": 0,
+      "closed_won": 0
+    }
+  }
+]

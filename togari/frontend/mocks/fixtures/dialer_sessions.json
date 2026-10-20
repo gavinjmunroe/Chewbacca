@@ -1,0 +1,19 @@
+[
+  {
+    "session_id": "ds_kevin_2026_05_11_am",
+    "tenant_id": "48n",
+    "user_id": "u_kevin",
+    "thesis_id": "thesis_landscaping_se",
+    "task_filter": {
+      "tier": 1,
+      "milestone": "not_yet_approached"
+    },
+    "retell_call_id": null,
+    "status": "active",
+    "total_calls": 7,
+    "answered_count": 3,
+    "meetings_booked": 1,
+    "started_at": "2026-05-08T19:40:58.686Z",
+    "ended_at": null
+  }
+]

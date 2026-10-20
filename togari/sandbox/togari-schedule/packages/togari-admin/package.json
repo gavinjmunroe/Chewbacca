@@ -1,0 +1,7 @@
+{
+  "name": "@togari/admin",
+  "version": "1.0.0",
+  "description": "Shared infrastructure for Togari services (stub)",
+  "main": "index.js",
+  "types": "index.d.ts"
+}

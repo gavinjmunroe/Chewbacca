@@ -1,0 +1,30 @@
+[
+  {
+    "user_id": "u_kevin",
+    "full_name": "Kevin Park",
+    "email": "kevin@48north.com",
+    "role": "Partner",
+    "avatar_initial": "KP"
+  },
+  {
+    "user_id": "u_tyler",
+    "full_name": "Tyler Morgan",
+    "email": "tyler@48north.com",
+    "role": "Principal",
+    "avatar_initial": "TM"
+  },
+  {
+    "user_id": "u_sagar",
+    "full_name": "Sagar Tiwari",
+    "email": "sagar@bluemodern.ai",
+    "role": "Founder",
+    "avatar_initial": "ST"
+  },
+  {
+    "user_id": "u_caleb",
+    "full_name": "Caleb Newton",
+    "email": "caleb@bluemodern.ai",
+    "role": "Engineer",
+    "avatar_initial": "CN"
+  }
+]

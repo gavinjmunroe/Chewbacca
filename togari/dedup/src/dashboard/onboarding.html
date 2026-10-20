@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0a0a0a" />
+    <title>Get started · Togari</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    />
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    <link rel="stylesheet" href="dashboard.css" />
+  </head>
+
+  <body class="text-zinc-50 min-h-screen">
+    <nav id="tg-nav" class="fixed top-0 inset-x-0 z-50 tg-glass">
+      <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
+        <a href="index.html" class="flex items-center gap-2 font-semibold tracking-tight">
+          <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-indigo-500/15 border border-indigo-500/30">
+            <i data-lucide="link-2" class="w-4 h-4 text-indigo-400"></i>
+          </span>
+          <span>Togari</span>
+          <span class="text-zinc-500 font-normal hidden sm:inline">— onboarding</span>
+        </a>
+        <div class="flex items-center gap-2 text-sm">
+          <a href="connect.html" class="px-3 py-1.5 rounded-lg hover:bg-white/5 text-zinc-400 hover:text-white transition-all duration-200 hidden sm:inline-block">Connect</a>
+          <a href="api-keys.html" class="px-3 py-1.5 rounded-lg hover:bg-white/5 text-zinc-400 hover:text-white transition-all duration-200">API keys</a>
+        </div>
+      </div>
+    </nav>
+
+    <main class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-24">
+      <!-- Header -->
+      <header class="pt-8 pb-10">
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 mb-6">
+          <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+          New here
+        </div>
+        <h1 class="text-3xl md:text-5xl font-bold tracking-tight bg-gradient-to-br from-white to-zinc-400 bg-clip-text text-transparent leading-tight">
+          Let's get you a working Clay column.
+        </h1>
+        <p class="mt-4 text-zinc-400 max-w-2xl leading-relaxed">
+          Four short steps. You can leave and come back at any point. We'll remember where you are.
+        </p>
+      </header>
+
+      <!-- Stepper -->
+      <div class="mb-12">
+        <ol class="grid grid-cols-4 gap-2" id="tg-stepper">
+          <li data-step="1">
+            <div class="h-1 rounded-full bg-indigo-500"></div>
+            <div class="mt-2 text-xs font-medium">Welcome</div>
+          </li>
+          <li data-step="2">
+            <div class="h-1 rounded-full bg-zinc-800"></div>
+            <div class="mt-2 text-xs text-zinc-500">Connect</div>
+          </li>
+          <li data-step="3">
+            <div class="h-1 rounded-full bg-zinc-800"></div>
+            <div class="mt-2 text-xs text-zinc-500">Get a key</div>
+          </li>
+          <li data-step="4">
+            <div class="h-1 rounded-full bg-zinc-800"></div>
+            <div class="mt-2 text-xs text-zinc-500">Paste into Clay</div>
+          </li>
+        </ol>
+      </div>
+
+      <!-- Sign-in gate -->
+      <section id="tg-unauth" class="hidden mb-8 p-6 rounded-2xl border border-amber-500/30 bg-amber-500/5">
+        <div class="flex items-start gap-3">
+          <i data-lucide="key-round" class="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0"></i>
+          <div class="flex-1">
+            <h3 class="font-semibold text-amber-100">Sign in to continue</h3>
+            <p class="mt-1 text-sm text-amber-200/70">Paste your Togari access token below. Stored locally only.</p>
+            <form id="tg-token-form" class="mt-4 flex flex-col sm:flex-row gap-2">
+              <input
+                id="tg-token-input"
+                type="password"
+                placeholder="eyJhbGc..."
+                class="flex-1 px-4 py-2.5 rounded-xl bg-zinc-900 border border-zinc-700 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 font-mono text-sm"
+                autocomplete="off"
+              />
+              <button type="submit" class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition-all duration-200 cursor-pointer">Save</button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <!-- Step 1: Welcome -->
+      <section data-panel="1" class="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-8">
+        <div class="flex items-center gap-3 mb-4">
+          <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 font-mono text-sm">1</span>
+          <h2 class="text-xl font-semibold">Welcome</h2>
+        </div>
+        <p class="text-zinc-300 leading-relaxed mb-4">
+          Togari is your private contact dedupe layer. You'll connect at least one platform (LinkedIn is the fastest), generate an API key, and paste the key into Clay. Clay then asks Togari "is this person in my contacts?" on every row.
+        </p>
+        <p class="text-zinc-400 text-sm leading-relaxed mb-8">
+          Nothing here is shared with other BMA team members. Your contact pool is scoped to your Auth0 identity. Other accounts cannot read it.
+        </p>
+        <button data-next="2" class="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shadow-lg shadow-indigo-500/25 transition-all duration-200 cursor-pointer">
+          Start
+          <i data-lucide="arrow-right" class="w-4 h-4"></i>
+        </button>
+      </section>
+
+      <!-- Step 2: Connect -->
+      <section data-panel="2" class="hidden rounded-2xl border border-zinc-800 bg-zinc-900/40 p-8">
+        <div class="flex items-center gap-3 mb-4">
+          <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 font-mono text-sm">2</span>
+          <h2 class="text-xl font-semibold">Connect a platform</h2>
+        </div>
+        <p class="text-zinc-300 leading-relaxed mb-4">
+          Open the Connect page, pick at least one platform (LinkedIn is fastest), and complete the OAuth flow. Come back here when you're done.
+        </p>
+        <div class="rounded-xl border border-zinc-800 bg-zinc-950 p-4 mb-6">
+          <div class="flex items-start gap-3">
+            <div id="tg-connected-icon" class="mt-0.5">
+              <i data-lucide="circle-dashed" class="w-5 h-5 text-zinc-500"></i>
+            </div>
+            <div class="flex-1">
+              <div class="text-sm font-medium" id="tg-connected-title">No platforms connected yet</div>
+              <div class="text-xs text-zinc-500 mt-0.5" id="tg-connected-sub">We'll detect any connection automatically.</div>
+            </div>
+            <button id="tg-recheck" class="text-xs text-indigo-300 hover:text-indigo-200 px-2 py-1 rounded hover:bg-indigo-500/10 transition-all duration-200 cursor-pointer">
+              Refresh
+            </button>
+          </div>
+        </div>
+        <div class="flex flex-col sm:flex-row gap-3">
+          <a href="connect.html" target="_blank" class="inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shadow-lg shadow-indigo-500/25 transition-all duration-200 cursor-pointer">
+            Open Connect page
+            <i data-lucide="external-link" class="w-4 h-4"></i>
+          </a>
+          <button data-next="3" id="tg-next-step3" disabled class="inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-100 font-medium border border-zinc-700 hover:enabled:bg-zinc-700 transition-all duration-200">
+            Continue
+            <i data-lucide="arrow-right" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </section>
+
+      <!-- Step 3: Get a key -->
+      <section data-panel="3" class="hidden rounded-2xl border border-zinc-800 bg-zinc-900/40 p-8">
+        <div class="flex items-center gap-3 mb-4">
+          <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 font-mono text-sm">3</span>
+          <h2 class="text-xl font-semibold">Generate an API key</h2>
+        </div>
+        <p class="text-zinc-300 leading-relaxed mb-6">
+          We'll create your first <code class="font-mono text-xs px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-200">tgi_live_</code> key. Give it a memorable name. The full key is shown once and never again, so copy it somewhere safe before continuing.
+        </p>
+
+        <form id="tg-key-form" class="space-y-4 mb-4">
+          <div>
+            <label class="block text-sm font-medium text-zinc-300 mb-2" for="tg-key-name">Key name</label>
+            <input
+              id="tg-key-name"
+              type="text"
+              placeholder="Clay table 1"
+              class="w-full px-4 py-2.5 rounded-xl bg-zinc-900 border border-zinc-700 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
+              required
+            />
+          </div>
+          <button type="submit" id="tg-key-create" class="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shadow-lg shadow-indigo-500/25 transition-all duration-200 cursor-pointer">
+            Create key
+            <i data-lucide="key" class="w-4 h-4"></i>
+          </button>
+        </form>
+
+        <div id="tg-key-result" class="hidden rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 mb-6">
+          <div class="flex items-start gap-3 mb-3">
+            <i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-400 mt-0.5"></i>
+            <div class="flex-1">
+              <div class="text-sm font-semibold text-emerald-100">Key created. Copy it now — you can't see it again.</div>
+              <div class="text-xs text-emerald-200/70 mt-1">If you lose it, revoke it and make a new one.</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <code id="tg-key-value" class="flex-1 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 font-mono text-xs text-emerald-300 overflow-x-auto"></code>
+            <button id="tg-key-copy" class="px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-100 text-xs font-medium border border-zinc-700 transition-all duration-200 cursor-pointer">Copy</button>
+          </div>
+        </div>
+
+        <button data-next="4" id="tg-next-step4" disabled class="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-100 font-medium border border-zinc-700 hover:enabled:bg-zinc-700 transition-all duration-200">
+          Continue
+          <i data-lucide="arrow-right" class="w-4 h-4"></i>
+        </button>
+      </section>
+
+      <!-- Step 4: Paste into Clay -->
+      <section data-panel="4" class="hidden rounded-2xl border border-zinc-800 bg-zinc-900/40 p-8">
+        <div class="flex items-center gap-3 mb-4">
+          <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 font-mono text-sm">4</span>
+          <h2 class="text-xl font-semibold">Paste into Clay</h2>
+        </div>
+        <p class="text-zinc-300 leading-relaxed mb-6">
+          In Clay, add an <strong>HTTP API</strong> enrichment column. Use the values below. Click the copy button next to each block.
+        </p>
+
+        <div class="space-y-5 mb-6">
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <label class="text-xs font-mono uppercase text-zinc-500 tracking-wider">Method</label>
+            </div>
+            <code class="block px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 font-mono text-sm text-indigo-300">POST</code>
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <label class="text-xs font-mono uppercase text-zinc-500 tracking-wider">Endpoint</label>
+              <button data-copy="tg-endpoint" class="text-xs text-zinc-400 hover:text-white px-2 py-1 rounded hover:bg-white/5 transition-all duration-200 cursor-pointer">Copy</button>
+            </div>
+            <code id="tg-endpoint" class="block px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 font-mono text-sm overflow-x-auto"></code>
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <label class="text-xs font-mono uppercase text-zinc-500 tracking-wider">Headers</label>
+              <button data-copy="tg-headers" class="text-xs text-zinc-400 hover:text-white px-2 py-1 rounded hover:bg-white/5 transition-all duration-200 cursor-pointer">Copy</button>
+            </div>
+            <pre id="tg-headers" class="block px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 font-mono text-xs overflow-x-auto whitespace-pre"></pre>
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <label class="text-xs font-mono uppercase text-zinc-500 tracking-wider">Body (JSON)</label>
+              <button data-copy="tg-body" class="text-xs text-zinc-400 hover:text-white px-2 py-1 rounded hover:bg-white/5 transition-all duration-200 cursor-pointer">Copy</button>
+            </div>
+            <pre id="tg-body" class="block px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 font-mono text-xs overflow-x-auto whitespace-pre"></pre>
+            <p class="text-xs text-zinc-500 mt-2">Replace the <code class="text-indigo-300">/Field</code> references with your Clay column references using Clay's <code class="text-indigo-300">/</code> picker.</p>
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-zinc-800 bg-zinc-950 p-4 mb-6">
+          <div class="flex items-center gap-3 mb-3">
+            <i data-lucide="play" class="w-4 h-4 text-indigo-300"></i>
+            <span class="text-sm font-semibold">Quick test</span>
+          </div>
+          <p class="text-xs text-zinc-400 mb-3">Ping your key against the live API to confirm it works.</p>
+          <button id="tg-test" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-100 text-sm font-medium border border-zinc-700 transition-all duration-200 cursor-pointer">
+            <i data-lucide="zap" class="w-4 h-4"></i>
+            Test the key
+          </button>
+          <div id="tg-test-result" class="hidden mt-3 px-3 py-2 rounded-lg font-mono text-xs"></div>
+        </div>
+
+        <div class="flex flex-col sm:flex-row gap-3">
+          <a href="clay-setup.html" class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-100 font-medium transition-all duration-200 cursor-pointer">
+            <i data-lucide="book-open" class="w-4 h-4"></i>
+            Full Clay setup guide
+          </a>
+          <a href="api-keys.html" class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shadow-lg shadow-indigo-500/25 transition-all duration-200 cursor-pointer">
+            Done — go to dashboard
+            <i data-lucide="check" class="w-4 h-4"></i>
+          </a>
+        </div>
+      </section>
+
+      <!-- Toast -->
+      <div id="tg-toast" class="fixed bottom-6 right-6 z-50 hidden tg-toast"></div>
+    </main>
+
+    <script>
+      lucide.createIcons();
+
+      // ─── Scroll-aware nav ──────────────────────────────────────────────────
+      (function () {
+        var nav = document.getElementById("tg-nav");
+        function update() {
+          var y = window.scrollY;
+          var nearBottom = y + window.innerHeight >= document.documentElement.scrollHeight - 200;
+          if (y > 80 && !nearBottom) nav.classList.add("tg-nav-visible");
+          else nav.classList.remove("tg-nav-visible");
+        }
+        window.addEventListener("scroll", update, { passive: true });
+        update();
+      })();
+
+      // ─── State + helpers ───────────────────────────────────────────────────
+      var BASE = window.location.origin;
+      var TOKEN_KEY = "togari_token";
+      var PROGRESS_KEY = "togari_onboarding_step";
+      var CREATED_KEY_VALUE = null;
+
+      function getToken() { return localStorage.getItem(TOKEN_KEY); }
+      function saveToken(t) { localStorage.setItem(TOKEN_KEY, t); }
+      function getProgress() { return Number(localStorage.getItem(PROGRESS_KEY) || "1"); }
+      function setProgress(n) { localStorage.setItem(PROGRESS_KEY, String(n)); }
+
+      function toast(msg, type) {
+        var el = document.getElementById("tg-toast");
+        var color = type === "err" ? "bg-rose-500/15 border-rose-500/30 text-rose-100"
+                  : type === "warn" ? "bg-amber-500/15 border-amber-500/30 text-amber-100"
+                  : "bg-emerald-500/15 border-emerald-500/30 text-emerald-100";
+        el.className = "fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl border tg-toast " + color;
+        el.textContent = msg;
+        el.classList.remove("hidden");
+        setTimeout(function () { el.classList.add("hidden"); }, 3500);
+      }
+
+      async function api(path, method, body) {
+        var t = getToken();
+        var headers = { "Content-Type": "application/json" };
+        if (t) headers["Authorization"] = "Bearer " + t;
+        var res = await fetch(BASE + path, {
+          method: method || "GET",
+          headers: headers,
+          body: body ? JSON.stringify(body) : undefined,
+        });
+        if (res.status === 401) { showUnauth(); throw new Error("Not signed in"); }
+        if (!res.ok) throw new Error("HTTP " + res.status + ": " + (await res.text()));
+        return res.json();
+      }
+
+      function showUnauth() {
+        document.getElementById("tg-unauth").classList.remove("hidden");
+      }
+
+      function hideUnauth() {
+        document.getElementById("tg-unauth").classList.add("hidden");
+      }
+
+      // ─── Step navigation ───────────────────────────────────────────────────
+      function showStep(n) {
+        document.querySelectorAll("[data-panel]").forEach(function (p) {
+          p.classList.toggle("hidden", p.getAttribute("data-panel") !== String(n));
+        });
+        document.querySelectorAll("#tg-stepper li").forEach(function (li, i) {
+          var bar = li.querySelector("div");
+          var label = li.querySelectorAll("div")[1];
+          var isActive = i + 1 <= n;
+          bar.className = "h-1 rounded-full " + (isActive ? "bg-indigo-500" : "bg-zinc-800");
+          label.className = "mt-2 text-xs " + (isActive ? "font-medium" : "text-zinc-500");
+        });
+        setProgress(n);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+
+      document.querySelectorAll("[data-next]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          showStep(Number(btn.getAttribute("data-next")));
+        });
+      });
+
+      // ─── Sign-in handling ──────────────────────────────────────────────────
+      document.getElementById("tg-token-form").addEventListener("submit", function (e) {
+        e.preventDefault();
+        var v = document.getElementById("tg-token-input").value.trim();
+        if (!v) return;
+        saveToken(v);
+        hideUnauth();
+        toast("Token saved", "ok");
+        if (getProgress() >= 2) checkConnections();
+      });
+
+      // ─── Step 2: poll for any connection ───────────────────────────────────
+      async function checkConnections() {
+        if (!getToken()) { showUnauth(); return; }
+        try {
+          var r = await api("/dnc/auth/status");
+          var connected = (r && r.connected) || [];
+          var iconEl = document.getElementById("tg-connected-icon");
+          var titleEl = document.getElementById("tg-connected-title");
+          var subEl = document.getElementById("tg-connected-sub");
+          var btn = document.getElementById("tg-next-step3");
+          if (connected.length > 0) {
+            iconEl.innerHTML = '<i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-400"></i>';
+            titleEl.textContent = connected.length + " platform" + (connected.length > 1 ? "s" : "") + " connected";
+            subEl.textContent = connected.join(", ");
+            btn.disabled = false;
+            btn.className = "inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shadow-lg shadow-indigo-500/25 transition-all duration-200 cursor-pointer";
+          } else {
+            iconEl.innerHTML = '<i data-lucide="circle-dashed" class="w-5 h-5 text-zinc-500"></i>';
+            titleEl.textContent = "No platforms connected yet";
+            subEl.textContent = "Connect at least one to continue.";
+            btn.disabled = true;
+          }
+          lucide.createIcons();
+        } catch (e) { /* gated by showUnauth() above */ }
+      }
+      document.getElementById("tg-recheck").addEventListener("click", checkConnections);
+
+      // ─── Step 3: create key ────────────────────────────────────────────────
+      document.getElementById("tg-key-form").addEventListener("submit", async function (e) {
+        e.preventDefault();
+        var name = document.getElementById("tg-key-name").value.trim();
+        if (!name) return;
+        var btn = document.getElementById("tg-key-create");
+        btn.disabled = true;
+        btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Creating...';
+        lucide.createIcons();
+        try {
+          var r = await api("/api/v1/keys", "POST", { name: name });
+          CREATED_KEY_VALUE = r.key;
+          document.getElementById("tg-key-value").textContent = r.key;
+          document.getElementById("tg-key-result").classList.remove("hidden");
+          var next = document.getElementById("tg-next-step4");
+          next.disabled = false;
+          next.className = "inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shadow-lg shadow-indigo-500/25 transition-all duration-200 cursor-pointer";
+          renderClaySnippet();
+          toast("Key created", "ok");
+        } catch (err) {
+          toast("Failed to create key: " + err.message, "err");
+          btn.disabled = false;
+          btn.innerHTML = 'Create key <i data-lucide="key" class="w-4 h-4"></i>';
+          lucide.createIcons();
+        }
+      });
+
+      document.getElementById("tg-key-copy").addEventListener("click", function () {
+        if (!CREATED_KEY_VALUE) return;
+        navigator.clipboard.writeText(CREATED_KEY_VALUE);
+        toast("Key copied to clipboard", "ok");
+      });
+
+      // ─── Step 4: Clay snippet + test ───────────────────────────────────────
+      function renderClaySnippet() {
+        document.getElementById("tg-endpoint").textContent = BASE + "/api/v1/people/match";
+        document.getElementById("tg-headers").textContent =
+          "Authorization: Bearer " + (CREATED_KEY_VALUE || "tgi_live_...") + "\nContent-Type: application/json";
+        document.getElementById("tg-body").textContent = JSON.stringify(
+          { name: "/Full Name", email: "/Email", linkedin: "/LinkedIn URL", phone: "/Phone" },
+          null,
+          2
+        );
+      }
+      renderClaySnippet();
+
+      document.querySelectorAll("[data-copy]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var id = btn.getAttribute("data-copy");
+          var el = document.getElementById(id);
+          if (!el) return;
+          navigator.clipboard.writeText(el.textContent);
+          toast("Copied " + id.replace("tg-", ""), "ok");
+        });
+      });
+
+      document.getElementById("tg-test").addEventListener("click", async function () {
+        if (!CREATED_KEY_VALUE) {
+          toast("Create a key first in step 3", "warn");
+          return;
+        }
+        var resEl = document.getElementById("tg-test-result");
+        resEl.classList.remove("hidden");
+        resEl.className = "mt-3 px-3 py-2 rounded-lg font-mono text-xs bg-zinc-900 border border-zinc-700 text-zinc-300";
+        resEl.textContent = "Calling /api/v1/people/match with test payload...";
+        try {
+          var res = await fetch(BASE + "/api/v1/people/match", {
+            method: "POST",
+            headers: {
+              "Authorization": "Bearer " + CREATED_KEY_VALUE,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ name: "Smoke Test " + Date.now() }),
+          });
+          var body = await res.json();
+          if (res.ok) {
+            resEl.className = "mt-3 px-3 py-2 rounded-lg font-mono text-xs bg-emerald-500/10 border border-emerald-500/30 text-emerald-200";
+            resEl.textContent = "200 OK — " + JSON.stringify(body);
+          } else {
+            resEl.className = "mt-3 px-3 py-2 rounded-lg font-mono text-xs bg-rose-500/10 border border-rose-500/30 text-rose-200";
+            resEl.textContent = res.status + " " + JSON.stringify(body);
+          }
+        } catch (err) {
+          resEl.className = "mt-3 px-3 py-2 rounded-lg font-mono text-xs bg-rose-500/10 border border-rose-500/30 text-rose-200";
+          resEl.textContent = "Network error: " + err.message;
+        }
+      });
+
+      // ─── Init ──────────────────────────────────────────────────────────────
+      if (!getToken()) showUnauth();
+      showStep(getProgress());
+      if (getProgress() >= 2) checkConnections();
+    </script>
+  </body>
+</html>

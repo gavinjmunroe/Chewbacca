@@ -38,10 +38,7 @@ opener as passing instead of failing it.
 
 - "DONT TELL ME UR READY IF THIS SHIT IS HAPPENING": the word ready, or "good
   until X", only follows a `chewbacca gtme ready` pass. ready-guard refuses it
-  otherwise. A tooling tab answering "We good?" names what is good in the
-  first line ("the lesson checks are on main"), never a bare "we're good":
-  in a GTM tab he reads it as the launch, and on 2026-10-16 a lesson-ledger
-  tab's "Yeah we're good" was refused while Zeutara sat NOT READY at 41.
+  otherwise.
 - "Never lie to me bro": report the blocker list as it stands, the same turn,
   even when it is long.
 - "Never tell anyone to press anything in clay themselves": the agent starts
@@ -51,6 +48,13 @@ opener as passing instead of failing it.
   story vs number first, as on 10-12).
 - "Everything should be togari": agents never post in a client's Slack as
   him. client-post-guard refuses it; Togari's bot is the voice there.
+- Client call sheets (Sabo, 2026-10-20): Gav leads, so a sheet is talking
+  points plus questions, not a screen-share script. Before the call Gav said
+  "refrain from showing anything, just explain things", and Caleb had to ask
+  twice ("update the pdf to flow", "we're not presenting"). Write it in call
+  order: a 20 second explanation, one line for if they ask how, then
+  questions, then Gav's ask. Don't pitch other products (the CRM) unless Gav
+  brings them up.
 - Credit the right person: the Perplexity line was Maggie's process, Sagar's
   rule was only "2 variants of 3 messages". Name whose rule it is before
   citing it.
@@ -157,16 +161,8 @@ rlly high response rate". The reply-rate lifts quoted for video (3x to 4x)
 come almost entirely from Loom and Vidyard selling video, and video links in a
 first cold email cost deliverability. So:
 
-- Email 1 stays plain text with one ask. Superseded 10/18 for Firm Foundation:
-  offering the audit we already ran ("It's one of 8 fixes we'd suggest. Want
-  the full list? I'll send it over, free.") took 30 emails from 82-93 to 90-97
-  on gtme_jev, and a yes is deliverable the same day from pre-written lists.
-  The video moved to email 2 as one plain link to a page on the client's own
-  site (firmfoundation.tech/watch), never an attachment (the render was 49 MB).
-- Before linking any render, contact-sheet it (one frame every 4 s) and read
-  every frame. FF v21 still showed "(photo of people together outside, the
-  hero shot ...)" full screen at 26 s (2026-10-19). Then curl the link for a
-  200 before ok-ing the batch that carries it.
+- Email 1 stays plain text. Its last line offers the video ("Want a 60 second
+  video of what we'd change on yours?"), and a yes already counts as a reply.
 - One video for every recipient by default. Caleb, 10/12, on a per-church
   opening cut from the audit: "nah we're not gonna custom make that no need
   to overengineer". Offer personalization once as an option, never as the plan.
@@ -183,7 +179,7 @@ first cold email cost deliverability. So:
   those from research or leave them out. The Firm Foundation list is in their
   Downloads, "Firm Foundation video questions.md".
 - `gtme batch` and `gtme today` read the ledger's own lines.json. Pass
-  `--lines` only to override it (lesson `firm-foundation-lines-not-passed`).
+  `--lines` only to override it (10/12: 252 leads held because nobody passed it).
 
 ## Client rulings beat your strategy (2026-10-09)
 
@@ -208,18 +204,6 @@ and no interest that isn't in the reply text.
 When a new ruling arrives in a text, call or Slack, add it to `DECISIONS.json`
 in the same turn, with its source.
 
-## A grant the user relays is settled (2026-10-19)
-
-When Caleb reports that a client or data owner gave him rights (to resell a
-list, reuse copy, run a campaign), record it in the owning team note with the
-date and his words, and stop gating on it. Never ask him to get it in writing,
-confirm it again, or check a co-owner after he says it's done. On 2026-10-19
-three replies in a row asked for more proof of Jonah's okay to sell
-Prometheus. Caleb called Jonah, who said to stop asking because he and his
-partner had already given full approval. Duties that come from the law itself
-(data broker registration, GDPR) are a separate question: say them once, then
-move on to pricing and selling.
-
 ## Read these first, every time (2026-10-06: skipping them cost a day)
 
 Before building anything for a client, load what already exists, in this order:
@@ -235,30 +219,6 @@ Togari's capabilities and their Chewbacca equivalents, row by row, are in
 `docs/reference/TOGARI-PARITY.md`. `gtme-dnc check` answers "may we email this
 address" across every local source; `gtme-score` ports Togari's lead, affiliation,
 primary-contact, tier and contact-quality rubrics.
-
-## Start from the lesson ledger, and add to it (2026-10-16)
-
-Before planning any campaign, list, table or copy change, run
-`chewbacca gtme lesson plan "<what you're about to build>" --client NAME` and
-run every check it prints. On 2026-10-16 Sabo's chain rediscovered by hand
-the off-domain-email failure that Zeutara's lists had shown on 10-03. The
-ledger (`team/gtme-lessons/`) now hands that check over. When an experiment
-ends, success or failure, record it: `chewbacca gtme lesson template`, fill it
-in, `chewbacca gtme lesson add FILE`. Later results go through `gtme lesson
-record ID`, which keeps the old verdict in history. The oracles refuse a
-`confirmed` built on a Clay category, an unchecked email domain, cost per
-attempted row, a proxy score or under 500 per arm, so write `observed` or
-`inconclusive` when that's what the evidence supports. The design is in
-`docs/plans/GTME-MEMORY.md`.
-
-When the ledger and a client's chain disagree on a GTM call with a clear best
-answer, make the call and say why. Don't hand Caleb the choice. On 2026-10-16
-the wrap-up asked "Should Sabo's chain count a catch-all email as verified?"
-He answered "Confused by the ask?", then "Do wtv is best". The right move was
-to rule on it (catch-all isn't verified: Sabo fears sending too much, and a
-bounce costs more than a missing contact), apply it, and report it in one
-line. Ask only for something only he can decide (money, a client's say, a
-send), and then ask in plain words, not vendor jargon.
 
 ## Client state comes from the graph, never from memory files
 
@@ -320,10 +280,20 @@ clay campaign-stats`, `chewbacca gtm sync` then `gtm replies --all` answer in
   out, keychain copies, launchd jobs that post to it, READMEs), because the
   rename kills the old URL.
 
-Reply counts that disagree across sources, and replies read from a snippet: `chewbacca gtme lesson plan "reply handling"` (lessons `zeutara-reply-coverage-gap`, `zeutara-reply-text-not-category`).
+Also from that build: a reply count that doesn't match across sources is a
+finding, never a footnote. Reconcile person by person before a client sees
+it; on 10/10 the 62 vs 27 gap was 51 replies Togari never got, 10 of them
+opt-outs that had to be blocklisted before Monday.
 
-## Three more from the all-night GTME session, 2026-10-11
+## Four more from the all-night GTME session, 2026-10-11
 
+- **Read the reply, never the snippet.** Until 65f7991d the reply snippet
+  was the raw HTML body's first 280 characters: 73 of 87 Zeutara replies
+  were `<div>` soup cut mid-sentence, so 12 classified "unclear" and two
+  investor deck asks sat 2 days with no answer. Classify and draft from
+  `text` (`gtm replies --json`), the whole reply in the lead's own words.
+  Run `gtme-reply intent` over every reply after any change and read each
+  one that isn't auto-handled.
 - **Every rule runs as code, or it doesn't count.** Caleb: "Make chewb not
   just be a storage of a bunch of cool things, but make it actually
   intelligently follow EVERY rule we set it!!!!!!!!!" A ruling in a client's
@@ -344,14 +314,15 @@ Reply counts that disagree across sources, and replies read from a snippet: `che
 
 ## Sabo takeover lessons, 2026-10-16
 
-- Buyer search, parent domains, `identifiers_only`, off-domain emails, Jev's
-  score floor, cost per verified buyer and flipping the client's list are in
-  the ledger: `chewbacca gtme lesson plan "find the buyer at a brand"`. Before
-  touching a Clay table run `python3 -I tools/table_graph.py <table id>`
-  (`gtme lesson show sabo-table-graph-before-touching`). The working chain is
-  `tools/brand_buyer.py` (live_chain.py is a shim over it); team memory
-  `reference_clay_people_search_finds_buyers`. An empty search goes to
-  `gtme next-move`, below, not to a parents file.
+- **Start from the client's buyer, then flip it.** Caleb: "be efficient and
+  not so narrow minded". For a creator manager, also trace who pays creators
+  like his: run clubs and running creators, then their sponsors. That's how
+  Klarna, Strava, ASICS and Diplo's Run Club sponsors surfaced, none of them on
+  Sabo's list. A contact for a brand he already worked with is recovery.
+- **Search the parent domain when the brand domain comes back empty.** Clay
+  people search found nobody on nocco.com or barebells.com and four people on
+  vitaminwell.com. Resolve the parent first (Vitamin Well, Unilever, Celsius
+  Holdings, Strava).
 - **Bind columns in Clay, not by hand.** Caleb: "make sure we're following
   best practices for handling column to column flow". Codex found Scout by
   search, then pasted her URL into the Findymail input through the UI. Build
@@ -359,216 +330,37 @@ Reply counts that disagree across sources, and replies read from a snippet: `che
   on that formula, then ZeroBounce on the email, so a new row runs end to end.
   `add-column` only makes plain columns, so formula and enrichment columns are
   built once in the UI.
-- **Inside a cap he set, don't ask again.** Caleb, 2026-10-16, after three
-  approval asks in an hour for the same brands: "Fix chewbs you shouldn't be
-  asking for permission maybe its bc im in the claude app instead of the vscode
-  one". It wasn't the app. The asks were the agent's own. Reruns, retries and
-  keyword fixes on the approved brands under the approved credits just run.
-  Asking again is only for new brands or for going over the cap.
-- **A missing Clay read is a build, not a reason to open Clay.** Caleb: "We
-  should work towards never opening clay". When a read fails, map the endpoint
-  into `chewbacca clay` (row `fields=`, views and view-order paging landed on
-  fix/bg-nav, 3d9c8ace) instead of working around it in the UI.
+- **The background read can't see a fresh people search.** `chewbacca clay row`
+  refuses a row whose people cell is over 20,000 chars (Klarna, 5 people: 35,714),
+  and `rows` with `after=` stopped after 10 of 397 rows. Keep the row id from
+  the `add-rows` response, read results as formula values, and budget for this
+  before you promise a live chain.
+- **Measure the field before showing it.** On the 3 Sabo proof rows, people
+  search filled 1 of 3, professional posts 1 of 3 at 2.5 credits each, and
+  Findymail plus ZeroBounce 2 of 2 at 0.6. Show the cheap chain, and say when
+  a field is under 60%.
+
 - **A client demo table is built the night before, not 5 minutes out.**
   Caleb, 12:35 on 10/16 with Sabo due at 1: "This looks so unorganized????? move
   all the goated rows to the top that's how demos are supposed to work". Before
   any client sees a Clay table: a client view sorted with the best rows on top,
   only the 4 to 6 columns the story needs, test rows deleted, one email column
   per person (Clay's waterfall pattern, which Caleb expects: "isn't the whole
-  point of a waterfall that it condenses"). The view ops exist now
-  (`view-columns`, `view-move-columns`, `view-sort`), so this is one command:
-  `python3 -I tools/table_tidy.py --client <slug> --apply`. Run it after every
-  batch that writes rows, not only before a demo.
-- **Every table is planned, never grown.** Caleb, 2026-10-17: "Make sure every
-  table chewb ever makes is systematically organized, not brute forced. This
-  will make it infinitely easier to iterate and build off of and learn from
-  workflows." The Sabo table reached 38 columns by adding a column per
-  experiment: two Findymail columns, two Email formulas, two Verify columns,
-  nine hand-typed leftovers. Before adding any column: run
-  `table_graph.py <table>` and reuse a column that already does the step; write
-  the client file's `view_spec` (`client_view` is a view id) (or let `table_tidy` derive it from
-  `columns`); add the new column into that plan, not beside it.
-- **Weigh every enrichment before wiring one.** Same day: "I need chewbs to
-  have a perfect memory of all the diff clay tools you are yet to use a built
-  in waterfall and always weigh the best option systematically". The chain ran
-  Findymail alone on every brand while the Work Email waterfall (10 providers,
-  ~1.1 credits a row) sat in the Tools panel. Refresh the catalog with
-  `clay workflows actions list` (a launch-guard read; feed its output to
-  `tools/enrich_catalog.py build`), fold in our own outcomes with
-  `enrich_catalog.py learn <runs.jsonl>`, then `enrich_catalog.py pick
-"<capability>" --client <slug>`. Jev only decides which actions can deliver
-  the field. Every number after that is counted: Beta posteriors over usable
-  results (valid and at the right company, not merely found), cascades priced
-  as c1 + (1 - p1) c2, value from the client's deal size, reply rate, close
-  rate and dollars per credit. It prints P(best) per option and picks only at
-  0.9 or above; under that it names the test and its row count. Run the test,
-  `enrich_catalog.py record`, pick again. Caleb, same day: "Nothing in this
-  process should be based on vibes/rough association".
+  point of a waterfall that it condenses"). View settings have no API yet, so
+  set them while he can still click, or map that endpoint first.
 - **During a live call, 3 lines max.** Caleb mid-demo: "This is too much
   text bro wtf". Give him what to say, not why.
-- **Nothing recurring runs on a Mac.** Caleb, 2026-10-16 3:05 PM: "we should
-  never hv anythign dependent on our computer being open on a loop!" A watcher
-  (job changes, refreshes, new rows) is a Clay signal, a Clay schedule or a
-  Railway service, never cron, launchd, a daemon or `chewbacca jobs`. The Mac
-  only does one-time setup. The past-buyer watcher is a Clay JobChange signal
-  (`reference_follow_past_buyers`).
-- **Client work lands in the kit, parameterized by client.** Caleb, 2026-10-16
-  3:07 PM: "Make sure everythign we do for sabo is repeatable and
-  productizable!" A script in a Downloads folder with one client's ids is a
-  prototype. Before calling it done, move it to `tools/` or
-  `tools/creator_gtm/`, read ids and columns from the client file, add a test
-  to `tests/run.sh`, and land it (follow_buyers.py on brand_buyer.py, a8f54457).
-  Ids aren't the only client-specific part: weights, the questions Jev answers,
-  windows and seed research go in the client file too. The first spend_now for
-  Sabo had his weights and Jev questions as code constants, and his run-club
-  sponsor research in a file next to the script. It had to be redone the same
-  day so the weights, questions and windows live in `spend_now.signals` and the
-  sponsors are plain evidence lines (6bd465d6, `reference_spend_now_score`).
-
-## A new creator-manager client in 10 minutes
-
-Copy `library/gtm/brand-buyer/clients/hearthside.json` (a made-up second client) to `~/.chewbacca/gtm/clients/<slug>.json` and fill in `client_slug`, `creator`, `ws`, `table`, `view`, `client_view`, `provider`, `ready_value`, `people_search` (keywords, excludes, limit), `columns` (the table's own names for the roles brand, domain, creator, people, profile, findymail, email, verify, person, title, why, status, contact), `hide`, `buyers` (the past-buyer seed file) and the `spend_now` block (signals with weight, label and Jev question, window, budget_reset, brands, ats); `records`, `rows` and `run_log` default to `<slug>.*` next to the file. Then run, in order: `python3 tools/brand_buyer.py --client <slug> --setup --live`, `python3 tools/brand_buyer.py --client <slug> "<Brand>" <domain> --live` per brand, `python3 tools/creator_gtm/spend_now.py <file> columns --live`, then `collect`, `check` and `write --live`, then `python3 tools/creator_gtm/follow_buyers.py --client <slug> --live`, then `python3 tools/creator_gtm/deliver.py <file> --live` (add `--from-records` on a provider with no table). `tests/test_creator_gtm_second_client.py` proves no step needs code: it runs that whole chain for Hearthside through a fake provider (two direct finds, one empty search that next-move resolves to the parent, spend ranked by Hearthside's own weights, one job change turned warm, every handed contact in the intro ledger as `hearthside`), and fails if any tool file names the first client or its ids.
-
-## When a step comes back empty or blocked: `gtme next-move` (2026-10-16)
-
-On the Sabo call we said Chewbacca "found a way around a blocker" by looking up
-Barebells' parent. It didn't. The parent came from a parents.json row typed in
-after barebells.com returned nobody. Caleb: "make chewbs actually smart and
-intuitively think through all the possible courses of action". Now a blocked
-step (0 people, no email, an off-domain email, no buyer, a failed op, a gate)
-goes through `chewbacca gtme next-move`, and `tools/brand_buyer.py` calls it on
-every empty people search. No parents file exists anymore. Describe it to a client as
-what the code does: it reads the brand's site and Jev ranks the moves (team
-memory `feedback_claims_match_the_mechanism`).
-
-- **Write the blocker as evidence, not as a label.** The request holds the
-  goal, the persona from the client's research, the step, the failure in plain
-  words, and what was seen: people with titles and scores, filters, site text,
-  errors, what was tried. The operators read that. Put your own ideas in
-  `extra`, each with `action_class` (read, paid_write, write, ask, send,
-  launch, add_leads, delete), `touches`, credits and minutes. A move with no
-  class is dropped.
-- **Every operator runs every time.** Related company (from the brand's own
-  ownership sentence, the hosts its site links and the email domains of people
-  found), next person, persona swap, loosen one filter, retry, a source read,
-  ask the client. There's no "if X then Y". An operator with nothing in the
-  evidence proposes nothing, which is why the free site read usually goes first:
-  on Barebells it turned up "Barebells is part of Vitamin Well Group" and a link
-  to career.vitaminwell.com, and the next round proposed vitaminwell.com itself.
-- **Boundaries are data.** `references/next-move.json` holds them with their
-  source: no send, launch or add-leads without a signed `gtme ready`, no
-  deletes, no purchases, nothing over the credit allowance, no auto-run, no hand
-  step in the vendor UI, no interest from a category, no off-account contact.
-  Client rulings come from the client's `DECISIONS.json` through `client_rulings`
-  (Zeutara's no-postal-address drops "add Jonah's office address"). A new rule
-  is a new entry there, never an if-statement. Dropped moves print with the rule
-  that dropped them, and `run` checks again right before any executor.
-- **Never hop on a bare link (2026-10-17).** An org_hop people search runs only
-  on an ownership sentence (footer or about page) or on emails already found at
-  that domain. Bare links hopped Runna to therunbuddy.co.uk, website-files.com
-  and marker.io, and hopped Zico to acsbapp.com, shopifysvc.com and
-  shopifycdn.com. That's six 0.5-credit searches and nobody found. The site read
-  keeps script, stylesheet and preconnect hosts out of `links`, and
-  `infra_domains` in `references/next-move.json` is the cross-check. A company
-  the about page only names doesn't count either, since integrations like
-  Strava and Garmin are named the same way. Caleb's rule for this work: every
-  step decided systematically, nothing brute forced.
-- **Jev ranks, code counts.** Jev gives each surviving move a probability of
-  progress from the evidence. Code ranks on p / (credits + the credits the move
-  still owes downstream + minutes x 0.02 + 0.25), halved when irreversible. A
-  search rerun owes the 0.6 email lookup too, so a 0.6 next-person lookup that
-  finishes the job can outrank it. Jev's number is never permission.
-- **It learns in the lesson ledger.** Each paid attempt adds to a
-  `next-move:<kind>` lesson (`move_stats`, history kept), and the next ranking
-  blends that clear rate with Jev's. `gtme next-move record` adds one by hand.
-- **Commands.** `plan FILE` shows every move, its p, cost and why, plus the
-  dropped ones. `run FILE` only does free reads and then hands back the paid pick
-  for a caller with its own gates. `replay DIR` replays recorded blockers.
-
-Rules taken from how others do this, before building:
-
-- ReAct (Yao et al. 2022): act, observe, think again. A cheap read that adds
-  evidence is a real move, and the next round plans from what it saw.
-- Tree of Thoughts (Yao et al. 2023): generate several candidates, score each,
-  keep the ones you didn't pick for the next round. Tried moves go to `tried`
-  and are never proposed twice.
-- SayCan ([Ahn et al. 2022](https://arxiv.org/pdf/2204.01691)): the model says
-  what's useful, a separate check says what's possible, and the pick needs
-  both. Here Jev is the "useful" and the boundary file is the "possible".
-- Reflexion (Shinn et al. 2023): write down why an attempt failed so the next
-  try reads it. That's the ledger's `move_stats`.
-- Clay's waterfall: try sources cheapest first and stop at the first valid
-  result, paying only for the ones that ran. That's the cost term and the stop
-  on `cleared`. (From memory of Clay's docs; not re-read 2026-10-16.)
-
-Measured 2026-10-16 on 5 recorded blockers (`tests/fixtures/next_move/replays`,
-3 Sabo, 1 Gymshark email, 1 Zeutara gate), live Jev, 4 runs. A move the record
-doesn't cover counts as a miss at full cost. The loop cleared 5 of 5. The old
-hard-coded chain cleared 2 of 5, and 0 of 1 on Barebells with parents.json gone.
-One Codex call per blocker cleared 3 of 5. Cleared per credit: loop 1.28 in 3
-runs and 1.14 in 1 (a 0.67 vs 0.66 tie between vitaminwell.com and
-vitaminwellgroup.com), old chain 1.18, one call 1.07. With Jev off the loop
-cleared 2 of 5 at 0.32 per credit, so Jev's ranking is doing the work. The
-downstream-credit term was added after the first replay, so these five aren't
-held out anymore. Grade it on the next 10 real blockers.
-
-- **Never trust a move's own label (break-it pass, 2026-10-16).** The manager
-  tab got "delete the empty row and retry" through as a `write` and crashed the
-  loop with a move that had no `kind`. Agent moves are now classed from their
-  action text and touches: keywords after folding lookalike letters and zero-width
-  characters, then Jev, which can only raise a class. The riskiest reading wins.
-  On 6 evasive phrasings ("make the old rows go away", "let the sequence rip")
-  Jev caught all 6 and kept both harmless ones. Malformed blockers, an unreadable
-  budget (counts as 0) and garbage CLI input now drop or refuse cleanly. The cost
-  is a false positive. Zeutara's "ask for a written ruling to send without one"
-  now reads as a send and gets dropped, so the replay is down to 4 of 5 cleared at
-  0.91 to 1.03 per credit, under the old chain's 1.18. On the falsifier as we
-  wrote it, the loop clears more blockers but loses per credit.
-- **Agent moves fail closed (attack round 2, 2026-10-16).** "reach out to her
-  by email to confirm" labeled read got through, and a keyword list always loses
-  to paraphrase. So a move the agent proposes counts as a read only when it's one
-  read clause from a short allowlist with no contact or change words, and as an
-  ask only when it starts "ask the client" or "ask <Name>". Anything else labeled
-  read or ask counts as a send and drops. It runs only when Jev confirms its class.
-  Without Jev it comes back as an ask for a person, and Jev can raise a class but
-  never lower it. Agent kinds sit under `agent:`, so none reaches a built-in
-  executor.
-- **Both cost fixes are built, and 2 held-out blockers were scored (2026-10-16).**
-  An ask-shaped move whose only keyword is "send" stays an ask, bc asks go to a
-  person and never run. A chained or smuggled action ("then send", "by sending her
-  the intro", "via email") still drops it. Domains that share a company stem
-  (vitaminwell.com, vitaminwellgroup.com) get one search, and a careers host goes
-  first. Tuning set (the 5 above): 5 of 5 cleared, 1.28 per credit in 6 of 7 runs
-  and 1.11 in 1, against the old chain's 2 of 5 at 1.18. Held out (Barebells row
-  2 and Archer row 10 in runs.jsonl, frozen in tests/fixtures/next_move/heldout
-  before the loop saw them): loop 2 of 2 at 1.18, one Codex call 2 of 2 at 1.18,
-  old chain 1 of 2 at 1.67. Per credit rewards giving up cheaply. The old chain's
-  miss cost nothing, so a higher cleared count can lose on that metric. Read the
-  cleared count next to it.
-- **Never change what a provider step does on failure without running every test that
-  names it (2026-10-16).** 6b478168 turned NotWired into a blocker record and ran its own
-  tests only, so main sat red on `tests/test_gtm_provider.py` until 2851fade. Before
-  landing, `grep -rl <ExceptionName> tests/` and run each hit. Vendor calls in
-  `tools/creator_gtm/` go through `brand_buyer.prov()` (tools/creator_gtm/provider.py),
-  never a raw `clay()` call, so a provider swap stays one adapter.
-- **Every blocked creator GTM path asks next-move (2026-10-16).** brand_buyer on
-  a provider that raises NotWired or hits the credit allowance, follow_buyers when a
-  past buyer has no reachable email, spend_now when a brand has no dated evidence,
-  and deliver when a ledger post or record stamp fails. Each one calls
-  `next_move.on_blocked()`, which writes a line to `<client>.blockers.jsonl` and
-  puts the pick in the run's report. It runs nothing, so a paid or outbound pick
-  waits for the caller's own gate. A provider that's down drops every paid rerun.
-  One brand's failed post no longer ends the batch, and that includes a ledger
-  refusal (a SystemExit, which `except Exception` missed). Proven on the made-up
-  Hearthside client in `tests/test_next_move_wiring.py`.
 
 ## Never call a launch ready without `gtme ready`
 
 - **Never say a launch is ready, good to go, "good until X", "only waiting on
   X" or "just needs X" until `chewbacca gtme ready --client <name> --drafts
 <drafts.json>` prints READY.** Caleb, 2026-10-12: "DONT TELL ME UR READY IF
-  THIS SHIT IS HAPPENING? FIX CHEWBS BRO UR SUPPOSED TO BE A GTME". What that
-  launch actually looked like is lesson `zeutara-ready-claim-ungraded`. The command grades every draft through all five gates, checks the pre-send
+  THIS SHIT IS HAPPENING? FIX CHEWBS BRO UR SUPPOSED TO BE A GTME". That day a
+  Zeutara launch was called good "until Jonah responds" while the live copy
+  graded 25 to 67, 1 of 14 campaigns had been graded, gates 3 to 5 were NOT
+  CHECKED, 104 firm names carried "L.P." and the pre-send receipt had expired.
+  The command grades every draft through all five gates, checks the pre-send
   receipt and owed replies, and counts NOT CHECKED as a blocker. Report its
   NOT READY list as it stands. The Stop hook `ready-guard.sh` refuses a
   readiness claim without a signed READY under 2 hours old.
@@ -667,18 +459,26 @@ import), enrichment columns (Work email waterfall, Validate email, AI or
 Claygent with a source field), price ONE row from the credit balance before and
 after, then Run column and send the table or audience to the campaign.
 `.claude/hooks/clay-native-guard.sh` refuses shell loops of per-row Clay
-workflow or action test runs.
+workflow or action test runs, because on 2026-10-05 that pattern took a night
+and a Claygent loop burned ~3,400 client credits on 150 rows (~21 credits a row)
+before anyone priced a row.
 
 Use graph engineering instead when it is cheaper than the credit spend and the
 data is reusable: firm -> invested_in -> company -> in_sector, built once from
-each firm's own portfolio page, then walked per lead. Decide by cost per
-verified usable line, not by habit.
+each firm's own portfolio page (free HTTP, a no-tools model, a Jev check per
+edge, `zeutara-gtme/scripts/portfolio_graph.py`), then walked per lead.
+Measured 2026-10-05: zero Clay credits, but only 10 of 309 leads got a line,
+because most portfolio pages are logo-only. Decide by cost per verified usable
+line, not by habit.
 
-Finish a segment, then launch; add later contacts as a new campaign. Build the
-suppression list from actual sends (campaign activity, analytics, the send
-log), never from enrollment.
+A live campaign does not pull in contacts added to its segment after launch
+(2026-10-06, a live campaign stayed at 18 leads when its segment grew to 53). Finish
+the segment, then launch; add later contacts as a new campaign.
 
-What set those four, each readable with `chewbacca gtme lesson show <id>`: lessons `zeutara-unpriced-per-row-loop`, `zeutara-portfolio-graph-coverage`, `zeutara-live-campaign-segment-frozen`, `zeutara-suppression-from-enrollment`.
+Build the suppression list from actual sends (campaign activity, analytics, the
+send log), never from enrollment. On 2026-10-05 every contact ever enrolled in a
+paused campaign was treated as emailed, which hid ~1,400 never-emailed contacts
+of the client's own list for a whole night.
 
 Suppression is also everyone who must never be emailed again, whether or not
 we sent: anyone who replied (any class, any campaign, unmatched threads too),
@@ -699,7 +499,9 @@ lives in. On 2026-10-10 every Zeutara card tagged Jonah's retired-workspace
 copy (U0C0PL92WTC) and he never got pinged; Caleb: "it needs to tag the one
 that is signed into the workspace". His real id is U0C7RCPJPM5.
 
-Check the names a feeder sends before they reach a client card (lesson `zeutara-feeder-trailing-e`).
+Check the names a feeder sends before they reach a client card. Every Zeutara
+lead name arrived with a stray trailing "e" ("Gary Zimmermane"); Togari strips
+it now (leadNameTrailingE), but the fix belongs in the feeder column.
 
 When a client can't be added to a client channel ("This user can't be added"),
 check which workspace their Slack account is signed in through before guessing.

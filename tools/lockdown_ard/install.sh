@@ -20,7 +20,7 @@ source_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 # Compiled at a fixed path so the Full Disk Access grant survives reinstalls.
 /usr/bin/cc -O2 -o "$base/lockdown-ard-switch" "$source_dir/launcher.c"
 /usr/sbin/chown root:wheel "$base/lockdown-ard-switch"
-/bin/chmod 755 "$base/lockdown-ard-switch"
+/bin/chmod 700 "$base/lockdown-ard-switch"
 /usr/bin/install -o root -g wheel -m 644 "$source_dir/$label.plist" "$plist"
 /usr/bin/plutil -lint "$plist"
 /bin/launchctl bootstrap system "$plist"

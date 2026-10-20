@@ -7,13 +7,16 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-int main(int argc, char **argv) {
-    char *child[] = {"/usr/bin/python3",
-                     "/Library/Application Support/LockDown ARD Switch/switch.py",
-                     argc > 1 ? argv[1] : NULL, NULL};
+int main(void) {
+    /* This binary holds Full Disk Access, so nothing from the caller reaches
+       python: root only, no arguments, a fixed environment, isolated mode. */
+    if (getuid() != 0 || geteuid() != 0) { fputs("root only\n", stderr); return 1; }
+    char *child[] = {"/usr/bin/python3", "-I", "-S",
+                     "/Library/Application Support/LockDown ARD Switch/switch.py", NULL};
+    char *envp[] = {"PATH=/usr/bin:/bin:/usr/sbin:/sbin", "LANG=C", NULL};
     pid_t pid = fork();
     if (pid < 0) { perror("fork"); return 1; }
-    if (pid == 0) { execv(child[0], child); perror("execv"); _exit(127); }
+    if (pid == 0) { execve(child[0], child, envp); perror("execve"); _exit(127); }
     int status = 0;
     if (waitpid(pid, &status, 0) < 0) { perror("waitpid"); return 1; }
     return WIFEXITED(status) ? WEXITSTATUS(status) : 1;

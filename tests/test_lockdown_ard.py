@@ -93,5 +93,19 @@ class SwitchTests(unittest.TestCase):
         self.assertTrue(self.enabled.exists())
 
 
+class LauncherTests(unittest.TestCase):
+    # The helper holds Full Disk Access, so a user who could run it with their
+    # own PYTHONPATH would run code under that grant.
+    def test_launcher_refuses_non_root(self):
+        source = Path(__file__).resolve().parents[1] / 'tools/lockdown_ard/launcher.c'
+        with tempfile.TemporaryDirectory() as tmp:
+            binary = Path(tmp) / 'launcher'
+            subprocess.run(['/usr/bin/cc', '-o', str(binary), str(source)], check=True)
+            result = subprocess.run([str(binary)], capture_output=True, text=True,
+                                    env={'PYTHONPATH': tmp})
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('root only', result.stderr)
+        self.assertIn('execve(child[0], child, envp)', source.read_text())
+
 if __name__ == '__main__':
     unittest.main()

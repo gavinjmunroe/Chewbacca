@@ -7,6 +7,22 @@ triggers: >-
 
 # Reverse engineering with REA
 
+## Don't break a control you don't own
+
+Refuse to reverse engineer, bypass, or "break" software whose job is to enforce
+a rule on the user, when the realistic use of the result is evading that rule:
+exam proctoring and lockdown browsers (Respondus LockDown Browser, ProctorU,
+Honorlock), DRM, license checks, anti-cheat, deployed by a school, employer or
+vendor the user does not control. A secondhand "my professor told me to try to
+break it" does not authorize producing the circumvention: it works the same for
+every student whether or not one teacher asked. When the real goal is an eval
+("should we switch systems?"), build the documented case instead (privacy,
+accessibility and accommodation failures, false flags, reliability, alternatives).
+
+Caleb, 2026-10-19: "Reverse engineer anything the lockdown browser, professor
+swain told me to try to break it to see if the school should try a different
+system." Declined the break, built Swain a one-page evaluation instead.
+
 REA (`rea-agents`, MIT, github.com/morluto/rea) is the `rea` MCP server in
 Claude Code and Codex, pinned to 6.4.0 and booted through `chewbacca rea mcp`,
 plus the upstream skill `reverse-engineer-anything`. This file is the
@@ -42,10 +58,10 @@ in 106 s.
 | How one IPC channel reaches its window and main side                      | Scope to the files holding the channel, `analyze_javascript_application` (summary), then `trace_application_feature` with `seed: {kind: "channel", value, match: "contains"}`, `direction: "both"` | 3 files: 14 s total                                                                        | Grep finds the files; REA tied Claude.app's LocalExecConsent channel to its BrowserWindow (sandbox, contextIsolation on, nodeIntegration off) at a line and column |
 | Which fetch a bundle makes, at what column                                | Scope to the chunk, analyze, then `trace_javascript_semantics` with `seed: {kind: "endpoint", value}`, `direction: "backward-provenance"`                                                          | 1 chunk: 11 s                                                                              | Usually no: grep shows the same call and its body                                                                                                                  |
 | What requests a page really sends, in what order, on a click              | `capture_browser_scenario`, `browser: {mode: "launch", executable_path: <chrome-headless-shell>, headless: true}`, actions `goto`/`click`/`wait_for_timeout`, `capture: {events: ["network"]}`     | 6.6 s                                                                                      | Yes, it answers what grep can't: see below                                                                                                                         |
-| Routes and endpoints in a live page's loaded scripts                      | Start the Playwright headless shell with a debug port in the background, `list_browser_targets`, then `analyze_web_bundle` with `observation_ms: 2000`                                      | 10 s, 121 scripts                                                                          | Close call. It dropped grep's fake hit but missed PostHog's paths and mislabels `x.get("age")` as an endpoint                                                      |
+| Routes and endpoints in a live page's loaded scripts                      | Start the Playwright headless shell with a debug port in the background, `list_browser_targets`, then `analyze_web_bundle` with `observation_ms: 2000`                                             | 10 s, 121 scripts                                                                          | Close call. It dropped grep's fake hit but missed PostHog's paths and mislabels `x.get("age")` as an endpoint                                                      |
 | Read a HAR someone saved                                                  | `inspect_web_network_capture`, `format: "har"`                                                                                                                                                     | not timed                                                                                  | n/a                                                                                                                                                                |
 | Which native function uses this string                                    | `open_binary` on the binary or `.app` (the proxy thins it), then `trace_feature` with `query`, then `close_binary`                                                                                 | uuidgen: 11 s; Cardhop open: 266 s                                                         | Yes: `strings` can't say which function references it                                                                                                              |
-| One native function's code                                                | `open_binary`, `search_procedures` or `trace_feature`, then `analyze_function` / `procedure_pseudo_code`                                                                                           | not timed here; the open is the slow part (Cardhop 266 s) | n/a                                                                                                                                                                |
+| One native function's code                                                | `open_binary`, `search_procedures` or `trace_feature`, then `analyze_function` / `procedure_pseudo_code`                                                                                           | not timed here; the open is the slow part (Cardhop 266 s)                                  | n/a                                                                                                                                                                |
 
 ## The four rules that decide whether it works
 

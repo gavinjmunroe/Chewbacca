@@ -122,6 +122,14 @@ chatdb-guard refuses both the `text`-column query and raw thread reads, and on
 2026-10-10 four calls into that wall got "What's taking so long?" from Caleb
 before any draft reached him.
 
+A draft he'll paste is a text, so it's as long as his texts: two or three short
+lines per point, his abbreviations, no explaining how the pipeline works. On
+2026-10-19 a reply to Maggie came back as two full paragraphs (scoring, Clay
+verification, Prometheus being thin, "you'd just verify those leads and load
+them") and Caleb wrote "Ok shorter text that reads slop". Answer her question,
+correct the one wrong fact, stop. Context for him goes above the draft, never
+inside it.
+
 A link message can come back from `people texts` with its words missing. On
 2026-10-10 Erik's "Check out the language of this when you can:
 Www.ChristCosmic.org" showed as a bare follow-up, "Click on the PDF", with

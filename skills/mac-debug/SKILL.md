@@ -155,6 +155,30 @@ them to the loop that spawns it. That day it was the inbox read falling back to
 a Chrome. Never patch the app that flashes (appctl was BackgroundOnly and
 innocent) before the parent chain says who launched it.
 
+## The Mac is slow ("all the tabs are slow", "stop whatever is eating my CPU")
+
+Read memory before CPU. On 2026-10-19 three tabs crawled at load 110, yet live
+CPU summed to about 250% of 1400%: the real cost was swap at 87% (10.6 of 12.3 GB)
+and 34% free memory, so every app was paging. Load average also counts short-lived
+hook processes, so it overstates the problem and drops fast once a burst ends.
+
+1. `sysctl vm.swapusage; sysctl -n kern.memorystatus_level; uptime`. Swap stays
+   high long after pressure ends (it read 87% again with 54% free), so judge by
+   free memory, not swap alone.
+2. `top -l 2 -s 3 -o cpu -n 25` for live CPU. `ps %cpu` is a decayed average and
+   misleads.
+3. Group RSS by app, then look for the known leaks: `ollama ps` (embedding models
+   on 2h keep_alive), ppid-1 processes under `$TMPDIR/tmp*/kit/` (test servers),
+   agent Chromes on `chewie-chrome-*` profiles, and `orphan-reap` output.
+4. Kill only what's provably dead or reloads itself: `ollama stop <model>`,
+   orphans, an idle agent Chrome. The user's own Chrome, Codex and Claude are
+   theirs: name them with their numbers and let them quit them.
+
+`orphan-reap --kill --pressure --min-age 7200` runs from the daemon every 5
+minutes and covers step 4 on its own. If a slowdown happened anyway, find the
+leak it missed, add it to `TAB_JOB` in `bin/orphan-reap` with a fixture row in
+`tests/orphan_reap.sh`, and fix the source that leaked it.
+
 ## Inspecting an element by hand
 
 When `chewie click "Save"` cannot find something, the element is probably not called

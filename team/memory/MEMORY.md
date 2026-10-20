@@ -407,3 +407,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - project_firm_foundation_site_motion_split: FF site what-we-do panels are scroll, click and timed; Monday is the only Apple-style part (2026-10-17 call)
 - project_togari_code_lives_in_chewbacca: All Togari code is in chewbacca/togari (platform/ is live); clients never use a Togari repo; two leaked keys need rotating
 - reference_sharing_a_claude_setup: Give a friend the setup as a prompt md + idempotent install.sh merging into their ~/.claude, never chewbacca setup.sh (Colin, 10/19)
+- feedback_slow_mac_is_memory_not_cpu: A slow Mac was swap plus leaked processes, not CPU; orphan-reap sweeps every 5 min with --pressure (load 110, 10/19)

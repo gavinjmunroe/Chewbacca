@@ -99,6 +99,8 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_caleb_standing_answers_hud_2026_10_10: HUD relaunch anytime, always the latest agent engine, seamless failover, Anarlog records on its own; never ask again (10/10)
 - feedback_recording_off_until_reviews_pass: an agent's HUD rebuild turned meeting auto-recording on with 3 security findings open (10/10); recording ships off until findings close w passing tests
 
+- feedback_github_handle_from_commits: a teammate's GitHub login is the noreply author email in a repo they committed to (id must match); 3 "Maggie Chen" accounts on 10/20. A big file with dead Drive auth goes as a private release asset
+
 ## References
 
 - reference_clay_background_reads: Clay with no tab, 10/16: jev-browse allowed on Clay pages, views + view-sort/filter/columns ops, whole reads past the 20k cap, Clay's afterrecordid skips rows (use row-ids + rows-by-id)

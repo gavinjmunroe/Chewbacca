@@ -43,6 +43,7 @@ POST-DEPLOY
 [ ] Open production URL and verify it loads
 [ ] Test primary user flow end-to-end
 [ ] Check Railway deploy logs for runtime errors
+[ ] Railpack static site (plain index.html): a root Caddyfile sends Cache-Control no-cache, and a fresh fetch of the main script shows the new code. Without it browsers kept the old main.js after the microbots redeploy, 2026-10-20
 [ ] Load the live URL on a phone and a laptop (first day)
 ```
 

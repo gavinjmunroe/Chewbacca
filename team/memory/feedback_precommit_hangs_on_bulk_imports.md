@@ -12,8 +12,10 @@ staged 5,217 files and the hook was still in that loop after 41 minutes.
 **Why:** the check is O(staged files x log rows), fine for a 10-file commit and hopeless
 for a repo import.
 
-**How to apply:** for a bulk import, build it in a detached worktree of origin/main whose
-index holds only the import, commit there with `--no-verify`, and land the sha with
-`chewbacca land <sha>` so pre-push still checks it. The real fix is one pass (load the
-log into an awk map, then read the staged list) so the hook scales; not done yet.
+**Fixed the same night:** the authorship check is one awk pass over the log, and the
+mtime check is one `stat` call for the whole list. A 3,000-file commit against a
+100,000-row log went from 27 s to 1 s; `tests/precommit_authorship.sh` fails past 30 s.
+
+**How to apply:** if a commit hook runs past a minute, look for a per-file subprocess
+before reaching for `--no-verify`, and fix the loop.
 Related: [[project_amber_code_lives_in_chewbacca]], [[feedback_push_race_retry_loop]].

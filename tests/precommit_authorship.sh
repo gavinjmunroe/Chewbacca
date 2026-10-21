@@ -84,5 +84,30 @@ git commit -q -m "merge feature" >/dev/null 2>&1 && ok "two sessions: merge comm
 unset CHEWBACCA_FAKE_SESSIONS
 export CHEWBACCA_PATHSPEC_COMMIT=1
 
+# Nested paths still resolve to the logged absolute path.
+mkdir -p sub/dir; echo "$RANDOM" > sub/dir/n.txt; echo "$RANDOM" > a.txt; git add -A
+printf '%s\tS1\t%s/sub/dir/n.txt\n%s\tS2\t%s/a.txt\n' "$(now)" "$T" "$(now)" "$T" > "$CHEWBACCA_WRITE_LOG"
+git commit -q -m nested >/dev/null 2>&1 && no "nested path: absorbed a second session" || ok "nested path: two sessions refused"
+git reset -q
+
+# A bulk import must not hang. The per-file grep took 41+ minutes on 5,217
+# files against a 279,468-row log (amber/, 2026-10-20); one awk pass is seconds.
+mkdir -p bulk
+python3 - "$T" "$CHEWBACCA_WRITE_LOG" <<'PY'
+import sys, time
+top, log = sys.argv[1], sys.argv[2]
+with open(log, "w") as w:
+    for i in range(100000):
+        w.write(f"{time.time()}\tOTHER\t/elsewhere/f{i}.txt\tbash\n")
+    for i in range(3000):
+        open(f"{top}/bulk/f{i}.txt", "w").write(str(i))
+        w.write(f"{time.time()}\tS1\t{top}/bulk/f{i}.txt\tbash\n")
+PY
+git add bulk
+start=$(date +%s)
+git commit -q -m bulk >/dev/null 2>&1; rc=$?
+took=$(( $(date +%s) - start ))
+[ "$rc" -eq 0 ] && [ "$took" -lt 30 ] && ok "bulk import: 3000 files committed in ${took}s" || no "bulk import: rc=$rc after ${took}s"
+
 echo "  ${pass} passed, ${fail} failed"
 [ "$fail" -eq 0 ]

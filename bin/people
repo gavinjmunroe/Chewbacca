@@ -7,8 +7,7 @@ process.removeAllListeners("warning");
 /**
  * people: everything you know about the people in your life, in one place you own.
  *
- * The design here is ported from Amber's identity service with the permission of
- * its authors, Karthik Devarakonda and Sagar Tiwari. The good ideas are theirs:
+ * The design started from Amber's identity service (upstream: `amber/id/`):
  * one observations table instead of seven, modality as a column rather than a
  * tag, scoring knobs as rows rather than constants, and permissions where the
  * absence of a grant means no. What changed is the setting. Amber is a

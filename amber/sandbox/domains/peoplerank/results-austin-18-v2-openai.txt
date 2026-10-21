@@ -1,0 +1,283 @@
+╔════════════════════════════════════════════════════════════╗
+║  PEOPLERANK v2 — Austin Dinner #18                         ║
+║  2026-04-04                                                ║
+║  9 people · 36 pairs scored                                ║
+║  Mode: BLIND (profile data only — no post-event feedback)  ║
+║  Embedding: openai (text-embedding-3-large)                ║
+╚════════════════════════════════════════════════════════════╝
+
+HOW TO READ THIS REPORT
+────────────────────────
+Compatibility score (0–100):
+  14+    Strong match — high confidence these two would connect
+  11+    Good match — shared interests or complementary profiles
+  11+    Moderate match — some overlap but not a standout pairing
+  <11   Weak — limited signal for connection
+
+Readiness score (0–100):
+  How socially active and engaged this person is, based on their
+  social bravery, event participation, feedback, and host observations.
+  Higher = more likely to follow through on a connection.
+
+
+GUEST PROFILES
+──────────────────────────────────────────────────────────────
+ Name                      Type            Age  Readiness
+ ────────────────────────────────────────────────────────────
+ Financial Analyst         investigator     24        54
+   "Born & raised in Austin, was at A&M, graduated spring of '24"
+ Paralegal                 investigator     29        54
+   "Didn’t know anyone moving to austin"
+ Entrepreneur (RE & E)     storyteller      22        50
+   "Used to own a bike shop"
+ Dancer (Slackliner & A Y) investigator     22        48
+   "Alessandro"
+ Pricing-finance           listener         27        47
+   "Been in Austin for 5 years"
+ PhD student               storyteller      28        46
+   "From San Antonio, moved to Austin then Chicago"
+ Bartender                 investigator     25        44
+   "She's a beast going to Japan for 2.5 weeks then coming back…"
+ Music (C C E & poetry)    investigator     26        38
+   "on tour with yoga influencer in europe & england"
+ Designer                  investigator     24        37
+   "Just moved from London, did undergrad in London"
+
+
+STRONGEST PREDICTED CONNECTIONS
+──────────────────────────────────────────────────────────────
+
+ #1  Dancer (Slackliner & A Y) ↔ Entrepreneur (RE & E) Score: 34
+     ┌─────────────────────────────────────────────────────────
+     │ Both describe themselves around outside, dance,
+     │   strangers.
+     │ Complementary types (Investigator + Storyteller).
+     │ Trust: Already friends.
+     └─────────────────────────────────────────────────────────
+
+ #2  Financial Analyst ↔ Paralegal                  Score: 17
+     ┌─────────────────────────────────────────────────────────
+     │ Strong overlap in structured profile data
+     │   (investigator, austin).
+     │ Also both mention current, timeleft.
+     │ Trust: Co-attended this dinner.
+     └─────────────────────────────────────────────────────────
+
+ #3  Paralegal ↔ Pricing-finance                    Score: 15
+     ┌─────────────────────────────────────────────────────────
+     │ Both describe themselves around working, solo, year.
+     │ Complementary types (Investigator + Listener).
+     │ Trust: Co-attended this dinner.
+     └─────────────────────────────────────────────────────────
+
+ #4  Paralegal ↔ Dancer (Slackliner & A Y)          Score: 14
+     ┌─────────────────────────────────────────────────────────
+     │ Strong overlap in structured profile data
+     │   (investigator, woman, austin).
+     │ Also both mention friendships, meeting.
+     │ Trust: Co-attended this dinner.
+     └─────────────────────────────────────────────────────────
+
+ #5  Financial Analyst ↔ Dancer (Slackliner & A Y)  Score: 14
+     ┌─────────────────────────────────────────────────────────
+     │ Strong overlap in structured profile data
+     │   (investigator, austin).
+     │ Also both mention relationships, try.
+     │ Similar age (24 and 22).
+     │ Trust: Co-attended this dinner.
+     └─────────────────────────────────────────────────────────
+
+ #6  Dancer (Slackliner & A Y) ↔ Pricing-finance    Score: 14
+     ┌─────────────────────────────────────────────────────────
+     │ Both describe themselves around experiences, meet,
+     │   went.
+     │ Complementary types (Investigator + Listener).
+     │ Trust: Co-attended this dinner.
+     └─────────────────────────────────────────────────────────
+
+ #7  Financial Analyst ↔ Pricing-finance            Score: 14
+     ┌─────────────────────────────────────────────────────────
+     │ Both describe themselves around traveling, saw, place.
+     │ Complementary types (Investigator + Listener).
+     │ Trust: Co-attended this dinner.
+     └─────────────────────────────────────────────────────────
+
+ #8  PhD student ↔ Pricing-finance                  Score: 14
+     ┌─────────────────────────────────────────────────────────
+     │ Both describe themselves around hard, working, hostel.
+     │ Complementary types (Storyteller + Listener).
+     │ Trust: Co-attended this dinner.
+     └─────────────────────────────────────────────────────────
+
+ #9  Financial Analyst ↔ PhD student                Score: 14
+     ┌─────────────────────────────────────────────────────────
+     │ Both describe themselves around hours, day, build.
+     │ Complementary types (Investigator + Storyteller).
+     │ Trust: Co-attended this dinner.
+     └─────────────────────────────────────────────────────────
+
+ #10  PhD student ↔ Paralegal                       Score: 14
+     ┌─────────────────────────────────────────────────────────
+     │ Both describe themselves around making, brave, times.
+     │ Complementary types (Storyteller + Investigator).
+     │ Trust: Co-attended this dinner.
+     └─────────────────────────────────────────────────────────
+
+ #11  PhD student ↔ Dancer (Slackliner & A Y)       Score: 13
+     ┌─────────────────────────────────────────────────────────
+     │ Strong overlap in structured profile data (woman,
+     │   austin).
+     │ Also both mention went, community.
+     │ Complementary types (Storyteller + Investigator).
+     │ Trust: Co-attended this dinner.
+     └─────────────────────────────────────────────────────────
+
+ #12  Financial Analyst ↔ Entrepreneur (RE & E)     Score: 12
+     ┌─────────────────────────────────────────────────────────
+     │ Both describe themselves around talk, app, loves.
+     │ Complementary types (Investigator + Storyteller).
+     │ Trust: Co-attended this dinner.
+     └─────────────────────────────────────────────────────────
+
+ #13  Pricing-finance ↔ Entrepreneur (RE & E)       Score: 12
+     ┌─────────────────────────────────────────────────────────
+     │ Both describe themselves around spontaneous, middle,
+     │   old.
+     │ Complementary types (Listener + Storyteller).
+     │ Trust: Co-attended this dinner.
+     └─────────────────────────────────────────────────────────
+
+ #14  Paralegal ↔ Entrepreneur (RE & E)             Score: 12
+     ┌─────────────────────────────────────────────────────────
+     │ Both describe themselves around travel, strangers,
+     │   focused.
+     │ Complementary types (Investigator + Storyteller).
+     │ Trust: Co-attended this dinner.
+     └─────────────────────────────────────────────────────────
+
+ #15  Designer ↔ Paralegal                          Score: 12
+     ┌─────────────────────────────────────────────────────────
+     │ Strong overlap in structured profile data
+     │   (investigator, woman, austin).
+     │ Also both mention likes, interior.
+     │ Trust: Co-attended this dinner.
+     └─────────────────────────────────────────────────────────
+
+
+EACH GUEST'S TOP 3 MATCHES
+──────────────────────────────────────────────────────────────
+
+ Financial Analyst (investigator, 24) — Readiness: 54
+   1. Paralegal (17)
+      Both in austin
+   2. Dancer (Slackliner & A Y) (14)
+      Both in austin, similar age
+   3. Pricing-finance (14)
+      Shared traveling, saw, investigator + listener
+
+ Paralegal (investigator, 29) — Readiness: 54
+   1. Financial Analyst (17)
+      Both in austin
+   2. Pricing-finance (15)
+      Shared working, solo, investigator + listener
+   3. Dancer (Slackliner & A Y) (14)
+      Both in austin
+
+ Entrepreneur (RE & E) (storyteller, 22) — Readiness: 50
+   1. Dancer (Slackliner & A Y) (34)
+      Shared outside, dance, investigator + storyteller
+   2. Financial Analyst (12)
+      Shared talk, app, investigator + storyteller
+   3. Pricing-finance (12)
+      Shared spontaneous, middle, listener + storyteller
+
+ Dancer (Slackliner & A Y) (investigator, 22) — Readiness: 48
+   1. Entrepreneur (RE & E) (34)
+      Shared outside, dance, investigator + storyteller
+   2. Paralegal (14)
+      Both in austin
+   3. Financial Analyst (14)
+      Both in austin, similar age
+
+ Pricing-finance (listener, 27) — Readiness: 47
+   1. Paralegal (15)
+      Shared working, solo, investigator + listener
+   2. Dancer (Slackliner & A Y) (14)
+      Shared experiences, meet, investigator + listener
+   3. Financial Analyst (14)
+      Shared traveling, saw, investigator + listener
+
+ PhD student (storyteller, 28) — Readiness: 46
+   1. Pricing-finance (14)
+      Shared hard, working, storyteller + listener
+   2. Financial Analyst (14)
+      Shared hours, day, investigator + storyteller
+   3. Paralegal (14)
+      Shared making, brave, storyteller + investigator
+
+ Bartender (investigator, 25) — Readiness: 44
+   1. Paralegal (11)
+      Both in austin
+   2. Financial Analyst (11)
+      Both in austin, similar age
+   3. PhD student (11)
+      Shared anxiety, connections, investigator + storyteller
+
+ Music (C C E & poetry) (investigator, 26) — Readiness: 38
+   1. Dancer (Slackliner & A Y) (12)
+      Both in austin
+   2. Paralegal (11)
+      Shared art, connecting, similar age
+   3. Pricing-finance (11)
+      Shared tour, playing, listener + investigator
+
+ Designer (investigator, 24) — Readiness: 37
+   1. Paralegal (12)
+      Both in austin
+   2. Pricing-finance (11)
+      Shared feels, london, investigator + listener
+   3. Music (C C E & poetry) (11)
+      Both in austin, similar age
+
+
+══════════════════════════════════════════════════════════════
+PeopleRank v2 · Togari · Confidential
+Scored at: 2026-04-17 01:49:27 UTC
+══════════════════════════════════════════════════════════════
+
+GROUND TRUTH VALIDATION
+──────────────────────────────────────────────────────────────
+The algorithm scored all pairs using ONLY profile data — no
+knowledge of who actually enjoyed spending time together.
+Here's how the predictions mapped to reality:
+
+ Algorithm's Top 10 vs. Actual Picks:
+   #1  Dancer (Slackliner & A Y) ↔ Entrepreneur (RE & E) (34)✓ one-way pick
+   #2  Financial Analyst ↔ Paralegal (17)            · not picked
+   #3  Paralegal ↔ Pricing-finance (15)              · not picked
+   #4  Paralegal ↔ Dancer (Slackliner & A Y) (14)    ✓ one-way pick
+   #5  Financial Analyst ↔ Dancer (Slackliner & A Y) (14)✓ one-way pick
+   #6  Dancer (Slackliner & A Y) ↔ Pricing-finance (14)✓ one-way pick
+   #7  Financial Analyst ↔ Pricing-finance (14)      ✓ one-way pick
+   #8  PhD student ↔ Pricing-finance (14)            ✓ one-way pick
+   #9  Financial Analyst ↔ PhD student (14)          ✓ one-way pick
+   #10  PhD student ↔ Paralegal (14)                 ✓ one-way pick
+
+ Accuracy: 8 of top 10 predictions confirmed by actual picks
+
+
+ Mutual picks the algorithm missed:
+   ✗ PhD student ↔ Dancer (Slackliner & A Y) — ranked #11
+   ✗ Bartender ↔ PhD student — ranked #28
+
+ Most popular guest (picked by most people):
+   Pricing-finance — picked by 8 people (algorithm ranked them #5 in readiness)
+   PhD student — picked by 6 people (algorithm ranked them #6 in readiness)
+   Designer — picked by 4 people (algorithm ranked them #9 in readiness)
+
+══════════════════════════════════════════════════════════════
+PeopleRank v2 · Togari · Confidential
+Scored at: 2026-04-17 01:49:27 UTC
+══════════════════════════════════════════════════════════════
+
+OpenAI API usage: 26 embeddings generated, 0 cached. ~$0.0006 spent.

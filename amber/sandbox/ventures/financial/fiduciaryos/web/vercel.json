@@ -1,0 +1,9 @@
+{
+  "framework": "nextjs",
+  "crons": [
+    {
+      "path": "/api/cron/limits-refresh",
+      "schedule": "0 9 1 1 *"
+    }
+  ]
+}

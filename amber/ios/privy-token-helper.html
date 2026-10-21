@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privy Token Helper - Amber</title>
+    <script src="https://sdk.privy.io/api/v1/privy.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        .status {
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        .status.info {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+        .status.success {
+            background: #e8f5e9;
+            color: #388e3c;
+        }
+        .status.error {
+            background: #ffebee;
+            color: #c62828;
+        }
+        button {
+            width: 100%;
+            padding: 14px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-bottom: 10px;
+        }
+        button:hover {
+            background: #5568d3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .token-display {
+            margin-top: 20px;
+            padding: 16px;
+            background: #f5f5f5;
+            border-radius: 8px;
+            word-break: break-all;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+            color: #333;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .copy-btn {
+            background: #4caf50;
+            margin-top: 10px;
+        }
+        .copy-btn:hover {
+            background: #45a049;
+        }
+        .instructions {
+            margin-top: 20px;
+            padding: 16px;
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #856404;
+        }
+        .instructions ol {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+        .instructions li {
+            margin-bottom: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 Privy Token Helper</h1>
+        <p class="subtitle">Get your access token for the Amber iOS app</p>
+        
+        <div id="status" class="status info">
+            Ready to authenticate with Privy
+        </div>
+        
+        <button id="loginBtn" onclick="login()">Sign In with Privy</button>
+        <button id="logoutBtn" onclick="logout()" style="display: none;">Sign Out</button>
+        
+        <div id="tokenDisplay" style="display: none;">
+            <div class="token-display" id="tokenText"></div>
+            <button class="copy-btn" onclick="copyToken()">📋 Copy Token</button>
+        </div>
+        
+        <div class="instructions" id="instructions" style="display: none;">
+            <strong>Next Steps:</strong>
+            <ol>
+                <li>Copy the token above</li>
+                <li>Open your Amber iOS app</li>
+                <li>Tap "Sign In with Privy"</li>
+                <li>Paste the token in the text field</li>
+                <li>Tap "Sign In"</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        let privyClient = null;
+
+        // Initialize Privy
+        window.addEventListener('load', async () => {
+            try {
+                privyClient = new Privy({
+                    appId: 'cmisgt8wr00enjj0dkasj2xsz',
+                    config: {
+                        loginMethods: ['email', 'wallet', 'google', 'twitter'],
+                        appearance: {
+                            theme: 'light',
+                            accentColor: '#667eea',
+                        },
+                    },
+                });
+
+                await privyClient.ready();
+                
+                if (privyClient.isAuthenticated) {
+                    showAuthenticated();
+                } else {
+                    updateStatus('Ready to authenticate with Privy', 'info');
+                }
+            } catch (error) {
+                updateStatus('Error initializing Privy: ' + error.message, 'error');
+                console.error('Privy init error:', error);
+            }
+        });
+
+        async function login() {
+            try {
+                updateStatus('Opening Privy login...', 'info');
+                await privyClient.login();
+                
+                if (privyClient.isAuthenticated) {
+                    showAuthenticated();
+                }
+            } catch (error) {
+                updateStatus('Login failed: ' + error.message, 'error');
+                console.error('Login error:', error);
+            }
+        }
+
+        async function showAuthenticated() {
+            try {
+                const token = await privyClient.getAccessToken();
+                
+                document.getElementById('loginBtn').style.display = 'none';
+                document.getElementById('logoutBtn').style.display = 'block';
+                document.getElementById('tokenDisplay').style.display = 'block';
+                document.getElementById('instructions').style.display = 'block';
+                document.getElementById('tokenText').textContent = token;
+                
+                updateStatus('✅ Authenticated! Copy your token below.', 'success');
+            } catch (error) {
+                updateStatus('Error getting token: ' + error.message, 'error');
+                console.error('Token error:', error);
+            }
+        }
+
+        async function logout() {
+            try {
+                await privyClient.logout();
+                document.getElementById('loginBtn').style.display = 'block';
+                document.getElementById('logoutBtn').style.display = 'none';
+                document.getElementById('tokenDisplay').style.display = 'none';
+                document.getElementById('instructions').style.display = 'none';
+                updateStatus('Logged out. Ready to authenticate again.', 'info');
+            } catch (error) {
+                updateStatus('Logout error: ' + error.message, 'error');
+            }
+        }
+
+        function copyToken() {
+            const tokenText = document.getElementById('tokenText').textContent;
+            navigator.clipboard.writeText(tokenText).then(() => {
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.textContent = '✅ Copied!';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                }, 2000);
+            }).catch(err => {
+                alert('Failed to copy: ' + err);
+            });
+        }
+
+        function updateStatus(message, type) {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.className = 'status ' + type;
+        }
+    </script>
+</body>
+</html>
+
+
+
+

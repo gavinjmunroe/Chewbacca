@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Syntax check (node --check)
+        run: |
+          find src -name "*.js" | xargs -I{} node --check {}
+
+      - name: Run tests
+        run: npm run test:ci
+
+      # A RATCHET, NOT A REPORT. --audit-level=high fails on high and critical
+      # findings. Moderate advisories remain visible in the output; force-fixing
+      # the remaining transitive advisories would require major dependency
+      # changes, so they need a separate compatibility review.
+      - name: Audit (fail on high or critical)
+        run: npm audit --audit-level=high
+
+      # Catches what the import checker cannot see: a name referenced but never
+      # declared, which is how ten dangling references survived a rip-out behind
+      # a green build.
+      - name: Undeclared names
+        run: npm run check:undef

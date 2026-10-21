@@ -1,0 +1,74 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment — NEVER commit this
+.env
+.env.local
+.env.*.local
+
+# Data
+data/raw/
+data/processed/
+data/train/
+*.jsonl
+*.json
+!core/policy_compiler.py
+!data/.gitkeep
+# Web app config (must be tracked for Vercel builds)
+!vercel.json
+!web/package.json
+!web/package-lock.json
+!web/tsconfig.json
+!web/vercel.json
+
+# Model checkpoints
+checkpoints/
+*.bin
+*.safetensors
+*.pt
+*.pth
+
+# Signing keys — NEVER commit private keys
+*.pem
+*.key
+private_keys/
+signing/
+
+# Logs
+*.log
+logs/
+wandb/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# DeepSpeed
+zero_to_fp32.py
+
+# Results
+results/
+*.csv
+*.parquet
+
+# Docker
+docker-compose.override.yml
+web/.next/
+web/node_modules/

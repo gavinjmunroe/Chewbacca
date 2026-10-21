@@ -1,0 +1,19 @@
+{
+  "name": "amber-phone-call",
+  "version": "0.1.0",
+  "description": "Voice gateway for Amber. Twilio phone number + ElevenLabs Conversational AI, with tool webhooks that call into the Amber agent brain.",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "twilio": "^5.3.5"
+  }
+}

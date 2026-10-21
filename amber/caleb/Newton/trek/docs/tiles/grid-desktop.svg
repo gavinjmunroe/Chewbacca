@@ -1,0 +1,146 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 820" role="img" aria-label="TREK feature tiles">
+  <g transform="translate(0 0)">
+    <defs>
+      <clipPath id="clip-planner"><rect width="520" height="260" rx="22"/></clipPath>
+    </defs>
+    <g clip-path="url(#clip-planner)">
+      <rect width="520" height="260" fill="#FFE8D9"/>
+      <circle cx="520" cy="0" r="220" fill="#FFFFFF" opacity="0.35"/>
+      <g transform="translate(390 22) scale(6)" fill="none" stroke="#B5492D" stroke-width="0.7" stroke-linecap="round" stroke-linejoin="round" opacity="0.10"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></g>
+      <rect x="436" y="28" width="56" height="56" rx="14" fill="#FFFFFF" opacity="0.7"/>
+      <g transform="translate(450 42) scale(1.15)" fill="none" stroke="#B5492D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></g>
+      <text x="36" y="62" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, Segoe UI, Roboto, sans-serif" font-size="18" font-weight="800" letter-spacing="2.8" fill="#B5492D">TRIP PLANNER</text>
+      <text x="36" y="132" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, Segoe UI, Roboto, sans-serif" font-size="48" font-weight="800" letter-spacing="-1.2" fill="#1A1A1F">Drag and drop</text>
+      <text x="36" y="184" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, Segoe UI, Roboto, sans-serif" font-size="48" font-weight="800" letter-spacing="-1.2" fill="#B5492D">day by day</text>
+      <text x="36" y="224" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, Segoe UI, Roboto, sans-serif" font-size="20" font-weight="500" fill="#7C3B2A">Reorder, move across days, optimise</text>
+    </g>
+  </g>
+  <g transform="translate(540 0)">
+    <defs>
+      <clipPath id="clip-maps"><rect width="520" height="260" rx="22"/></clipPath>
+    </defs>
+    <g clip-path="url(#clip-maps)">
+      <rect width="520" height="260" fill="#DDEDFB"/>
+      <circle cx="520" cy="0" r="220" fill="#FFFFFF" opacity="0.35"/>
+      <g transform="translate(390 22) scale(6)" fill="none" stroke="#1E5AA8" stroke-width="0.7" stroke-linecap="round" stroke-linejoin="round" opacity="0.10"><path d="M1 6l7-3 8 3 7-3v15l-7 3-8-3-7 3zM8 3v15M16 6v15"/></g>
+      <rect x="436" y="28" width="56" height="56" rx="14" fill="#FFFFFF" opacity="0.7"/>
+      <g transform="translate(450 42) scale(1.15)" fill="none" stroke="#1E5AA8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 6l7-3 8 3 7-3v15l-7 3-8-3-7 3zM8 3v15M16 6v15"/></g>
+      <text x="36" y="62" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, Segoe UI, Roboto, sans-serif" font-size="18" font-weight="800" letter-spacing="2.8" fill="#1E5AA8">MAPS</text>
+      <text x="36" y="132" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, Segoe UI, Roboto, sans-serif" font-size="48" font-weight="800" letter-spacing="-1.2" fill="#1A1A1F">See it all</text>
+      <text x="36" y="184" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, Segoe UI, Roboto, sans-serif" font-size="48" font-weight="800" letter-spacing="-1.2" fill="#1E5AA8">on the map</text>
+      <text x="36" y="224" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, Segoe UI, Roboto, sans-serif" font-size="20" font-weight="500" fill="#3B4D66">Leaflet + Mapbox GL, 3D buildings</text>
+    </g>
+  </g>
+  <g transform="translate(1080 0)">
+    <defs>
+      <clipPath id="clip-collab"><rect width="520" height="260" rx="22"/></clipPath>
+    </defs>
+    <g clip-path="url(#clip-collab)">
+      <rect width="520" height="260" fill="#D6F0E3"/>
+      <circle cx="520" cy="0" r="220" fill="#FFFFFF" opacity="0.35"/>
+      <g transform="translate(390 22) scale(6)" fill="none" stroke="#1F7A4E" stroke-width="0.7" stroke-linecap="round" stroke-linejoin="round" opacity="0.10"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></g>
+      <rect x="436" y="28" width="56" height="56" rx="14" fill="#FFFFFF" opacity="0.7"/>
+      <g transform="translate(450 42) scale(1.15)" fill="none" stroke="#1F7A4E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></g>
+      <text x="36" y="62" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, Segoe UI, Roboto, sans-serif" font-size="18" font-weight="800" letter-spacing="2.8" fill="#1F7A4E">COLLAB</text>
+      <text x="36" y="132" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, Segoe UI, Roboto, sans-serif" font-size="48" font-weight="800" letter-spacing="-1.2" fill="#1A1A1F">Plan together</text>
+      <text x="36" y="184" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, Segoe UI, Roboto, sans-serif" font-size="48" font-weight="800" letter-spacing="-1.2" fill="#1F7A4E">in real time</text>
+      <text x="36" y="224" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, Segoe UI, Roboto, sans-serif" font-size="20" font-weight="500" fill="#325646">WebSocket sync, chat, polls, notes</text>
+    </g>
+  </g>
+  <g transform="translate(0 280)">
+    <defs>
+      <clipPath id="clip-budget"><rect width="520" height="260" rx="22"/></clipPath>
+    </defs>
+    <g clip-path="url(#clip-budget)">
+      <rect width="520" height="260" fill="#FDF0C7"/>
+      <circle cx="520" cy="0" r="220" fill="#FFFFFF" opacity="0.35"/>
+      <g transform="translate(390 22) scale(6)" fill="none" stroke="#8A6A1E" stroke-width="0.7" stroke-linecap="round" stroke-linejoin="round" opacity="0.10"><path d="M20 12V8a2 2 0 0 0-2-2H4a2 2 0 0 1 0-4h14v4"/><path d="M2 6v14a2 2 0 0 0 2 2h18v-8H16a2 2 0 0 1 0-4h6"/></g>
+      <rect x="436" y="28" width="56" height="56" rx="14" fill="#FFFFFF" opacity="0.7"/>
+      <g transform="translate(450 42) scale(1.15)" fill="none" stroke="#8A6A1E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V8a2 2 0 0 0-2-2H4a2 2 0 0 1 0-4h14v4"/><path d="M2 6v14a2 2 0 0 0 2 2h18v-8H16a2 2 0 0 1 0-4h6"/></g>
+      <text x="36" y="62" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, Segoe UI, Roboto, sans-serif" font-size="18" font-weight="800" letter-spacing="2.8" fill="#8A6A1E">BUDGET</text>
+      <text x="36" y="132" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, Segoe UI, Roboto, sans-serif" font-size="48" font-weight="800" letter-spacing="-1.2" fill="#1A1A1F">Track costs</text>
+      <text x="36" y="184" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, Segoe UI, Roboto, sans-serif" font-size="48" font-weight="800" letter-spacing="-1.2" fill="#8A6A1E">per person</text>
+      <text x="36" y="224" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, Segoe UI, Roboto, sans-serif" font-size="20" font-weight="500" fill="#6B5523">Pie chart, multi-currency, splits</text>
+    </g>
+  </g>
+  <g transform="translate(540 280)">
+    <defs>
+      <clipPath id="clip-packing"><rect width="520" height="260" rx="22"/></clipPath>
+    </defs>
+    <g clip-path="url(#clip-packing)">
+      <rect width="520" height="260" fill="#E4DEF6"/>
+      <circle cx="520" cy="0" r="220" fill="#FFFFFF" opacity="0.35"/>
+      <g transform="translate(390 22) scale(6)" fill="none" stroke="#5443A5" stroke-width="0.7" stroke-linecap="round" stroke-linejoin="round" opacity="0.10"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></g>
+      <rect x="436" y="28" width="56" height="56" rx="14" fill="#FFFFFF" opacity="0.7"/>
+      <g transform="translate(450 42) scale(1.15)" fill="none" stroke="#5443A5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></g>
+      <text x="36" y="62" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, Segoe UI, Roboto, sans-serif" font-size="18" font-weight="800" letter-spacing="2.8" fill="#5443A5">PACKING</text>
+      <text x="36" y="132" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, Segoe UI, Roboto, sans-serif" font-size="48" font-weight="800" letter-spacing="-1.2" fill="#1A1A1F">Lists, sorted.</text>
+      <text x="36" y="184" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, Segoe UI, Roboto, sans-serif" font-size="48" font-weight="800" letter-spacing="-1.2" fill="#5443A5">by category</text>
+      <text x="36" y="224" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, Segoe UI, Roboto, sans-serif" font-size="20" font-weight="500" fill="#4A3E72">Templates, bag tracking, weights</text>
+    </g>
+  </g>
+  <g transform="translate(1080 280)">
+    <defs>
+      <clipPath id="clip-journal"><rect width="520" height="260" rx="22"/></clipPath>
+    </defs>
+    <g clip-path="url(#clip-journal)">
+      <rect width="520" height="260" fill="#FBDAE4"/>
+      <circle cx="520" cy="0" r="220" fill="#FFFFFF" opacity="0.35"/>
+      <g transform="translate(390 22) scale(6)" fill="none" stroke="#9A2F58" stroke-width="0.7" stroke-linecap="round" stroke-linejoin="round" opacity="0.10"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></g>
+      <rect x="436" y="28" width="56" height="56" rx="14" fill="#FFFFFF" opacity="0.7"/>
+      <g transform="translate(450 42) scale(1.15)" fill="none" stroke="#9A2F58" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></g>
+      <text x="36" y="62" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, Segoe UI, Roboto, sans-serif" font-size="18" font-weight="800" letter-spacing="2.8" fill="#9A2F58">JOURNEY</text>
+      <text x="36" y="132" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, Segoe UI, Roboto, sans-serif" font-size="48" font-weight="800" letter-spacing="-1.2" fill="#1A1A1F">A journal for</text>
+      <text x="36" y="184" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, Segoe UI, Roboto, sans-serif" font-size="48" font-weight="800" letter-spacing="-1.2" fill="#9A2F58">every trip</text>
+      <text x="36" y="224" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, Segoe UI, Roboto, sans-serif" font-size="20" font-weight="500" fill="#6E3345">Magazine entries, photos, maps</text>
+    </g>
+  </g>
+  <g transform="translate(0 560)">
+    <defs>
+      <clipPath id="clip-vacay"><rect width="520" height="260" rx="22"/></clipPath>
+    </defs>
+    <g clip-path="url(#clip-vacay)">
+      <rect width="520" height="260" fill="#D4DCF7"/>
+      <circle cx="520" cy="0" r="220" fill="#FFFFFF" opacity="0.35"/>
+      <g transform="translate(390 22) scale(6)" fill="none" stroke="#2F3FA4" stroke-width="0.7" stroke-linecap="round" stroke-linejoin="round" opacity="0.10"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></g>
+      <rect x="436" y="28" width="56" height="56" rx="14" fill="#FFFFFF" opacity="0.7"/>
+      <g transform="translate(450 42) scale(1.15)" fill="none" stroke="#2F3FA4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></g>
+      <text x="36" y="62" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, Segoe UI, Roboto, sans-serif" font-size="18" font-weight="800" letter-spacing="2.8" fill="#2F3FA4">VACAY</text>
+      <text x="36" y="132" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, Segoe UI, Roboto, sans-serif" font-size="48" font-weight="800" letter-spacing="-1.2" fill="#1A1A1F">Vacation days,</text>
+      <text x="36" y="184" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, Segoe UI, Roboto, sans-serif" font-size="48" font-weight="800" letter-spacing="-1.2" fill="#2F3FA4">visualised</text>
+      <text x="36" y="224" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, Segoe UI, Roboto, sans-serif" font-size="20" font-weight="500" fill="#3B4471">Calendar, 100+ country holidays</text>
+    </g>
+  </g>
+  <g transform="translate(540 560)">
+    <defs>
+      <clipPath id="clip-mcp"><rect width="520" height="260" rx="22"/></clipPath>
+    </defs>
+    <g clip-path="url(#clip-mcp)">
+      <rect width="520" height="260" fill="#CFEDE6"/>
+      <circle cx="520" cy="0" r="220" fill="#FFFFFF" opacity="0.35"/>
+      <g transform="translate(390 22) scale(6)" fill="none" stroke="#116E64" stroke-width="0.7" stroke-linecap="round" stroke-linejoin="round" opacity="0.10"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4M8 16h.01M16 16h.01"/></g>
+      <rect x="436" y="28" width="56" height="56" rx="14" fill="#FFFFFF" opacity="0.7"/>
+      <g transform="translate(450 42) scale(1.15)" fill="none" stroke="#116E64" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4M8 16h.01M16 16h.01"/></g>
+      <text x="36" y="62" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, Segoe UI, Roboto, sans-serif" font-size="18" font-weight="800" letter-spacing="2.8" fill="#116E64">AI / MCP</text>
+      <text x="36" y="132" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, Segoe UI, Roboto, sans-serif" font-size="48" font-weight="800" letter-spacing="-1.2" fill="#1A1A1F">Let AI plan</text>
+      <text x="36" y="184" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, Segoe UI, Roboto, sans-serif" font-size="48" font-weight="800" letter-spacing="-1.2" fill="#116E64">your trips</text>
+      <text x="36" y="224" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, Segoe UI, Roboto, sans-serif" font-size="20" font-weight="500" fill="#2C524C">80+ tools, OAuth 2.1, Claude-ready</text>
+    </g>
+  </g>
+  <g transform="translate(1080 560)">
+    <defs>
+      <clipPath id="clip-selfhost"><rect width="520" height="260" rx="22"/></clipPath>
+    </defs>
+    <g clip-path="url(#clip-selfhost)">
+      <rect width="520" height="260" fill="#E4E6EB"/>
+      <circle cx="520" cy="0" r="220" fill="#FFFFFF" opacity="0.35"/>
+      <g transform="translate(390 22) scale(6)" fill="none" stroke="#2D3544" stroke-width="0.7" stroke-linecap="round" stroke-linejoin="round" opacity="0.10"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></g>
+      <rect x="436" y="28" width="56" height="56" rx="14" fill="#FFFFFF" opacity="0.7"/>
+      <g transform="translate(450 42) scale(1.15)" fill="none" stroke="#2D3544" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></g>
+      <text x="36" y="62" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, Segoe UI, Roboto, sans-serif" font-size="18" font-weight="800" letter-spacing="2.8" fill="#2D3544">SELF-HOSTED</text>
+      <text x="36" y="132" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, Segoe UI, Roboto, sans-serif" font-size="48" font-weight="800" letter-spacing="-1.2" fill="#1A1A1F">Runs on</text>
+      <text x="36" y="184" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, Segoe UI, Roboto, sans-serif" font-size="48" font-weight="800" letter-spacing="-1.2" fill="#2D3544">your server</text>
+      <text x="36" y="224" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, Segoe UI, Roboto, sans-serif" font-size="20" font-weight="500" fill="#414958">Docker, SQLite, AGPL — your data, yours</text>
+    </g>
+  </g>
+</svg>

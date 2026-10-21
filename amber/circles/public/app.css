@@ -1,0 +1,1657 @@
+/* Amber Circles. Stance: material, which is printed signage: flat blocks,
+   hard edges, hard offset shadows. Chosen 2026-09-27 for one reason: signage
+   is the tradition built for reading at a glance without your glasses, and
+   the person making a tool here may be in their seventies. Amber has one
+   meaning: you can tap this. Anything amber that is not tappable is noise,
+   which design-gate measured as ink 0.52 on the first signage landing. Every refusal is
+   declared in DENY.md and enforced by test/deny.test.js.
+
+   Type is Atkinson Hyperlegible, drawn by the Braille Institute for low
+   vision readers, in one family carried by size and weight. */
+@import url("https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;500;700;800&family=Atkinson+Hyperlegible+Mono:wght@400;500&display=swap");
+
+:root {
+  --paper: #f2eee3;
+  --sheet: #fffcf5;
+  --ink: #17150f;
+  --body: #2e2b24;
+  /* #5c574c clears 6.3:1 on paper and 7.1:1 on sheet. The editorial build's
+     soft grey failed axe at 3.2:1 on exactly the labels older eyes miss. */
+  --muted: #5c574c;
+  --rule-soft: color-mix(in srgb, #17150f 18%, transparent);
+
+  --amber: #ffb300;
+  --amber-wash: #ffe9b0;
+  /* Amber itself is 1.9:1 on paper, so it is only ever a fill behind ink.
+     Amber as text uses this, 5.2:1 on paper. */
+  --amber-deep: #8a5700;
+
+  --present: #1d6b3f;
+  --danger: #a8321f;
+
+  --sans:
+    "Atkinson Hyperlegible Next", "Atkinson Hyperlegible", -apple-system,
+    "Helvetica Neue", Arial, sans-serif;
+  --mono: "Atkinson Hyperlegible Mono", ui-monospace, Menlo, monospace;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --space-9: 96px;
+
+  --radius: 4px;
+  --rule: 2px solid var(--ink);
+  --lift: 4px 4px 0 var(--ink);
+  --lift-high: 6px 6px 0 var(--ink);
+  --bar-height: 64px;
+  --welcome-height: 96px;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (min-width: 700px) {
+  :root {
+    --welcome-height: 64px;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+/* A class that sets display beats the hidden attribute, which is how the
+   make page showed the new-group fields with a group already picked
+   (2026-09-27). Hidden means hidden. */
+[hidden] {
+  display: none !important;
+}
+html,
+body {
+  margin: 0;
+}
+/* The root follows the browser's own text size, so a person who set their
+   phone to large text gets large text here too. */
+html {
+  font-size: 100%;
+}
+body {
+  min-height: 100vh;
+  background-color: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 18px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+h1,
+h2,
+h3 {
+  font-family: var(--sans);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  margin: 0;
+  color: var(--ink);
+  text-wrap: balance;
+}
+p {
+  margin: 0;
+}
+a {
+  color: var(--amber-deep);
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+  transition:
+    color 120ms ease-out,
+    background-color 120ms ease-out;
+}
+a:hover {
+  color: var(--ink);
+  background-color: var(--amber-wash);
+}
+:focus-visible {
+  outline: 3px solid var(--amber);
+  outline-offset: 3px;
+}
+button {
+  font: inherit;
+}
+code {
+  font-family: var(--mono);
+}
+
+.icon {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.icon-sm {
+  width: 18px;
+  height: 18px;
+}
+.skip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.skip:focus {
+  width: auto;
+  height: auto;
+  clip-path: none;
+  left: var(--space-4);
+  top: var(--space-4);
+  z-index: 99;
+  background-color: var(--amber);
+  color: var(--ink);
+  padding: var(--space-2) var(--space-3);
+  border: var(--rule);
+}
+
+/* ---------- page and bar ---------- */
+
+.page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 var(--space-6) var(--space-9);
+}
+@media (max-width: 640px) {
+  .page {
+    padding: 0 var(--space-4) var(--space-8);
+  }
+}
+.nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-height: var(--bar-height);
+  border-bottom: var(--rule);
+  margin-bottom: var(--space-7);
+}
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+  text-decoration: none;
+}
+.brand:hover {
+  background-color: transparent;
+}
+.brand-mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background-color: var(--amber);
+  border: var(--rule);
+  flex: none;
+}
+.brand-name {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+.brand-sub {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.nav-links {
+  display: flex;
+  align-self: stretch;
+  gap: var(--space-2);
+}
+.nav-links a {
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-3);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 6px solid transparent;
+  margin-bottom: -2px;
+}
+.nav-links a:hover {
+  background-color: var(--amber-wash);
+}
+.nav-links a[aria-current="page"] {
+  border-bottom-color: var(--amber);
+}
+@media (max-width: 520px) {
+  .brand-sub {
+    display: none;
+  }
+  .nav-links {
+    gap: 0;
+  }
+  .nav-links a {
+    padding: 0 10px;
+  }
+}
+
+/* ---------- headings and text ---------- */
+
+.masthead {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--space-5);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-6);
+}
+.masthead h1 {
+  font-size: clamp(40px, 5vw, 60px);
+}
+.masthead .lede {
+  margin-top: var(--space-3);
+}
+.section-title {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.lede {
+  font-size: 20px;
+  line-height: 1.5;
+  color: var(--body);
+  max-width: 40em;
+}
+.fine,
+.sub,
+.hint {
+  font-size: 16px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.desc {
+  font-size: 18px;
+  color: var(--body);
+}
+.quote {
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--ink);
+  border-left: 6px solid var(--amber);
+  padding-left: var(--space-4);
+}
+.present {
+  color: var(--present);
+  font-weight: 700;
+}
+.error-text {
+  color: var(--danger);
+  font-weight: 700;
+  font-size: 17px;
+}
+.error-text:empty {
+  display: none;
+}
+
+/* ---------- layout helpers ---------- */
+
+.stack {
+  display: grid;
+  gap: var(--space-4);
+}
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+.spacer {
+  flex: 1;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--space-5);
+}
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: var(--space-6);
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .split {
+    grid-template-columns: 1fr;
+  }
+}
+.card,
+.stack > *,
+.grid > * {
+  min-width: 0;
+}
+.mt-0 {
+  margin-top: 0;
+}
+.mt-1 {
+  margin-top: var(--space-2);
+}
+.mt-3 {
+  margin-top: var(--space-4);
+}
+.mt-4 {
+  margin-top: var(--space-6);
+}
+.mb-4 {
+  margin-bottom: var(--space-5);
+}
+.m-0 {
+  margin: 0;
+}
+.items-start {
+  align-items: start;
+}
+.gap-3 {
+  gap: var(--space-4);
+}
+.h-320 {
+  height: 320px;
+}
+.h-360 {
+  height: 360px;
+}
+.h-420 {
+  height: 420px;
+}
+.pt-run {
+  padding-top: calc(var(--bar-height) + var(--space-6));
+}
+
+/* ---------- buttons: blocks you can press ---------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 52px;
+  padding: 0 var(--space-5);
+  font-family: var(--sans);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--ink);
+  background-color: var(--sheet);
+  border: var(--rule);
+  border-radius: 0;
+  box-shadow: var(--lift);
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    transform 90ms ease-out,
+    box-shadow 90ms ease-out,
+    background-color 120ms ease-out;
+}
+.btn:hover {
+  color: var(--ink);
+  background-color: var(--amber-wash);
+  transform: translate(-2px, -2px);
+  box-shadow: var(--lift-high);
+}
+.btn:active {
+  transform: translate(4px, 4px);
+  box-shadow: 0 0 0 var(--ink);
+}
+.btn:disabled {
+  cursor: progress;
+  opacity: 0.6;
+  transform: none;
+}
+.btn-primary {
+  background-color: var(--amber);
+}
+.btn-primary:hover {
+  background-color: var(--amber);
+}
+.btn.btn-ghost {
+  box-shadow: none;
+  border-color: transparent;
+  background-color: transparent;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+.btn.btn-ghost:hover {
+  box-shadow: none;
+  transform: none;
+  border-color: var(--ink);
+}
+.btn.btn-ghost:active {
+  transform: none;
+  box-shadow: none;
+}
+.btn-sm {
+  min-height: 44px;
+  padding: 0 var(--space-4);
+  font-size: 17px;
+  box-shadow: 3px 3px 0 var(--ink);
+}
+.btn-lg {
+  min-height: 64px;
+  padding: 0 var(--space-6);
+  font-size: 21px;
+}
+.btn-lg .icon {
+  width: 24px;
+  height: 24px;
+}
+
+/* ---------- forms ---------- */
+
+.field {
+  display: grid;
+  gap: var(--space-2);
+}
+.field label,
+.start label {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.input {
+  width: 100%;
+  min-height: 56px;
+  padding: 12px 16px;
+  font-family: var(--sans);
+  font-size: 19px;
+  color: var(--ink);
+  background-color: var(--sheet);
+  border: var(--rule);
+  border-radius: var(--radius);
+}
+.input::placeholder {
+  color: var(--muted);
+}
+.input:focus {
+  outline: 3px solid var(--amber);
+  outline-offset: 2px;
+}
+textarea.input {
+  min-height: 132px;
+  line-height: 1.45;
+  resize: vertical;
+}
+select.input {
+  appearance: none;
+  padding-right: 48px;
+  background-color: var(--sheet);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2317150f' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 22px;
+}
+.input.code {
+  font-family: var(--mono);
+  font-size: 15px;
+  min-height: 240px;
+}
+.grow-name {
+  flex: 2 1 180px;
+}
+.grow-phone {
+  flex: 1 1 150px;
+}
+
+/* ---------- surfaces ---------- */
+
+.card,
+.sheet {
+  background-color: var(--sheet);
+  border: var(--rule);
+  padding: var(--space-5);
+}
+.card-title {
+  font-size: 24px;
+  margin-bottom: var(--space-4);
+}
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+  background-color: var(--amber-wash);
+  border: var(--rule);
+  padding: 2px 10px;
+  white-space: nowrap;
+}
+.tag-neutral {
+  background-color: var(--paper);
+}
+.tag-xs {
+  font-size: 15px;
+  padding: 0 6px;
+}
+.code-block {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  background-color: var(--ink);
+  color: var(--sheet);
+  padding: var(--space-3) var(--space-4);
+}
+.code-block code {
+  flex: 1;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+.code-block .btn {
+  color: var(--sheet);
+}
+.code-block .btn:hover {
+  color: var(--ink);
+}
+
+/* ---------- people ---------- */
+
+.avatar,
+.face {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: var(--rule);
+  background-color: var(--sheet);
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--ink);
+  flex: none;
+}
+.people {
+  display: grid;
+}
+.person {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) 0;
+  border-bottom: 2px solid var(--rule-soft);
+}
+.person:last-child {
+  border-bottom: 0;
+}
+.person .who {
+  flex: 1 1 160px;
+  display: grid;
+}
+.person .who b {
+  font-size: 20px;
+  font-weight: 700;
+}
+.person .who span {
+  font-size: 16px;
+  color: var(--muted);
+}
+.person-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  margin-left: auto;
+}
+.person-actions .btn {
+  white-space: nowrap;
+}
+@media (max-width: 520px) {
+  .person-actions {
+    width: 100%;
+    margin-left: 56px;
+  }
+}
+
+/* A group as a row of faces: filled amber once that person has opened the
+   tool, green ring while they are using it right now. */
+.faces {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.faces .face {
+  width: 40px;
+  height: 40px;
+  font-size: 15px;
+  background-color: var(--paper);
+  color: var(--muted);
+  border-style: dashed;
+}
+.faces .face.is-in {
+  background-color: var(--ink);
+  color: var(--sheet);
+  border-style: solid;
+}
+.faces .face.is-here {
+  outline: 3px solid var(--present);
+  outline-offset: 1px;
+}
+
+/* ---------- landing ---------- */
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: var(--space-8);
+  align-items: start;
+  padding-bottom: var(--space-8);
+}
+.hero h1 {
+  font-size: clamp(48px, 6.4vw, 88px);
+  line-height: 0.98;
+  letter-spacing: -0.035em;
+}
+.hero .lede {
+  margin-top: var(--space-5);
+  font-size: 21px;
+}
+.start {
+  margin-top: var(--space-6);
+  display: grid;
+  gap: var(--space-3);
+  padding-top: var(--space-5);
+  border-top: var(--rule);
+}
+.start textarea.input {
+  min-height: 108px;
+  font-size: 21px;
+}
+.start-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-3);
+}
+.start-row .field {
+  flex: 1 1 200px;
+}
+.start-row .btn {
+  flex: 0 0 auto;
+}
+.hero .fine {
+  margin-top: var(--space-4);
+}
+@media (max-width: 900px) {
+  .hero {
+    grid-template-columns: 1fr;
+    gap: var(--space-7);
+  }
+}
+@media (max-width: 520px) {
+  .start-row .btn {
+    flex: 1 1 100%;
+  }
+}
+
+/* The text a group actually receives. Ink for the owner's messages, sheet
+   for everyone else's, no rounding: this is a sign of a text, not a clone
+   of one app's bubbles. */
+.thread {
+  background-color: var(--sheet);
+  border: var(--rule);
+  box-shadow: var(--lift-high);
+}
+.thread-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-bottom: var(--rule);
+  background-color: var(--paper);
+}
+.thread-head div b {
+  display: block;
+  font-size: 20px;
+  font-weight: 800;
+}
+.thread-head div span {
+  display: block;
+  font-size: 16px;
+  color: var(--ink);
+}
+.thread-body {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-5) var(--space-4);
+  display: grid;
+  gap: var(--space-3);
+  align-content: start;
+}
+.msg {
+  max-width: 86%;
+  padding: 12px 14px;
+  font-size: 18px;
+  line-height: 1.4;
+  border: var(--rule);
+  opacity: 0;
+  transition: opacity 260ms ease-out;
+}
+.msg.is-shown {
+  opacity: 1;
+}
+.msg-out {
+  justify-self: end;
+  background-color: var(--ink);
+  color: var(--sheet);
+}
+.msg-in {
+  justify-self: start;
+  background-color: var(--paper);
+}
+.msg .who {
+  display: block;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--muted);
+}
+.link-card {
+  display: block;
+  background-color: var(--amber);
+  color: var(--ink);
+  margin: -4px -6px;
+  padding: 10px 12px;
+  border: var(--rule);
+}
+.link-card b {
+  display: block;
+  font-size: 20px;
+  font-weight: 800;
+}
+.link-card span {
+  font-size: 16px;
+}
+.msg-link {
+  background-color: var(--ink);
+  padding: 10px;
+}
+.thread-foot {
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  font-size: 16px;
+  color: var(--muted);
+  border-top: 2px solid var(--rule-soft);
+}
+
+/* Three steps as one printed strip, not three floating cards. */
+.band {
+  border: var(--rule);
+  background-color: var(--sheet);
+}
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.steps li {
+  padding: var(--space-6) var(--space-5);
+  border-left: var(--rule);
+}
+.steps li:first-child {
+  border-left: 0;
+}
+.step-n {
+  display: block;
+  font-family: var(--mono);
+  font-size: 56px;
+  font-weight: 500;
+  line-height: 1;
+  margin-bottom: var(--space-4);
+}
+.steps b {
+  display: block;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  margin-bottom: var(--space-2);
+}
+.steps p {
+  font-size: 18px;
+  color: var(--ink);
+}
+@media (max-width: 800px) {
+  .steps {
+    grid-template-columns: 1fr;
+  }
+  .steps li {
+    border-left: 0;
+    border-top: var(--rule);
+  }
+  .steps li:first-child {
+    border-top: 0;
+  }
+}
+
+.docs {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: var(--space-7);
+  padding-top: var(--space-8);
+}
+.docs h2 {
+  font-size: clamp(32px, 3.6vw, 48px);
+}
+.docs .lede {
+  margin-top: var(--space-4);
+}
+.docs-list {
+  margin: 0;
+  border-top: var(--rule);
+}
+.docs-list > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr);
+  gap: var(--space-5);
+  padding: var(--space-5) 0;
+  border-bottom: var(--rule);
+}
+.docs-list dt {
+  font-size: 22px;
+  font-weight: 800;
+}
+.docs-list dd {
+  margin: 0;
+  font-size: 18px;
+  color: var(--body);
+}
+@media (max-width: 800px) {
+  .docs,
+  .docs-list > div {
+    grid-template-columns: 1fr;
+  }
+  .docs {
+    gap: var(--space-5);
+  }
+  .docs-list > div {
+    gap: var(--space-2);
+  }
+}
+.foot {
+  margin-top: var(--space-8);
+  padding-top: var(--space-5);
+  border-top: var(--rule);
+  font-size: 16px;
+  color: var(--muted);
+}
+
+/* SPAWN, in reading order. 60ms steps, 180ms total, under the 400ms cap. */
+.enter {
+  animation: enter 260ms var(--ease-out) both;
+}
+.enter-1 {
+  animation-delay: 0ms;
+}
+.enter-2 {
+  animation-delay: 60ms;
+}
+.enter-3 {
+  animation-delay: 120ms;
+}
+.enter-4 {
+  animation-delay: 180ms;
+}
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------- the tools shelf: every tool shown as itself ---------- */
+
+.shelf {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: var(--space-6);
+}
+.tile {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--sheet);
+  border: var(--rule);
+  box-shadow: var(--lift);
+  transition:
+    transform 90ms ease-out,
+    box-shadow 90ms ease-out;
+}
+.tile:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: var(--lift-high);
+}
+.tile-thumb {
+  display: block;
+  position: relative;
+  height: 240px;
+  overflow: hidden;
+  border-bottom: var(--rule);
+  background-color: var(--paper);
+}
+.tile-thumb:hover {
+  background-color: var(--paper);
+}
+/* The tool renders at twice the tile's width, then shrinks by half: a real
+   look at the live tool, the way Docs shows a page, not a screenshot. */
+.thumb-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 200%;
+  height: 200%;
+  border: 0;
+  transform: scale(0.5);
+  transform-origin: top left;
+  pointer-events: none;
+  background-color: var(--paper);
+}
+.tile-body {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-5) var(--space-5);
+}
+.tile-title {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  text-decoration: none;
+  line-height: 1.15;
+}
+.tile-title:hover {
+  background-color: transparent;
+  text-decoration: underline;
+}
+.tile-circle {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--amber-deep);
+}
+.tile-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+.tile-meta {
+  font-size: 16px;
+  color: var(--muted);
+  text-align: right;
+}
+.tile-new {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: start;
+  gap: var(--space-2);
+  min-height: 360px;
+  padding: var(--space-6);
+  background-color: var(--amber);
+  color: var(--ink);
+  text-decoration: none;
+  border: var(--rule);
+  box-shadow: var(--lift);
+  transition:
+    transform 90ms ease-out,
+    box-shadow 90ms ease-out;
+}
+.tile-new:hover {
+  color: var(--ink);
+  background-color: var(--amber);
+  transform: translate(-2px, -2px);
+  box-shadow: var(--lift-high);
+}
+.tile-new .icon {
+  width: 56px;
+  height: 56px;
+  stroke-width: 2.5;
+  margin-bottom: var(--space-4);
+}
+.tile-new b {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+}
+.tile-new span {
+  font-size: 18px;
+}
+@media (max-width: 520px) {
+  .tile-new {
+    min-height: 0;
+    padding: var(--space-5);
+  }
+  .tile-new .icon {
+    width: 40px;
+    height: 40px;
+    margin-bottom: var(--space-2);
+  }
+}
+
+/* ---------- ledger rows, for the circles list ---------- */
+
+.ledger {
+  border-top: var(--rule);
+}
+.ledger-row {
+  display: grid;
+  gap: var(--space-4);
+  align-items: center;
+  padding: var(--space-5) 0;
+  border-bottom: var(--rule);
+}
+.ledger-circles {
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.4fr) 80px auto;
+}
+.ledger-row .title {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--ink);
+  text-decoration: none;
+}
+.ledger-row .title:hover {
+  background-color: transparent;
+  text-decoration: underline;
+}
+.num {
+  font-family: var(--mono);
+  font-size: 24px;
+  text-align: right;
+}
+.cell-label {
+  display: none;
+}
+.actions {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: end;
+  flex-wrap: wrap;
+}
+@media (max-width: 760px) {
+  .ledger-circles {
+    grid-template-columns: 1fr;
+    gap: var(--space-2);
+  }
+  .num {
+    text-align: left;
+    font-size: 20px;
+  }
+  .cell-label {
+    display: inline;
+    font-family: var(--sans);
+    font-size: 16px;
+    color: var(--muted);
+    margin-right: var(--space-2);
+  }
+  .actions {
+    justify-content: start;
+    margin-top: var(--space-2);
+  }
+}
+
+/* ---------- access requests ---------- */
+
+.asks {
+  display: grid;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+.ask {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  background-color: var(--amber-wash);
+  border: var(--rule);
+  font-size: 19px;
+}
+.ask .sub {
+  display: block;
+  margin-top: 2px;
+}
+
+/* ---------- make ---------- */
+
+.make {
+  display: grid;
+  gap: var(--space-5);
+  max-width: 760px;
+}
+.make-request {
+  min-height: 160px;
+  font-size: 22px;
+}
+.ideas {
+  display: grid;
+  gap: var(--space-3);
+}
+.ideas .fine {
+  font-weight: 700;
+  color: var(--ink);
+  font-size: 18px;
+}
+.idea {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-family: var(--sans);
+  font-size: 19px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--ink);
+  background-color: var(--sheet);
+  border: 2px solid var(--rule-soft);
+  padding: 14px 16px;
+  cursor: pointer;
+  transition:
+    border-color 120ms ease-out,
+    background-color 120ms ease-out;
+}
+.idea:hover {
+  border-color: var(--ink);
+  background-color: var(--amber-wash);
+}
+.who select {
+  max-width: 480px;
+}
+.new-group {
+  border-left: 6px solid var(--amber);
+  padding-left: var(--space-5);
+}
+
+/* Building: every stage named as it happens, because a blank minute reads as
+   broken to an older person, and they blame themselves. */
+.progress {
+  max-width: 760px;
+  background-color: var(--sheet);
+  border: var(--rule);
+  padding: var(--space-5);
+}
+.stages {
+  list-style: none;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+}
+.stages li {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  font-size: 21px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.stages .mark {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px dashed var(--muted);
+}
+.stages .when {
+  font-family: var(--mono);
+  font-size: 16px;
+  font-weight: 400;
+}
+.stages li.is-now {
+  color: var(--ink);
+}
+.stages li.is-now .mark {
+  border: 2px solid var(--ink);
+  background-color: var(--amber-wash);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.stages li.is-done {
+  color: var(--ink);
+}
+.stages li.is-done .mark {
+  border: 2px solid var(--ink);
+  background-color: var(--ink);
+}
+
+/* ---------- a tool's page ---------- */
+
+.tool-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--space-5);
+  margin-bottom: var(--space-6);
+}
+.tool-head h1 {
+  font-size: clamp(40px, 5vw, 64px);
+  margin-top: var(--space-2);
+}
+.crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.circle-link {
+  display: inline-block;
+  margin-top: var(--space-3);
+  font-size: 18px;
+  font-weight: 700;
+}
+.tool-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+}
+.workspace {
+  display: grid;
+  grid-template-columns: 420px minmax(0, 1fr);
+  gap: var(--space-7);
+  align-items: start;
+}
+.phone {
+  position: sticky;
+  top: var(--space-4);
+}
+.phone-label {
+  font-size: 17px;
+  font-weight: 700;
+  margin-bottom: var(--space-3);
+}
+.phone-frame {
+  display: block;
+  width: 100%;
+  height: min(760px, 78vh);
+  border: var(--rule);
+  box-shadow: var(--lift-high);
+  background-color: var(--paper);
+}
+.panel {
+  display: grid;
+  gap: var(--space-7);
+}
+.panel > section,
+.panel > form {
+  display: grid;
+  gap: var(--space-4);
+}
+.draft {
+  background-color: var(--amber-wash);
+  box-shadow: var(--lift-high);
+}
+.versions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: var(--rule);
+}
+.versions li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4) 0;
+  border-bottom: 2px solid var(--rule-soft);
+}
+.versions li b {
+  display: block;
+  font-size: 19px;
+  font-weight: 800;
+}
+.versions li span {
+  display: block;
+  font-size: 17px;
+  color: var(--body);
+}
+.versions li .fine {
+  font-size: 16px;
+  color: var(--muted);
+}
+.versions .tag {
+  white-space: nowrap;
+}
+.restore {
+  display: flex;
+  flex-direction: column;
+  align-items: end;
+  gap: var(--space-2);
+}
+@media (max-width: 900px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+  .phone {
+    position: static;
+  }
+  .phone-frame {
+    height: 640px;
+  }
+}
+@media (max-width: 520px) {
+  .versions li {
+    flex-wrap: wrap;
+  }
+  .restore {
+    align-items: start;
+  }
+}
+
+/* ---------- states ---------- */
+
+.state {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-4);
+  max-width: 560px;
+  padding: var(--space-6);
+  background-color: var(--sheet);
+  border: var(--rule);
+}
+.state h2 {
+  font-size: 30px;
+}
+.state p {
+  font-size: 19px;
+  color: var(--body);
+}
+.state .glyph {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  background-color: var(--ink);
+  color: var(--sheet);
+  border: var(--rule);
+}
+.state .glyph .icon {
+  width: 28px;
+  height: 28px;
+}
+.state form {
+  width: 100%;
+}
+.skeleton {
+  background-color: color-mix(in srgb, var(--ink) 8%, transparent);
+  animation: pulse 1.4s linear infinite;
+}
+.skeleton-line {
+  height: 20px;
+  width: 180px;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translate(-50%, 12px);
+  opacity: 0;
+  z-index: 50;
+  max-width: calc(100vw - 32px);
+  background-color: var(--ink);
+  color: var(--sheet);
+  border: var(--rule);
+  box-shadow: 4px 4px 0 var(--amber);
+  padding: 14px 20px;
+  font-size: 18px;
+  font-weight: 700;
+  transition:
+    opacity 180ms ease-out,
+    transform 180ms ease-out;
+  pointer-events: none;
+}
+.toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* ---------- the member's view of a tool ---------- */
+
+body.runner {
+  overflow: hidden;
+}
+.run-bar {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: var(--bar-height);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-4);
+  background-color: var(--sheet);
+  border-bottom: var(--rule);
+}
+.run-title {
+  font-size: 20px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.run-me {
+  margin-left: auto;
+  font-size: 17px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .run-bar .tag {
+    display: none;
+  }
+}
+.run-frame {
+  position: fixed;
+  inset: var(--bar-height) 0 0 0;
+  width: 100%;
+  height: calc(100% - var(--bar-height));
+  border: 0;
+  background-color: var(--paper);
+}
+.welcome {
+  position: fixed;
+  inset: var(--bar-height) 0 auto 0;
+  height: var(--welcome-height);
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-4);
+  background-color: var(--amber-wash);
+  border-bottom: var(--rule);
+}
+.welcome p {
+  flex: 1;
+  font-size: 17px;
+  line-height: 1.35;
+}
+.welcome b {
+  font-weight: 800;
+}
+body.welcoming .run-frame {
+  inset: calc(var(--bar-height) + var(--welcome-height)) 0 0 0;
+  height: calc(100% - var(--bar-height) - var(--welcome-height));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .enter {
+    animation-name: fade;
+  }
+  .btn,
+  .tile,
+  .tile-new {
+    transition: none;
+  }
+  .btn:hover,
+  .btn:active,
+  .tile:hover,
+  .tile-new:hover {
+    transform: none;
+  }
+  .skeleton,
+  .stages li.is-now .mark {
+    animation: none;
+  }
+  @keyframes fade {
+    from {
+      opacity: 0;
+    }
+  }
+}
+
+/* ---------- make: who gets it ---------- */
+
+.make-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+  gap: var(--space-7);
+  align-items: start;
+}
+.gets {
+  position: sticky;
+  top: var(--space-5);
+  display: grid;
+  gap: var(--space-4);
+  background-color: var(--sheet);
+  border: var(--rule);
+  box-shadow: var(--lift);
+  padding: var(--space-5);
+}
+.gets-people {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+.gets-people li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: 19px;
+  font-weight: 700;
+}
+.gets-people .avatar {
+  background-color: var(--ink);
+  color: var(--sheet);
+}
+@media (max-width: 900px) {
+  .make-layout {
+    grid-template-columns: 1fr;
+  }
+  .gets {
+    position: static;
+  }
+}
+
+/* Inside the Amber iMessage app the tool fills the sheet; Amber is the frame. */
+body.embedded .run-frame {
+  inset: 0;
+  height: 100%;
+}
+
+/* The team board on a Mac (teamPage in app.js). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.team-who {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.team-add {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+  margin: var(--space-5) 0 var(--space-2);
+}
+@media (min-width: 700px) {
+  .team-add {
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+  }
+}
+.team-person {
+  margin-top: var(--space-6);
+}
+.team-person h2 {
+  font-size: 24px;
+  font-weight: 800;
+  margin: 0 0 var(--space-3);
+}
+.team-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: var(--rule);
+  background: var(--sheet);
+}
+.team-task {
+  display: grid;
+  grid-template-columns: 8.5rem minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3);
+}
+.team-task + .team-task {
+  border-top: var(--rule);
+}
+.team-status {
+  min-height: 44px;
+}
+.team-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.team-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.team-meta {
+  font-size: 15px;
+  color: var(--muted);
+}
+.team-meta a {
+  color: var(--ink);
+  font-weight: 700;
+}
+.team-late {
+  color: var(--danger);
+  font-weight: 700;
+}

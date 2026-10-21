@@ -1,0 +1,18 @@
+{
+  "lifecycle": {
+    "rule": [
+      {
+        "action": { "type": "SetStorageClass", "storageClass": "NEARLINE" },
+        "condition": { "age": 30 }
+      },
+      {
+        "action": { "type": "SetStorageClass", "storageClass": "COLDLINE" },
+        "condition": { "age": 90 }
+      },
+      {
+        "action": { "type": "Delete" },
+        "condition": { "age": 730 }
+      }
+    ]
+  }
+}

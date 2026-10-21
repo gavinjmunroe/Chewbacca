@@ -1,0 +1,12 @@
+[
+  {
+    "origin": [
+      "https://amberintelligence.ai",
+      "https://www.amberintelligence.ai",
+      "http://localhost:3000"
+    ],
+    "method": ["GET", "PUT", "HEAD"],
+    "responseHeader": ["Content-Type", "Content-Length", "x-goog-resumable"],
+    "maxAgeSeconds": 3600
+  }
+]

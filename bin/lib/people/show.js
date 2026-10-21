@@ -53,8 +53,8 @@ function cmdShow(argv) {
           WHERE st.person_id = ? ORDER BY dm.sort_order`,
       )
       .all(p.id);
-    // THESE BARS SAY KNOWN, NOT GOOD. The idea and the wording are Karthik
-    // Devarakonda's, from amber-id, and the reasoning is worth keeping intact:
+    // THESE BARS SAY KNOWN, NOT GOOD. The idea and the wording come from
+    // amber-id (`amber/id/`), and the reasoning is worth keeping intact:
     // the evidence is whatever somebody happened to mention, so a zero means
     // nothing was ever recorded about that part of a person's life, not that
     // the part is thin. Presenting it as a verdict would invent an assessment
@@ -332,9 +332,8 @@ function cmdSearch(argv) {
 }
 
 // ---------------------------------------------------------------- shelf life
-// Ported from Karthik's api/temporal.py in amberintelligence/amber-search
-// ("Facts have a shelf life", 2026-08-25), with his and Sagar's standing
-// permission to lift Amber's people architecture into Chewbacca.
+// Upstream: api/temporal.py in amberintelligence/amber-search (`togari/search/`),
+// "Facts have a shelf life", 2026-08-25.
 //
 // The problem it names: "Sam is visiting SF for a month" and "Sam moved to
 // SF" are the same sentence to anything that only reads text. One is true

@@ -1,0 +1,146 @@
+# Mac
+.DS_Store
+
+# Node / JavaScript
+node_modules
+dist
+build
+.turbo
+.sst
+.serverless
+
+# Environment
+.env
+.env.local
+.env*
+*.env
+
+# Xcode
+#
+# gitignore contributors: remember to update Global/Xcode.gitignore, Objective-C.gitignore & Swift.gitignore
+
+## User settings
+xcuserdata/
+
+## compatibility with Xcode 8 and earlier (ignoring not required starting Xcode 9)
+*.xcscmblueprint
+*.xccheckout
+
+## compatibility with Xcode 3 and earlier (ignoring not required starting Xcode 4)
+build/
+DerivedData/
+.DerivedData/
+.buildsettings.txt
+*.moved-aside
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+
+## Obj-C/Swift specific
+*.hmap
+
+## App packaging
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+## Playgrounds
+timeline.xctimeline
+playground.xcworkspace
+
+# Swift Package Manager
+#
+# Add this line if you want to avoid checking in source code from Swift Package Manager dependencies.
+# Packages/
+# Package.pins
+# Package.resolved
+# *.xcodeproj
+#
+# Xcode automatically generates this directory with a .xcworkspacedata file and xcuserdata
+# hence it is not needed unless you have added a package configuration file to your project
+# .swiftpm
+
+.build/
+*.xcodeproj/project.xcworkspace/
+!*.xcodeproj/project.xcworkspace/contents.xcworkspacedata
+!*.xcodeproj/project.xcworkspace/xcshareddata/
+!*.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
+!*.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+*.xcworkspace/xcuserdata/
+*.swiftpm/
+.swiftpm/
+
+# CocoaPods
+#
+# We recommend against adding the Pods directory to your .gitignore. However
+# you should judge for yourself, the pros and cons are mentioned at:
+# https://guides.cocoapods.org/using/using-cocoapods.html#should-i-check-the-pods-directory-into-source-control
+#
+Pods/
+#
+# Add this line if you want to avoid checking in source code from the Xcode workspace
+# *.xcworkspace
+
+# Carthage
+#
+# Add this line if you want to avoid checking in source code from Carthage dependencies.
+# Carthage/Checkouts
+
+Carthage/Build/
+
+# Accio dependency management
+Dependencies/
+.accio/
+
+# fastlane
+#
+# It is recommended to not store the screenshots in the git repo.
+# Instead, use fastlane to re-generate the screenshots whenever they are needed.
+# For more information about the recommended setup visit:
+# https://docs.fastlane.tools/best-practices/source-control/#source-control
+
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+# Code Injection
+#
+# After new code Injection tools there's a generated folder /iOSInjectionProject
+# https://github.com/johnno1962/injectionforxcode
+
+iOSInjectionProject/
+
+# API Keys & Secrets
+**/Secrets.swift
+**/Config/Secrets.plist
+
+# Claude Code worktrees
+.claude/worktrees/
+.worktrees/
+
+# Local agent / MCP configs — these tend to contain bearer tokens.
+# Keep them out of version control entirely.
+.mcp.json
+.claude/settings.local.json
+.claude/.credentials*
+
+# This is a pnpm workspace (pnpm-lock.yaml). An npm lockfile here means npm was
+# run in it, which fights pnpm's node_modules layout -- see the ajv/lightningcss
+# breakage of 2026-09-08.
+package-lock.json
+
+# A HOLDING PEN, NEVER HISTORY.
+# The agent shell cannot delete on this mounted filesystem (rm fails with
+# "Operation not permitted"), so files that are meant to be gone get moved to
+# _to_delete/ and removed by hand later. Ignored so a `git add -A` in between
+# does not commit a file whose whole purpose is to stop existing.
+_to_delete/
+
+# Local signed archives and exported IPAs
+/release/

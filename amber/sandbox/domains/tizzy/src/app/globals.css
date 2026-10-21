@@ -1,0 +1,155 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Tizzy Design Tokens ──────────────────────────────────────────────────── */
+:root {
+  --tizzy-bg:            #F8F9FB;
+  --tizzy-surface:       #FFFFFF;
+  --tizzy-surface-alt:   #F3F4F6;
+  --tizzy-border:        #E5E7EB;
+  --tizzy-text-primary:  #0F1117;
+  --tizzy-text-secondary:#6B7280;
+  --tizzy-text-tertiary: #9CA3AF;
+  --tizzy-accent:        #2563EB;
+  --tizzy-accent-light:  #EFF6FF;
+  --tizzy-success:       #16A34A;
+  --tizzy-success-light: #F0FDF4;
+  --tizzy-warning:       #D97706;
+  --tizzy-brand:         #1A1A2E;
+  --tizzy-streak:        #F97316;
+  --tizzy-streak-light:  #FFF7ED;
+  /* Metric colors */
+  --metric-clarity:      #2563EB;
+  --metric-pace:         #7C3AED;
+  --metric-range:        #0891B2;
+  --metric-flow:         #059669;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--font-inter), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+}
+
+/* Scroll containers */
+.inner-scroll { overflow-y: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.inner-scroll::-webkit-scrollbar { display: none; }
+
+/* Issue 115: .phone-float {} removed — was empty and unused */
+
+/* Screen transitions */
+.screen-forward { animation: screenForward 0.20s cubic-bezier(0.25, 0.46, 0.45, 0.94) both; }
+.screen-back    { animation: screenBack   0.18s cubic-bezier(0.25, 0.46, 0.45, 0.94) both; }
+.screen-up      { animation: screenUp     0.24s cubic-bezier(0.25, 0.46, 0.45, 0.94) both; }
+.screen-fade    { animation: screenFade   0.16s ease both; }
+
+@keyframes screenForward {
+  from { opacity: 0; transform: translateX(28px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+/* Issue 112: symmetrized to -28px matching screenForward magnitude */
+@keyframes screenBack {
+  from { opacity: 0; transform: translateX(-28px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+/* Issue 113: increased from 20px to 28px for consistency */
+@keyframes screenUp {
+  from { opacity: 0; transform: translateY(28px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes screenFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Element entry animations */
+.tizzy-fade-in  { animation: tizzyFadeIn  0.35s ease both; }
+.tizzy-slide-up { animation: tizzySlideUp 0.40s cubic-bezier(0.25, 0.46, 0.45, 0.94) both; }
+.tizzy-scale-in { animation: tizzyScaleIn 0.30s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+@keyframes tizzyFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+/* Issue 114: increased from 12px to 16px for more noticeable entry */
+@keyframes tizzySlideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes tizzyScaleIn {
+  from { opacity: 0; transform: scale(0.94); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* Waveform bars animation */
+.waveform-bar { animation: waveform 1.4s ease-in-out infinite; transform-origin: bottom; }
+.waveform-bar:nth-child(1) { animation-delay: 0.00s; }
+.waveform-bar:nth-child(2) { animation-delay: 0.10s; }
+.waveform-bar:nth-child(3) { animation-delay: 0.20s; }
+.waveform-bar:nth-child(4) { animation-delay: 0.30s; }
+.waveform-bar:nth-child(5) { animation-delay: 0.15s; }
+.waveform-bar:nth-child(6) { animation-delay: 0.25s; }
+.waveform-bar:nth-child(7) { animation-delay: 0.05s; }
+
+@keyframes waveform {
+  0%, 100% { transform: scaleY(0.25); opacity: 0.5; }
+  50%       { transform: scaleY(1);    opacity: 1; }
+}
+
+/* Status dot pulse */
+.status-dot-connected { animation: statusPulse 2.5s ease-in-out infinite; }
+@keyframes statusPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.55; }
+}
+
+/* Recording indicator */
+.recording-dot { animation: recordingBlink 1.2s ease-in-out infinite; }
+@keyframes recordingBlink {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.85); }
+}
+
+/* Progress bar fill */
+.progress-fill { animation: progressFill 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94) both; }
+@keyframes progressFill {
+  from { width: 0%; }
+}
+
+/* Stagger delays for list items */
+.stagger-1  { animation-delay: 0.05s; }
+.stagger-2  { animation-delay: 0.10s; }
+.stagger-3  { animation-delay: 0.15s; }
+.stagger-4  { animation-delay: 0.20s; }
+.stagger-5  { animation-delay: 0.25s; }
+.stagger-6  { animation-delay: 0.30s; }
+
+/* Tap feedback */
+.tizzy-tap { transition: opacity 0.12s ease, transform 0.12s ease; }
+.tizzy-tap:active { opacity: 0.7; transform: scale(0.98); }
+
+/* Accessible focus rings for keyboard navigation */
+input:focus-visible,
+button:focus-visible {
+  outline: 2px solid #2563EB;
+  outline-offset: 2px;
+}
+
+/* Button active state — subtle press feel */
+button:active:not(:disabled) {
+  opacity: 0.82;
+  transform: scale(0.985);
+  transition: opacity 0.08s ease, transform 0.08s ease;
+}
+
+/* Issue 111: Disable animations for users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

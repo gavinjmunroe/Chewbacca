@@ -1,0 +1,71 @@
+# Fastlane configuration for Amber iOS.
+# Run lanes from the AmberApp directory:
+#
+#   bundle exec fastlane ios beta     # TestFlight build
+#   bundle exec fastlane ios release  # App Store submission
+#   bundle exec fastlane ios test     # Run unit tests
+
+default_platform(:ios)
+
+platform :ios do
+  before_all do
+    setup_ci if is_ci
+  end
+
+  lane :test do
+    run_tests(
+      project: "AmberApp.xcodeproj",
+      scheme: "AmberApp",
+      devices: ["iPhone 17 Pro"],
+      clean: true
+    )
+  end
+
+  lane :beta do
+    ensure_git_status_clean
+    increment_build_number(xcodeproj: "AmberApp.xcodeproj")
+    match(type: "appstore", app_identifier: "com.amber.AmberApp", readonly: is_ci)
+    build_app(
+      project: "AmberApp.xcodeproj",
+      scheme: "AmberApp",
+      configuration: "Release",
+      clean: true,
+      output_directory: "build",
+      export_method: "app-store"
+    )
+    upload_to_testflight(
+      skip_waiting_for_build_processing: true,
+      distribute_external: false,
+      notify_external_testers: false
+    )
+    commit_version_bump(xcodeproj: "AmberApp.xcodeproj", message: "chore: bump build number [skip ci]")
+  end
+
+  lane :release do
+    match(type: "appstore", app_identifier: "com.amber.AmberApp", readonly: is_ci)
+    build_app(
+      project: "AmberApp.xcodeproj",
+      scheme: "AmberApp",
+      configuration: "Release",
+      clean: true,
+      output_directory: "build",
+      export_method: "app-store"
+    )
+    deliver(
+      submit_for_review: true,
+      automatic_release: false,
+      force: true,
+      precheck_include_in_app_purchases: false,
+      submission_information: {
+        add_id_info_uses_idfa: false,
+        export_compliance_uses_encryption: false
+      },
+      metadata_path: "./fastlane/metadata",
+      screenshots_path: "./fastlane/screenshots"
+    )
+  end
+
+  error do |lane, exception|
+    UI.error("Lane #{lane} failed: #{exception.message}")
+  end
+end

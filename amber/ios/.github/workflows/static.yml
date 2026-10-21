@@ -1,0 +1,48 @@
+name: static
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Lightweight static validation that runs on Linux (cheap + fast).
+#
+# The cross-package typecheck/lint/build runs in ci.yml. This workflow
+# adds repository-wide sanity checks that don't need Xcode or Node:
+#   - YAML parses for every workflow file
+#   - No personal credentials checked into the repo
+#
+# The previous version of this workflow also checked for entitlements,
+# privacy manifest, and Info.plist usage strings under the root
+# `AmberApp/AmberApp/...` paths. Those files now live under
+# `legacy-ios/AmberApp/AmberApp/...` and the active mobile app
+# (`apps/mobile/`) is React Native + Expo, where the equivalent
+# configuration lives in `app.json` / Expo config plugins. Those
+# legacy iOS-specific checks have been removed here; if the SwiftUI
+# build is ever revived, reintroduce them pointing at `legacy-ios/`.
+
+jobs:
+  yaml-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate workflow YAML
+        run: |
+          for f in .github/workflows/*.yml; do
+            python3 -c "import sys, yaml; yaml.safe_load(open('$f'))" || exit 1
+          done
+
+  shell-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject hard-coded personal credentials
+        run: |
+          set -e
+          if grep -RIn --exclude-dir=.git --exclude-dir=node_modules \
+             --exclude-dir=legacy-ios --exclude-dir=.github \
+             -E '@(gmail|icloud|me)\.com|FASTLANE_APPLE_ID.*=.*@' . ; then
+            echo "::error::Personal credentials must not be committed."
+            exit 1
+          fi

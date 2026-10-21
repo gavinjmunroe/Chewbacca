@@ -1,0 +1,15 @@
+tool_activity.log
+.venv
+PERPLEXITY_HOOKS.json
+__pycache__/
+hook_commands.log
+PERPLEXITY.md
+.env
+
+perplexity_code.egg-info/
+
+# Runtime artifacts
+.perplexity/sessions/
+.perplexity/sources/
+.perplexity/benchmarks.jsonl
+.perplexity/routing_log.jsonl

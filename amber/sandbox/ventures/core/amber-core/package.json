@@ -1,0 +1,22 @@
+{
+  "name": "amber-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Amber platform — memory engine, people graph, search, approvals, identity",
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "lint": "turbo lint",
+    "type-check": "turbo type-check",
+    "start": "node -e \"const s=process.env.SERVICE||'api';require('child_process').spawn('node',['apps/'+s+'/dist/index.js'],{stdio:'inherit'}).on('exit',process.exit)\""
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "typescript": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=20.x",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.0.0"
+}

@@ -1,0 +1,186 @@
+\documentclass[11pt]{article}
+\usepackage{amsmath,amssymb,amsthm,bm,geometry,hyperref}
+\geometry{margin=1in}
+\title{\textbf{Dimension-Aware Personalized PageRank \\ on the Amber Relationship Graph}}
+\author{Tiwari Research --- Amber Organization}
+\date{Draft, April 2026}
+
+\newtheorem{definition}{Definition}
+\newtheorem{proposition}{Proposition}
+\newtheorem{theorem}{Theorem}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We formalize \textsc{tiwari-peoplerank} as a six-channel
+personalized random walk on the Amber relationship graph, one channel
+per dimension of health (spiritual, emotional, physical, intellectual,
+social, financial). The six per-dimension stationary distributions
+$\pi^{(d)}$ are fused on a joint manifold to produce a single ranking
+that respects both semantic relevance to a query and the dimensional
+profile of the querying user. We prove convergence, give a contraction
+bound, and describe how the algorithm braids together three evidence
+streams: \textsc{togari} (web-scale, scraped), \textsc{newton}
+(user-specific signal heuristics), and \textsc{amber-id} (the user's
+private Pinecone knowledge graph).
+\end{abstract}
+
+\section{Setting}
+
+Let $G = (V, E, W)$ be a directed, weighted graph where
+$V$ is the union of every person referenced in the user's amber-id
+knowledge base, every contact in the user's Togari-ingested contact
+list, and the user themselves (the \emph{ego}).
+Each edge $(u,v)\in E$ carries a stochastic-row weight
+$w_{uv}\ge 0$ with $\sum_v w_{uv} = 1$.
+
+We define six dimensions
+$\mathcal{D} = \{\text{spi},\text{emo},\text{phy},\text{int},\text{soc},\text{fin}\}$
+and six \emph{edge-weight sheets} $W^{(d)}\in\mathbb{R}^{|V|\times|V|}$
+with $W^{(d)}_{uv}$ equal to the relative evidence that the
+relationship $(u\to v)$ contributes to dimension $d$. For a
+conversation about a medical scare, $W^{(\text{phy})}$ and
+$W^{(\text{emo})}$ spike; for a job referral, $W^{(\text{fin})}$
+dominates.
+
+\section{Personalized Teleport Vector}
+
+Given a natural-language query $q$ issued by ego $e$, we classify $q$
+into a dimension-weight simplex
+\[
+\bm{\alpha}(q) \in \Delta^5, \qquad \sum_{d\in\mathcal{D}} \alpha_d(q) = 1
+\]
+via an embedding classifier (see \texttt{amber-id/src/lib/dimension-classifier.js}).
+
+We assemble a per-dimension personalization vector
+$\bm{v}^{(d)}\in\mathbb{R}^{|V|}$ by seeding the ego and boosting any
+vertex $p\in V$ that amber-id's Pinecone namespace returns for the
+query, weighted by the Pinecone cosine similarity $s_p$ and by the
+metadata-level trust score $\tau_p\in[0,1]$ that the ingestion pipe
+assigns (agent $=0.65$, health $=0.95$, check-in $=1.00$,
+relationship $=0.50$).
+
+\begin{equation}
+v^{(d)}_p \propto
+\mathbb{1}[p=e] + \lambda \cdot s_p \cdot \tau_p \cdot W^{(d)}_{ep},
+\qquad
+\sum_p v^{(d)}_p = 1.
+\end{equation}
+
+\section{Six Random Walks, One per Dimension}
+
+Each dimension gets its own personalized PageRank stationary
+distribution $\pi^{(d)}$, defined by the fixed-point equation
+\begin{equation}
+\pi^{(d)} = (1 - \beta)\, \bm{v}^{(d)}
+          + \beta \, (P^{(d)})^\top \pi^{(d)},
+\qquad \beta \in (0,1),
+\end{equation}
+where $P^{(d)}$ is the row-stochastic transition matrix derived from
+$W^{(d)}$.
+
+\begin{proposition}[Existence, uniqueness, contraction]
+For every $\beta \in (0,1)$ and every personalization
+$\bm{v}^{(d)}\in\Delta^{|V|-1}$, the map
+$T^{(d)}(\pi)\triangleq (1-\beta)\bm{v}^{(d)} + \beta(P^{(d)})^\top\pi$
+is a $\beta$-contraction on $(\Delta^{|V|-1},\|\cdot\|_1)$. Therefore
+$\pi^{(d)}$ exists and is unique, and power-iteration converges
+geometrically with rate $\beta$.
+\end{proposition}
+
+\begin{proof}
+For $\pi, \pi' \in \Delta^{|V|-1}$,
+$\|T^{(d)}(\pi) - T^{(d)}(\pi')\|_1
+ = \beta\, \| (P^{(d)})^\top (\pi - \pi') \|_1
+ \le \beta\, \|\pi - \pi'\|_1$,
+since a row-stochastic matrix is a non-expansion under $\ell_1$.
+\end{proof}
+
+\section{Joint-Manifold Fusion}
+
+We fuse the six distributions using the query-conditioned simplex
+$\bm{\alpha}(q)$ together with a \emph{dimension-diversity} term that
+penalizes rankings that collapse onto one channel:
+
+\begin{equation}
+\label{eq:fusion}
+\pi^\star(p \mid q)
+ \;\propto\;
+ \underbrace{\prod_{d\in\mathcal{D}} \bigl(\pi^{(d)}_p\bigr)^{\alpha_d(q)}}_{\text{weighted geometric mean}}
+ \cdot
+ \underbrace{\exp\!\Bigl(\gamma \cdot H\bigl(\bm{\pi}_p\bigr)\Bigr)}_{\text{diversity reward}},
+\end{equation}
+where $\bm{\pi}_p \in \Delta^5$ is the $\ell_1$-normalized row of
+per-dimension scores for vertex $p$, $H$ is Shannon entropy, and
+$\gamma \ge 0$ is a diversity temperature.
+
+The geometric mean is the natural fusion on the probability simplex
+(it is the minimizer of the Aitchison distance to the six inputs).
+The entropy bonus embodies the product philosophy: a person who shows
+up across multiple dimensions of a user's life is more valuable to
+rank high than one who dominates a single channel.
+
+\section{Braiding in Togari and Newton}
+
+Equation~\ref{eq:fusion} scores vertices on the amber-id manifold
+alone. The production ranking blends in two external evidence streams:
+
+\begin{equation}
+\label{eq:braid}
+\text{score}(p, q)
+ \;=\;
+ \omega_T \cdot \tilde s^T_p
+ + \omega_N \cdot \tilde s^N_p
+ + \omega_A \cdot \tilde\pi^\star_p,
+\end{equation}
+where the three inputs are min-max normalized to $[0,1]$ on the
+candidate set, and $(\omega_T, \omega_N, \omega_A)$ are adapter
+weights. The production default is
+$(\omega_T, \omega_N, \omega_A) = (0.55, 0.20, 0.25)$,
+reflecting that Togari's list-building corpus is the densest prior,
+Newton contributes ego-specific heuristics, and amber-id's private
+manifold breaks ties with the user's actual life.
+
+\section{Identifiability and Privacy}
+
+The random walk respects two hard constraints:
+
+\begin{enumerate}
+\item A vertex with metadata \texttt{visibility = "private"} may
+      contribute to $\pi^{(d)}$ only when the query originates from
+      the owning ego. Cross-ego reads are masked before the walk.
+\item Trust-weighted teleport ensures that scraped (Togari, trust
+      $\approx 0.65$) evidence never outranks first-person check-ins
+      (trust $= 1.00$) for the same person at the same query.
+\end{enumerate}
+
+\section{Complexity}
+
+With $|V|=n$, $|E|=m$, and $k$ power-iteration steps to reach
+$\epsilon$ accuracy, the per-query cost is $O(k \cdot |\mathcal{D}| \cdot m)$.
+In practice $k \le \lceil \log(1/\epsilon)/\log(1/\beta) \rceil$ and
+the six dimensions run in parallel, giving an effective
+$O(k\cdot m)$ wall-clock with a six-way parallel harness.
+
+\section{Why This Is the Right Form}
+
+A flat PageRank on one graph cannot distinguish \emph{why} person $p$
+matters to the user. Six channels let Amber answer
+``who should I talk to for my career?'' and
+``who should I call because I'm sad?'' with different people, using
+the same graph. The dimension-diversity term ensures Amber never
+reduces a human to a single utility.
+
+\section*{Implementation pointers}
+
+\begin{itemize}
+\item \texttt{Tiwari/tiwari-peoplerank/src/blend.js} implements
+      Eq.~\ref{eq:braid}.
+\item \texttt{Tiwari/tiwari-peoplerank/src/pagerank.js} implements
+      the six per-dimension walks and Eq.~\ref{eq:fusion}.
+\item \texttt{amber-id/src/lib/dimension-classifier.js} emits
+      $\bm{\alpha}(q)$.
+\end{itemize}
+
+\end{document}

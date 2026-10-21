@@ -1,0 +1,21 @@
+{
+  "name": "@amber/knowledge-graph",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Amber knowledge graph — HTTP service over Pinecone amber-people. Extracted from amber-id per MIGRATION_PLAN.md 2026-08-31.",
+  "type": "module",
+  "main": "service/server.js",
+  "scripts": {
+    "start": "node service/server.js",
+    "dev": "node --watch service/server.js",
+    "test": "node --test service/lib/*.test.js writers/*.test.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.2",
+    "@pinecone-database/pinecone": "^4.0.0",
+    "fastify": "^5.2.1"
+  }
+}

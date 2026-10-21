@@ -1,0 +1,309 @@
+import React, { useState, useEffect, useRef } from 'react'
+import { Palette, Sun, Moon, Monitor, ChevronDown, Check } from 'lucide-react'
+import { SUPPORTED_LANGUAGES, useTranslation } from '../../i18n'
+import { useSettingsStore } from '../../store/settingsStore'
+import { useToast } from '../shared/Toast'
+import Section from './Section'
+
+export default function DisplaySettingsTab(): React.ReactElement {
+  const { settings, updateSetting } = useSettingsStore()
+  const { t } = useTranslation()
+  const toast = useToast()
+  const [tempUnit, setTempUnit] = useState<string>(settings.temperature_unit || 'celsius')
+  const [langOpen, setLangOpen] = useState(false)
+  const langDropdownRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!langOpen) return
+    const handler = (e: MouseEvent) => {
+      if (langDropdownRef.current && !langDropdownRef.current.contains(e.target as Node)) setLangOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [langOpen])
+
+  useEffect(() => {
+    setTempUnit(settings.temperature_unit || 'celsius')
+  }, [settings.temperature_unit])
+
+  return (
+    <Section title={t('settings.display')} icon={Palette}>
+      {/* Color Mode */}
+      <div>
+        <label className="block text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>{t('settings.colorMode')}</label>
+        <div className="flex gap-3" style={{ flexWrap: 'wrap' }}>
+          {[
+            { value: 'light', label: t('settings.light'), icon: Sun },
+            { value: 'dark', label: t('settings.dark'), icon: Moon },
+            { value: 'auto', label: t('settings.auto'), icon: Monitor },
+          ].map(opt => {
+            const current = settings.dark_mode
+            const isActive = current === opt.value || (opt.value === 'light' && current === false) || (opt.value === 'dark' && current === true)
+            return (
+              <button
+                key={opt.value}
+                onClick={async () => {
+                  try {
+                    await updateSetting('dark_mode', opt.value)
+                  } catch (e: unknown) { toast.error(e instanceof Error ? e.message : t('common.error')) }
+                }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '10px 14px', borderRadius: 10, cursor: 'pointer', flex: '1 1 0', justifyContent: 'center', minWidth: 0,
+                  fontFamily: 'inherit', fontSize: 14, fontWeight: 500,
+                  border: isActive ? '2px solid var(--text-primary)' : '2px solid var(--border-primary)',
+                  background: isActive ? 'var(--bg-hover)' : 'var(--bg-card)',
+                  color: 'var(--text-primary)',
+                  transition: 'all 0.15s',
+                }}
+              >
+                <span className="hidden sm:inline-flex"><opt.icon size={16} /></span>
+                {opt.value === 'auto' ? (
+                  <>
+                    <span className="hidden sm:inline">{opt.label}</span>
+                    <span className="sm:hidden">Auto</span>
+                  </>
+                ) : opt.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Language */}
+      <div>
+        <label className="block text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>{t('settings.language')}</label>
+        {/* Desktop: Button grid */}
+        <div className="hidden sm:flex flex-wrap gap-3">
+          {SUPPORTED_LANGUAGES.map(opt => (
+            <button
+              key={opt.value}
+              onClick={async () => {
+                try { await updateSetting('language', opt.value) }
+                catch (e: unknown) { toast.error(e instanceof Error ? e.message : t('common.error')) }
+              }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '10px 20px', borderRadius: 10, cursor: 'pointer',
+                fontFamily: 'inherit', fontSize: 14, fontWeight: 500,
+                border: settings.language === opt.value ? '2px solid var(--text-primary)' : '2px solid var(--border-primary)',
+                background: settings.language === opt.value ? 'var(--bg-hover)' : 'var(--bg-card)',
+                color: 'var(--text-primary)',
+                transition: 'all 0.15s',
+              }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        {/* Mobile: Custom dropdown */}
+        <div ref={langDropdownRef} className="sm:hidden" style={{ position: 'relative' }}>
+          {(() => {
+            const current = SUPPORTED_LANGUAGES.find(o => o.value === settings.language) || SUPPORTED_LANGUAGES[0]
+            return (
+              <button
+                type="button"
+                onClick={() => setLangOpen(v => !v)}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '10px 14px', borderRadius: 10,
+                  border: '2px solid var(--border-primary)',
+                  background: 'var(--bg-card)', color: 'var(--text-primary)',
+                  fontSize: 14, fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer',
+                }}
+              >
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{current?.label}</span>
+                <ChevronDown size={14} style={{ flexShrink: 0, color: 'var(--text-faint)', transform: langOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
+              </button>
+            )
+          })()}
+          {langOpen && (
+            <div style={{
+              position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 50,
+              background: 'var(--bg-card)', border: '1px solid var(--border-primary)', borderRadius: 10,
+              boxShadow: '0 8px 24px rgba(0,0,0,0.15)', padding: 4, maxHeight: 280, overflowY: 'auto',
+            }}>
+              {SUPPORTED_LANGUAGES.map(opt => {
+                const active = settings.language === opt.value
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={async () => {
+                      setLangOpen(false)
+                      try { await updateSetting('language', opt.value) }
+                      catch (err: unknown) { toast.error(err instanceof Error ? err.message : t('common.error')) }
+                    }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                      padding: '9px 12px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                      background: active ? 'var(--bg-hover)' : 'transparent',
+                      fontFamily: 'inherit', fontSize: 14, color: 'var(--text-primary)',
+                      textAlign: 'left', fontWeight: active ? 600 : 500,
+                    }}
+                  >
+                    <span style={{ flex: 1 }}>{opt.label}</span>
+                    {active && <Check size={14} strokeWidth={2.5} color="var(--accent)" />}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Temperature */}
+      <div>
+        <label className="block text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>{t('settings.temperature')}</label>
+        <div className="flex gap-3">
+          {[
+            { value: 'celsius', label: '°C Celsius' },
+            { value: 'fahrenheit', label: '°F Fahrenheit' },
+          ].map(opt => (
+            <button
+              key={opt.value}
+              onClick={async () => {
+                setTempUnit(opt.value)
+                try { await updateSetting('temperature_unit', opt.value) }
+                catch (e: unknown) { toast.error(e instanceof Error ? e.message : t('common.error')) }
+              }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '10px 20px', borderRadius: 10, cursor: 'pointer',
+                fontFamily: 'inherit', fontSize: 14, fontWeight: 500,
+                border: tempUnit === opt.value ? '2px solid var(--text-primary)' : '2px solid var(--border-primary)',
+                background: tempUnit === opt.value ? 'var(--bg-hover)' : 'var(--bg-card)',
+                color: 'var(--text-primary)',
+                transition: 'all 0.15s',
+              }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Time Format */}
+      <div>
+        <label className="block text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>{t('settings.timeFormat')}</label>
+        <div className="flex gap-3">
+          {[
+            { value: '24h', short: '24h', example: '14:30' },
+            { value: '12h', short: '12h', example: '2:30 PM' },
+          ].map(opt => (
+            <button
+              key={opt.value}
+              onClick={async () => {
+                try { await updateSetting('time_format', opt.value) }
+                catch (e: unknown) { toast.error(e instanceof Error ? e.message : t('common.error')) }
+              }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '10px 20px', borderRadius: 10, cursor: 'pointer',
+                fontFamily: 'inherit', fontSize: 14, fontWeight: 500,
+                border: settings.time_format === opt.value ? '2px solid var(--text-primary)' : '2px solid var(--border-primary)',
+                background: settings.time_format === opt.value ? 'var(--bg-hover)' : 'var(--bg-card)',
+                color: 'var(--text-primary)',
+                transition: 'all 0.15s',
+              }}
+            >
+              {opt.short}
+              <span className="hidden sm:inline">{` (${opt.example})`}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Route Calculation */}
+      <div>
+        <label className="block text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>{t('settings.routeCalculation')}</label>
+        <div className="flex gap-3">
+          {[
+            { value: true, label: t('settings.on') || 'On' },
+            { value: false, label: t('settings.off') || 'Off' },
+          ].map(opt => (
+            <button
+              key={String(opt.value)}
+              onClick={async () => {
+                try { await updateSetting('route_calculation', opt.value) }
+                catch (e: unknown) { toast.error(e instanceof Error ? e.message : t('common.error')) }
+              }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '10px 20px', borderRadius: 10, cursor: 'pointer',
+                fontFamily: 'inherit', fontSize: 14, fontWeight: 500,
+                border: (settings.route_calculation !== false) === opt.value ? '2px solid var(--text-primary)' : '2px solid var(--border-primary)',
+                background: (settings.route_calculation !== false) === opt.value ? 'var(--bg-hover)' : 'var(--bg-card)',
+                color: 'var(--text-primary)',
+                transition: 'all 0.15s',
+              }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Booking route labels */}
+      <div>
+        <label className="block text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>{t('settings.bookingLabels')}</label>
+        <div className="flex gap-3">
+          {[
+            { value: true, label: t('settings.on') || 'On' },
+            { value: false, label: t('settings.off') || 'Off' },
+          ].map(opt => (
+            <button
+              key={String(opt.value)}
+              onClick={async () => {
+                try { await updateSetting('map_booking_labels', opt.value) }
+                catch (e: unknown) { toast.error(e instanceof Error ? e.message : t('common.error')) }
+              }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '10px 20px', borderRadius: 10, cursor: 'pointer',
+                fontFamily: 'inherit', fontSize: 14, fontWeight: 500,
+                border: (settings.map_booking_labels !== false) === opt.value ? '2px solid var(--text-primary)' : '2px solid var(--border-primary)',
+                background: (settings.map_booking_labels !== false) === opt.value ? 'var(--bg-hover)' : 'var(--bg-card)',
+                color: 'var(--text-primary)',
+                transition: 'all 0.15s',
+              }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs mt-1" style={{ color: 'var(--text-faint)' }}>{t('settings.bookingLabelsHint')}</p>
+      </div>
+
+      {/* Blur Booking Codes */}
+      <div>
+        <label className="block text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>{t('settings.blurBookingCodes')}</label>
+        <div className="flex gap-3">
+          {[
+            { value: true, label: t('settings.on') || 'On' },
+            { value: false, label: t('settings.off') || 'Off' },
+          ].map(opt => (
+            <button
+              key={String(opt.value)}
+              onClick={async () => {
+                try { await updateSetting('blur_booking_codes', opt.value) }
+                catch (e: unknown) { toast.error(e instanceof Error ? e.message : t('common.error')) }
+              }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '10px 20px', borderRadius: 10, cursor: 'pointer',
+                fontFamily: 'inherit', fontSize: 14, fontWeight: 500,
+                border: (!!settings.blur_booking_codes) === opt.value ? '2px solid var(--text-primary)' : '2px solid var(--border-primary)',
+                background: (!!settings.blur_booking_codes) === opt.value ? 'var(--bg-hover)' : 'var(--bg-card)',
+                color: 'var(--text-primary)',
+                transition: 'all 0.15s',
+              }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </Section>
+  )
+}

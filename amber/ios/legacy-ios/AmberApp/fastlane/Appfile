@@ -1,0 +1,6 @@
+app_identifier("com.amber.AmberApp")
+# Personal credentials must never live in source. CI/local users supply these
+# via the FASTLANE_* environment variables (see AmberApp/SETUP.md).
+apple_id(ENV["FASTLANE_APPLE_ID"] || "REPLACE_WITH_APPLE_ID")
+team_id(ENV["FASTLANE_TEAM_ID"] || "REPLACE_WITH_TEAM_ID")
+itc_team_id(ENV["FASTLANE_ITC_TEAM_ID"] || "REPLACE_WITH_ITC_TEAM_ID")

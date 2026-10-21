@@ -1,0 +1,10 @@
+node_modules/
+.env
+.env.*
+!.env.example
+.DS_Store
+.design-gate-url
+public/.design-gate-url
+ios/build/
+ios/*.xcodeproj/xcuserdata/
+ios/build-device/

@@ -8,10 +8,8 @@
  * user wrote it themselves, so it must not be thrown away. It is also not their
  * name, so it must not be shown as one.
  *
- * PORTED FROM AMBER. This is a port of `src/lib/name-split.js` in
- * amberintelligence/amber-id, written by Karthik Devarakonda. The method, the
- * three-signal ordering and the sticky-tail rule are his. Ported with Karthik
- * and Sagar's standing permission, same as the rest of the people layer.
+ * UPSTREAM: `amber/id/src/lib/name-split.js` (amberintelligence/amber-id).
+ * Resync the three-signal ordering and the sticky-tail rule from there.
  *
  * WHAT IT REPLACES HERE, AND WHY THAT MATTERS FOR A PUBLIC KIT. The dashboard
  * used to strip labels with two hand-written lists: fifty-odd tokens like

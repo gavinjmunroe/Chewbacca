@@ -1,0 +1,10 @@
+{
+  "source": "amber-organization/medha-sandbox (amber-ventures) git history",
+  "source_path": "social/clearout",
+  "source_sha": "04d361b",
+  "deleted_in": "fd23d5a",
+  "restored_at": "2026-08-03",
+  "role": "AI communication command center (Gmail triage/draft/voice); iMessage via domains/messaging",
+  "note": "No standalone amber-organization/ClearOut GitHub repo existed; restored from pre-delete archive",
+  "excluded": ["supabase/.temp"]
+}

@@ -1,0 +1,28 @@
+{
+  "source_repo": "amberintelligence/amber-id",
+  "source_sha": "9af33e058a59f0e2ced5aaf5bd2e00ee33db8c4c",
+  "source_paths": [
+    "src/knowledge/pinecone-client.js",
+    "src/knowledge/author-voice-index.js",
+    "src/knowledge/contact-edges-index.js",
+    "src/knowledge/contacts-index.js",
+    "src/knowledge/content-seed-index.js",
+    "src/knowledge/events-index.js",
+    "src/knowledge/forget-and-snapshot.js",
+    "src/knowledge/highlight-preference.js",
+    "src/knowledge/partnerships-index.js",
+    "src/knowledge/people-rank-index.js",
+    "src/knowledge/personal-life-index.js",
+    "src/knowledge/pipelines-index.js",
+    "src/knowledge/relationship-snapshot-index.js",
+    "src/lib/embeddings.js",
+    "src/lib/contact-edge.js",
+    "src/lib/events.js",
+    "src/lib/people-rank-score.js",
+    "src/lib/relationship-score.js",
+    "src/lib/name-boundary.js"
+  ],
+  "extracted_at": "2026-08-31",
+  "session": "Amber project — KG realignment autopilot",
+  "notes": "Ported per MIGRATION_PLAN.md 2026-08-31 Phase 2. deriveId is byte-identical; do not modify. pinecone-client renamed to lib/pinecone.js and includes namespace-visibility surface from amber-id PR #187."
+}

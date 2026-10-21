@@ -1,0 +1,7 @@
+{
+  "source_repo": "amber-organization/tizzy",
+  "source_sha": "b8e19c5",
+  "folded_at": "2026-08-02",
+  "role": "Always-wearable autism conversation coach — docs, web demo, mobile companion",
+  "excluded": ["mobile-app/Tizzy.ipa"]
+}

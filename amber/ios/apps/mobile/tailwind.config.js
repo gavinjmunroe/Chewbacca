@@ -1,0 +1,93 @@
+/** @type {import('tailwindcss').Config} */
+module.exports = {
+  content: ['./app/**/*.{js,jsx,ts,tsx}', './components/**/*.{js,jsx,ts,tsx}'],
+  presets: [require('nativewind/preset')],
+  theme: {
+    extend: {
+      colors: {
+        rausch: {
+          DEFAULT: '#ff385c',
+          active: '#e00b41',
+          disabled: '#ffd1da',
+        },
+        luxe: '#460479',
+        plus: '#92174d',
+        ink: '#222222',
+        body: '#3f3f3f',
+        muted: {
+          DEFAULT: '#6a6a6a',
+          soft: '#929292',
+        },
+        hairline: {
+          DEFAULT: '#dddddd',
+          soft: '#ebebeb',
+        },
+        'border-strong': '#c1c1c1',
+        canvas: '#ffffff',
+        surface: {
+          soft: '#f7f7f7',
+          card: '#ffffff',
+          strong: '#f2f2f2',
+        },
+        'legal-link': '#428bff',
+        error: {
+          DEFAULT: '#c13515',
+          hover: '#b32505',
+        },
+      },
+      borderRadius: {
+        none: '0px',
+        xs: '4px',
+        sm: '8px',
+        md: '14px',
+        lg: '20px',
+        xl: '32px',
+        full: '9999px',
+      },
+      spacing: {
+        xxs: '2px',
+        xs: '4px',
+        sm: '8px',
+        md: '12px',
+        base: '16px',
+        lg: '24px',
+        xl: '32px',
+        xxl: '48px',
+        section: '64px',
+      },
+      fontFamily: {
+        display: ['Inter_700Bold', 'System'],
+        body: ['Inter_400Regular', 'System'],
+        medium: ['Inter_500Medium', 'System'],
+        semibold: ['Inter_600SemiBold', 'System'],
+      },
+      fontSize: {
+        'display-xl': ['28px', { lineHeight: '40px', fontWeight: '700' }],
+        'display-lg': ['22px', { lineHeight: '26px', letterSpacing: '-0.44px', fontWeight: '500' }],
+        'display-md': ['21px', { lineHeight: '30px', fontWeight: '700' }],
+        'display-sm': ['20px', { lineHeight: '24px', letterSpacing: '-0.18px', fontWeight: '600' }],
+        'title-md': ['16px', { lineHeight: '20px', fontWeight: '600' }],
+        'title-sm': ['16px', { lineHeight: '20px', fontWeight: '500' }],
+        'rating-display': [
+          '64px',
+          { lineHeight: '70px', letterSpacing: '-1px', fontWeight: '700' },
+        ],
+        'body-md': ['16px', { lineHeight: '24px', fontWeight: '400' }],
+        'body-sm': ['14px', { lineHeight: '20px', fontWeight: '400' }],
+        caption: ['14px', { lineHeight: '18px', fontWeight: '500' }],
+        'caption-sm': ['13px', { lineHeight: '16px', fontWeight: '400' }],
+        badge: ['11px', { lineHeight: '13px', fontWeight: '600' }],
+        'micro-label': ['12px', { lineHeight: '16px', fontWeight: '700' }],
+        'uppercase-tag': [
+          '8px',
+          { lineHeight: '10px', letterSpacing: '0.32px', fontWeight: '700' },
+        ],
+        'button-md': ['16px', { lineHeight: '20px', fontWeight: '500' }],
+        'button-sm': ['14px', { lineHeight: '18px', fontWeight: '500' }],
+        link: ['14px', { lineHeight: '20px', fontWeight: '400' }],
+        'nav-link': ['16px', { lineHeight: '20px', fontWeight: '600' }],
+      },
+    },
+  },
+  plugins: [],
+};

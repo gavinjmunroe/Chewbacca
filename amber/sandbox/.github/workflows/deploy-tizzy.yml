@@ -1,0 +1,51 @@
+name: Deploy Tizzy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "domains/tizzy/**"
+      - ".github/workflows/deploy-tizzy.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: domains/tizzy
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Vercel secrets
+        id: creds
+        run: |
+          if [ -z "${{ secrets.VERCEL_TOKEN }}" ] || [ -z "${{ secrets.VERCEL_ORG_ID }}" ] || [ -z "${{ secrets.VERCEL_PROJECT_ID_TIZZY }}" ]; then
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "Vercel secrets missing — skip. Set Root Directory to domains/tizzy in the Vercel dashboard."
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Node
+        if: steps.creds.outputs.present == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: domains/tizzy/package-lock.json
+
+      - name: Install Vercel CLI
+        if: steps.creds.outputs.present == 'true'
+        run: npm i -g vercel@latest
+
+      - name: Pull env & deploy production
+        if: steps.creds.outputs.present == 'true'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_TIZZY }}
+        run: |
+          vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+          vercel build --prod --token="$VERCEL_TOKEN"
+          vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"

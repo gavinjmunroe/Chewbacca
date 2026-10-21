@@ -1,0 +1,6 @@
+[codespell]
+# Skip generated/third-party files
+skip = *.pyc,*.json,*.lock,__pycache__,.git,*.yaml,*.yml,node_modules
+# Domain-specific terms: STIP is an ETF ticker (iShares 0-5 Year TIPS Bond ETF)
+# HSA = Health Savings Account (financial industry standard abbreviation)
+ignore-words-list = stip,hsa

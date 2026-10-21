@@ -1,0 +1,19 @@
+node_modules/
+.env
+.env.local
+dist/
+.DS_Store
+
+# Local MCP server config — contains an AUTH_TOKEN bearer for the
+# perplexity agent-proxy. Use .mcp.json.example as the template and
+# keep your real token out of git.
+.mcp.json
+schema-before.txt
+schema-before.sql
+
+# Local Claude Code settings (per-machine, not shared)
+.claude/
+
+# Scratch: device_bash cannot delete files, so anything to be removed is moved
+# here instead. Safe to delete the whole folder; never commit its contents.
+_to_delete/

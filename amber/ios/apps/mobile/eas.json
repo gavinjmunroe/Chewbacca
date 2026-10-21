@@ -1,0 +1,44 @@
+{
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": {
+        "resourceClass": "m-medium"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "channel": "preview",
+      "ios": {
+        "resourceClass": "m-medium",
+        "simulator": false
+      }
+    },
+    "production": {
+      "autoIncrement": false,
+      "channel": "production",
+      "ios": {
+        "resourceClass": "m-medium"
+      }
+    },
+    "kyber": {
+      "extends": "production",
+      "env": {
+        "AMBER_KYBER": "1"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleTeamId": "XJ94HGCQHA",
+        "ascAppId": "6817619431"
+      }
+    }
+  }
+}

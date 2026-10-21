@@ -1,0 +1,18 @@
+{
+  "name": "@amber/memory-engine",
+  "version": "0.1.0",
+  "description": "Memory ingestion, extraction, and retrieval engine for Amber",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@amber/shared-types": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0"
+  }
+}

@@ -1,0 +1,202 @@
+---
+version: "3.9"
+
+# FiduciaryOS Production Deployment
+#
+# Architecture:
+#   core_net:  fiduciaryos-api ← → vllm-server
+#              (model inference, portfolio management, policy enforcement)
+#
+#   alpha_net: alpha-sleeve ← → alpha-proxy ← → fiduciaryos-api
+#              (prediction market arbitrage, ISOLATED, opt-in only)
+#              alpha-sleeve has NO direct access to fiduciaryos-api or core data
+#
+# Security:
+#   - Alpha Sleeve runs in separate container with separate network namespace
+#   - Alpha Proxy is the ONLY bridge between alpha and core networks
+#   - Alpha Proxy enforces narrow API (only approved endpoints)
+#   - All containers run as non-root (UID 1001)
+#   - Read-only filesystem for alpha-sleeve
+#   - No new privileges (no_new_privileges: true)
+#   - Signing keys mounted as Docker secrets, never in images
+
+networks:
+  core_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+  alpha_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/24
+    # Alpha net is isolated: only alpha-proxy bridges to core_net
+    internal: false
+
+secrets:
+  policy_signing_key:
+    file: ./.keys/policy_signing_key.pem
+  policy_verification_key:
+    file: ./.keys/policy_verification_key_pub.pem
+
+volumes:
+  audit_logs:
+    driver: local
+  risk_guardian_state:
+    driver: local
+  model_cache:
+    driver: local
+
+services:
+
+  # -------------------------------------------------------------------------
+  # Core: FiduciaryOS API
+  # -------------------------------------------------------------------------
+  fiduciaryos-api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: fiduciaryos-api:latest
+    container_name: fiduciaryos-api
+    restart: unless-stopped
+    networks:
+      - core_net
+    ports:
+      - "8080:8080"
+    environment:
+      - VLLM_URL=http://vllm-server:8000
+      - VLLM_API_KEY=${VLLM_API_KEY:-dummy}
+      - POLICY_SIGNING_KEY_PATH=/run/secrets/policy_signing_key
+      - POLICY_VERIFICATION_KEY_PATH=/run/secrets/policy_verification_key
+      - AUDIT_LOG_DIR=/data/audit_logs
+      - RISK_GUARDIAN_STATE=/data/risk_guardian/state.json
+      - ALPHA_SLEEVE_ENABLED=${ALPHA_SLEEVE_ENABLED:-false}
+      - ALPHA_PROXY_URL=http://alpha-proxy:9090
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - WANDB_API_KEY=${WANDB_API_KEY:-}
+    secrets:
+      - policy_signing_key
+      - policy_verification_key
+    volumes:
+      - audit_logs:/data/audit_logs
+      - risk_guardian_state:/data/risk_guardian
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      - vllm-server
+
+  # -------------------------------------------------------------------------
+  # vLLM Model Server (FiduciaryOS model)
+  # -------------------------------------------------------------------------
+  vllm-server:
+    image: vllm/vllm-openai:latest
+    container_name: fiduciaryos-vllm
+    restart: unless-stopped
+    networks:
+      - core_net
+    ports:
+      - "8000:8000"
+    environment:
+      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN:-}
+    volumes:
+      - model_cache:/root/.cache/huggingface
+      - ../checkpoints:/models:ro
+    command: >
+      --model /models/dpo/final
+      --served-model-name fiduciaryos
+      --tensor-parallel-size 1
+      --max-model-len 4096
+      --gpu-memory-utilization 0.90
+      --api-key ${VLLM_API_KEY:-dummy}
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /root/.cache/pip
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # -------------------------------------------------------------------------
+  # Alpha Proxy — narrow bridge between alpha-sleeve and core
+  #
+  # SECURITY: This is the ONLY point of communication between alpha and core.
+  # The proxy enforces:
+  #   - GET /alpha/policy_context  (read-only policy artifact, no PII)
+  #   - POST /alpha/halt_signal    (one-way halt signal from core to alpha)
+  #   - POST /alpha/log_action     (one-way audit logging from alpha to core)
+  # All other endpoints are rejected with 403.
+  # -------------------------------------------------------------------------
+  alpha-proxy:
+    image: nginx:1.25-alpine
+    container_name: alpha-proxy
+    restart: unless-stopped
+    networks:
+      - core_net
+      - alpha_net
+    ports: []  # No external ports — only internal bridge
+    volumes:
+      - ./alpha-proxy-nginx.conf:/etc/nginx/nginx.conf:ro
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
+    depends_on:
+      - fiduciaryos-api
+
+  # -------------------------------------------------------------------------
+  # Alpha Sleeve — isolated prediction market arbitrage container
+  #
+  # SECURITY:
+  #   - Separate network namespace (alpha_net only)
+  #   - No access to core_net except via alpha-proxy
+  #   - Read-only filesystem
+  #   - No new privileges
+  #   - Separate audit log volume (alpha-only, reviewed independently)
+  #   - Only enabled if ALPHA_SLEEVE_ENABLED=true in client policy
+  # -------------------------------------------------------------------------
+  alpha-sleeve:
+    image: fiduciaryos-alpha-sleeve:latest
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.alpha
+    container_name: alpha-sleeve
+    restart: unless-stopped
+    networks:
+      - alpha_net
+    environment:
+      - ALPHA_PROXY_URL=http://alpha-proxy:9090
+      - POLYMARKET_API_KEY=${POLYMARKET_API_KEY:-}
+      - MANIFOLD_API_KEY=${MANIFOLD_API_KEY:-}
+      - ALPHA_SLEEVE_MAX_ALLOCATION_PCT=${ALPHA_SLEEVE_MAX_ALLOCATION_PCT:-0.05}
+    volumes:
+      - ./alpha-audit-logs:/data/alpha_audit:rw
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    profiles:
+      - alpha  # Only started with: docker compose --profile alpha up
+    depends_on:
+      - alpha-proxy

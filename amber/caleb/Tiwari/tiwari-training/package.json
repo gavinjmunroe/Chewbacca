@@ -1,0 +1,6 @@
+{
+  "name": "tiwari-training",
+  "private": true,
+  "type": "module",
+  "description": "Training harness for Tiwari primitives. Not a runtime surface — offline jobs only. See docs/TRAINING-LOOPS.md."
+}

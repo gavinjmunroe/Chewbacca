@@ -1,0 +1,60 @@
+name: iOS (legacy)
+
+# The active mobile app lives in `apps/mobile/` (React Native + Expo).
+# The SwiftUI app under `legacy-ios/AmberApp/` is retained for reference and
+# is no longer the path to the App Store. This workflow used to build the
+# root `AmberApp/...` project, which has been moved to `legacy-ios/AmberApp/`.
+#
+# It is now disabled by default and runnable only via manual dispatch, so
+# the broken paths don't fail every PR. Re-enable on push/PR only if the
+# legacy SwiftUI build is intentionally being maintained.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ios-legacy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build and test (legacy SwiftUI)
+    runs-on: macos-15
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: legacy-ios/AmberApp
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s "$DEVELOPER_DIR" || true
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Build for iOS Simulator
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project AmberApp.xcodeproj \
+            -scheme AmberApp \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            build | tail -40
+
+      - name: Run unit tests
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project AmberApp.xcodeproj \
+            -scheme AmberApp \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+            -configuration Debug \
+            test | tail -120
+
+      - name: Surface build warnings
+        if: failure()
+        run: |
+          echo "Legacy SwiftUI build failed. Re-run locally with the same command for full log."

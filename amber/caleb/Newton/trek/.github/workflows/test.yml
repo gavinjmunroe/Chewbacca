@@ -1,0 +1,67 @@
+name: Tests
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - 'server/**'
+      - '.github/workflows/test.yml'
+      - 'client/**'
+
+jobs:
+  server-tests:
+    name: Server Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install dependencies
+        run: cd server && npm ci
+
+      - name: Run tests
+        run: cd server && npm run test:coverage
+
+      - name: Upload coverage
+        if: success()
+        uses: actions/upload-artifact@v6
+        with:
+          name: backend-coverage
+          path: server/coverage/
+          retention-days: 7
+
+  client-tests:
+    name: Client Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install dependencies
+        run: cd client && npm ci
+
+      - name: Run tests
+        run: cd client && npm run test:coverage
+
+      - name: Upload coverage
+        if: success()
+        uses: actions/upload-artifact@v6
+        with:
+          name: frontend-coverage
+          path: client/coverage/
+          retention-days: 7

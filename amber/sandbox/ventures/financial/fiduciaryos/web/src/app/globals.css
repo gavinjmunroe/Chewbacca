@@ -1,0 +1,171 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  box-sizing: border-box;
+}
+
+body {
+  background-color: #ffffff;
+  color: #0a0a0a;
+  font-family: var(--font-manrope), system-ui, sans-serif;
+}
+
+.serif {
+  font-family: var(--font-source-serif), Georgia, serif;
+}
+
+/* Staggered animation delays */
+.delay-0 { animation-delay: 0s; }
+.delay-1 { animation-delay: 0.12s; }
+.delay-2 { animation-delay: 0.24s; }
+.delay-3 { animation-delay: 0.36s; }
+.delay-4 { animation-delay: 0.48s; }
+.delay-5 { animation-delay: 0.60s; }
+.delay-6 { animation-delay: 0.72s; }
+.delay-7 { animation-delay: 0.84s; }
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: #ffffff; }
+::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: #d1d5db; }
+
+/* Scroll offset for fixed nav */
+#hero, #gap, #how, #capabilities, #stats {
+  scroll-margin-top: 72px;
+}
+
+/* fadeUp keyframes used as CSS animation */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Scroll reveal */
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition:
+    opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+
+/* ─── FiduciaryOS App — Dark Design System (Apple-inspired) ───────────────── */
+/* Used by authenticated routes: /dashboard, /cashflow, /settings, /login      */
+:root {
+  --bg:           #000000;
+  --surface-1:    #1c1c1e;
+  --surface-2:    #2c2c2e;
+  --surface-3:    #3a3a3c;
+  --label:        #ffffff;
+  --label-2:      rgba(235,235,245,0.6);
+  --label-3:      rgba(235,235,245,0.3);
+  --label-4:      rgba(235,235,245,0.18);
+  --separator:    rgba(84,84,88,0.65);
+  --sep-opaque:   #38383a;
+  --green:        #30d158;
+  --green-dim:    rgba(48,209,88,0.15);
+  --blue:         #0a84ff;
+  --blue-dim:     rgba(10,132,255,0.15);
+  --red:          #ff453a;
+  --red-dim:      rgba(255,69,58,0.15);
+  --orange:       #ff9f0a;
+  --yellow:       #ffd60a;
+  --purple:       #bf5af2;
+  --font:         -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+}
+
+/* ─── Typography scale ───────────────────────────────────────────────────── */
+.t-large-title { font-size: 34px; font-weight: 700; letter-spacing: 0.37px; line-height: 1.2; }
+.t-title1      { font-size: 28px; font-weight: 700; letter-spacing: 0.36px; }
+.t-title2      { font-size: 22px; font-weight: 700; letter-spacing: 0.35px; }
+.t-title3      { font-size: 20px; font-weight: 600; letter-spacing: 0.38px; }
+.t-headline    { font-size: 17px; font-weight: 600; letter-spacing: -0.41px; }
+.t-body        { font-size: 17px; font-weight: 400; letter-spacing: -0.41px; }
+.t-callout     { font-size: 16px; font-weight: 400; letter-spacing: -0.31px; }
+.t-subhead     { font-size: 15px; font-weight: 400; letter-spacing: -0.24px; }
+.t-footnote    { font-size: 13px; font-weight: 400; letter-spacing: -0.08px; }
+.t-caption1    { font-size: 12px; font-weight: 400; letter-spacing: 0; }
+.t-caption2    { font-size: 11px; font-weight: 400; letter-spacing: 0.06px; }
+
+/* ─── Glass card ─────────────────────────────────────────────────────────── */
+.glass {
+  background: rgba(255,255,255,0.04);
+  backdrop-filter: blur(40px) saturate(1.8);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+}
+
+.glass-nav {
+  background: rgba(0,0,0,0.72);
+  backdrop-filter: blur(28px) saturate(1.9);
+  -webkit-backdrop-filter: blur(28px) saturate(1.9);
+  border-bottom: 0.5px solid rgba(255,255,255,0.1);
+}
+
+/* ─── App-route dark background ─────────────────────────────────────────── */
+/* Applied only to pages that use the authenticated dark theme */
+.app-bg { background: var(--bg); min-height: 100dvh; }
+
+/* ─── Animations (dark app) ─────────────────────────────────────────────── */
+@keyframes fadeUpDark {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeInDark {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes typingBounce {
+  0%, 100% { transform: translateY(0); opacity: 0.4; }
+  50%       { transform: translateY(-3px); opacity: 1; }
+}
+
+.fade-up { animation: fadeUpDark 0.5s cubic-bezier(0.16,1,0.3,1) both; }
+.fade-in { animation: fadeInDark 0.4s ease both; }
+
+/* ─── Skeleton loader ────────────────────────────────────────────────────── */
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-1) 25%, var(--surface-2) 50%, var(--surface-1) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: 8px;
+}
+
+/* ─── Utility ────────────────────────────────────────────────────────────── */
+.num-green { color: var(--green); }
+.num-red   { color: var(--red); }
+.num-dim   { color: var(--label-2); }

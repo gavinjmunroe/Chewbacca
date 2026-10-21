@@ -1,0 +1,21 @@
+{
+  "name": "@amber/worker",
+  "version": "0.1.0",
+  "description": "Amber background worker — drift detection, reminders, proactive suggestions",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts"
+  },
+  "dependencies": {
+    "@amber/shared-types": "workspace:*",
+    "pg": "^8.11.5"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.5",
+    "tsx": "^4.7.3",
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0"
+  }
+}

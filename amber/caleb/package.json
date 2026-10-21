@@ -1,0 +1,19 @@
+{
+  "name": "amber-imessage",
+  "version": "3.0.1",
+  "description": "amber-imessage — Newton (development) and Tiwari (production). Repository name aligns with the iMessage agent surface; Railway deploys as service `amber-agent`.",
+  "private": true,
+  "workspaces": [
+    "Newton/agent",
+    "shared/firestore"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node Newton/agent/agent.js",
+    "install:agent": "cd Newton/agent && npm install",
+    "install:identity": "cd Newton/identity && npm install",
+    "install:all": "npm install"
+  }
+}

@@ -1,0 +1,3550 @@
+{
+  "app/(auth)/sign-in.tsx": {
+    "handlers": [
+      "onChangeText=inline:setCode+v.replace+v.replace(/\\D/g, '').slice",
+      "onChangeText=setPhone",
+      "onPress=inline:WebBrowser.openBrowserAsync+WebBrowser.openBrowserAsync(privacyPolicyUrl).catch",
+      "onPress=inline:WebBrowser.openBrowserAsync+WebBrowser.openBrowserAsync(termsUrl).catch",
+      "onPress=inline:onSocial",
+      "onPress=inline:setCode+setError+setStage",
+      "onPress=onBack",
+      "onPress=onCancelSocial",
+      "onPress=onOpenOptIn",
+      "onPress=onSendCode",
+      "onPress=onVerify"
+    ],
+    "navigations": [
+      "replace:<computed>"
+    ],
+    "apiCalls": [
+      "formatDisplay",
+      "isAppleAvailable",
+      "isLikelyValid",
+      "linkSocialWithPhone",
+      "requestCode",
+      "signInWithApple",
+      "signInWithGoogle",
+      "verifyPhoneCode"
+    ],
+    "queryKeys": [],
+    "labels": []
+  },
+  "app/(gated)/_layout.tsx": {
+    "handlers": [],
+    "navigations": [],
+    "apiCalls": [
+      "claimPushRegistration",
+      "installContactsSyncResume",
+      "registerForPushNotifications"
+    ],
+    "queryKeys": [],
+    "labels": []
+  },
+  "app/(gated)/circle/[id].tsx": {
+    "handlers": [
+      "onChange=setTab",
+      "onChangeText=inline:setKindTag+t.slice",
+      "onChangeText=setDescription",
+      "onChangeText=setName",
+      "onChangeText=setSearchQuery",
+      "onClose=inline:setFeedKey+setRecOpen+setTimeout",
+      "onOpen=inline:router.push",
+      "onPress=handleDelete",
+      "onPress=handleLeave",
+      "onPress=inline:dictation.start+dictation.stop",
+      "onPress=inline:handleExport",
+      "onPress=inline:handleSave",
+      "onPress=inline:noop",
+      "onPress=inline:onChange",
+      "onPress=inline:respondToInvite",
+      "onPress=inline:router.back",
+      "onPress=inline:setColorKey",
+      "onPress=inline:setKindOther+setKindTag",
+      "onPress=inline:setRecOpen",
+      "onPress=inline:setSearchQuery",
+      "onPress=inline:setShowAllContacts",
+      "onPress=onBack",
+      "onPress=onPress",
+      "onPress=onRemove",
+      "onPress=onSearch",
+      "onPress=onToggle",
+      "onRemove=inline:toggleMember",
+      "onToggle=inline:toggleMember"
+    ],
+    "navigations": [
+      "back:<computed>",
+      "push:/(gated)/circle/search/${}?accent=${}",
+      "push:/(gated)/u/${}"
+    ],
+    "apiCalls": [
+      "addCircleLocally",
+      "createCircle",
+      "deleteCircle",
+      "filterPeople",
+      "getCircleFeed",
+      "getCircleMembers",
+      "leaveCircle",
+      "listCircles",
+      "listInboundCircles",
+      "markCircleSeen",
+      "medhaIdErrorCopy",
+      "patchCircleLocally",
+      "removeCircleLocally",
+      "respondToCircleInvite",
+      "setCircleMembers",
+      "updateCircle",
+      "useContacts",
+      "useSharedWithMe",
+      "useVoiceDictation"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Another kind",
+      "accessibilityLabel=Back",
+      "accessibilityLabel=Clear search",
+      "accessibilityLabel=Decline this circle",
+      "accessibilityLabel=Delete circle",
+      "accessibilityLabel=Export transcripts",
+      "accessibilityLabel=Join this circle",
+      "accessibilityLabel=Leave circle",
+      "accessibilityLabel=Load all contacts",
+      "accessibilityLabel=Open ${}'s profile",
+      "accessibilityLabel=Record a note for this circle",
+      "accessibilityLabel=Remove ${}",
+      "accessibilityLabel=Search transcripts"
+    ]
+  },
+  "app/(gated)/circle/search/[id].tsx": {
+    "handlers": [
+      "onChangeText=setQuery",
+      "onPress=inline:router.back",
+      "onPress=inline:setQuery"
+    ],
+    "navigations": [
+      "back:<computed>"
+    ],
+    "apiCalls": [
+      "getCircleFeed",
+      "unwrapOrThrow"
+    ],
+    "queryKeys": [
+      "<v>/feed/<v>"
+    ],
+    "labels": [
+      "accessibilityLabel=Back",
+      "accessibilityLabel=Clear search"
+    ]
+  },
+  "app/(gated)/connect/index.tsx": {
+    "handlers": [
+      "onPress=inline:router.back",
+      "onPress=inline:router.push",
+      "onPress=onPress"
+    ],
+    "navigations": [
+      "back:<computed>",
+      "push:/(gated)/u/${}"
+    ],
+    "apiCalls": [
+      "listConnections",
+      "unwrapOrThrow"
+    ],
+    "queryKeys": [
+      "connect/list"
+    ],
+    "labels": [
+      "accessibilityLabel=Back"
+    ]
+  },
+  "app/(gated)/connect/invite.tsx": {
+    "handlers": [
+      "onPress=inline:accept.mutate",
+      "onPress=inline:connect.mutate",
+      "onPress=leave",
+      "onPress=onPress"
+    ],
+    "navigations": [
+      "replace:/(gated)/home"
+    ],
+    "apiCalls": [
+      "acceptConnectRequest",
+      "connectResultCopy",
+      "errorCopy",
+      "listIncomingRequests",
+      "searchConnectUsers",
+      "sendConnectRequest",
+      "unwrapOrThrow"
+    ],
+    "queryKeys": [
+      "connect",
+      "connect/incoming",
+      "connect/invite/<v>"
+    ],
+    "labels": [
+      "accessibilityLabel=Close",
+      "accessibilityLabel=Not now"
+    ]
+  },
+  "app/(gated)/connect/search.tsx": {
+    "handlers": [
+      "onChangeText=setQuery",
+      "onPress=inline:router.back",
+      "onPress=inline:setQuery"
+    ],
+    "navigations": [
+      "back:<computed>",
+      "push:/(gated)/home"
+    ],
+    "apiCalls": [
+      "connectResultCopy",
+      "errorCopy",
+      "medhaIdErrorCopy",
+      "searchConnectUsers",
+      "sendConnectRequest",
+      "unwrapOrThrow"
+    ],
+    "queryKeys": [
+      "connect/outgoing",
+      "connect/search",
+      "connect/search/<v>"
+    ],
+    "labels": [
+      "accessibilityLabel=Back",
+      "accessibilityLabel=Clear search"
+    ]
+  },
+  "app/(gated)/contacts.tsx": {
+    "handlers": [
+      "onAdd=inline:router.push",
+      "onChangeText=setQuery",
+      "onLayout=inline:Math.abs+Math.round+setHeaderH",
+      "onPress=inline:setQuery"
+    ],
+    "navigations": [
+      "back:<computed>",
+      "push:/(gated)/connect/search",
+      "push:/(gated)/person/${}"
+    ],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Clear search",
+      "accessibilityLabel=Search your contacts"
+    ]
+  },
+  "app/(gated)/home.tsx": {
+    "handlers": [
+      "onClose=closeAsk",
+      "onClose=closeMessages",
+      "onClose=inline:setVoiceOpen",
+      "onLayout=inline:Math.abs+setPagerHeight+setPagerWidth",
+      "onSelect=inline:goToPage"
+    ],
+    "navigations": [
+      "push:/(gated)/person/${}",
+      "push:/(gated)/settings"
+    ],
+    "apiCalls": [
+      "consumeVoiceCapture",
+      "modeForTab",
+      "publishTodayActive",
+      "shouldUseRedesignedRoute",
+      "useDmThreads",
+      "useFullscreenLayer",
+      "usePagerScrollHandler",
+      "usePendingVoiceCapture"
+    ],
+    "queryKeys": [],
+    "labels": []
+  },
+  "app/(gated)/intros.tsx": {
+    "handlers": [
+      "onPress=inline:router.back",
+      "onPress=inline:showContact",
+      "onPress=onApprove",
+      "onPress=onDecline"
+    ],
+    "navigations": [
+      "back:<computed>"
+    ],
+    "apiCalls": [
+      "approveIntro",
+      "declineIntro",
+      "errorCopy",
+      "getIntroContact",
+      "listIntros",
+      "medhaIdErrorCopy",
+      "unwrapOrThrow"
+    ],
+    "queryKeys": [
+      "intros/incoming",
+      "intros/outgoing"
+    ],
+    "labels": [
+      "accessibilityLabel=Approve intro",
+      "accessibilityLabel=Back",
+      "accessibilityLabel=Decline intro",
+      "accessibilityLabel=Show contact"
+    ]
+  },
+  "app/(gated)/onboarding.tsx": {
+    "handlers": [
+      "onChange=setPrivacyTier",
+      "onChangeText=onChangeValue",
+      "onPress=onBack",
+      "onPress=onPress",
+      "onPress=onSelect",
+      "onPress=props.onCity",
+      "onPress=props.onContactsContinue",
+      "onPress=props.onName",
+      "onPress=props.onPhone",
+      "onPress=props.onPrivacy",
+      "onPress=props.onSkipCity",
+      "onPress=props.onSkipContacts",
+      "onPress=props.onSyncContacts",
+      "onSelect=inline:onChange",
+      "onSubmit=onCityContinue",
+      "onSubmit=onNameContinue",
+      "onSubmit=onPhoneContinue",
+      "onSubmitEditing=onSubmit"
+    ],
+    "navigations": [
+      "replace:/(gated)/home"
+    ],
+    "apiCalls": [
+      "callMedhaId",
+      "errorCopy",
+      "formatCount",
+      "loadSession",
+      "markOnboarded",
+      "medhaIdErrorCopy",
+      "readDeviceContacts",
+      "setSyncState",
+      "syncContactsInChunks",
+      "unwrapOrThrow",
+      "unwrapSingle"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=${}. ${}",
+      "accessibilityLabel=Go back"
+    ]
+  },
+  "app/(gated)/person/[id].tsx": {
+    "handlers": [
+      "onChangeText=setValue",
+      "onClose=inline:setEditOpen",
+      "onClose=inline:setShareFor",
+      "onLayout=inline:Math.abs+Math.floor+setWaveWidth",
+      "onLongPress=copy",
+      "onLongPress=inline:copy|undefined",
+      "onPress=a.onPress",
+      "onPress=confirmDeleteContact",
+      "onPress=copyAmberId",
+      "onPress=dictation.cancel",
+      "onPress=dictation.start",
+      "onPress=dictation.stop",
+      "onPress=inline:commit",
+      "onPress=inline:muteMutation.mutate",
+      "onPress=inline:open",
+      "onPress=inline:router.back",
+      "onPress=inline:router.push",
+      "onPress=inline:setEditOpen",
+      "onPress=inline:setShareFor",
+      "onPress=onBack",
+      "onPress=onEdit",
+      "onPress=onEnrich",
+      "onPress=onNone",
+      "onPress=onPick",
+      "onPress=onPress",
+      "onPress=open",
+      "onPress=openLinkedin",
+      "onSave=inline:onSaveField"
+    ],
+    "navigations": [
+      "back:<computed>",
+      "push:/(gated)/circle/${}",
+      "push:/(gated)/home",
+      "push:/(gated)/person/${}"
+    ],
+    "apiCalls": [
+      "callMedhaId",
+      "captureContactNote",
+      "deleteContact",
+      "enrichContacts",
+      "errorCopy",
+      "getCachedPerson",
+      "getCirclesForContact",
+      "getContact",
+      "getContactFacts",
+      "getNotificationPrefs",
+      "listFavorites",
+      "medhaIdErrorCopy",
+      "normalizeScore",
+      "resolveContactAmberUser",
+      "resolveEnrichment",
+      "sendConnectRequest",
+      "setCachedPerson",
+      "setPersonMuted",
+      "unwrapOrThrow",
+      "updateContact",
+      "useExperiences",
+      "useVoiceDictation"
+    ],
+    "queryKeys": [
+      "connect/outgoing",
+      "contact-circles/<v>",
+      "contact/<v>",
+      "contactFacts/<v>",
+      "contactLive/<v>",
+      "contacts",
+      "enrich/<v>",
+      "favorites",
+      "person/<v>",
+      "person/<v>/amber"
+    ],
+    "labels": [
+      "accessibilityHint=Long press to copy",
+      "accessibilityHint=Opens LinkedIn",
+      "accessibilityLabel=${} ${}",
+      "accessibilityLabel=Back",
+      "accessibilityLabel=Back to Amber",
+      "accessibilityLabel=Company",
+      "accessibilityLabel=Copy Amber ID",
+      "accessibilityLabel=Discard this recording",
+      "accessibilityLabel=Edit contact",
+      "accessibilityLabel=Keep this recording",
+      "accessibilityLabel=Name",
+      "accessibilityLabel=None of these",
+      "accessibilityLabel=Open ${}",
+      "accessibilityLabel=Record a note about ${}",
+      "accessibilityLabel=Refresh enrichment",
+      "accessibilityLabel=Role",
+      "accessibilityLabel=Save note",
+      "accessibilityLabel=Share experience",
+      "accessibilityLabel=This is ${}"
+    ]
+  },
+  "app/(gated)/profile.tsx": {
+    "handlers": [
+      "onPress=inline:router.back",
+      "onSelect=inline:router.replace"
+    ],
+    "navigations": [
+      "back:<computed>",
+      "replace:/(gated)/home?tab=today"
+    ],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Back"
+    ]
+  },
+  "app/(gated)/questions/[id].tsx": {
+    "handlers": [
+      "onChangeText=setAnswerText",
+      "onChangeText=setDraft",
+      "onClose=inline:setAnswerSheetOpen",
+      "onPress=inline:router.back",
+      "onPress=inline:setSelectedChoice",
+      "onPress=inline:setVisibility",
+      "onPress=inline:submitMutation.mutate",
+      "onPress=inline:suggestMutation.mutate",
+      "onPress=onClose",
+      "onPress=onSend",
+      "onRequestClose=onClose"
+    ],
+    "navigations": [
+      "back:<computed>"
+    ],
+    "apiCalls": [
+      "errorCopy",
+      "getThread",
+      "medhaIdErrorCopy",
+      "sendThreadMessage",
+      "submitAnswer",
+      "suggestAnswer",
+      "unwrapOrThrow"
+    ],
+    "queryKeys": [
+      "connect/feed",
+      "questions/inbox",
+      "questions/thread/<v>"
+    ],
+    "labels": [
+      "accessibilityLabel=Back",
+      "accessibilityLabel=Close",
+      "accessibilityLabel=Save answer",
+      "accessibilityLabel=Send",
+      "accessibilityLabel=Submit answer"
+    ]
+  },
+  "app/(gated)/u/[amberId].tsx": {
+    "handlers": [
+      "onPress=inline:router.back",
+      "onPress=onRequestIntro",
+      "onPress=openLinkedin"
+    ],
+    "navigations": [
+      "back:<computed>"
+    ],
+    "apiCalls": [
+      "createIntro",
+      "errorCopy",
+      "medhaIdErrorCopy",
+      "unwrapOrThrow",
+      "viewUserNetwork",
+      "viewUserProfile"
+    ],
+    "queryKeys": [
+      "directory/network/<v>",
+      "directory/profile/<v>"
+    ],
+    "labels": [
+      "accessibilityHint=Opens LinkedIn",
+      "accessibilityLabel=Back",
+      "accessibilityLabel=Request intro to ${}"
+    ]
+  },
+  "app/_layout.tsx": {
+    "handlers": [],
+    "navigations": [],
+    "apiCalls": [
+      "hasSession",
+      "requestCardImport",
+      "requestConnect",
+      "requestVCardImport"
+    ],
+    "queryKeys": [
+      "connections"
+    ],
+    "labels": []
+  },
+  "components/AddFavoriteModal.tsx": {
+    "handlers": [
+      "onBlur=inline:setAddingTag",
+      "onCancel=dictation.cancel",
+      "onChangeText=setCustomTag",
+      "onChangeText=setNote",
+      "onChangeText=setQ",
+      "onLayout=inline:Math.abs+Math.floor+setWaveWidth",
+      "onPress=back",
+      "onPress=close",
+      "onPress=inline:prev.filter+prev.includes+setTags",
+      "onPress=inline:setAddingTag",
+      "onPress=inline:setChosen",
+      "onPress=inline:setPicked",
+      "onPress=inline:setQ",
+      "onPress=inline:submit",
+      "onPress=onCancel",
+      "onPress=onClose",
+      "onPress=onStart",
+      "onPress=onStop",
+      "onRequestClose=close",
+      "onSubmitEditing=inline:customTag.trim+customTag.trim().toLowerCase+prev.includes+setAddingTag+setCustomTag+setTags"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "learnFromCorrection",
+      "useVoiceDictation"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Add a custom tag",
+      "accessibilityLabel=Add to favorites",
+      "accessibilityLabel=Back",
+      "accessibilityLabel=Clear",
+      "accessibilityLabel=Close",
+      "accessibilityLabel=Continue with the chosen contact",
+      "accessibilityLabel=Discard this recording",
+      "accessibilityLabel=Save this recording to the note",
+      "accessibilityLabel=Tag ${}",
+      "accessibilityLabel=Tap to record a note"
+    ]
+  },
+  "components/AgentChat.tsx": {
+    "handlers": [
+      "onChangeText=setInput",
+      "onCopy=inline:copyMessage",
+      "onDismiss=inline:setGate",
+      "onPress=inline:onPick",
+      "onPress=inline:openLink",
+      "onPress=inline:scrollToEnd+setShowScrollDown",
+      "onPress=inline:send",
+      "onPress=onClear",
+      "onPress=onCopy",
+      "onPress=onRegenerate",
+      "onPress=onRetry",
+      "onPress=onToggleExpanded",
+      "onPress=stop",
+      "onRetry=onRegenerate"
+    ],
+    "navigations": [
+      "push:/(gated)/home?tab=profile",
+      "replace:/(auth)/sign-in"
+    ],
+    "apiCalls": [
+      "askAgent",
+      "clearChatHistory",
+      "loadChatHistory",
+      "saveChatHistory",
+      "signOut"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Clear conversation",
+      "accessibilityLabel=Copy reply",
+      "accessibilityLabel=Message ${}",
+      "accessibilityLabel=Regenerate reply",
+      "accessibilityLabel=Scroll to latest",
+      "accessibilityLabel=Send",
+      "accessibilityLabel=Stop",
+      "accessibilityLabel=Try again"
+    ]
+  },
+  "components/AmberAccountCard.tsx": {
+    "handlers": [
+      "onDismiss=inline:action+onClose",
+      "onPress=inline:Linking.openURL+Linking.openURL('https://muse.ai/platform/docs').catch+setError",
+      "onPress=inline:connectGoogle",
+      "onPress=inline:leaveFor",
+      "onPress=inline:onClose+setPage",
+      "onPress=inline:setPage",
+      "onPress=inline:setRetry",
+      "onPress=onPress",
+      "onRequestClose=onClose"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "connectCalendarProvider",
+      "fetchConnections",
+      "unwrapSingle"
+    ],
+    "queryKeys": [],
+    "labels": []
+  },
+  "components/AmberLiveCard.tsx": {
+    "handlers": [
+      "onChangeText=inline:changeLink",
+      "onChangeText=inline:setCard",
+      "onPress=inline:card.links.filter+setCard",
+      "onPress=inline:changeLink",
+      "onPress=inline:persist",
+      "onPress=inline:randomUUID+setCard+setEditing",
+      "onPress=inline:setEditing",
+      "onPress=inline:setQr",
+      "onPress=inline:setRetry",
+      "onValueChange=inline:changeLink"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "loadAmberCard",
+      "saveAmberCard"
+    ],
+    "queryKeys": [],
+    "labels": []
+  },
+  "components/AmberProfileEditor.tsx": {
+    "handlers": [
+      "onChangeText=inline:setProfile",
+      "onPress=inline:save",
+      "onPress=inline:setEditing",
+      "onPress=inline:setProfile",
+      "onPress=inline:toggle",
+      "onPress=onAccountSettings",
+      "onPress=onClose",
+      "onRequestClose=inline:onClose"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "callMedhaId",
+      "membersFor",
+      "unwrapSingle"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Card color ${}",
+      "accessibilityLabel=Close profile editor"
+    ]
+  },
+  "components/AmberRock.tsx": {
+    "handlers": [
+      "onPress=close",
+      "onPress=inline:choose",
+      "onPress=toggle",
+      "onPressIn=inline:noop",
+      "onPressOut=inline:noop",
+      "onRequestClose=close"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "rockTarget"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Close circle menu",
+      "accessibilityLabel=Close circle menu and return to your network",
+      "accessibilityLabel=Your Amber rock. ${} network. Tap to choose a circle or Amber Alert."
+    ]
+  },
+  "components/AmberVoiceCall.tsx": {
+    "handlers": [
+      "onLongPress=handleForceExit",
+      "onPress=handleForceExit",
+      "onPress=onClose",
+      "onPress=onWavePress",
+      "onRequestClose=onClose",
+      "onRetry=inline:runSearch"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "useChat",
+      "useVoiceDictation"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=End voice",
+      "accessibilityLabel=Tap to exit voice"
+    ]
+  },
+  "components/AmberVoiceOverlay.tsx": {
+    "handlers": [
+      "onPress=closeOverlay",
+      "onRequestClose=closeOverlay"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "useChat"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Close"
+    ]
+  },
+  "components/AmbiguousLinksSheet.tsx": {
+    "handlers": [
+      "onPress=inline:linkContactToAccount+onResolved+setBusy+setDone+toast.error+toast.success",
+      "onPress=inline:noop",
+      "onPress=onClose",
+      "onRequestClose=onClose"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "linkContactToAccount"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=${} is ${}",
+      "accessibilityLabel=Close",
+      "accessibilityLabel=Decide later"
+    ]
+  },
+  "components/ApplePermissions.tsx": {
+    "handlers": [
+      "onPress=inline:choose"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "getApplePermission",
+      "performApplePermissionAction",
+      "permissionAction",
+      "permissionLabel"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=${} ${} permission"
+    ]
+  },
+  "components/AskChat.tsx": {
+    "handlers": [
+      "onCancel=inline:setNoteFor",
+      "onClose=inline:setSavePerson",
+      "onClose=inline:setShareNoteId",
+      "onDone=inline:saveContactNote+setNoteFor",
+      "onLayout=inline:Math.abs+Math.round+setWidth",
+      "onLongPress=onHold",
+      "onOpen=inline:router.push",
+      "onPress=inline:/^https?:\\/\\//i.test+Linking.openURL+Linking.openURL(p.url).catch",
+      "onPress=inline:/^https?:\\/\\//i.test+Linking.openURL+Linking.openURL(src.url).catch",
+      "onPress=inline:Linking.openURL+Linking.openURL(person.url).catch",
+      "onPress=inline:onAddNote",
+      "onPress=inline:onAsk",
+      "onPress=inline:onOpen",
+      "onPress=inline:onOpenPerson",
+      "onPress=inline:onRetry",
+      "onPress=inline:onSave",
+      "onPress=inline:onSuggestion",
+      "onPress=inline:resetChat",
+      "onPress=inline:router.push",
+      "onPress=inline:setShownCount",
+      "onPress=onNew",
+      "onPress=onPress",
+      "onRetry=inline:runSearch",
+      "onSave=onSaveWebPerson"
+    ],
+    "navigations": [
+      "push:/(gated)/circle/${}",
+      "push:/(gated)/circle/new"
+    ],
+    "apiCalls": [
+      "captureContactNote",
+      "clearCirclesCache",
+      "createCircle",
+      "declinePending",
+      "deleteCircle",
+      "getMyMessageAudio",
+      "leaveCircle",
+      "medhaIdErrorCopy",
+      "parseAndScheduleReminders",
+      "peopleBarBottom",
+      "publishAskBusy",
+      "registerAskStopper",
+      "registerAskSubmitter",
+      "reminderConfirmationText",
+      "resolveAnswerText",
+      "resolvePending",
+      "scheduleFailureText",
+      "setCircleMembers",
+      "useChat",
+      "useCircles",
+      "useIdleReset",
+      "useKeyboardLift",
+      "usePendingResolutions"
+    ],
+    "queryKeys": [
+      "circles",
+      "contact/<v>",
+      "contactFacts/<v>",
+      "contactLive/<v>",
+      "person/<v>",
+      "recentlyMentioned"
+    ],
+    "labels": [
+      "accessibilityHint=Press and hold for details and to leave",
+      "accessibilityLabel=${}${}. Opens LinkedIn.",
+      "accessibilityLabel=${}, already in your contacts. Opens their card.",
+      "accessibilityLabel=Make a circle",
+      "accessibilityLabel=New chat",
+      "accessibilityLabel=New circle",
+      "accessibilityLabel=Save ${} to your contacts"
+    ]
+  },
+  "components/AskOverlay.tsx": {
+    "handlers": [
+      "onCancel=inline:clearMessageClip+setRecording",
+      "onClose=onClose",
+      "onDone=inline:(transcript ?? '').trim+setRecording+stageMessageClip+submitAsk",
+      "onPress=onClose",
+      "onRequestClose=onClose"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "clearMessageClip",
+      "stageMessageClip",
+      "submitAsk",
+      "useChat",
+      "useLiveTurn"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Close"
+    ]
+  },
+  "components/AuthGate.tsx": {
+    "handlers": [
+      "onPress=handleUseCode",
+      "onPress=runPrompt"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "authenticateBiometric",
+      "getBiometricCapability",
+      "isOnboardingComplete",
+      "isSessionValid",
+      "shouldBiometricLock",
+      "signOut"
+    ],
+    "queryKeys": [],
+    "labels": []
+  },
+  "components/BuildStamp.tsx": {
+    "handlers": [
+      "onPress=inline:check"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Build information. Tap to check for an update."
+    ]
+  },
+  "components/Button.tsx": {
+    "handlers": [
+      "onBlur=inline:focusOpacity.setValue",
+      "onFocus=inline:focusOpacity.setValue",
+      "onPress=undefined|handlePress",
+      "onPressIn=undefined|pressIn",
+      "onPressOut=undefined|pressOut"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": []
+  },
+  "components/CalendarActivityFeed.tsx": {
+    "handlers": [
+      "onChange=setDay"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": []
+  },
+  "components/CalendarConnections.tsx": {
+    "handlers": [
+      "onClose=inline:setCalendar",
+      "onPress=inline:setCalendar+setSelected",
+      "onPress=inline:setSelected",
+      "onRequestClose=inline:setSelected"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=${}${}",
+      "accessibilityLabel=Close connection"
+    ]
+  },
+  "components/CalendarDateStrip.tsx": {
+    "handlers": [
+      "onPress=inline:choose",
+      "onPress=inline:expand",
+      "onPress=inline:navigate"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "dayKey",
+      "isSameDay",
+      "monthDates",
+      "moveCalendarDay",
+      "moveCalendarMonth",
+      "selectedWeekIndex"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityHint=Pull the date row down to browse a month",
+      "accessibilityLabel=Go to today",
+      "accessibilityLabel=Next ${}",
+      "accessibilityLabel=Previous ${}"
+    ]
+  },
+  "components/CalendarMonth.tsx": {
+    "handlers": [
+      "onPress=inline:moveCalendarMonth+setExpanded+setMonth",
+      "onPress=inline:onChange",
+      "onPress=inline:onChange+setExpanded",
+      "onPress=inline:setExpanded+setMonth"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "dayKey",
+      "getWeekDates",
+      "isSameDay",
+      "monthDates",
+      "moveCalendarMonth",
+      "yearProgress"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=${} days left in ${}",
+      "accessibilityLabel=Go to today",
+      "accessibilityLabel=Next month",
+      "accessibilityLabel=Previous month"
+    ]
+  },
+  "components/CalendarSyncSheet.tsx": {
+    "handlers": [
+      "onPress=inline:Linking.openSettings+Linking.openSettings().catch",
+      "onPress=inline:addAccount",
+      "onPress=inline:connect",
+      "onPress=inline:noop",
+      "onPress=inline:refresh",
+      "onPress=inline:removeAccount",
+      "onPress=onClose",
+      "onPress=onPress",
+      "onRequestClose=onClose"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "accountStatusLine",
+      "calendarAccess",
+      "connectCalendarProvider",
+      "disconnectCalendarAccount",
+      "getCalendarAccounts",
+      "readCalendarSources",
+      "requestCalendarAccess"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Add a ${} account",
+      "accessibilityLabel=Add another account",
+      "accessibilityLabel=Check again",
+      "accessibilityLabel=Close",
+      "accessibilityLabel=Disconnect ${}",
+      "accessibilityLabel=Open Settings",
+      "accessibilityLabel=Sync my calendars"
+    ]
+  },
+  "components/CaptureInput.tsx": {
+    "handlers": [
+      "onChangeText=setText",
+      "onPress=inline:capture",
+      "onPress=inline:setFile",
+      "onPress=inline:setPicking",
+      "onPress=onClose",
+      "onPress=onRecord"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "readCaptureFile",
+      "validateCaptureFile"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Attach a photo or file",
+      "accessibilityLabel=Close capture",
+      "accessibilityLabel=Note or context for Amber",
+      "accessibilityLabel=Record voice memo",
+      "accessibilityLabel=Remove attachment"
+    ]
+  },
+  "components/Card.tsx": {
+    "handlers": [
+      "onBlur=inline:focusOpacity.setValue",
+      "onFocus=inline:focusOpacity.setValue",
+      "onPress=handlePress",
+      "onPressIn=pressIn",
+      "onPressOut=pressOut"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": []
+  },
+  "components/ChatSurface.tsx": {
+    "handlers": [
+      "onChangeText=onChangeText",
+      "onChangeText=setQuery",
+      "onClose=inline:setCallVisible",
+      "onLayout=inline:anchorTo+turnTops.current.set",
+      "onPress=inline:Keyboard.dismiss",
+      "onPress=inline:Linking.openURL+Linking.openURL(s.url).catch",
+      "onPress=inline:onClarify",
+      "onPress=inline:onNo",
+      "onPress=inline:onOpenPerson",
+      "onPress=inline:onRetry",
+      "onPress=inline:onSuggestion",
+      "onPress=inline:onYes",
+      "onPress=inline:runSearch",
+      "onPress=inline:setPlusMenuOpen",
+      "onPress=inline:setPlusMenuOpen+toast.info",
+      "onPress=inline:toast.info",
+      "onPress=onCopy",
+      "onPress=onPress",
+      "onPress=onShare",
+      "onPress=onStop",
+      "onPress=onSubmit",
+      "onPress=onVoicePress",
+      "onPressIn=pressIn",
+      "onPressOut=pressOut",
+      "onRequestClose=inline:setPlusMenuOpen",
+      "onRetry=inline:submitQuery",
+      "onRetry=onRetry",
+      "onSubmit=inline:submitQuery"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "findPerson",
+      "getContact",
+      "normalizeScore",
+      "resolveAnswerText",
+      "unwrapSingle",
+      "useChat",
+      "useSyncState"
+    ],
+    "queryKeys": [
+      "me"
+    ],
+    "labels": [
+      "accessibilityLabel=Amber",
+      "accessibilityLabel=Ask Amber",
+      "accessibilityLabel=Attach",
+      "accessibilityLabel=Copy answer",
+      "accessibilityLabel=No",
+      "accessibilityLabel=Share answer",
+      "accessibilityLabel=Stop",
+      "accessibilityLabel=Try again",
+      "accessibilityLabel=Voice input",
+      "accessibilityLabel=Yes"
+    ]
+  },
+  "components/CircleFeedTab.tsx": {
+    "handlers": [
+      "onChangeText=setDraft",
+      "onPress=expression",
+      "onPress=inline:react",
+      "onPress=inline:send",
+      "onPress=inline:setPicking",
+      "onPress=inline:setShowFull",
+      "onPress=onPress"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "addComment",
+      "clearReaction",
+      "getCircleFeed",
+      "getComments",
+      "setReaction"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Post comment"
+    ]
+  },
+  "components/CircleMembersSheet.tsx": {
+    "handlers": [
+      "onChangeText=setQuery",
+      "onPress=inline:next.add+next.delete+next.has+setSelected",
+      "onPress=inline:onNew",
+      "onPress=inline:save",
+      "onPress=onClose",
+      "onRequestClose=inline:onClose"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Close members",
+      "accessibilityLabel=Search contacts to add"
+    ]
+  },
+  "components/CircleVoiceCapture.tsx": {
+    "handlers": [
+      "onCancel=onClose",
+      "onClose=onClose",
+      "onDone=inline:getConversationId+onClose+parseAndScheduleReminders+parseAndScheduleReminders(text)\n          .then+parseAndScheduleReminders(text)\n          .then((outcome) => {\n            if (outcome.failure) {\n              toast.error('Reminder not saved', scheduleFailureText(outcome.failure));\n              return;\n            }\n            const copy = reminderConfirmationText(outcome.scheduled);\n            if (copy) toast.success(copy);\n          })\n          .catch+reminderConfirmationText+resetChat+runSearch+runSearch(text, undefined, undefined, 'soundboard').then+scheduleFailureText+setNoteShare+setNoteShare(noteId, {\n            visibility: 'circle',\n            targetId: circleId,\n            targetName: circleName,\n          }).then+t.trim+toast.error+toast.success+uploadNoteAudio+uploadNoteAudio(noteId, media.uri, {\n              durationMs: media.durationMs,\n              peaks: media.peaks,\n            }).then"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "parseAndScheduleReminders",
+      "reminderConfirmationText",
+      "scheduleFailureText",
+      "setNoteShare",
+      "uploadNoteAudio",
+      "useChat"
+    ],
+    "queryKeys": [],
+    "labels": []
+  },
+  "components/CirclesGrid.tsx": {
+    "handlers": [
+      "onPress=inline:openEdit",
+      "onPress=onPress",
+      "onPress=openCreate"
+    ],
+    "navigations": [
+      "push:/(gated)/circle/${}",
+      "push:/(gated)/circle/new"
+    ],
+    "apiCalls": [
+      "useCircles"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Create your first circle",
+      "accessibilityLabel=New circle"
+    ]
+  },
+  "components/ClayContactActions.tsx": {
+    "handlers": [
+      "onChangeText=setCompany",
+      "onChangeText=setDomain",
+      "onPress=inline:deviceContactDetails+onExistingDetails+setApple+setCandidates",
+      "onPress=inline:find",
+      "onPress=inline:save"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "callMedhaId",
+      "contactDetailRows",
+      "deviceContactDetails",
+      "existingDetail",
+      "findAppleContacts",
+      "getValidSession",
+      "linkedinKey"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Company",
+      "accessibilityLabel=Company website"
+    ]
+  },
+  "components/CommunityModes.tsx": {
+    "handlers": [
+      "onPress=inline:onSelect",
+      "onPress=onAdd"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": []
+  },
+  "components/CommunityResults.tsx": {
+    "handlers": [
+      "onPress=inline:onChoose"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Open ${}"
+    ]
+  },
+  "components/CommunitySearch.tsx": {
+    "handlers": [
+      "onChangeText=onChange",
+      "onPress=inline:onWebChange",
+      "onPress=onSubmit",
+      "onSubmitEditing=onSubmit"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityHint=Turn on to search the web; turn off to search saved content",
+      "accessibilityLabel=Amber web search",
+      "accessibilityLabel=Search"
+    ]
+  },
+  "components/ConnectButton.tsx": {
+    "handlers": [
+      "onPress=onConnect",
+      "onPress=onGoToInbox"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Connect",
+      "accessibilityLabel=Wants to connect"
+    ]
+  },
+  "components/ConnectLinkBridge.tsx": {
+    "handlers": [],
+    "navigations": [],
+    "apiCalls": [
+      "consumeConnect",
+      "usePendingConnect"
+    ],
+    "queryKeys": [],
+    "labels": []
+  },
+  "components/ConnectedRolodex.tsx": {
+    "handlers": [
+      "onCancel=inline:setNewContact",
+      "onChange=setQuery|setJournalQuery",
+      "onChangeText=setDraft",
+      "onChangeText=setQuery",
+      "onClose=inline:memos.find+setMemoContext+setRecording+setReviewMemo+syncMemo",
+      "onClose=inline:noop",
+      "onClose=inline:setAccountCalendars",
+      "onClose=inline:setAccountCard+setImportIntent",
+      "onClose=inline:setActivityOpen",
+      "onClose=inline:setEditProfile",
+      "onClose=inline:setHistoryOpen",
+      "onClose=inline:setMemberCategory",
+      "onClose=inline:setProfile",
+      "onClose=inline:setSearch",
+      "onConfirm=confirmMemo",
+      "onConfirm=inline:confirmMemo",
+      "onDismiss=inline:action",
+      "onOpen=openPerson",
+      "onPress=inline:refresh",
+      "onPress=inline:setAccountCard",
+      "onPress=inline:setHistoryOpen",
+      "onPress=inline:setPanel",
+      "onPress=inline:setPanel+setPerson",
+      "onPress=inline:setPanel+setQuery",
+      "onPress=inline:write",
+      "onRequestClose=inline:setPanel",
+      "onSave=inline:circles.save",
+      "onSave=inline:circles.save+savedSpace.save+setSelfMe",
+      "onSave=inline:saveNewContact",
+      "onSubmit=inline:(tab === 'people' ? query : journalQuery).trim+setSearch+webSearchRequest"
+    ],
+    "navigations": [
+      "push:/(gated)/settings"
+    ],
+    "apiCalls": [
+      "addFavorite",
+      "callMedhaId",
+      "captureContactNote",
+      "communityNodes",
+      "consumeVoiceCapture",
+      "contactName",
+      "createGoogleMemoEvent",
+      "createReviewedContact",
+      "dayBounds",
+      "focusedMemoSorting",
+      "getCommunityGraph",
+      "getContact",
+      "listConversations",
+      "listFavorites",
+      "loadProgressively",
+      "memoActionId",
+      "orderByPeopleRank",
+      "runCaptureTask",
+      "subscribeCardImport",
+      "takeCardImport",
+      "unwrapSingle",
+      "useAmberSpace",
+      "useCommunityCircles",
+      "useJournal",
+      "useMemoQueries",
+      "usePendingVoiceCapture",
+      "webSearchRequest"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Review contact note",
+      "accessibilityLabel=Search saved contacts",
+      "accessibilityLabel=Voice memo history",
+      "accessibilityLabel=Your shareable Amber card and integrations"
+    ]
+  },
+  "components/ConnectionsSheet.tsx": {
+    "handlers": [
+      "onChangeText=setNeedle",
+      "onOpen=onOpenPerson",
+      "onPress=inline:onOpen|undefined",
+      "onPress=inline:setNeedle",
+      "onPress=onClose",
+      "onRequestClose=onClose"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "enterFullscreenLayer",
+      "matchesTerms",
+      "searchTerms"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Clear the search",
+      "accessibilityLabel=Close connections"
+    ]
+  },
+  "components/ConnectionsWeb.tsx": {
+    "handlers": [
+      "onPress=closeWebOverlay",
+      "onPress=inline:onSelect",
+      "onPress=inline:openWebOverlay",
+      "onPress=onPressPerson",
+      "onPress=recenter",
+      "onSelect=setCircleId"
+    ],
+    "navigations": [
+      "push:/(gated)/person/${}",
+      "push:/(gated)/u/${}"
+    ],
+    "apiCalls": [
+      "boardForCount",
+      "filterByCircle",
+      "filterPills",
+      "hubDiameter",
+      "inviteContactToAmber",
+      "layoutWeb",
+      "openWebOverlay",
+      "sortPeople",
+      "useWebOverlay",
+      "webCapacity",
+      "webSummary"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Center the view",
+      "accessibilityLabel=Close",
+      "accessibilityLabel=Invite ${} to Amber",
+      "accessibilityLabel=Open ${}",
+      "accessibilityLabel=Open your web",
+      "accessibilityLabel=Show ${}"
+    ]
+  },
+  "components/ContactImport.tsx": {
+    "handlers": [
+      "onChangeText=inline:(draft.emails || []).slice+edit",
+      "onChangeText=inline:(draft.phoneNumbers || []).slice+edit",
+      "onChangeText=inline:edit",
+      "onClose=inline:setScan",
+      "onPress=inline:Contacts.presentContactPickerAsync+Contacts.presentContactPickerAsync()\n                        .then+Contacts.presentContactPickerAsync()\n                        .then((c) => {\n                          if (c) {\n                            setExtra(c);\n                            setSelected(c.id);\n                          }\n                        })\n                        .catch+setError+setExtra+setSelected",
+      "onPress=inline:Linking.openSettings",
+      "onPress=inline:Linking.openSettings+request",
+      "onPress=inline:old.filter+setDrafts+setIndex",
+      "onPress=inline:photo",
+      "onPress=inline:pickFile",
+      "onPress=inline:requireOptionalNativeModule+setError+setScan",
+      "onPress=inline:save",
+      "onPress=inline:setDrafts+setIndex+setSuccess",
+      "onPress=inline:setOpen",
+      "onPress=inline:setReload",
+      "onPress=inline:setSelected",
+      "onPress=onClose"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "findAppleContacts",
+      "linkedinKey",
+      "previewContactImport",
+      "saveToAppleContacts",
+      "syncAppleContactById"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Discard this draft"
+    ]
+  },
+  "components/ContactPickerModal.tsx": {
+    "handlers": [
+      "onChangeText=setQ",
+      "onPress=inline:pick",
+      "onPress=onClose",
+      "onRequestClose=onClose"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "searchMyContacts"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Choose ${}",
+      "accessibilityLabel=Close"
+    ]
+  },
+  "components/ContactProvenance.tsx": {
+    "handlers": [
+      "onPress=inline:setRetry"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "getContactProvenance"
+    ],
+    "queryKeys": [],
+    "labels": []
+  },
+  "components/ContactReachability.tsx": {
+    "handlers": [
+      "onPress=inline:Linking.openURL+Linking.openURL(url).catch+encodeURIComponent+row.value.replace+setError"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "contactDetailRows"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=${} ${}"
+    ]
+  },
+  "components/DailyDigest.tsx": {
+    "handlers": [
+      "onChangeText=setFollowup",
+      "onPress=inline:setExpanded",
+      "onPress=inline:setRefinements",
+      "onPress=inline:setSaved+values.filter+values.includes",
+      "onPress=inline:setShowExamples",
+      "onPress=submit",
+      "onSubmitEditing=submit"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=${} example opportunity",
+      "accessibilityLabel=Follow up on daily opportunities",
+      "accessibilityLabel=Refine daily opportunities"
+    ]
+  },
+  "components/DailyFocus.tsx": {
+    "handlers": [
+      "onChangeText=setDraft",
+      "onClose=inline:setOpen",
+      "onPress=inline:explore"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Who am I looking for today?"
+    ]
+  },
+  "components/DailyReflectionFeed.tsx": {
+    "handlers": [
+      "onPress=inline:Linking.openURL",
+      "onPress=inline:answer",
+      "onSave=onIntentChange"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "filterBy",
+      "loadSession"
+    ],
+    "queryKeys": [],
+    "labels": []
+  },
+  "components/DayAgenda.tsx": {
+    "handlers": [
+      "onPress=inline:onOpenItem",
+      "onPress=inline:onToggleDone",
+      "onPress=onAddEvent",
+      "onPress=onConnect",
+      "onPress=onPress"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "agendaKey",
+      "calendarAccess",
+      "carriedFromLabel",
+      "clockTime",
+      "placeLine",
+      "setReminderDone",
+      "timeRange",
+      "useDayAgenda"
+    ],
+    "queryKeys": [
+      "agenda"
+    ],
+    "labels": [
+      "accessibilityLabel=${}, ${}",
+      "accessibilityLabel=Add an event",
+      "accessibilityLabel=Sync your calendars"
+    ]
+  },
+  "components/DirectMessagesSection.tsx": {
+    "handlers": [
+      "onOpen=onOpenThread",
+      "onPress=expression",
+      "onPress=inline:onOpen",
+      "onPress=onNewMessage"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Open chat with ${}${}",
+      "accessibilityLabel=Retry loading messages"
+    ]
+  },
+  "components/DmInfoPanel.tsx": {
+    "handlers": [
+      "onPress=inline:onOpenMessage",
+      "onPress=inline:onOpenPerson",
+      "onPress=inline:toggleMute",
+      "onPress=onClear",
+      "onPress=onExport",
+      "onPress=onPress",
+      "onPress=onReport",
+      "onPress=onToggleBlock"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "getContactRank",
+      "getNotificationPrefs",
+      "listPinnedDmMessages",
+      "setPersonMuted"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Open this message"
+    ]
+  },
+  "components/DmThreadView.tsx": {
+    "handlers": [
+      "onCancel=inline:setRecording",
+      "onChangeText=inline:runSearch+setNeedle",
+      "onChangeText=setDraft",
+      "onClose=inline:setReportOpen",
+      "onClose=inline:setSettingsOpen",
+      "onDelete=onDelete",
+      "onDone=sendVoice",
+      "onLongPress=inline:Haptics.impactAsync+Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch+onOpenPicker",
+      "onPress=inline:onClosePicker",
+      "onPress=inline:setHits+setNeedle+setSearchOpen",
+      "onPress=inline:setSearchOpen",
+      "onPress=inline:setSettingsOpen",
+      "onPress=inline:setTab",
+      "onPress=inline:submit",
+      "onPress=onBack",
+      "onPress=onBlock",
+      "onPress=onClose",
+      "onPress=onDelete",
+      "onPress=onExport",
+      "onPress=onPress",
+      "onPress=onRecord",
+      "onPress=onReport",
+      "onPress=onSearch",
+      "onRequestClose=onClose",
+      "onSend=send",
+      "onToggle=react"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "clearDmThread",
+      "enterFullscreenLayer",
+      "exportDmThread",
+      "getDmAudio",
+      "pinDmMessage",
+      "searchDmThread",
+      "sendDmText",
+      "sendDmVoice",
+      "setDmBlock",
+      "setDmReaction",
+      "useDmConversation"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Back",
+      "accessibilityLabel=Chat settings",
+      "accessibilityLabel=Close",
+      "accessibilityLabel=Close search",
+      "accessibilityLabel=React to this message",
+      "accessibilityLabel=Record a voice message",
+      "accessibilityLabel=Search this chat",
+      "accessibilityLabel=Send"
+    ]
+  },
+  "components/DockCapture.tsx": {
+    "handlers": [
+      "onPress=onVoice"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Record a voice memo"
+    ]
+  },
+  "components/DuplicateContactsSheet.tsx": {
+    "handlers": [
+      "onPress=inline:runMerge",
+      "onPress=onClose",
+      "onRequestClose=onClose"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "listDuplicateContacts",
+      "mergeContacts"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Close",
+      "accessibilityLabel=Merge ${}"
+    ]
+  },
+  "components/EditContactModal.tsx": {
+    "handlers": [
+      "onChangeText=inline:setForm",
+      "onChangeText=onChangeText",
+      "onPress=inline:save",
+      "onPress=onClose",
+      "onRequestClose=onClose"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "getContact",
+      "medhaIdErrorCopy",
+      "updateContact"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Close",
+      "accessibilityLabel=Save"
+    ]
+  },
+  "components/EditableField.tsx": {
+    "handlers": [
+      "onBlur=commit",
+      "onChangeText=setDraft",
+      "onPress=inline:setDraft+setEditing",
+      "onSubmitEditing=commit"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=${}. ${}. Tap to edit."
+    ]
+  },
+  "components/EmptyState.tsx": {
+    "handlers": [
+      "onPress=onPrimaryPress",
+      "onPress=onSecondaryPress"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": []
+  },
+  "components/ErrorState.tsx": {
+    "handlers": [
+      "onPress=onRetry"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": []
+  },
+  "components/EventDetail.tsx": {
+    "handlers": [
+      "onDismiss=inline:action+setLeaving",
+      "onPress=inline:leaveFor",
+      "onPress=inline:leaveFor+onClose+onOpenPerson",
+      "onPress=inline:mapsLinks+open",
+      "onPress=inline:onClose+setLocationOpen",
+      "onPress=inline:open",
+      "onPress=inline:setLocationOpen",
+      "onRequestClose=onClose"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "eventPeople",
+      "mapsLinks",
+      "timeRange"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Add voice memo to this plan",
+      "accessibilityLabel=Open ${}",
+      "accessibilityLabel=Open location: ${}"
+    ]
+  },
+  "components/FavoritesGrid.tsx": {
+    "handlers": [
+      "onLayout=inline:Math.abs+Math.floor+setWidth",
+      "onPress=inline:onOpenPerson",
+      "onPress=onAdd"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Pin another favorite"
+    ]
+  },
+  "components/FeedCard.tsx": {
+    "handlers": [
+      "onBlur=claim.onBlur",
+      "onChangeText=setDraft",
+      "onFocus=claim.onFocus",
+      "onLayout=inline:setRowWidth",
+      "onLongPress=onShowReactors",
+      "onPress=inline:cancelRecording",
+      "onPress=inline:finishRecording",
+      "onPress=inline:react",
+      "onPress=inline:recorder.start",
+      "onPress=inline:send",
+      "onPress=onOpenComments",
+      "onPress=onShare",
+      "onSubmitEditing=inline:send"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "applyReaction",
+      "nextKind",
+      "useCommentRecorder",
+      "useKeyboardClaim"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=${}${}, hold to see who",
+      "accessibilityLabel=Cancel recording",
+      "accessibilityLabel=Comments",
+      "accessibilityLabel=Record a voice comment",
+      "accessibilityLabel=See all comments",
+      "accessibilityLabel=Send",
+      "accessibilityLabel=Send recording",
+      "accessibilityLabel=Share"
+    ]
+  },
+  "components/FloatingAccent.tsx": {
+    "handlers": [
+      "onPress=onPress"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": []
+  },
+  "components/GlassCard.tsx": {
+    "handlers": [
+      "onPress=onPress"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": []
+  },
+  "components/GlobalSearchResults.tsx": {
+    "handlers": [
+      "onChangeText=setText",
+      "onPress=inline:Linking.openURL+Linking.openURL(person.linkedin!).catch+setError",
+      "onPress=inline:add",
+      "onPress=inline:search",
+      "onPress=inline:setError+setSelected",
+      "onPress=inline:setSelected",
+      "onSubmitEditing=inline:search"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "bustContactsCache",
+      "callMedhaId",
+      "chooseAppleContact",
+      "saveToAppleContacts",
+      "syncAppleContactById",
+      "useDiscoverySearch"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Back to search results",
+      "accessibilityLabel=Preview ${}",
+      "accessibilityLabel=Search people",
+      "accessibilityLabel=Search people on the web"
+    ]
+  },
+  "components/GoogleCalendarDestination.tsx": {
+    "handlers": [
+      "onPress=inline:onChange",
+      "onPress=inline:setRevision"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "getCalendarAccounts"
+    ],
+    "queryKeys": [],
+    "labels": []
+  },
+  "components/GoogleMailStatus.tsx": {
+    "handlers": [
+      "onPress=inline:sync"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "getMailAccounts",
+      "mailSyncMessage",
+      "syncMail"
+    ],
+    "queryKeys": [],
+    "labels": []
+  },
+  "components/GroundedConversation.tsx": {
+    "handlers": [
+      "onChangeText=setDraft",
+      "onPress=inline:ask",
+      "onPress=inline:onChoose",
+      "onSubmitEditing=inline:ask"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "generateBrief"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Amber is thinking",
+      "accessibilityLabel=Ask Amber a follow-up",
+      "accessibilityLabel=Send follow-up"
+    ]
+  },
+  "components/Header.tsx": {
+    "handlers": [
+      "onPress=handleBack"
+    ],
+    "navigations": [
+      "back:<computed>"
+    ],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Go back"
+    ]
+  },
+  "components/HeaderBack.tsx": {
+    "handlers": [
+      "onPress=inline:router.back"
+    ],
+    "navigations": [
+      "back:<computed>"
+    ],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Go back"
+    ]
+  },
+  "components/HealthSummaryPreview.tsx": {
+    "handlers": [
+      "onPress=inline:preview",
+      "onPress=inline:save"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "callMedhaId",
+      "readHealthSummary"
+    ],
+    "queryKeys": [],
+    "labels": []
+  },
+  "components/HomeTabs.tsx": {
+    "handlers": [
+      "onLayout=onLayout",
+      "onPress=inline:press"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "useAppReducedMotion"
+    ],
+    "queryKeys": [],
+    "labels": []
+  },
+  "components/HomeVoiceCapture.tsx": {
+    "handlers": [
+      "onCancel=onClose",
+      "onDone=inline:[400, 1200, 2500, 5000].map+bumps.forEach+getConversationId+notifyHomeNote+onClose+parseAndScheduleReminders+parseAndScheduleReminders(text)\n          .then+parseAndScheduleReminders(text)\n          .then((outcome) => {\n            if (outcome.failure) {\n              toast.error('Reminder not saved', scheduleFailureText(outcome.failure));\n              return;\n            }\n            const copy = reminderConfirmationText(outcome.scheduled);\n            if (copy) toast.success(copy);\n          })\n          .catch+pending.finally+pending.then+publishPendingNote+reminderConfirmationText+resetChat+runSearch+scheduleFailureText+setNoteShare+setNoteShare(noteId, scope).then+setTimeout+t.trim+toast.error+toast.success+uploadNoteAudio+uploadNoteAudio(audioNoteId, media.uri, {\n              durationMs: media.durationMs,\n              peaks: media.peaks,\n            }).then"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "parseAndScheduleReminders",
+      "publishPendingNote",
+      "reminderConfirmationText",
+      "scheduleFailureText",
+      "setNoteShare",
+      "uploadNoteAudio",
+      "useChat"
+    ],
+    "queryKeys": [],
+    "labels": []
+  },
+  "components/IconButton.tsx": {
+    "handlers": [
+      "onBlur=inline:focusOpacity.setValue",
+      "onFocus=inline:focusOpacity.setValue",
+      "onPress=handlePress",
+      "onPressIn=pressIn",
+      "onPressOut=pressOut"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": []
+  },
+  "components/ImessageChannelSection.tsx": {
+    "handlers": [
+      "onPress=inline:Linking.openURL+Linking.openURL(messagesUrl).catch+toast.error",
+      "onValueChange=inline:setLink.mutate"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "amberMessagesUrl",
+      "errorCopy",
+      "getImessageLink",
+      "isStaleLink",
+      "linkImessage",
+      "linkStatusLine",
+      "unlinkImessage",
+      "unwrapOrThrow"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Open Messages to Amber"
+    ]
+  },
+  "components/IntegrationStories.tsx": {
+    "handlers": [
+      "onClose=inline:setCalendarSetup",
+      "onPress=inline:Math.max+setStoryIndex",
+      "onPress=inline:Math.min+setStoryIndex",
+      "onPress=inline:connect",
+      "onPress=inline:select",
+      "onPress=inline:setCalendarSetup+setSelected",
+      "onPress=inline:setImporting",
+      "onPress=inline:setImporting+setMessage+setSection",
+      "onPress=inline:setSection",
+      "onPress=inline:setSelected",
+      "onRequestClose=inline:setSelected"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "connectCalendarProvider",
+      "isComingSoon",
+      "startContactsSync"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=${}${}",
+      "accessibilityLabel=Close integration"
+    ]
+  },
+  "components/KeyboardProbe.tsx": {
+    "handlers": [],
+    "navigations": [],
+    "apiCalls": [
+      "useKeyboardObserver"
+    ],
+    "queryKeys": [],
+    "labels": []
+  },
+  "components/LinkContactPrompt.tsx": {
+    "handlers": [
+      "onPress=inline:linkContactToAccount+onClose+onLinked+setLinking+toast.error+toast.success",
+      "onPress=inline:noop",
+      "onPress=onClose",
+      "onRequestClose=onClose"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "getLinkSuggestions",
+      "linkContactToAccount"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=None of these",
+      "accessibilityLabel=Not now",
+      "accessibilityLabel=Yes, ${} is them"
+    ]
+  },
+  "components/McpConnectionSection.tsx": {
+    "handlers": [
+      "onChangeText=setName",
+      "onPress=inline:Alert.alert+create",
+      "onPress=inline:Alert.alert+revoke",
+      "onPress=inline:copy",
+      "onPress=inline:run",
+      "onPress=inline:setIssued"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "callMedhaId",
+      "errorCopy",
+      "unwrapOrThrow"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Assistant name"
+    ]
+  },
+  "components/MemoComposer.tsx": {
+    "handlers": [
+      "onCancel=onClose",
+      "onClose=onClose",
+      "onConfirm=inline:onConfirm",
+      "onDone=inline:contextualMemo+new Date().toISOString+onCaptured+randomUUID+setEntry",
+      "onPress=inline:setShowActions",
+      "onPress=onClose",
+      "onRequestClose=inline:onClose"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "contextualMemo"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Close memo actions"
+    ]
+  },
+  "components/MemoConversation.tsx": {
+    "handlers": [
+      "onChangeText=setQuestion",
+      "onPress=inline:choose",
+      "onPress=inline:onAsk",
+      "onPress=inline:onContact",
+      "onPress=inline:setExpanded",
+      "onPress=send",
+      "onSave=onSaveTranscript"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "canExploreMemo",
+      "tokenizeInline"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Choose person for ${}",
+      "accessibilityLabel=Choose plan for ${}",
+      "accessibilityLabel=Continue this memo conversation",
+      "accessibilityLabel=Send memo question"
+    ]
+  },
+  "components/MemoHistory.tsx": {
+    "handlers": [
+      "onChange=setQuery",
+      "onDismiss=onDismiss",
+      "onPress=back",
+      "onPress=close",
+      "onPress=inline:onSync+onSync(local).finally+setSyncing",
+      "onPress=inline:setCursor",
+      "onPress=inline:setError+setLocalId",
+      "onPress=inline:setRetry",
+      "onPress=inline:setSelected",
+      "onRequestClose=back|close"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "getConversation",
+      "getMyMessageAudio",
+      "journalSyncLabel",
+      "listJournalHistory",
+      "memoRecordedOn"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Back to voice memories",
+      "accessibilityLabel=Close voice memo history",
+      "accessibilityLabel=Open memo: ${}"
+    ]
+  },
+  "components/MemoPlanChoice.tsx": {
+    "handlers": [
+      "onChangeText=setQuery",
+      "onPress=inline:onChange",
+      "onPress=inline:onChange+selectMemoPlan",
+      "onPress=inline:search",
+      "onSubmitEditing=inline:search"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "callMedhaId",
+      "selectMemoPlan"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Find an existing plan"
+    ]
+  },
+  "components/MemoTranscript.tsx": {
+    "handlers": [
+      "onChangeText=setDraft",
+      "onPress=inline:memoTranscript+save+setDraft",
+      "onPress=inline:setDraft",
+      "onPress=inline:setOpen"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "contextualMemo",
+      "memoTranscript"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Correct memo transcript",
+      "accessibilityLabel=Transcript"
+    ]
+  },
+  "components/MessagesPanel.tsx": {
+    "handlers": [
+      "onBlur=keyboard.onBlur",
+      "onChangeText=setQuery",
+      "onClose=inline:setNewDmOpen",
+      "onFocus=keyboard.onFocus",
+      "onOpen=openPerson",
+      "onOpen=openThread",
+      "onPress=inline:contactsReload",
+      "onPress=inline:dmsReload",
+      "onPress=inline:onOpen",
+      "onPress=inline:setExpanded",
+      "onPress=inline:setNewDmOpen",
+      "onPress=inline:setQuery",
+      "onPress=manageContacts",
+      "onPress=onClose"
+    ],
+    "navigations": [
+      "push:/(gated)/contacts"
+    ],
+    "apiCalls": [
+      "alphaSections",
+      "avatarInitial",
+      "avatarTone",
+      "circleLabels",
+      "enterFullscreenLayer",
+      "filterPeople",
+      "groupMembersByCircle",
+      "listAllCircleMembers",
+      "messageStamp",
+      "recentThreads",
+      "threadPreview",
+      "unwrapOrThrow",
+      "useCircles",
+      "useContacts",
+      "useKeyboardClaim"
+    ],
+    "queryKeys": [
+      "circles/members"
+    ],
+    "labels": [
+      "accessibilityLabel=Clear search",
+      "accessibilityLabel=Close messages",
+      "accessibilityLabel=Manage contacts, favorites and sync",
+      "accessibilityLabel=Open ${}",
+      "accessibilityLabel=Open chat with ${}${}",
+      "accessibilityLabel=Retry loading contacts",
+      "accessibilityLabel=Retry loading messages",
+      "accessibilityLabel=Search your contacts",
+      "accessibilityLabel=See ${} more conversations",
+      "accessibilityLabel=Start a direct message"
+    ]
+  },
+  "components/NetworkCanvas.tsx": {
+    "handlers": [
+      "onLayout=inline:setSize",
+      "onPress=inline:changeZoom",
+      "onPress=inline:onOpen",
+      "onPress=inline:onPress",
+      "onPress=onOpen",
+      "onPress=recenter",
+      "onSelect=onRockAction"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "arrangeCircle",
+      "visibleCircleNodes",
+      "warmCircleSearchIndex"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=${}${}",
+      "accessibilityLabel=Back to you",
+      "accessibilityLabel=Show more people",
+      "accessibilityLabel=Your personal profile",
+      "accessibilityLabel=Zoom in on network"
+    ]
+  },
+  "components/NetworkProfile.tsx": {
+    "handlers": [
+      "onClose=inline:setSourceMemo",
+      "onDismiss=inline:action+onClose",
+      "onPress=inline:leaveFor",
+      "onPress=inline:onClose+setSharing",
+      "onPress=inline:saveToAppleContacts+saveToAppleContacts({name,firstName:contact.firstName,lastName:contact.lastName,company:contact.company,title:contact.title,emails:email,phoneNumbers:phone,linkedin:contact.linkedinUrl || contact.enrichment?.linkedinUrl,...contact.enrichment?.clayFields})\n                        .then+saveToAppleContacts({name,firstName:contact.firstName,lastName:contact.lastName,company:contact.company,title:contact.title,emails:email,phoneNumbers:phone,linkedin:contact.linkedinUrl || contact.enrichment?.linkedinUrl,...contact.enrichment?.clayFields})\n                        .then(()=>setAppleMessage('Saved to Apple Contacts.')).catch+saveToAppleContacts({name,firstName:contact.firstName,lastName:contact.lastName,company:contact.company,title:contact.title,emails:email,phoneNumbers:phone,linkedin:contact.linkedinUrl || contact.enrichment?.linkedinUrl,...contact.enrichment?.clayFields})\n                        .then(()=>setAppleMessage('Saved to Apple Contacts.')).catch(e=>setAppleMessage(e.message)).finally+setAppleBusy+setAppleMessage",
+      "onPress=inline:setPhoto",
+      "onPress=inline:setRetry",
+      "onPress=inline:setSharing",
+      "onPress=inline:setSourceMemo",
+      "onPress=inline:setTab",
+      "onPress=inline:share",
+      "onRequestClose=inline:setPhoto",
+      "onRequestClose=onClose",
+      "onRetry=inline:setRetry",
+      "onValueChange=setIncludeDetails",
+      "onValueChange=setIncludeEmail",
+      "onValueChange=setIncludePhone"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "connectProfileUrl",
+      "contactName",
+      "contactSourceGroups",
+      "detailText",
+      "getContact",
+      "getContactDetails",
+      "getContactFacts",
+      "getContactRank",
+      "profileShareText",
+      "saveToAppleContacts",
+      "unwrapSingle"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Choose profile details to share",
+      "accessibilityLabel=Close photo",
+      "accessibilityLabel=Include email addresses",
+      "accessibilityLabel=Include phone numbers",
+      "accessibilityLabel=Include profile details",
+      "accessibilityLabel=Open source profile photo"
+    ]
+  },
+  "components/NetworkTopics.tsx": {
+    "handlers": [
+      "onChangeText=setDraft",
+      "onPress=inline:draft.trim+previous.some+setDraft+setTopics+topic.toLocaleLowerCase+value.toLocaleLowerCase",
+      "onPress=inline:previous.filter+setTopics"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Topic to follow",
+      "accessibilityLabel=Unfollow ${}"
+    ]
+  },
+  "components/NetworkUpdates.tsx": {
+    "handlers": [
+      "onPress=inline:onOpen",
+      "onPress=inline:setRefresh"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "askPeopleRank",
+      "generateBrief",
+      "getContactFacts",
+      "getNetworkFeed",
+      "networkFeed",
+      "rankUpdates"
+    ],
+    "queryKeys": [],
+    "labels": []
+  },
+  "components/NewContactModal.tsx": {
+    "handlers": [
+      "onChangeText=onChangeText",
+      "onChangeText=setCity",
+      "onChangeText=setCompany",
+      "onChangeText=setEmail",
+      "onChangeText=setFullName",
+      "onChangeText=setPhone",
+      "onChangeText=setTitle",
+      "onPress=inline:onSave",
+      "onPress=onCancel",
+      "onRequestClose=inline:onCancel"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": []
+  },
+  "components/NewDmModal.tsx": {
+    "handlers": [
+      "onChangeText=setQ",
+      "onPress=inline:open+sendInvite",
+      "onPress=onClose",
+      "onRequestClose=onClose"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "dmCandidates",
+      "inviteBySms",
+      "openDmThread"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Close"
+    ]
+  },
+  "components/NoteSharingModal.tsx": {
+    "handlers": [
+      "onChange=setScope",
+      "onPress=handleSave",
+      "onPress=inline:noop",
+      "onPress=onClose",
+      "onRequestClose=onClose"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "getNoteShare",
+      "setNoteShare"
+    ],
+    "queryKeys": [
+      "connect/feed",
+      "notes/feed"
+    ],
+    "labels": [
+      "accessibilityLabel=Close",
+      "accessibilityLabel=Save sharing"
+    ]
+  },
+  "components/OnboardingVoiceStep.tsx": {
+    "handlers": [
+      "onCancel=inline:setRecording",
+      "onChangeText=inline:setEntry",
+      "onChangeText=setSearch",
+      "onDone=recorded",
+      "onPress=inline:old.filter+old.includes+setPriorities",
+      "onPress=inline:old.filter+old.includes+setSelected",
+      "onPress=inline:save",
+      "onPress=inline:setRecording",
+      "onPress=onNext"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "callMedhaId",
+      "promptMemoTitle",
+      "sortMemo",
+      "syncJournalMemo",
+      "unwrapOrThrow",
+      "useJournal"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Find a contact for your answer",
+      "accessibilityLabel=Record your answer",
+      "accessibilityLabel=Review your answer"
+    ]
+  },
+  "components/OpenReminders.tsx": {
+    "handlers": [
+      "onOpen=inline:onOpen|undefined",
+      "onPress=onOpen",
+      "onPress=onToggle",
+      "onToggle=inline:toggle"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "listOpenReminders",
+      "repeatLabel",
+      "setOpenReminderDone"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=${}. Edit."
+    ]
+  },
+  "components/PendingConfirmCard.tsx": {
+    "handlers": [
+      "onChangeText=setQ",
+      "onPress=inline:choose",
+      "onPress=inline:onDecline+setChosen",
+      "onPress=inline:setSearchOpen",
+      "onPress=onPress"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "searchMyContacts"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Choose another contact",
+      "accessibilityLabel=Not now"
+    ]
+  },
+  "components/PeopleRankCard.tsx": {
+    "handlers": [
+      "onPress=inline:onRetry+setOpen"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=People Rank and six health dimensions"
+    ]
+  },
+  "components/PeopleSearchExperience.tsx": {
+    "handlers": [
+      "onPress=onClose",
+      "onRequestClose=onClose"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Close search"
+    ]
+  },
+  "components/PersonalActivity.tsx": {
+    "handlers": [
+      "onChangeText=setText",
+      "onPress=inline:save",
+      "onPress=inline:setAudience+setCircleId+setError",
+      "onPress=inline:setCircleId",
+      "onPress=onClose",
+      "onRequestClose=inline:onClose"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "listCircles",
+      "sendAmberAlert"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Close activity",
+      "accessibilityLabel=Your Amber Alert text"
+    ]
+  },
+  "components/PinnedCirclesGrid.tsx": {
+    "handlers": [
+      "onLayout=inline:Math.abs+Math.floor+setWidth",
+      "onPress=inline:onOpenCircle",
+      "onPress=onAdd"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Pin another circle"
+    ]
+  },
+  "components/PlaceCard.tsx": {
+    "handlers": [
+      "onPress=inline:Linking.openURL+Linking.openURL(href).catch",
+      "onPress=inline:onAsk"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Ask which ${}"
+    ]
+  },
+  "components/PlaceSearchResults.tsx": {
+    "handlers": [
+      "onChangeText=setCity",
+      "onChangeText=setText",
+      "onClose=inline:setEditor",
+      "onPress=inline:encodeURIComponent+open",
+      "onPress=inline:open",
+      "onPress=inline:planVisit",
+      "onPress=submit",
+      "onSubmitEditing=submit"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "blankEventDraft",
+      "useDiscoverySearch"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=City and region",
+      "accessibilityLabel=Find places",
+      "accessibilityLabel=Map for ${}",
+      "accessibilityLabel=Search places",
+      "accessibilityLabel=View ${}"
+    ]
+  },
+  "components/PlanEvents.tsx": {
+    "handlers": [
+      "onClose=inline:setConnections",
+      "onClose=inline:setSelected",
+      "onPress=inline:setConnections",
+      "onPress=inline:setRetry",
+      "onPress=inline:setSelected"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "dayBounds",
+      "timeRange",
+      "useCalendarDay"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Open event: ${}",
+      "accessibilityLabel=Refreshing calendar events"
+    ]
+  },
+  "components/PlanPeopleChoice.tsx": {
+    "handlers": [
+      "onChangeText=setQuery",
+      "onPress=inline:onChange+selected.filter+selected.includes"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Add people to this plan"
+    ]
+  },
+  "components/PlatformCard.tsx": {
+    "handlers": [
+      "onPress=onConnect",
+      "onPress=onConnect|onDisconnect"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Connect ${}"
+    ]
+  },
+  "components/PostSocial.tsx": {
+    "handlers": [
+      "onBlur=claim.onBlur",
+      "onChangeText=setDraft",
+      "onClose=onClose",
+      "onDelete=inline:remove",
+      "onFocus=claim.onFocus",
+      "onPress=inline:noop",
+      "onPress=inline:send",
+      "onPress=onClose",
+      "onPress=onDelete",
+      "onRequestClose=onClose"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "useKeyboardClaim"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Close",
+      "accessibilityLabel=Delete this comment",
+      "accessibilityLabel=Send"
+    ]
+  },
+  "components/Pressable.tsx": {
+    "handlers": [
+      "onPressIn=inline:onPressIn+setPressed",
+      "onPressOut=inline:onPressOut+setPressed"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": []
+  },
+  "components/QuickEventSheet.tsx": {
+    "handlers": [
+      "onChange=inline:setStart",
+      "onChange=setGoogleAccountId",
+      "onChangeText=setLink",
+      "onChangeText=setTitle",
+      "onPress=inline:save",
+      "onPress=inline:setMinutes",
+      "onPress=onClose",
+      "onRequestClose=inline:onClose"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "createGoogleMemoEvent",
+      "memoActionId"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Close new event",
+      "accessibilityLabel=Event title",
+      "accessibilityLabel=FaceTime link"
+    ]
+  },
+  "components/RecorderEgg.tsx": {
+    "handlers": [],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Recording, ${}. Tap to open the recorder. Drag to move."
+    ]
+  },
+  "components/RecordingWaveform.tsx": {
+    "handlers": [
+      "onLayout=inline:Math.abs+Math.floor+setMeasured|undefined"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "barsForWidth",
+      "createMeter",
+      "meterSample"
+    ],
+    "queryKeys": [],
+    "labels": []
+  },
+  "components/RelationshipCalendar.tsx": {
+    "handlers": [
+      "onChange=inline:setDay+setPickerOpen",
+      "onClose=inline:setAdding",
+      "onClose=inline:setSelected",
+      "onPress=inline:Haptics.selectionAsync+Haptics.selectionAsync().catch+setAdding",
+      "onPress=inline:setDay",
+      "onPress=inline:setMode",
+      "onPress=inline:setPickerOpen",
+      "onPress=inline:setRetry",
+      "onPress=inline:setSelected",
+      "onScrollEndDrag=inline:Math.abs+move"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "buildAgenda",
+      "callMedhaId",
+      "dayBounds",
+      "readDeviceEvents",
+      "timeRange"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityHint=Swipe up or down in the agenda to change days",
+      "accessibilityLabel=Choose calendar date",
+      "accessibilityLabel=Loading calendar",
+      "accessibilityLabel=Open ${}"
+    ]
+  },
+  "components/RelationshipDock.tsx": {
+    "handlers": [
+      "onPress=inline:onTab"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": []
+  },
+  "components/ReminderSheet.tsx": {
+    "handlers": [
+      "onPress=inline:noop",
+      "onPress=inline:onAsk+onClose+reminder.contact?.name?.trim",
+      "onPress=inline:onClose+onToggleDone",
+      "onPress=inline:onOpenPerson",
+      "onPress=onClose",
+      "onRequestClose=onClose"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Ask Amber about this reminder",
+      "accessibilityLabel=Close",
+      "accessibilityLabel=Open ${}"
+    ]
+  },
+  "components/ReportSheet.tsx": {
+    "handlers": [
+      "onChangeText=inline:setDetail+v.slice",
+      "onPress=inline:noop",
+      "onPress=inline:noop|onClose",
+      "onPress=inline:setReason",
+      "onPress=inline:submit",
+      "onRequestClose=onClose"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "reportUser"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Anything else we should know",
+      "accessibilityLabel=Cancel",
+      "accessibilityLabel=Close",
+      "accessibilityLabel=Send report"
+    ]
+  },
+  "components/RequestReview.tsx": {
+    "handlers": [
+      "onChange=inline:patch",
+      "onChange=patch",
+      "onChangeText=changeText",
+      "onChangeText=inline:patch",
+      "onChangeText=inline:patch+place.trim",
+      "onChangeText=setContactQuery",
+      "onPress=inline:Share.share+Share.share({ url: source.uri }).catch",
+      "onPress=inline:add",
+      "onPress=inline:changeText",
+      "onPress=inline:confirm",
+      "onPress=inline:patch",
+      "onPress=inline:prepare",
+      "onPress=inline:retryTranscription",
+      "onPress=inline:setSelected",
+      "onPress=onClose",
+      "onRequestClose=inline:onClose"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "actionKey",
+      "blankMemoAction",
+      "parseMemoActions",
+      "proposeMemoActions",
+      "transcribeVoice",
+      "validMemoAction"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Action text",
+      "accessibilityLabel=Add ${} action",
+      "accessibilityLabel=Close memo",
+      "accessibilityLabel=Email",
+      "accessibilityLabel=Event title",
+      "accessibilityLabel=Find contact for this action",
+      "accessibilityLabel=Full name",
+      "accessibilityLabel=Memo transcript",
+      "accessibilityLabel=Phone number",
+      "accessibilityLabel=Place context",
+      "accessibilityLabel=Preparing memo actions"
+    ]
+  },
+  "components/RichAnswer.tsx": {
+    "handlers": [
+      "onPress=inline:openLink"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "parseAnswer",
+      "plainLength",
+      "tokenizeInline"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Source ${}: ${}"
+    ]
+  },
+  "components/RouteErrorBoundary.tsx": {
+    "handlers": [
+      "onRetry=inline:retry"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": []
+  },
+  "components/SaveWebPersonModal.tsx": {
+    "handlers": [
+      "onChangeText=setNote",
+      "onPress=inline:dictation.start+dictation.stop",
+      "onPress=inline:noop",
+      "onPress=inline:toggleTag",
+      "onPress=onClose",
+      "onPress=save",
+      "onRequestClose=onClose"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "createContactFromWeb",
+      "useVoiceDictation"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Close",
+      "accessibilityLabel=Save contact"
+    ]
+  },
+  "components/ScheduleEditor.tsx": {
+    "handlers": [
+      "onChange=inline:d.toISOString+set",
+      "onChange=inline:dateToDay+set",
+      "onChange=inline:dateToTime+set",
+      "onChange=inline:set",
+      "onChangeText=inline:set",
+      "onChangeText=onChange",
+      "onPress=inline:[...days, i].sort+days.filter+onChange",
+      "onPress=inline:remove",
+      "onPress=inline:save",
+      "onPress=inline:set",
+      "onPress=inline:set+setShowNotify",
+      "onPress=inline:set+setShowRepeat",
+      "onPress=inline:setPicker",
+      "onPress=inline:setShowNotify",
+      "onPress=inline:setShowRepeat",
+      "onPress=onClose",
+      "onPress=onPress",
+      "onRequestClose=onClose",
+      "onValueChange=onChange"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "createCalendarEvent",
+      "deleteCalendarEvent",
+      "deleteOpenReminder",
+      "eventPatchFrom",
+      "reminderPatchFrom",
+      "updateCalendarEvent",
+      "updateOpenReminder"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Close",
+      "accessibilityLabel=No notification",
+      "accessibilityLabel=Repeat forever",
+      "accessibilityLabel=Save",
+      "accessibilityLabel=Title"
+    ]
+  },
+  "components/Screen.tsx": {
+    "handlers": [
+      "onRefresh=onRefresh"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": []
+  },
+  "components/SearchConversation.tsx": {
+    "handlers": [
+      "onChangeText=setDraft",
+      "onPress=onStop|send",
+      "onSubmitEditing=send"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "useChat"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Message Amber"
+    ]
+  },
+  "components/SearchDock.tsx": {
+    "handlers": [
+      "onBlur=inline:noop",
+      "onChangeText=setValue",
+      "onFocus=inline:noop",
+      "onPress=inline:setValue",
+      "onPress=stopAsk|commit|onRecord",
+      "onPress=undefined|onRecord",
+      "onSubmitEditing=commit"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "nextHoldover",
+      "peopleBarBottom",
+      "useAskBusy",
+      "useBarSuppressed",
+      "useKeyboardLift"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Clear"
+    ]
+  },
+  "components/SearchInput.tsx": {
+    "handlers": [
+      "onChangeText=onChangeText",
+      "onPress=inline:onChangeText",
+      "onPress=onSubmit",
+      "onSubmitEditing=onSubmit"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Clear search",
+      "accessibilityLabel=Search"
+    ]
+  },
+  "components/SelfDimensionsCard.tsx": {
+    "handlers": [],
+    "navigations": [],
+    "apiCalls": [
+      "coverageLine",
+      "coverageNudge",
+      "dimensionsToRadar",
+      "getSelfDimensions",
+      "hasAnyCoverage",
+      "unwrapOrThrow"
+    ],
+    "queryKeys": [
+      "me/dimensions"
+    ],
+    "labels": []
+  },
+  "components/SelfProfileSources.tsx": {
+    "handlers": [
+      "onPress=inline:onMemo",
+      "onPress=inline:setRetry"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "fetchConnections",
+      "getContactsSummary",
+      "listJournalHistory"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Open memo ${}"
+    ]
+  },
+  "components/ShareScopePicker.tsx": {
+    "handlers": [
+      "onChangeText=setQuery",
+      "onPress=inline:onSelect",
+      "onPress=inline:selectVisibility",
+      "onSelect=inline:onChange"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "filterPeople",
+      "useCircles",
+      "useContacts"
+    ],
+    "queryKeys": [],
+    "labels": []
+  },
+  "components/ShareSheet.tsx": {
+    "handlers": [
+      "onChangeText=setQuery",
+      "onPress=inline:toggle",
+      "onPress=onClose",
+      "onPress=onPress",
+      "onRequestClose=onClose"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "createShare",
+      "filterPeople",
+      "listSharesForItem",
+      "unshare",
+      "useCircles",
+      "useContacts"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Close"
+    ]
+  },
+  "components/SharedHeader.tsx": {
+    "handlers": [
+      "onPress=inline:onSelectDay",
+      "onPress=inline:setOpen",
+      "onPress=onAdd",
+      "onPress=onBack",
+      "onPress=onMessages",
+      "onPress=onPress",
+      "onPress=onSettings",
+      "onSelectDay=onSelectDay"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "publishStripExpanded",
+      "registerStripCollapse",
+      "useTodayActive"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=${} ${}",
+      "accessibilityLabel=Back",
+      "accessibilityLabel=Find people",
+      "accessibilityLabel=Settings"
+    ]
+  },
+  "components/Skeleton.tsx": {
+    "handlers": [],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Loading"
+    ]
+  },
+  "components/TabBar.tsx": {
+    "handlers": [
+      "onLongPress=onLongPress",
+      "onLongPress=onLongPressCenter",
+      "onPress=onPress",
+      "onPress=selectHome",
+      "onPress=selectYou"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Home. Press and hold to talk to Amber.",
+      "accessibilityLabel=You. Press and hold to talk to Amber."
+    ]
+  },
+  "components/Tapbacks.tsx": {
+    "handlers": [
+      "onPress=inline:Haptics.impactAsync+Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch+onPick",
+      "onPress=inline:Haptics.impactAsync+Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch+onPin",
+      "onPress=inline:onToggle"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=${}${}"
+    ]
+  },
+  "components/TextInput.tsx": {
+    "handlers": [
+      "onBlur=inline:rest.onBlur+setFocused",
+      "onFocus=inline:rest.onFocus+setFocused"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": []
+  },
+  "components/ToastHost.tsx": {
+    "handlers": [
+      "onPress=inline:dismiss"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "useToastStore"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Dismiss notification"
+    ]
+  },
+  "components/VoiceBioCard.tsx": {
+    "handlers": [
+      "onDone=inline:finish",
+      "onPress=confirmRemove",
+      "onPress=inline:setArmed",
+      "onPress=inline:stop",
+      "onPress=onPress"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "configureVoiceAudio",
+      "createMeter",
+      "deleteVoiceBio",
+      "downsamplePeaks",
+      "getMyVoiceBio",
+      "meterSample",
+      "releaseVoiceAudio",
+      "toStoredLevel",
+      "uploadVoiceBio"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Remove your voice bio",
+      "accessibilityLabel=Stop recording"
+    ]
+  },
+  "components/VoiceCommentBubble.tsx": {
+    "handlers": [
+      "onPress=inline:toggle"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "commentAudioUrl"
+    ],
+    "queryKeys": [],
+    "labels": []
+  },
+  "components/VoiceNotePlayer.tsx": {
+    "handlers": [
+      "onLayout=inline:setWidth",
+      "onPress=inline:seekToFraction",
+      "onPress=inline:toggle"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "configurePlaybackAudio",
+      "getNoteAudio",
+      "resamplePeaks"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Voice note position"
+    ]
+  },
+  "components/VoiceNoteRecorder.tsx": {
+    "handlers": [
+      "onChange=setScope",
+      "onLayout=inline:Math.abs+Math.floor+setWaveWidth",
+      "onLayout=inline:Math.floor+Math.max+setWaveWidth",
+      "onPress=cancel",
+      "onPress=inline:Haptics.selectionAsync+Haptics.selectionAsync().catch+Math.max+performance.now+recorder.pause+recorder.record+recordingDurationMs+setCaptureError+setPaused",
+      "onPress=inline:Haptics.selectionAsync+Haptics.selectionAsync().catch+finish+onCancel",
+      "onPress=inline:finish",
+      "onPress=inline:onDestination",
+      "onPress=inline:setMinimized",
+      "onRequestClose=inline:cancel",
+      "onRequestClose=inline:setMinimized|cancel",
+      "onValueChange=setShareOn"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "configureVoiceAudio",
+      "createMeter",
+      "createRecordingSession",
+      "downsamplePeaks",
+      "meterSample",
+      "recordingDurationMs",
+      "releaseVoiceAudio",
+      "toStoredLevel",
+      "transcribeVoice"
+    ],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=Add ${} action",
+      "accessibilityLabel=Cancel voice note",
+      "accessibilityLabel=Keep recording and use the rest of the app",
+      "accessibilityLabel=Save voice note",
+      "accessibilityLabel=Share this note"
+    ]
+  },
+  "components/WebDiscoverySheet.tsx": {
+    "handlers": [
+      "onClose=props.onClose"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": []
+  },
+  "components/classical.tsx": {
+    "handlers": [
+      "onLongPress=onLongPress",
+      "onPress=onPress",
+      "onPress=onPressRight"
+    ],
+    "navigations": [],
+    "apiCalls": [],
+    "queryKeys": [],
+    "labels": [
+      "accessibilityLabel=${} ${}"
+    ]
+  },
+  "components/pages/ContactsPage.tsx": {
+    "handlers": [
+      "onAdd=inline:setAddFavOpen+toast.error",
+      "onAdd=onAdd",
+      "onAdd=onAddFavorite",
+      "onClose=inline:setAddFavOpen",
+      "onClose=inline:setNewDmOpen",
+      "onClose=inline:setSheetOpen",
+      "onLayout=inline:Math.abs+setHeaderHeight",
+      "onPress=exitSelectMode",
+      "onPress=expression",
+      "onPress=inline:h.onOpenPerson+h.toggleSelect+seedCachedPerson",
+      "onPress=inline:handleShareContacts",
+      "onPress=inline:onJump",
+      "onPress=onAction",
+      "onPress=onAdd",
+      "onPress=onChoose",
+      "onPress=onClose",
+      "onPress=onEnrichAll",
+      "onPress=onEnrichSelected",
+      "onPress=onPress",
+      "onPress=onRetry",
+      "onRefresh=onRefresh",
+      "onRemove=onRemove",
+      "onRemove=onRemoveFavorite",
+      "onRequestClose=onClose",
+      "onRetry=contacts.reload",
+      "onRetry=inline:dms.reload",
+      "onRetry=inline:favoritesQuery.refetch"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "addFavorite",
+      "bustContactsCache",
+      "enrichContacts",
+      "filterPeople",
+      "firstLetter",
+      "formatCount",
+      "getContactsSummary",
+      "listFavorites",
+      "medhaIdErrorCopy",
+      "removeFavorite",
+      "reorderFavorites",
+      "saveContactsSummary",
+      "seedCachedPerson",
+      "startContactsSync",
+      "unwrapOrThrow",
+      "useContacts",
+      "useDmThreads",
+      "useSyncState"
+    ],
+    "queryKeys": [
+      "contacts/summary",
+      "favorites"
+    ],
+    "labels": [
+      "accessibilityLabel=Cancel selection",
+      "accessibilityLabel=Close",
+      "accessibilityLabel=Enrich selected contacts",
+      "accessibilityLabel=Jump to ${}",
+      "accessibilityLabel=Pin a favorite",
+      "accessibilityLabel=Retry loading favorites",
+      "accessibilityLabel=Share Your Apple Contacts",
+      "accessibilityLabel=Try again"
+    ]
+  },
+  "components/pages/HomePage.tsx": {
+    "handlers": [
+      "onCancel=inline:setAddingFor",
+      "onChange=setTab",
+      "onClose=inline:setAskLinkFor",
+      "onClose=inline:setCommentsFor",
+      "onClose=inline:setEditing",
+      "onClose=inline:setOpenEvent",
+      "onClose=inline:setPicking",
+      "onClose=inline:setReactorsFor",
+      "onClose=inline:setResolving",
+      "onClose=inline:setSharingOpen",
+      "onClose=inline:setSheetReminderId",
+      "onClose=inline:setSyncOpen",
+      "onClose=inline:setTaggedOpen",
+      "onDelete=inline:onDelete",
+      "onDelete=removeConversation",
+      "onLayout=inline:setHeaderH",
+      "onLongPress=confirmDelete",
+      "onLongPress=inline:(p.name ?? '').trim+tagActions",
+      "onOpen=inline:onOpenPerson+setTaggedOpen",
+      "onOpen=inline:onOpenReminder",
+      "onOpen=inline:setEditing+subjectFromReminder",
+      "onOpen=openInAsk",
+      "onPress=inline:collapseStrip",
+      "onPress=inline:item.note.conversationId.startsWith+onOpen",
+      "onPress=inline:noop",
+      "onPress=inline:onActions",
+      "onPress=inline:onOpen",
+      "onPress=inline:onOpenPerson",
+      "onPress=inline:router.push",
+      "onPress=inline:setResolving",
+      "onPress=inline:setShowAllToday",
+      "onPress=onAccept",
+      "onPress=onClose",
+      "onPress=onDecline",
+      "onPress=onOpen",
+      "onPress=onPress",
+      "onPress=onRetry",
+      "onPress=onToggle",
+      "onPress=openMenu",
+      "onRefresh=inline:onRefresh",
+      "onRequestClose=onClose",
+      "onRetry=inline:feedQuery.refetch+sharedQuery.refetch",
+      "onRetry=inline:inboxQuery.refetch",
+      "onRetry=inline:incomingQuery.refetch",
+      "onRetry=onRetry",
+      "onSave=inline:String+notifyHomeNote+openPerson+removePending+resolvePending+resolvePending(target.pendingId, '__new__', draft).then+setAddingFor+setSavingNew+setTimeout+toast.error",
+      "onSelectDay=inline:dayKey+setSelectedDay+setTab",
+      "onToggle=inline:onToggleReminder"
+    ],
+    "navigations": [
+      "push:/(gated)/questions/${}"
+    ],
+    "apiCalls": [
+      "acceptConnectRequest",
+      "agendaTargetOf",
+      "blankEventDraft",
+      "clearPendingNote",
+      "collapseStrip",
+      "conversationsForDay",
+      "dayBounds",
+      "dayKey",
+      "declineConnectRequest",
+      "declinePending",
+      "deleteConversation",
+      "errorCopy",
+      "getConversation",
+      "getInbox",
+      "getNetworkFeed",
+      "getWeekDates",
+      "listCircles",
+      "listConversations",
+      "listIncomingRequests",
+      "listPendingTags",
+      "localDateKey",
+      "medhaIdErrorCopy",
+      "narrowSummary",
+      "networkFeed",
+      "noteActions",
+      "postActions",
+      "resolvePending",
+      "resolvePendingTag",
+      "retagNote",
+      "setReminderDone",
+      "unwrapOrThrow",
+      "unwrapSingle",
+      "useChat",
+      "usePendingNote",
+      "usePendingResolutions",
+      "useStripExpanded"
+    ],
+    "queryKeys": [
+      "agenda",
+      "circles/list",
+      "connect/feed",
+      "connect/incoming",
+      "connect/list",
+      "contactFacts",
+      "contacts",
+      "conversations",
+      "me",
+      "notes/feed",
+      "questions/inbox",
+      "reminders/self"
+    ],
+    "labels": [
+      "accessibilityHint=Press and hold to delete",
+      "accessibilityLabel=${} options",
+      "accessibilityLabel=${} — tap to open, hold to change",
+      "accessibilityLabel=Accept",
+      "accessibilityLabel=Change or remove ${}",
+      "accessibilityLabel=Close",
+      "accessibilityLabel=Close the calendar",
+      "accessibilityLabel=Decline",
+      "accessibilityLabel=Open ${}",
+      "accessibilityLabel=Open reminder: ${}",
+      "accessibilityLabel=Say who ${} is",
+      "accessibilityLabel=Try again"
+    ]
+  },
+  "components/pages/ProfilePage.tsx": {
+    "handlers": [
+      "onAdd=inline:setPinPickerOpen",
+      "onChangeText=inline:onChangeText+t.toLowerCase",
+      "onChangeText=onChangeText",
+      "onChangeText=setBio",
+      "onChangeText=setCurrentCity",
+      "onChangeText=setDisplayName",
+      "onChangeText=setDraft",
+      "onChangeText=setHometown",
+      "onChangeText=setHoroscope",
+      "onChangeText=setMbti",
+      "onChangeText=setOccupation",
+      "onChangeText=setSchool",
+      "onChangeText=setUsername",
+      "onClose=inline:setConnectionsOpen",
+      "onClose=inline:setEditing",
+      "onClose=inline:setPinPickerOpen",
+      "onPress=inline:Clipboard.setStringAsync+Haptics.selectionAsync+Haptics.selectionAsync().catch+toast.success",
+      "onPress=inline:clear.mutate",
+      "onPress=inline:draft.trim+save.mutate",
+      "onPress=inline:mgr.copySecret",
+      "onPress=inline:mgr.revoke",
+      "onPress=inline:onPick",
+      "onPress=inline:push.mutate",
+      "onPress=inline:router.push",
+      "onPress=inline:save.mutate",
+      "onPress=inline:setDraft+setEditing",
+      "onPress=inline:setEditing",
+      "onPress=inline:setExpanded",
+      "onPress=mgr.generate",
+      "onPress=mgr.hide",
+      "onPress=onClose",
+      "onPress=onEdit",
+      "onPress=onGenerateApiKey",
+      "onPress=onOpenConnections",
+      "onPress=onPress",
+      "onPress=onShare",
+      "onRequestClose=mgr.hide",
+      "onRequestClose=onClose",
+      "onRetry=inline:meQuery.refetch",
+      "onRetry=inline:mgr.refetchKeys",
+      "onShare=onShareProfile"
+    ],
+    "navigations": [
+      "push:/(gated)/circle/${}",
+      "push:/(gated)/circle/new",
+      "push:/(gated)/person/${}",
+      "push:/(gated)/settings"
+    ],
+    "apiCalls": [
+      "buildWeb",
+      "callMedhaId",
+      "clearClayDestination",
+      "errorCopy",
+      "getClayDestination",
+      "groupMembersByCircle",
+      "listAllCircleMembers",
+      "listConnections",
+      "listPinnedCircles",
+      "listRecentlyMentioned",
+      "peopleBarClearance",
+      "pinCircle",
+      "pushContactsToClay",
+      "reorderPinnedCircles",
+      "setClayDestination",
+      "timeAgo",
+      "unpinCircle",
+      "unwrapOrThrow",
+      "unwrapSingle",
+      "useCircles",
+      "useContactsSummaryCache",
+      "usernameAvailable"
+    ],
+    "queryKeys": [
+      "apiKeys",
+      "circleFavorites",
+      "circles/members",
+      "clayDestination",
+      "connect/list",
+      "me",
+      "recentlyMentioned/<v>"
+    ],
+    "labels": [
+      "accessibilityLabel=${} ${}",
+      "accessibilityLabel=Cancel",
+      "accessibilityLabel=Close",
+      "accessibilityLabel=Close this sheet",
+      "accessibilityLabel=Copy ${}",
+      "accessibilityLabel=Copy API key",
+      "accessibilityLabel=Edit your profile",
+      "accessibilityLabel=Load ${} more",
+      "accessibilityLabel=Pin ${}",
+      "accessibilityLabel=Preview what would be sent to Clay",
+      "accessibilityLabel=Remove the Clay webhook URL",
+      "accessibilityLabel=Replace the Clay webhook URL",
+      "accessibilityLabel=Revoke ${}",
+      "accessibilityLabel=Save changes",
+      "accessibilityLabel=Save the Clay webhook URL",
+      "accessibilityLabel=Send contacts to Clay now",
+      "accessibilityLabel=Settings",
+      "accessibilityLabel=Show fewer"
+    ]
+  },
+  "components/pages/SettingsPage.tsx": {
+    "handlers": [
+      "onClose=inline:refreshCalendars+setCalendarOpen",
+      "onClose=inline:setAmbiguousOpen",
+      "onClose=inline:setDuplicatesOpen",
+      "onPress=confirmDelete",
+      "onPress=inline:Linking.openSettings+Linking.openSettings().catch",
+      "onPress=inline:Linking.openURL+Linking.openURL(\n                  `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Amber account help')}`,\n                ).catch+encodeURIComponent+toast.error",
+      "onPress=inline:Linking.openURL+Linking.openURL(privacyPolicyUrl).catch+WebBrowser.openBrowserAsync+WebBrowser.openBrowserAsync(privacyPolicyUrl).catch+toast.error",
+      "onPress=inline:Linking.openURL+Linking.openURL(termsUrl).catch+WebBrowser.openBrowserAsync+WebBrowser.openBrowserAsync(termsUrl).catch+toast.error",
+      "onPress=inline:checkDuplicates",
+      "onPress=inline:chooseMoreContacts",
+      "onPress=inline:handleSignOut",
+      "onPress=inline:revokeProcessingConsent+revokeProcessingConsent().then+revokeProcessingConsent().then(() => toast.success('Processing permissions reset.')).catch+toast.error+toast.success",
+      "onPress=inline:router.back",
+      "onPress=inline:router.push",
+      "onPress=inline:setAmbiguousOpen",
+      "onPress=inline:setCalendarOpen",
+      "onPress=inline:syncContacts",
+      "onRetry=inline:connectionsQuery.refetch"
+    ],
+    "navigations": [
+      "back:<computed>",
+      "push:/(gated)/onboarding",
+      "replace:/(auth)/sign-in"
+    ],
+    "apiCalls": [
+      "calendarAccess",
+      "callMedhaId",
+      "clearLocalUserData",
+      "errorCopy",
+      "fetchConnections",
+      "formatCount",
+      "getAmbiguousLinks",
+      "listDuplicateContacts",
+      "readCalendarSources",
+      "revokeProcessingConsent",
+      "signOut",
+      "startContactsSync",
+      "unwrapOrThrow",
+      "useContactsSummaryCache",
+      "useSyncState"
+    ],
+    "queryKeys": [
+      "agenda",
+      "connections",
+      "contactAmbiguousLinks",
+      "contactDuplicates",
+      "contacts",
+      "me"
+    ],
+    "labels": [
+      "accessibilityLabel=Back",
+      "accessibilityLabel=Preview onboarding",
+      "accessibilityLabel=Sign out"
+    ]
+  },
+  "components/profileParts.tsx": {
+    "handlers": [
+      "onPress=onAction",
+      "onPress=onPress",
+      "onPress=onRetry",
+      "onValueChange=inline:onToggleApple",
+      "onValueChange=inline:patch.mutate",
+      "onValueChange=inline:patchChannel.mutate",
+      "onValueChange=onValueChange"
+    ],
+    "navigations": [],
+    "apiCalls": [
+      "ensureNotificationPermission",
+      "errorCopy",
+      "getNotificationPrefs",
+      "getNotificationSettings",
+      "patchNotificationCategories",
+      "patchNotificationSettings",
+      "setCachedNotificationChannels"
+    ],
+    "queryKeys": [
+      "notificationSettings"
+    ],
+    "labels": [
+      "accessibilityLabel=${} ${}",
+      "accessibilityLabel=Retry"
+    ]
+  }
+}

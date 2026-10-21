@@ -169,7 +169,7 @@ const PLACE = /\b(new york city|san francisco bay area|bay area|san francisco|ne
  * same list, or the report is lying about what was tried.
  *
  * The stopword set is grammar, not domain knowledge, and that distinction comes
- * from Karthik's gather.js. There is deliberately no synonym table: a question's
+ * from amber-id's gather.js (`amber/id/src/db/gather.js`). There is deliberately no synonym table: a question's
  * own words work for "podcasting" and "orthodontist" without anybody predicting
  * them, and a hand-written vocabulary only ever fits the person who wrote it.
  */
@@ -329,8 +329,8 @@ function cmdWho(argv) {
 
   // THE PART OF THE QUESTION NOTHING ANSWERED IS A SEARCH, NOT A SHRUG.
   //
-  // Ported from Karthik's retrieval ladder in amber-id (`src/db/gather.js`).
-  // His finding: Amber routed each question to one fixed slice of the database
+  // Upstream: the retrieval ladder in `amber/id/src/db/gather.js`.
+  // The finding there: Amber routed each question to one fixed slice of the database
   // chosen by how it was PHRASED, so "who do I know at USC" read observations
   // and "who goes to USC" read nothing. The author had data everywhere, so it
   // looked fine to him and shrugged at everybody else.
@@ -420,7 +420,7 @@ function cmdWho(argv) {
     const what = `"${terms.join(" ")}"`;
     // SAY WHAT THE EVIDENCE IS, NOT JUST THAT THERE WAS SOME. A keyword hit in
     // a recorded fact is weaker than a role or a company, which are structured
-    // fields somebody filled in. Karthik's rule is that every layer is returned
+    // fields somebody filled in. The upstream rule is that every layer is returned
     // labelled with what it is so the weak evidence can be offered AS weak; the
     // failure it prevents is a list of twelve keyword matches reading like
     // twelve verified answers.

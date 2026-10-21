@@ -1,0 +1,859 @@
+import CryptoKit
+import Messages
+import SwiftUI
+
+enum Route: Hashable {
+    case home
+    case tool(String)
+    /// A new app being talked through, before it exists. Its key starts
+    /// with "new-"; when the build lands it becomes .tool(slug).
+    case draft(String)
+    /// A group card (Together.swift): one shared question, everyone's answers.
+    case card(String)
+    /// The Chewbacca team board (Team.swift), for a chat linked to it.
+    case team
+}
+
+/// A new app the chat is talking about but has not built yet.
+struct DraftApp: Codable, Identifiable, Equatable {
+    let id: String
+    var started: Date
+    var title: String
+    /// When its build was sent. Set and never cleared until the app it made
+    /// takes its place, so a build cut off by closing iMessage still lands.
+    var buildStarted: Date? = nil
+}
+
+struct BoardItem: Decodable, Identifiable {
+    var id: String { (slug ?? "") + text }
+    let text: String
+    let name: String?
+    let slug: String?
+    let title: String?
+}
+
+struct Board: Decodable {
+    struct Idea: Decodable, Identifiable { var id: String { name }; let name: String; let description: String; let about: String? }
+    struct Building: Decodable, Identifiable { var id: String { who + what }; let who: String; let what: String }
+    let comments: [BoardItem]
+    let ideas: [Idea]
+    let building: [Building]
+    /// Every project's history, oldest first.
+    var activity: [BoardEvent]? = nil
+}
+
+struct BoardEvent: Decodable, Identifiable, Hashable {
+    let id: String
+    let kind: String
+    let text: String
+    let version: Int?
+    let created_at: String
+    let name: String?
+    let slug: String
+    let title: String
+}
+
+/// One line of the conversation with a tool: what someone said, or what
+/// Amber said back.
+struct Turn: Identifiable, Equatable, Codable {
+    var id = UUID()
+    let text: String
+    let mine: Bool
+    /// Who said it, shown above the bubble the way iMessage does in a group.
+    /// Nil on your own and on Amber's.
+    var who: String? = nil
+    /// Said just now, so it types itself out instead of appearing whole.
+    var fresh = false
+    /// A project card in the home chat, by draft key or app slug.
+    var project: String? = nil
+    /// Already on screen as the live transcript, so it takes that bubble's
+    /// place without animating in again.
+    var settled = false
+}
+
+/// What is on this phone and not yet in the cloud: the conversation, apps not
+/// yet published, and where the person was. Saved on every change, so closing
+/// iMessage by accident picks up like nothing happened (Caleb, 2026-09-27).
+struct LocalState: Codable {
+    var talk: [String: [Turn]] = [:]
+    var unpublished: Set<String> = []
+    var slug: String?
+    var drafts: [DraftApp]? = []
+    var draftKey: String?
+}
+
+struct BuildState: Equatable {
+    var request: String
+    var stage: String = "thinking"
+    var detail: String = ""
+    var started = Date()
+}
+
+/// One thread's state. A thread is identified the only way iMessage allows:
+/// this device's participant id in it, which is stable per conversation.
+@MainActor
+final class ChatStore: ObservableObject {
+    @Published var session: Session?
+    /// Group cards for this chat. Lives here so it follows the chat's session.
+    let together = TogetherStore()
+    let team = TeamStore()
+    @Published var overview: ChatOverview?
+    @Published var name: String = UserDefaults.standard.string(forKey: "amber.name") ?? ""
+    @Published var error: String?
+    @Published var building: BuildState?
+    @Published var route: Route = .home { didSet { saveLocal() } }
+    /// A double tap in the preview, waiting for words.
+    @Published var pinTarget: PinDrop?
+    /// Bumped when a comment is added from outside an app's screen, so it
+    /// reloads its comments and pins.
+    @Published var notesTick = 0
+
+    /// A comment pinned to one spot on the page.
+    func dropComment(_ pin: PinDrop, _ text: String) async {
+        guard let token = session?.token else { return }
+        do {
+            struct Made: Decodable { let id: String }
+            let _: Made = try await API.call("api/tools/\(pin.slug)/notes", method: "POST",
+                                             body: ["text": text, "anchor": pin.anchor.body], chat: token)
+            notesTick += 1
+        } catch { self.error = error.localizedDescription }
+    }
+
+    /// Sign-in, Face ID or the name step is showing.
+    var firstRun: Bool {
+        personKey == nil || (!unlocked && !(personKey ?? "").isEmpty) || name.isEmpty
+    }
+    /// Where each app's row sits on home, so closing one shrinks it back
+    /// into its own row, even one made after it was opened.
+    var rowFrames: [String: CGRect] = [:]
+    /// Which row or card the open project came from.
+    var openedRow: String?
+
+    /// A blank project, grown out of the + in the top bar.
+    func startNewProject() {
+        let draft = newDraft(title: "New project")
+        openedRow = "__plus"
+        revealFrom = rowFrames["__plus"] ?? .zero
+        host?.expand()
+        withAnimation(.reveal) { route = .draft(draft.id) }
+        greet(draft.id, "What are we making? Tell me who it's for and what it needs to do.")
+    }
+
+    func rename(_ key: String, to name: String) async {
+        if let index = drafts.firstIndex(where: { $0.id == key }) {
+            drafts[index].title = name
+            return
+        }
+        guard let token = session?.token else { return }
+        do {
+            struct Renamed: Decodable { let title: String }
+            let _: Renamed = try await API.call("api/tools/\(key)/rename", method: "POST", body: ["title": name], chat: token)
+            await refresh()
+        } catch { self.error = error.localizedDescription }
+    }
+
+    /// Opens a project from a card in the home chat.
+    func openProject(_ key: String) {
+        openedRow = "card-\(key)"
+        revealFrom = rowFrames["card-\(key)"] ?? .zero
+        host?.expand()
+        withAnimation(.reveal) {
+            if drafts.contains(where: { $0.id == key }) { route = .draft(key) } else if tool(key) != nil { route = .tool(key) }
+        }
+    }
+
+    func goHome() {
+        host?.view.endEditing(true)
+        let id: String? = switch route {
+        case .tool(let slug): slug
+        case .draft(let key): key
+        case .card(let id): id
+        case .team: "team"
+        case .home: nil
+        }
+        // Back into whatever it was opened from: its card in the chat or its
+        // row in the list.
+        let candidates = [openedRow, id.map { "card-\($0)" }, id].compactMap { $0 }
+        if let frame = candidates.lazy.compactMap({ self.rowFrames[$0] }).first { revealFrom = frame }
+        // One render with the new target first, so the closing card shrinks
+        // into the right row.
+        objectWillChange.send()
+        DispatchQueue.main.async {
+            withAnimation(.reveal) { self.route = .home }
+        }
+    }
+
+    /// The row an app is opening from, so its screen grows out of that row.
+    var revealFrom: CGRect = .zero
+    @Published var loading = false
+    @Published var expanded = false
+    /// How much of the screen the keyboard covers, measured by the host.
+    @Published var keyboardInset: CGFloat = 0
+    /// The conversation with each tool, kept here so it survives the building
+    /// screen replacing the tool's screen.
+    @Published var talk: [String: [Turn]] = [:] { didSet { saveLocal() } }
+    let speaker = Speaker()
+    /// Changes being built right now, by tool, with when they started. The
+    /// conversation stays open while they run (pipecat's async tools,
+    /// processors/aggregators/async_tool_messages.py).
+    @Published var changing: [String: Date] = [:]
+    /// The half-written page and what is being added right now, per tool
+    /// ("__new" for an app being made), for the live preview.
+    @Published var liveHTML: [String: String] = [:]
+    /// What the person is saying right now, while they hold the talk bar.
+    @Published var liveSpeech: String?
+    /// From Sign in with Apple; nil until they sign in.
+    /// Nil means nobody has chosen yet. Skipping sign-in is remembered too:
+    /// kept only in memory, every reopen of iMessage asked again (seen on the
+    /// simulator, 2026-09-28).
+    @Published var personKey: String? = PersonKey.load() ?? (UserDefaults.standard.bool(forKey: "amber.signinSkipped") ? "" : nil)
+    /// Face ID passed for this open.
+    /// Amber says nothing out loud until you are past Face ID (Caleb,
+    /// 2026-09-28: "it shouldn't start talking until you get past the face id
+    /// login"). Its words still arrive as text.
+    @Published var unlocked = false { didSet { speaker.muted = !unlocked } }
+    /// New apps being talked through on this phone, shown as boxes in the list.
+    @Published var drafts: [DraftApp] = [] { didSet { saveLocal() } }
+    /// The last thing Amber said on the home screen, shown for a moment above
+    /// the talk bar instead of piling up as a conversation.
+    @Published var caption: String?
+    @Published var board: Board?
+    @Published var doing: [String: String] = [:]
+    /// Tools built but not yet shared. Nothing goes into the message box
+    /// until the person taps Publish (Caleb, 2026-09-27: "the text already
+    /// tries to send without me clicking publish").
+    @Published var unpublished: Set<String> = [] { didSet { saveLocal() } }
+
+    /// Amber says what it is building as it goes, like a person narrating
+    /// their work, but never more than once every few seconds and never over
+    /// itself (Caleb: "it should literally feel like iron man genui").
+    private var lastNarration = Date.distantPast
+    private var lastNarrated = ""
+    /// Said and shown: anything Amber says out loud is also a message
+    /// (Caleb, 2026-09-27: "everything amber says should show up on screen
+    /// as a text").
+    func narrate(_ doing: String, in key: String) {
+        // Shown as the one live build line under the conversation, and said.
+        guard doing != lastNarrated, Date().timeIntervalSince(lastNarration) > 5, !speaker.isSpeaking,
+              let token = session?.token else { return }
+        lastNarration = Date()
+        lastNarrated = doing
+        Task { await speaker.say(doing + ".", token: token) }
+    }
+
+    /// Amber opens a tool by saying what it is, out loud, once.
+    func greet(_ slug: String, _ text: String) { reply(slug, text) }
+
+    /// Amber's side of the conversation: shown, and said out loud.
+    private func reply(_ slug: String, _ text: String) {
+        withAnimation(.reveal) {
+            talk[slug, default: []].append(Turn(text: text, mine: false, fresh: true))
+        }
+        if let token = session?.token { Task { await speaker.say(text, token: token) } }
+    }
+
+    weak var host: MessagesViewController?
+    private var participant = ""
+    private var pendingInvite: (chat: String, invite: String, slug: String?, card: String?, board: Bool)?
+
+    /// This thread, not this phone. localParticipantIdentifier is the same
+    /// for this device in every thread, so keying by it alone opened one
+    /// Amber chat everywhere and the projects made with Shirley showed up in
+    /// every other thread (Caleb, 2026-09-28). A thread is its people.
+    private var thread = ""
+    private var sessionKey: String { "amber.session.t.\(thread)" }
+    private var localKey: String { "amber.local.t.\(thread)" }
+    /// Where everything lived before threads were separate, kept until the
+    /// one thread it belongs to claims it.
+    private var legacySessionKey: String { "amber.session.\(participant)" }
+    private var legacyLocalKey: String { "amber.local.\(participant)" }
+    @Published var legacySession: Session?
+    private var restoring = false
+
+    private func saveLocal() {
+        guard !restoring, !participant.isEmpty else { return }
+        var slug: String?
+        var draftKey: String?
+        if case .tool(let current) = route { slug = current }
+        if case .draft(let key) = route { draftKey = key }
+        let state = LocalState(talk: talk, unpublished: unpublished, slug: slug, drafts: drafts, draftKey: draftKey)
+        if let data = try? JSONEncoder().encode(state) { UserDefaults.standard.set(data, forKey: localKey) }
+    }
+
+    private func restoreLocal() {
+        restoring = true
+        defer { restoring = false }
+        guard let data = UserDefaults.standard.data(forKey: localKey),
+              let state = try? JSONDecoder().decode(LocalState.self, from: data) else {
+            talk = [:]; unpublished = []; drafts = []; route = .home
+            return
+        }
+        talk = state.talk
+        unpublished = state.unpublished
+        drafts = state.drafts ?? []
+        route = state.slug.map { .tool($0) } ?? state.draftKey.map { .draft($0) } ?? .home
+    }
+
+    func attach(_ conversation: MSConversation) {
+        together.chat = self
+        team.chat = self
+        participant = conversation.localParticipantIdentifier.uuidString
+        let people = ([participant] + conversation.remoteParticipantIdentifiers.map(\.uuidString)).sorted().joined(separator: ",")
+        thread = SHA256.hash(data: Data(people.utf8)).prefix(12).map { String(format: "%02x", $0) }.joined()
+        restoreLocal()
+        // Home's chat starts empty on every open; what was said is still in
+        // Amber's memory on the server, it just is not left on screen
+        // (Caleb, 2026-09-28).
+        talk[""] = []
+        if let data = UserDefaults.standard.data(forKey: sessionKey),
+           let saved = try? JSONDecoder().decode(Session.self, from: data) {
+            session = saved
+        } else {
+            session = nil
+            overview = nil
+        }
+        legacySession = session == nil
+            ? UserDefaults.standard.data(forKey: legacySessionKey).flatMap { try? JSONDecoder().decode(Session.self, from: $0) }
+            : nil
+        if let url = conversation.selectedMessage?.url, let link = Self.parse(url) {
+            // A bubble from the old shared chat claims it for this thread.
+            if session == nil, let legacy = legacySession, legacy.chat == link.chat { claimLegacy() }
+            if session?.chat != link.chat {
+                pendingInvite = link
+            } else if link.board {
+                route = .team
+            } else if let card = link.card {
+                route = .card(card)
+            } else if let slug = link.slug {
+                route = .tool(slug)
+            }
+        }
+        Task { await joinIfNeeded(); await refresh(); await together.load(); await team.load() }
+    }
+
+    func saveName(_ value: String) {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        name = trimmed
+        UserDefaults.standard.set(trimmed, forKey: "amber.name")
+        Task { await joinIfNeeded(); await refresh() }
+    }
+
+    /// Moves the projects made before threads were separate into this thread,
+    /// and only this one: the old copy is deleted as it moves.
+    func claimLegacy() {
+        guard let legacy = legacySession else { return }
+        if let local = UserDefaults.standard.data(forKey: legacyLocalKey) {
+            UserDefaults.standard.set(local, forKey: localKey)
+        }
+        UserDefaults.standard.removeObject(forKey: legacyLocalKey)
+        UserDefaults.standard.removeObject(forKey: legacySessionKey)
+        legacySession = nil
+        restoreLocal()
+        talk[""] = []
+        store(legacy)
+        Task { await refresh() }
+    }
+
+    private func store(_ value: Session) {
+        session = value
+        if let data = try? JSONEncoder().encode(value) {
+            UserDefaults.standard.set(data, forKey: sessionKey)
+        }
+    }
+
+    /// Someone tapped a bubble from a chat this device has not joined yet.
+    private func joinIfNeeded() async {
+        guard let link = pendingInvite, !name.isEmpty else { return }
+        pendingInvite = nil
+        do {
+            let joined: Joined = try await API.call(
+                "api/chats/\(link.chat)/join", method: "POST",
+                body: ["invite": link.invite, "name": name, "participant": participant])
+            store(Session(chat: joined.chat, token: joined.token, invite: link.invite, name: name))
+            if link.board { route = .team } else if let card = link.card { route = .card(card) } else if let slug = link.slug { route = .tool(slug) }
+            await team.load()
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    /// This thread's chat on the server, started now if nobody has talked to
+    /// Amber here yet. A group card is often the first thing done in a thread,
+    /// and without this it had no chat to live in and did nothing.
+    func ensureSession() async -> Session? {
+        if let session { return session }
+        do {
+            let started: Joined = try await API.call(
+                "api/chats", method: "POST", body: ["name": name, "participant": participant])
+            store(Session(chat: started.chat, token: started.token, invite: started.invite ?? "", name: name))
+        } catch {
+            self.error = error.localizedDescription
+        }
+        return session
+    }
+
+    func refresh() async {
+        guard let session else { return }
+        loading = overview == nil
+        defer { loading = false }
+        do {
+            overview = try await API.call("api/chats/\(session.chat)", chat: session.token)
+        } catch {
+            self.error = error.localizedDescription
+        }
+        await reconcileDrafts()
+    }
+
+    func tool(_ slug: String) -> ToolItem? { overview?.tools.first { $0.slug == slug } }
+
+    // MARK: making and changing
+
+    func make(_ request: String) async {
+        let text = request.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        error = nil
+        building = BuildState(request: text)
+        do {
+            if session == nil {
+                let started: Joined = try await API.call(
+                    "api/chats", method: "POST",
+                    body: ["name": name, "participant": participant])
+                store(Session(chat: started.chat, token: started.token, invite: started.invite ?? "", name: name))
+            }
+            guard let session else { return }
+            let result = try await API.build(
+                request: text, chat: session.chat, slug: nil, token: session.token
+            ) { [weak self] stage, detail, _, _ in
+                self?.building?.stage = stage
+                self?.building?.detail = detail
+            }
+            await refresh()
+            building = nil
+            route = .tool(result.slug)
+            unpublished.insert(result.slug)
+        } catch {
+            building = nil
+            self.error = error.localizedDescription
+        }
+    }
+
+    func change(_ slug: String, _ request: String) async {
+        let text = request.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let session, !text.isEmpty else { return }
+        error = nil
+        building = BuildState(request: text)
+        do {
+            _ = try await API.build(request: text, chat: session.chat, slug: slug, token: session.token) {
+                [weak self] stage, detail, _, _ in
+                self?.building?.stage = stage
+                self?.building?.detail = detail
+            }
+            await refresh()
+            building = nil
+        } catch {
+            building = nil
+            self.error = error.localizedDescription
+        }
+    }
+
+    /// Loads the chat's conversation with Amber, all of it on the home screen
+    /// ("" key) or only what was said about one tool.
+    func loadTalk(_ slug: String) async {
+        guard let session, !slug.hasPrefix("new-") else { return }
+        struct Row: Decodable { let role: String; let text: String; let name: String? }
+        struct Rows: Decodable { let turns: [Row] }
+        let path = slug.isEmpty ? "api/chats/\(session.chat)/agent" : "api/chats/\(session.chat)/agent?slug=\(slug)"
+        guard let url = URL(string: path, relativeTo: API.base) else { return }
+        var request = URLRequest(url: url)
+        request.setValue(session.token, forHTTPHeaderField: "x-amber-chat")
+        guard let (data, _) = try? await URLSession.shared.data(for: request),
+              let rows = try? JSONDecoder().decode(Rows.self, from: data) else { return }
+        let fromServer: [Turn] = rows.turns.compactMap { row in
+            switch row.role {
+            case "person":
+                if let name = row.name, name != session.name { return Turn(text: row.text, mine: false, who: name) }
+                return Turn(text: row.text, mine: true)
+            case "amber": return Turn(text: row.text, mine: false)
+            default: return nil
+            }
+        }
+        // The phone may hold newer lines than the server (a "ready" said while
+        // offline, or a reply not yet logged); never let the older copy win.
+        if fromServer.count >= (talk[slug]?.count ?? 0) { talk[slug] = fromServer }
+    }
+
+    /// Say something to the chat's agent, on the home screen (slug "") or
+    /// about one tool. The fast words never reach a model, the way
+    /// Chewbacca's music does (docs/VOICE-DESIGN.md): keep it, put it back,
+    /// open it.
+    func say(_ slug: String, _ text: String, open: (URL) -> Void = { _ in }) async {
+        let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !words.isEmpty else { return }
+        error = nil
+        if liveSpeech != nil {
+            talk[slug, default: []].append(Turn(text: words, mine: true, settled: true))
+            liveSpeech = nil
+        } else {
+            withAnimation(.reveal) { talk[slug, default: []].append(Turn(text: words, mine: true)) }
+        }
+        do {
+            if session == nil {
+                let started: Joined = try await API.call(
+                    "api/chats", method: "POST", body: ["name": name, "participant": participant])
+                store(Session(chat: started.chat, token: started.token, invite: started.invite ?? "", name: name))
+            }
+        } catch {
+            self.error = error.localizedDescription
+            return
+        }
+        guard let session else { return }
+        let lower = words.lowercased()
+        let hasDraft = !slug.isEmpty && tool(slug)?.has_draft == true
+        if hasDraft, lower.range(of: #"^(keep (it|this|that)|looks good|ship it|yes keep)"#, options: .regularExpression) != nil {
+            await keep(slug); reply(slug, "Kept. Everyone in the chat has it now."); return
+        }
+        if hasDraft, lower.range(of: #"^(put it back|undo|never ?mind|throw (it|that) (out|away))"#, options: .regularExpression) != nil {
+            await discard(slug); reply(slug, "Put back. Nothing changed."); return
+        }
+        if !slug.isEmpty, lower.range(of: #"^(open|show me)( it| the (draft|app|site))?$"#, options: .regularExpression) != nil,
+           let url = openURL(slug, draft: hasDraft) {
+            reply(slug, "Opening it in Safari. Come back and tell me what you think.")
+            open(url); return
+        }
+        // Chewbacca's filler rule: nothing said for two seconds, say something
+        // shaped to the request, not "um".
+        var answered = false
+        let subject = slug.isEmpty ? "that" : (tool(slug)?.title ?? "it")
+        let filler = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            if !answered, let self { self.reply(slug, "Let me look at \(subject).") }
+        }
+        // The filler only covers the wait: its bubble goes when the real
+        // answer comes, so it never sits above it (Caleb, 2026-09-27).
+        let fillerText = "Let me look at \(subject)."
+        func dropFiller() {
+            filler.cancel()
+            withAnimation(.messageIn) { talk[slug]?.removeAll { !$0.mine && $0.text == fillerText } }
+        }
+        do {
+            struct Action: Decodable { let type: String; let slug: String?; let request: String? }
+            struct Reply: Decodable { let reply: String; let actions: [Action] }
+            var body: [String: Any] = ["text": words]
+            if !slug.isEmpty, !slug.hasPrefix("new-") { body["slug"] = slug }
+            let result: Reply = try await API.call(
+                "api/chats/\(session.chat)/agent", method: "POST", body: body, chat: session.token,
+                person: (personKey ?? "").isEmpty ? nil : personKey)
+            answered = true
+            dropFiller()
+            filler.cancel()
+            self.reply(slug, result.reply)
+            for action in result.actions {
+                switch action.type {
+                case "change":
+                    if let target = action.slug, let request = action.request, changing[target] == nil {
+                        Task { await self.changeInBackground(target, request, tell: slug) }
+                    }
+                case "make":
+                    if let request = action.request { Task { await self.makeInBackground(request, tell: slug) } }
+                case "open":
+                    // Only when they asked to see it: Safari opening by itself
+                    // mid-conversation was jarring (simulator run, 2026-09-27).
+                    guard words.range(of: #"\b(open|show|see|pull (it )?up|look at)\b"#, options: [.regularExpression, .caseInsensitive]) != nil else { break }
+                    if let target = action.slug, let url = openURL(target, draft: tool(target)?.has_draft == true) { open(url) }
+                default: break
+                }
+            }
+        } catch {
+            answered = true
+            dropFiller()
+            filler.cancel()
+            self.error = error.localizedDescription
+        }
+    }
+
+    /// A new tool, built while the conversation keeps going. When it is ready
+    /// Amber says so and puts the bubble in the message field to send.
+    private func makeInBackground(_ request: String, tell key: String) async {
+        guard let session else { return }
+        // Every new app has a box from the first word; one started from the
+        // home screen gets one now.
+        let draftKey = key.hasPrefix("new-") ? key : newDraft(title: "New app").id
+        let since = drafts.first { $0.id == draftKey }?.started ?? Date()
+        // The name stays "New project" until the app names itself: the first
+        // 40 characters of the request cut off mid-word in the top bar
+        // ('A simple web page that just displays "He', 2026-09-28).
+        changing[draftKey] = Date()
+        if let index = drafts.firstIndex(where: { $0.id == draftKey }) { drafts[index].buildStarted = Date() }
+        defer { changing[draftKey] = nil }
+        do {
+            let result = try await API.build(request: request, chat: session.chat, slug: nil, token: session.token) { [weak self] _, _, html, doing in
+                if let html { self?.liveHTML[draftKey] = html }
+                if let doing { self?.doing[draftKey] = doing; self?.narrate(doing, in: draftKey) }
+            }
+            liveHTML[draftKey] = nil
+            doing[draftKey] = nil
+            await refresh()
+            guard drafts.contains(where: { $0.id == draftKey }) else { return }
+            await adopt(draftKey, into: result.slug, since: since)
+        } catch {
+            liveHTML[draftKey] = nil
+            doing[draftKey] = nil
+            // Closing iMessage drops the connection, but the server keeps
+            // building; the app it makes is picked up the next time Amber opens
+            // (Caleb, 2026-09-28: the draft stayed on home beside the app).
+            changing[draftKey] = nil
+            await refresh()
+            if drafts.contains(where: { $0.id == draftKey }) {
+                reply(draftKey, "I lost the connection while building. If it finishes, it will take this box's place.")
+            }
+        }
+    }
+
+    /// The draft's conversation and chat card move into the app it became.
+    private func adopt(_ draftKey: String, into slug: String, since: Date) async {
+        guard let session else { return }
+        struct Moved: Decodable { let moved: Int }
+        let _: Moved? = try? await API.call(
+            "api/chats/\(session.chat)/adopt", method: "POST",
+            body: ["slug": slug, "since": ISO8601DateFormatter().string(from: since.addingTimeInterval(-2))],
+            chat: session.token)
+        withAnimation(.reveal) {
+            talk[slug] = (talk[draftKey] ?? []) + (talk[slug] ?? [])
+            talk[draftKey] = nil
+            drafts.removeAll { $0.id == draftKey }
+            if var home = talk[""] {
+                for index in home.indices where home[index].project == draftKey { home[index].project = slug }
+                talk[""] = home
+            }
+            unpublished.insert(slug)
+            if route == .draft(draftKey) { route = .tool(slug) }
+        }
+        let title = tool(slug)?.title ?? "it"
+        reply(slug, "\(title) is ready. Try it in the preview, then tap Send to chat when you want everyone to have it.")
+    }
+
+    /// Drafts whose build finished while nobody was watching: each takes the
+    /// newest app this person made after its build started.
+    private var reconciling = false
+    func reconcileDrafts() async {
+        guard !reconciling, let tools = overview?.tools else { return }
+        reconciling = true
+        defer { reconciling = false }
+        let parser = ISO8601DateFormatter()
+        parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        func date(_ iso: String) -> Date? { parser.date(from: iso) ?? ISO8601DateFormatter().date(from: iso) }
+        var claimed = Set<String>()
+        for draft in drafts {
+            // Drafts from before buildStarted existed only show a build began
+            // by their title, which the build sets to the request.
+            let titled = draft.title != "New project" && draft.title != "New app"
+            guard let started = draft.buildStarted ?? (titled ? draft.started : nil), changing[draft.id] == nil else { continue }
+            let match = tools
+                .filter { $0.made_by == name && !claimed.contains($0.slug) }
+                .filter { (date($0.updated_at) ?? .distantPast) >= started.addingTimeInterval(-10) }
+                .min { (date($0.updated_at) ?? .distantPast) < (date($1.updated_at) ?? .distantPast) }
+            if let match {
+                claimed.insert(match.slug)
+                await adopt(draft.id, into: match.slug, since: draft.started)
+            }
+        }
+    }
+
+    /// A new app box, shown in the list right away.
+    @discardableResult
+    func newDraft(title: String) -> DraftApp {
+        let draft = DraftApp(id: "new-\(UUID().uuidString.prefix(8))", started: Date(), title: title)
+        withAnimation(.reveal) { drafts.insert(draft, at: 0) }
+        return draft
+    }
+
+    /// Talking on the home screen. Talk about making something opens a new
+    /// app box and moves into it; anything else is answered in a caption.
+    /// Caleb: "if I start talking abt making a new app, it should smoothly
+    /// create a new app box and we migrate to there."
+    func homeSay(_ text: String) async {
+        let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !words.isEmpty else { return }
+        let aboutNewApp = words.range(
+            of: #"\b(make|build|create|start|need|want|set up|let'?s do)\b.*\b(app|list|tracker|sheet|page|site|website|tool|sign.?up|calendar|schedule|poll|board|game)\b"#,
+            options: [.regularExpression, .caseInsensitive]) != nil
+        if aboutNewApp {
+            // What you said lands in the home chat, a card for the new project
+            // lands under it, and the card grows into the project (Caleb,
+            // 2026-09-27: "a seamless transition when you switch to being on
+            // a project").
+            let draft = newDraft(title: "New project")
+            let spoken = liveSpeech != nil
+            let asked = Turn(text: words, mine: true, settled: spoken)
+            let card = Turn(text: "", mine: false, project: draft.id)
+            talk["", default: []].append(asked)
+            liveSpeech = nil
+            withAnimation(.messageIn) { talk["", default: []].append(card) }
+            try? await Task.sleep(for: .milliseconds(700))
+            revealFrom = rowFrames["card-\(draft.id)"] ?? .zero
+            // Closing shrinks into the project's row: the card is only the
+            // doorway, and it leaves home once the project is open (Caleb,
+            // 2026-09-28: "when you go back to the main page, this shouldn't
+            // be there"). What was asked lives inside the project.
+            openedRow = draft.id
+            withAnimation(.reveal) { route = .draft(draft.id) }
+            try? await Task.sleep(for: .milliseconds(500))
+            talk[""]?.removeAll { $0.id == asked.id || $0.id == card.id }
+            await say(draft.id, words)
+            return
+        }
+        await say("", words)
+    }
+
+    func catchUp(_ slug: String) async -> String? {
+        guard let session else { return nil }
+        struct News: Decodable { let text: String }
+        let news: News? = try? await API.call("api/chats/\(session.chat)/catchup", method: "POST", body: ["slug": slug], chat: session.token)
+        return news?.text
+    }
+
+    func loadBoard() async {
+        guard let session else { return }
+        board = try? await API.call("api/chats/\(session.chat)/board", chat: session.token)
+    }
+
+    /// Builds a change without taking over the screen, then says when it is
+    /// ready. A failure is always said out loud, never left silent.
+    private func changeInBackground(_ slug: String, _ request: String, tell key: String? = nil) async {
+        guard let session else { return }
+        changing[slug] = Date()
+        defer { changing[slug] = nil }
+        do {
+            _ = try await API.build(request: request, chat: session.chat, slug: slug, token: session.token) { [weak self] _, _, html, doing in
+                if let html { self?.liveHTML[slug] = html }
+                if let doing { self?.doing[slug] = doing; self?.narrate(doing, in: slug) }
+            }
+            liveHTML[slug] = nil
+            doing[slug] = nil
+            await refresh()
+            struct Summary: Decodable { let text: String }
+            let summary: Summary? = try? await API.call("api/tools/\(slug)/draft-summary", chat: session.token)
+            reply(key ?? slug, "It's updated. " + (summary?.text ?? ""))
+        } catch {
+            reply(key ?? slug, "That change didn't go through. \(error.localizedDescription)")
+        }
+    }
+
+    func keep(_ slug: String, announce: Bool = true) async {
+        guard let session else { return }
+        do {
+            struct Kept: Decodable { let version: Int? }
+            let _: Kept = try await API.call("api/tools/\(slug)/keep", method: "POST", chat: session.token)
+            await refresh()
+            if announce, let kept = tool(slug) { send(kept, note: "I changed this. Tap to see it.") }
+            unpublished.remove(slug)
+        } catch { self.error = error.localizedDescription }
+    }
+
+    func discard(_ slug: String) async {
+        guard let session else { return }
+        do {
+            struct Done: Decodable { let ok: Bool? }
+            let _: Done = try await API.call("api/tools/\(slug)/discard", method: "POST", chat: session.token)
+            await refresh()
+        } catch { self.error = error.localizedDescription }
+    }
+
+    // MARK: the bubble
+
+    func link(for slug: String?, card: String? = nil, board: Bool = false) -> URL? {
+        guard let session else { return nil }
+        var components = URLComponents(url: API.base, resolvingAgainstBaseURL: false)
+        components?.path = "/c/\(session.chat)"
+        var fragment = "i=\(session.invite)"
+        if let slug { fragment += "&t=\(slug)" }
+        if let card { fragment += "&k=\(card)" }
+        if board { fragment += "&b=1" }
+        components?.fragment = fragment
+        return components?.url
+    }
+
+    /// The tool, opened as this person. The token rides after #, so it never
+    /// reaches a server log.
+    func openURL(_ slug: String, draft: Bool = false) -> URL? {
+        guard let session else { return nil }
+        let query = draft ? "?embed=1&draft=1" : "?embed=1"
+        return URL(string: "\(API.base.absoluteString)/t/\(slug)\(query)#m=\(session.token)")
+    }
+
+    /// Puts a bubble in the message field. The person still taps send, which
+    /// is how iMessage apps are meant to behave and why nothing goes out alone.
+    /// What a bubble in the message box will publish once it is sent.
+    private var pendingSend: [String: Bool] = [:]  // slug -> is a change
+
+    /// Puts the new app's bubble in the message box. It is published when the
+    /// person sends it.
+    func publish(_ slug: String) {
+        guard let made = tool(slug) else { return }
+        pendingSend[slug] = false
+        send(made, note: "I made this for us. Tap to open it.")
+    }
+
+    /// Puts a bubble for the waiting change in the message box; the change
+    /// goes live for everyone when the bubble is sent.
+    /// A bubble for the app in the conversation, nothing more: publishing a
+    /// waiting change online is its own button.
+    func shareToChat(_ slug: String) {
+        guard let made = tool(slug) else { return }
+        pendingSend[slug] = false
+        send(made, note: unpublished.contains(slug) ? "I made this for us. Tap to open it." : "Take a look at this. Tap to open it.")
+    }
+
+    func publishChanges(_ slug: String) {
+        guard let changed = tool(slug) else { return }
+        pendingSend[slug] = true
+        send(changed, note: "I changed this. Tap to see it.")
+    }
+
+    func didSend(_ url: URL?) {
+        if let url, let link = Self.parse(url), link.board { team.didSendBoard(); return }
+        guard let url, let link = Self.parse(url), let slug = link.slug, let isChange = pendingSend[slug] else { return }
+        pendingSend[slug] = nil
+        unpublished.remove(slug)
+        if let token = session?.token {
+            Task {
+                struct Done: Decodable { let ok: Bool }
+                let _: Done? = try? await API.call("api/tools/\(slug)/shared", method: "POST", body: [:], chat: token)
+            }
+        }
+        if isChange { Task { await keep(slug, announce: false) } }
+    }
+
+    func send(_ tool: ToolItem, note: String) {
+        guard let conversation = host?.activeConversation, let url = link(for: tool.slug) else { return }
+        let layout = MSMessageTemplateLayout()
+        // Game Pigeon's bubble says "Let's play 8-ball". Ours says what it is
+        // for (Caleb, 2026-09-27: "instead of let's play 8-ball, it says
+        // let's build together").
+        layout.caption = "Let's build together"
+        layout.subcaption = "\(tool.title). \(note)"
+        layout.trailingSubcaption = "Amber"
+        layout.image = BubbleArt.render(title: tool.title, by: tool.made_by ?? name)
+        let message = MSMessage(session: conversation.selectedMessage?.session ?? MSSession())
+        message.layout = layout
+        message.url = url
+        message.summaryText = "\(name) shared \(tool.title)"
+        conversation.insert(message) { [weak self] problem in
+            if let problem { Task { @MainActor in self?.error = problem.localizedDescription } }
+        }
+        host?.requestPresentationStyle(.compact)
+    }
+
+    static func parse(_ url: URL) -> (chat: String, invite: String, slug: String?, card: String?, board: Bool)? {
+        let parts = url.path.split(separator: "/")
+        guard parts.count == 2, parts[0] == "c" else { return nil }
+        var values: [String: String] = [:]
+        for pair in (url.fragment ?? "").split(separator: "&") {
+            let kv = pair.split(separator: "=", maxSplits: 1).map(String.init)
+            if kv.count == 2 { values[kv[0]] = kv[1] }
+        }
+        guard let invite = values["i"] else { return nil }
+        return (String(parts[1]), invite, values["t"], values["k"], values["b"] == "1")
+    }
+}

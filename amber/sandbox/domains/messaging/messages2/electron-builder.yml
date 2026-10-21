@@ -1,0 +1,41 @@
+appId: com.calebnewton.messages2
+productName: Messages2
+directories:
+  buildResources: build
+  output: dist
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintrc.js,.prettierrc,.prettierignore,.editorconfig,.gitignore,tsconfig.*.json,tsconfig.json}'
+  - '!{tailwind.config.js,postcss.config.js,components.json}'
+asarUnpack:
+  - resources/**
+  - '**/node_modules/better-sqlite3/**'
+mac:
+  category: public.app-category.social-networking
+  target:
+    - target: dmg
+      arch:
+        - arm64
+    - target: zip
+      arch:
+        - arm64
+  # Sign with Caleb's Apple Development cert so the signature hash stays
+  # stable across rebuilds. TCC binds Full Disk Access to the signature,
+  # not the bundle name — without a stable identity, every rebuild looks
+  # like a brand-new app and FDA needs re-granting.
+  identity: AD032F9A10743852FDF60C8161C1C87C1C09D963
+  forceCodeSigning: true
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  extendInfo:
+    NSAppleEventsUsageDescription: Messages2 uses Apple Events to send iMessages on your behalf via the system Messages app.
+    NSDesktopFolderUsageDescription: Messages2 may access your Desktop when you send attachments.
+    NSDocumentsFolderUsageDescription: Messages2 may access your Documents when you send attachments.
+    NSDownloadsFolderUsageDescription: Messages2 may access your Downloads when you send attachments.
+    NSContactsUsageDescription: Messages2 reads your contacts to display friendly names instead of phone numbers.
+    LSMinimumSystemVersion: '12.0.0'
+dmg:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+publish: null

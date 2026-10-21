@@ -1,0 +1,33 @@
+node_modules
+*.pem
+.env
+.env.local
+.next/
+.vercel/
+next-env.d.ts
+agent.old.js
+dashboard/tsconfig.tsbuildinfo
+
+# Tiwari training — ephemeral state, audit rows only kept in world-level PRs
+Tiwari/tiwari-training/sagar-mirror/state/*.json
+Tiwari/tiwari-training/caleb-mirror/state/*.json
+Tiwari/tiwari-training/runs/*.json
+!Tiwari/tiwari-training/**/README.md
+Tiwari/tiwari-training/node_modules/
+
+# Loop send audit trail — runtime output, not source
+# (trace-checkins.js reads this, produced by send-checkin.js)
+vision/outbox/
+
+# MCP client config: this file embeds local-only tool endpoints and may
+# contain operator-specific secrets for connected MCP servers. Treat it
+# like .env — never commit per-developer copies.
+.mcp.json
+**/.mcp.json
+
+# Local data dumps: per-tenant calendar / context exports that operators
+# generate while debugging. These are personal data — not source — and
+# must not land in the repo.
+Newton/agent/calendar-events.json
+**/calendar-events.json
+**/calendar-dump-*.json

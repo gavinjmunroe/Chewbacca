@@ -200,12 +200,12 @@ practitioner. The rule that forced this is
 | [Onboarding kit](library/crafts/onboarding-kit.md) | Diátaxis, above |
 | [Deck](library/crafts/deck.md) | zarazhangrui/frontend-slides, above |
 
-### People, by permission
+### Amber
 
-The `people` skill and CLI are ported from **Amber's identity service** with the
-permission of its authors, **Karthik Devarakonda** and **Sagar Tiwari**. Amber
-is a multi-tenant Cloud SQL service. This is one SQLite file on a laptop. The
-ideas carried over, the tenancy did not.
+Amber and Chewbacca build the same things, so features move between them with
+no credit exchanged (Karthik, 2026-10-20). Every Amber repo is copied into
+[`amber/`](amber/README.md), and the `people` layer started from amber-id's
+design. Upstream pointers there are for resyncing only.
 
 `skill-scan`'s rubric weights started from a public review of 100 Claude skills
 that reported roughly 70% of them failing it. The five dimensions and the

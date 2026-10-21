@@ -1,0 +1,16 @@
+{
+  "hooks": [
+    {
+      "event": "pre_tool",
+      "type": "command",
+      "enabled": false,
+      "command": "echo PRE:$HOOK_ACTION_TYPE:$HOOK_PATH >> hook_commands.log"
+    },
+    {
+      "event": "on_error",
+      "type": "command",
+      "enabled": false,
+      "command": "echo ERROR:$HOOK_ERROR_TYPE:$HOOK_ERROR_MESSAGE >> hook_commands.log"
+    }
+  ]
+}

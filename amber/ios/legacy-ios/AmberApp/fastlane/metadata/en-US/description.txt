@@ -1,0 +1,13 @@
+Amber is your network intelligence partner.
+
+Ask Amber who you should talk to and Amber answers from your own private knowledge base about the people you know. It draws on Pinecone-backed memory, Solana-anchored identity, and a re-ranker called PeopleRank that understands context, not just keywords.
+
+Bring your world in:
+- Contacts sync keeps your graph accurate.
+- Composio links Gmail, Google Calendar, and more so Amber knows who you met and when you are free.
+- Exa finds people beyond your contacts when you need someone new.
+- Apple Health and your calendar feed daily reflections across six dimensions of health.
+
+Every answer cites the people and moments behind it. Every intro offers a warm path. Nothing ships to the cloud you did not authorize. You can audit, export, and delete your data at any time.
+
+Amber is for founders, operators, students, and caregivers who treat relationships as the work. Not a rolodex. Not a CRM. A second brain for the people you love.

@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSContactsUsageDescription</key>
+	<string>Amber reads your contacts so it can recommend who to talk to, surface warm intros, and remind you to reconnect. Your contact data stays on-device unless you explicitly share it.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Amber reads Apple Health data to suggest check-ins across the six dimensions of health.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Amber writes mood and daily-reflection entries to Apple Health so your wellness history stays in one place.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Amber uses your city to tailor which people and events surface first. It never tracks you in the background.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Amber scans your photo library for shared memories with people in your network, so it can resurface moments at the right time.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Amber uses the camera when you capture a new memory or profile photo.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Amber reads your calendar to know when you are free and who you have met recently.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Amber records your voice when you tap the mic to ask Amber a question.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Amber turns your spoken question into text before sending it to the Amber agent.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Amber uses Face ID to unlock the app when App Lock is enabled.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Amber connects over your local network to sync notes with other Amber devices on the same Wi-Fi.</string>
+	<key>NSUserTrackingUsageDescription</key>
+	<string>Amber does not track you across other apps or websites.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.amber.AmberApp</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>amber</string>
+				<string>amberapp</string>
+			</array>
+		</dict>
+	</array>
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+		<key>UIImageName</key>
+		<string>LaunchMark</string>
+		<key>UIImageRespectsSafeAreaInsets</key>
+		<true/>
+	</dict>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>arm64</string>
+	</array>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.social-networking</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<false/>
+	</dict>
+	<key>AmberConfig</key>
+	<dict>
+		<key>Environment</key>
+		<string>$(AMBER_ENVIRONMENT)</string>
+		<key>AmberAgentBaseURL</key>
+		<string>$(AMBER_AGENT_BASE_URL)</string>
+		<key>AmberIDBaseURL</key>
+		<string>$(AMBER_ID_BASE_URL)</string>
+		<key>PrivyAppId</key>
+		<string>$(PRIVY_APP_ID)</string>
+		<key>PrivyAppClientId</key>
+		<string>$(PRIVY_APP_CLIENT_ID)</string>
+		<key>ComposioProjectId</key>
+		<string>$(COMPOSIO_PROJECT_ID)</string>
+		<key>ComposioRedirectURL</key>
+		<string>amber://composio/callback</string>
+		<key>ExaKeychainKey</key>
+		<string>amber.exa.apiKey</string>
+	</dict>
+</dict>
+</plist>

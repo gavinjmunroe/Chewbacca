@@ -1,0 +1,140 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font-inter), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+.inner-scroll {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  overscroll-behavior: contain;
+}
+.inner-scroll::-webkit-scrollbar { display: none; }
+
+.phone-float {
+  animation: float 6s ease-in-out infinite;
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0px) scale(var(--phone-scale, 1)); }
+  50%       { transform: translateY(-8px) scale(var(--phone-scale, 1)); }
+}
+
+.screen-forward {
+  animation: screenForward 0.30s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+.screen-back {
+  animation: screenBack 0.26s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+@keyframes screenForward {
+  from { opacity: 0; transform: translateX(32px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes screenBack {
+  from { opacity: 0; transform: translateX(-20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.pulse {
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.5; }
+}
+
+/* ── Verify screen ───────────────────────────────────────────── */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes progress-fill {
+  from { width: 0%; }
+  to   { width: 100%; }
+}
+@keyframes scanline {
+  0%   { top: 18%; opacity: 0; }
+  8%   { opacity: 0.65; }
+  92%  { opacity: 0.65; }
+  100% { top: 78%; opacity: 0; }
+}
+
+/* ── Voice recorder ──────────────────────────────────────────── */
+@keyframes record-ring {
+  0%   { transform: scale(1);    opacity: 0.7; }
+  100% { transform: scale(1.55); opacity: 0;   }
+}
+
+/* ── UI feedback ─────────────────────────────────────────────── */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes reaction-appear {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Form ────────────────────────────────────────────────────── */
+textarea::placeholder { color: rgba(255,255,255,0.18); }
+input::placeholder { color: rgba(255,255,255,0.25); }
+
+/* ── Accessibility ───────────────────────────────────────────── */
+*:focus-visible {
+  outline: 2px solid rgba(245,158,11,0.6);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+button:focus-visible {
+  outline: 2px solid rgba(245,158,11,0.6);
+  outline-offset: 3px;
+}
+
+/* ── Audio progress ──────────────────────────────────────────── */
+@keyframes audio-play {
+  from { width: 0%; }
+  to   { width: 100%; }
+}
+
+/* ── Interactive states ──────────────────────────────────────── */
+button, [role="button"] {
+  -webkit-tap-highlight-color: transparent;
+}
+[role="button"] {
+  transition: filter 0.12s ease, opacity 0.12s ease, transform 0.08s ease;
+}
+[role="button"]:not([aria-disabled="true"]):not(:disabled):hover  { filter: brightness(1.12); }
+[role="button"]:active { filter: brightness(0.88); opacity: 0.9; transform: scale(0.97); }
+button { transition: transform 0.08s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease; }
+button:active { transform: scale(0.96); }
+
+/* ── Celebration overlay ─────────────────────────────────────── */
+@keyframes celebrate-pop {
+  0%   { transform: scale(0.7); opacity: 0; }
+  60%  { transform: scale(1.1); opacity: 1; }
+  100% { transform: scale(1);   opacity: 1; }
+}
+
+/* ── Reduced motion ──────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── Dialog entrance ─────────────────────────────────────────── */
+@keyframes dialog-in {
+  from { opacity: 0; transform: scale(0.94) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.dialog-in {
+  animation: dialog-in 0.18s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}

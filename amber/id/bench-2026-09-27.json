@@ -1,0 +1,17 @@
+{
+  "owner": "ca78cc4d",
+  "contacts": 2560,
+  "provableDuplicatePairs": 15,
+  "cardsInvolved": 28,
+  "byPhone": 15,
+  "byEmail": 0,
+  "placeholderNumbersIgnored": 0,
+  "ambiguousNameGroups": 26,
+  "reviewQueue": 45,
+  "merges": 0,
+  "mergesAutomatic": 0,
+  "mergesUndone": 0,
+  "undoRate": 0,
+  "distinctSources": 2,
+  "provenanceRows": 6790
+}

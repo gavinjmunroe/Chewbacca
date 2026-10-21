@@ -59,6 +59,19 @@ people merge <keep-id> <drop-id>        # same human, one record now
 people brief <id> --force               # genuinely different people
 ```
 
+A merge can be taken back: `people merges` lists them, `people unmerge <id>`
+(or `last`) puts the absorbed person back with their phones, notes and
+messages. So merge a pair the evidence supports instead of leaving it for a
+human, and if it was wrong, unmerge it. Never hand-edit the store to split two
+people: until 2026-10-21 merge silently deleted the absorbed person's phones
+and Slack link through ON DELETE CASCADE, and a hand split repeats that class
+of loss.
+
+`people who "... in <place>"` also lists people with no location whose phone
+area code points there, under its own "Might be in" heading. Present those as a
+guess to check, never as people who live there: a mobile number keeps its area
+code after a move.
+
 Never work around it by reading a different row, by pulling facts out of the
 markdown export, or by going back to the message history by first name. Those
 are the three routes that produced the bad text.

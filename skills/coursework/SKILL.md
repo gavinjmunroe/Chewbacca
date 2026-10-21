@@ -222,6 +222,19 @@ When the user says that's what is happening:
   2026-10-11 a draft that scored clean on the default check went in, and a
   teammate called it "the slop version" on first read; `--essay` scores it 48.
 
+Before drafting any argument essay, read the assignment prompt PDF and the
+instructor's sample essays in full, and write down the prompt's actual job
+(for a "how does this practice discourage engagement" prompt: name ONE
+practice, prove OTHER students have the engagement problem, say why it
+matters). The thesis has to be something a reader could argue with. The
+user's personal story is evidence for that claim and can't stand in for it.
+On 2026-10-21 a WRIT 150 draft built from his outline notes, with no prompt
+or samples read, came back as "It sucks sounds ai slop is not creative at
+all barely has an opinion and isn't aligned with the prompt be methodical".
+It had taken the safest take available (AI bans are bad) and spent most of
+its words on his own growth. The redo read the prompt and samples first,
+modeled the blunt-thesis sample, and put a sharper practice on trial.
+
 Never-dos, from 2026-10-11 (Caleb, ACAD 324 Mash Up, midnight before the team
 deadline):
 
@@ -311,50 +324,6 @@ To ingest a new one, `~/Chewbacca/apps/texts/ingest/ingest.py scan <pdf>` prints
 chapter plan and writes nothing. Read the plan before `apply` files 500 pages
 under the wrong headings.
 
-## "Make me a ux to crank through the work": a work-session page
-
-When he wants to grind through a day of school, build one local page in
-~/Downloads (`Lock in <Day Mon DD>.html`), never a list in chat. It's a
-Practice session in the interface taxonomy: one task on screen at a time with
-a timer, 2 to 7 steps that say what done looks like, links to the guide or
-file that task needs, Done/next and Push to later, a projected finish time,
-and the full queue and a "not today, on purpose" list folded into one
-`<details>`. Build it from `coursework due --json` and each item's ledger
-notes, plus the study guides already in ~/Downloads. Order it quick wins
-first, then whichever deadline closes soonest, and put breaks in. Name what's
-sunk and why so it stops hanging over him. Save state in localStorage, and
-test Done, skip, undo and reload headless at 1440 and 390 before you say
-it's ready. 2026-10-17: "Make me a ux to crank through the work today,
-guitar is tmr everything else is today".
-
-A Brightspace 403 doesn't stop this or a practice drill. Build from the
-ledger, say once that submissions aren't verified, and keep going. On
-2026-10-17 the first reply stopped to offer "want me to build a practice
-set?" while the 185 guide already existed and only lacked a short-answer
-drill for an all-short-answer exam. Check the guide against the exam format
-(W8S15 p13: short answer, no notes) and fix that gap instead of asking.
-
-## Read replies to his own school emails before saying nothing's there
-
-When he asks about a class thing ("do I need to schedule my bio lab"), the
-first search is every thread where HE emailed course staff in the last 21
-days, and whether the staff reply is unread. Keyword searches miss these,
-because the subject is whatever he wrote. On 2026-10-17 a search for
-"makeup OR schedule OR missed" came back empty, the reply said nothing on
-disk needed scheduling, and he asked again: "Did you schedule my lab
-makeup?" The answer was in "Re: BISC 101 lab absence tomorrow", an unread
-10/15 email from the lab manager asking for his availability for a 2-hour
-makeup. It sat for two days.
-
-```bash
-GOOGLE_WORKSPACE_CLI_CONFIG_DIR=~/.chewbacca/email/calebnew@usc.edu \
-  gws gmail users messages list --params \
-  '{"userId":"me","q":"is:unread from:usc.edu -category:promotions -category:updates newer_than:21d"}'
-```
-
-Read every unread personal reply from an instructor, TA or lab manager in
-full before planning his week. Each one usually asks him for something.
-
 ## Planning a lock-in when he names only some courses
 
 When he says "lock in on X and Y tonight", the plan still has to account for
@@ -412,10 +381,6 @@ The ledger goes stale in exactly three ways, and all three are silent:
   thing was submitted and exactly when; `references/lms-ingest.md` has the D2L
   endpoint. Asking surfaces what they happen to remember, which is the big
   assignment, not the small one sitting on the same line of the syllabus.
-  The same goes for anything due TODAY: on 2026-10-19 a reply told him to
-  take BISC quiz #6 because the ledger said `todo`, and he wrote "I alr did
-  the bisc quiz". Run `brightspace grades` (or the quiz submission read)
-  before naming a quiz or dropbox as still to do.
 - **A date moves in an announcement or a class slide** and the ledger still
   carries the syllabus or prompt-PDF date. Before calling anything due on a
   day, read the last two weeks of announcements (`/le/1.67/<ou>/news/`, full
@@ -424,13 +389,6 @@ The ledger goes stale in exactly three ways, and all three are silent:
   Oct 19 to Oct 21 (Chappelow's 10/12 "Correction of Dates"), ACAD 324 Quiz 2
   Oct 19 to Oct 21 and the P3 team eval Oct 14 to Oct 19 (Davina's 10/12 and
   10/14 slide agendas). The plan would have pointed him at the wrong Monday.
-- **An empty dropbox is not a missing assignment.** `brightspace due` says
-  NOT SUBMITTED for any dropbox with no file, but some courses collect work
-  somewhere else. Read the dropbox's CustomInstructions first
-  (`/le/1.75/<ou>/dropbox/folders/`). On 2026-10-16 ACAD 185 A13 and A14
-  showed NOT SUBMITTED, and both specs said "Post your link to Master
-  Spreadsheet". His team row, his 3 hooks and his video were all there. Only
-  the A14 engagement-metrics cell was blank.
 - **A sign-up sheet is not the whole record.** Before calling a conference,
   meeting or extension missed, search his school inbox for the instructor
   (`GOOGLE_WORKSPACE_CLI_CONFIG_DIR=~/.chewbacca/email/<address> gws gmail

@@ -90,6 +90,32 @@ printf '%s\tS1\t%s/sub/dir/n.txt\n%s\tS2\t%s/a.txt\n' "$(now)" "$T" "$(now)" "$T
 git commit -q -m nested >/dev/null 2>&1 && no "nested path: absorbed a second session" || ok "nested path: two sessions refused"
 git reset -q
 
+# GNU stat: `-f` means filesystem status there and prints a lot, so the hook
+# must pick `-c` by probing, not by whether `-f` printed anything.
+SHIM=$(mktemp -d)
+cat > "$SHIM/stat" <<'SH'
+#!/bin/bash
+if [ "$1" = "-c" ]; then
+  shift 2
+  for f in "$@"; do [ "$f" = . ] && { echo 0; continue; }; python3 -c 'import os,sys; print(int(os.stat(sys.argv[1]).st_mtime), sys.argv[1])' "$f"; done
+  exit 0
+fi
+echo "  File: \"$2\""; echo "    ID: 0 Namelen: 255 Type: apfs"
+SH
+chmod +x "$SHIM/stat"
+echo "$RANDOM" > a.txt; echo "$RANDOM" > b.txt; git add a.txt b.txt
+python3 -c 'import os,time; old=time.time()-7200; os.utime("a.txt", (old,old))'
+unset CHEWBACCA_PATHSPEC_COMMIT; export CHEWBACCA_FAKE_SESSIONS=1
+if PATH="$SHIM:$PATH" git commit -q -m gnu >"$WLDIR/gnu-output" 2>&1; then
+  no "GNU stat: stale heuristic skipped"
+elif grep -q "last touched over" "$WLDIR/gnu-output"; then
+  ok "GNU stat: stale heuristic still fires"
+else
+  no "GNU stat: failed for another reason"
+fi
+unset CHEWBACCA_FAKE_SESSIONS; export CHEWBACCA_PATHSPEC_COMMIT=1
+git reset -q; rm -rf "$SHIM"
+
 # A bulk import must not hang. The per-file grep took 41+ minutes on 5,217
 # files against a 279,468-row log (amber/, 2026-10-20); one awk pass is seconds.
 mkdir -p bulk

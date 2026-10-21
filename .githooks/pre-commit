@@ -166,21 +166,22 @@ WINDOW=${STALE_STAGED_MINUTES:-45}
 NEWEST=0
 declare -a TIMES=() NAMES=()
 # One stat call for the whole list, not one per file (a stat per path made a
-# 3,000-file commit take 27 s on 2026-10-20). BSD stat first, then GNU.
+# 3,000-file commit take 27 s on 2026-10-20). Pick the flavour by probing,
+# never by whether output came back: GNU `stat -f` means filesystem status and
+# prints plenty, so an output test never reached the GNU fallback.
+if stat -c %Y . >/dev/null 2>&1; then STAT_FMT=(-c '%Y %n'); else STAT_FMT=(-f '%m %N'); fi
 MTIMES=$(printf '%s\n' "$STAGED" | while IFS= read -r f; do [ -f "$f" ] && printf '%s\0' "$f"; done \
-  | { xargs -0 stat -f '%m %N' 2>/dev/null || true; })
-if [ -z "$MTIMES" ] && [ -n "$STAGED" ]; then
-  MTIMES=$(printf '%s\n' "$STAGED" | while IFS= read -r f; do [ -f "$f" ] && printf '%s\0' "$f"; done \
-    | { xargs -0 stat -c '%Y %n' 2>/dev/null || true; })
-fi
+  | { xargs -0 stat "${STAT_FMT[@]}" 2>/dev/null || true; })
 while IFS= read -r line; do
-  [ -n "$line" ] || continue
   m=${line%% *}; f=${line#* }
+  # Anything that isn't "<digits> <path>" is skipped, never compared.
+  case "$m" in ''|*[!0-9]*) continue ;; esac
   [ "$m" -gt "$NEWEST" ] && NEWEST=$m
   TIMES+=("$m"); NAMES+=("$f")
 done <<< "$MTIMES"
 
-[ "$NEWEST" -gt 0 ] || exit 0
+# No early exit when no mtime came back: the authorship check below must
+# still run, and with no TIMES nothing can count as stale.
 CUTOFF=$(( NEWEST - WINDOW * 60 ))
 
 STALE=""

@@ -7,6 +7,7 @@
 const { c, die, say, parseArgs } = require("./output");
 const { db } = require("./db");
 const { sayNextStep } = require("./health");
+const { regionsFor, areaCodeOf } = require("./area-codes");
 const { clayKey } = require("./resolve");
 
 // ---------------------------------------------------------------- find
@@ -158,7 +159,7 @@ function clayAdvice(q, affected) {
 // one and leaves "City" behind as a stray search term, which then filters on
 // the word City. Alternation in JS is first-match, not longest-match, so the
 // order in this list is load-bearing.
-const PLACE = /\b(new york city|san francisco bay area|bay area|san francisco|new york|los angeles|nyc|sf|la\b|chicago|boston|seattle|austin|denver|miami|london|naperville|wisconsin|madison|remote|[A-Z][a-z]+, ?[A-Z]{2})\b/i;
+const PLACE = /\b(new york city|san francisco bay area|bay area|san francisco|new york|los angeles|orange county|inland empire|san diego|washington dc|nyc|sf|la\b|irvine|chicago|boston|seattle|austin|dallas|houston|atlanta|philadelphia|phoenix|portland|nashville|denver|miami|london|naperville|wisconsin|madison|remote|[A-Z][a-z]+, ?[A-Z]{2})\b/i;
 
 /**
  * The words in a question that no structured filter consumed.
@@ -304,6 +305,9 @@ function cmdWho(argv) {
   const placeAll = q.match(new RegExp(PLACE.source, "gi")) || [];
   const placeMatch = placeAll.length ? [placeAll.join(" or ")] : null;
   let placeNote = null;
+  // Everyone who passed the filters before place, kept for the area-code layer
+  // below, which reads the people place could not speak for.
+  const beforePlace = out;
   if (placeMatch) {
     const terms = [...new Set(placeAll.flatMap((pm) => PLACE_ALIASES[pm.toLowerCase()] || [pm.toLowerCase()]))];
     const withLoc = out.filter((p) => p.location && p.location.trim());
@@ -387,6 +391,61 @@ function cmdWho(argv) {
     // place filter already follows. Filtering a set where nobody has evidence
     // returns an empty list that reads like a confident answer.
     if (inSet.length) out = inSet;
+    evidence.found = found;
+  }
+
+  // THE FLOOR: WHAT A PHONE NUMBER'S AREA CODE SUGGESTS. Upstream: the IMPLIED
+  // layer in `amber/id/src/db/gather.js`.
+  //
+  // On 2026-10-21, 1,945 of 3,340 people here had no location at all, so "who
+  // do I know in LA" could only ever answer from the 1,375 who did, while 611
+  // of the rest carried an LA area code. Those people are offered separately
+  // and labelled as a guess, never mixed into the list above: a mobile number
+  // keeps its area code after a move, so this is where somebody MIGHT be.
+  // Anyone with a stated location is left out, because they already answered.
+  // Every filter the main list used still applies.
+  let implied = null;
+  if (placeMatch) {
+    const regions = [
+      ...new Map(placeAll.flatMap((pm) => regionsFor(pm)).map((r) => [r.name, r])).values(),
+    ];
+    if (regions.length) {
+      const codes = new Set(regions.flatMap((r) => r.codes));
+      const phones = new Map();
+      for (const r of d
+        .prepare(
+          `SELECT id AS pid, phone AS v FROM people WHERE deleted_at IS NULL AND phone IS NOT NULL
+           UNION ALL
+           SELECT person_id, value FROM identities WHERE kind = 'phone'`,
+        )
+        .all()) {
+        const code = areaCodeOf(r.v);
+        if (!code) continue;
+        if (!phones.has(r.pid)) phones.set(r.pid, new Set());
+        phones.get(r.pid).add(code);
+      }
+      let cand = beforePlace.filter((p) => !(p.location && p.location.trim()));
+      if (freeText.length)
+        cand = cand.filter((p) =>
+          freeText.some((w) =>
+            new RegExp(`\\b${w}`, "i").test(`${p.company || ""} ${p.role || ""} ${p.name}`),
+          ),
+        );
+      // Narrow whenever the evidence names anyone here. "who in LA loves
+      // pickleball" found 22 people mentioning it, none with a stated LA
+      // location, so the main list could not narrow; the guessed list can, and
+      // ignoring the term there would list all 611 people with an LA number.
+      let narrowedBy = null;
+      if (evidence && (evidence.matched || cand.some((p) => evidence.found.has(p.id)))) {
+        cand = cand.filter((p) => evidence.found.has(p.id));
+        narrowedBy = evidence.terms.join(" ");
+      }
+      const people = cand
+        .map((p) => ({ ...p, codes: [...(phones.get(p.id) || [])].filter((x) => codes.has(x)) }))
+        .filter((p) => p.codes.length);
+      people.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+      implied = { regions: regions.map((r) => r.name), people, narrowedBy };
+    }
   }
 
   out.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
@@ -464,6 +523,31 @@ function cmdWho(argv) {
   }
   if (out.length > limit) say(c.dim(`    ... and ${out.length - limit} more`));
   say();
+  if (implied && implied.people.length) {
+    const lim = Number(flags.limit || 15);
+    say(
+      c.yel(
+        `  Might be in ${implied.regions.join(" or ")}, going by phone area code only${implied.narrowedBy ? `, who mention "${implied.narrowedBy}"` : ""} (${implied.people.length}). No location on file, and a mobile number keeps its code after a move.`,
+      ),
+    );
+    say();
+    for (const p of implied.people.slice(0, lim)) {
+      const who = p.nickname ? `${p.name} ${c.dim(`(${p.nickname})`)}` : p.name;
+      say(
+        `    ${c.b(who.padEnd(p.nickname ? 38 : 24))} ${c.cyn((p.role || "").slice(0, 24).padEnd(25))} ${(p.company || "").slice(0, 26).padEnd(27)} ${c.dim(p.codes.join(" "))}`,
+      );
+    }
+    if (implied.people.length > lim)
+      say(c.dim(`    ... and ${implied.people.length - lim} more`));
+    say();
+  } else if (implied) {
+    say(
+      c.dim(
+        `  Checked area codes for ${implied.regions.join(" or ")} too: nobody without a location has one.`,
+      ),
+    );
+    say();
+  }
   // An empty answer from an empty store is not an answer about their network.
   if (!out.length) sayNextStep(d);
   clayAdvice(q, out.length || rows.length);

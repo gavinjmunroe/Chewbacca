@@ -306,6 +306,10 @@ if group "people"; then
       bash "$ROOT/tests/texts_owed.sh" "${P[@]}"
     check "people store write transactions wait for a lock instead of failing" \
       bash "$ROOT/tests/people_write_lock.sh"
+    check "people merge keeps phones and notes, and people unmerge puts every row back" \
+      bash "$ROOT/tests/people_merge_undo.sh"
+    check "people who reads area codes only for US numbers and whole-word places" \
+      node --test "$ROOT/tests/test_people_area_codes.mjs"
     check "WhatsApp rows come out in the texts reader's shape" \
       python3 "$ROOT/tests/test_whatsapp_reader.py"
     check "Slack rows come out in the texts reader's shape" \

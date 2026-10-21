@@ -15,22 +15,36 @@ const { recomputeScores } = require("./scoring");
 // that "Maggie Chen" from Contacts and "Maggie" from a thread were one person.
 // A store that quietly holds the same person twice gets every score wrong.
 
-// Tables that point at a person. Kept here rather than derived, because a
-// merge that silently misses a table loses data and nothing complains.
-const PERSON_TABLES = [
-  ["observations", "person_id"],
-  ["interactions", "person_id"],
-  ["important_dates", "person_id"],
-  ["tasks", "person_id"],
-  ["loans", "person_id"],
-  ["quick_facts", "person_id"],
-  ["messages", "person_id"],
-  ["score_history", "person_id"],
-  ["event_scan_state", "person_id"],
-  ["circle_members", "person_id"],
-  ["person_scores", "person_id"],
-  ["person_dimension_state", "person_id"],
+// EVERY COLUMN THAT POINTS AT A PERSON, READ FROM THE SCHEMA.
+//
+// This was a hand-written list, kept by hand "because a merge that silently
+// misses a table loses data and nothing complains". It had already missed two:
+// `identities` and `slack_links` both reference people ON DELETE CASCADE, so
+// deleting the absorbed row took their phone numbers, emails and Slack link
+// with it, silently, on every merge (found 2026-10-21). Reading the foreign
+// keys means a new table is carried by default, and the merge and its undo
+// agree about what a person owns.
+function personRefs(d) {
+  const tables = d
+    .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
+    .all()
+    .map((r) => r.name);
+  const refs = [];
+  for (const t of tables) {
+    for (const fk of d.prepare(`SELECT "table" AS ref, "from" AS col FROM pragma_foreign_key_list(?)`).all(t))
+      if (fk.ref === "people") refs.push([t, fk.col]);
+  }
+  return refs;
+}
+
+// `visibility` names people by value with no foreign key (item_type/item_id
+// and scope_type/scope_ref), so the schema cannot say it points at anyone.
+const POLY_REFS = [
+  ["visibility", "item_id", "item_type"],
+  ["visibility", "scope_ref", "scope_type"],
 ];
+
+const DERIVED = new Set(["person_scores", "person_dimension_state"]);
 
 function normName(s) {
   return String(s || "")
@@ -125,8 +139,8 @@ function cmdDedupe(argv) {
   say("");
   say(c.dim(`${pairs.length} likely duplicate pair(s). Nothing was changed.`));
   if (flags.merge) {
-    say(c.dim("--merge is deliberate: merging is not reversible, so do them one"));
-    say(c.dim("at a time with people merge <keep> <drop>."));
+    say(c.dim("--merge is deliberate: do them one at a time with people merge <keep> <drop>."));
+    say(c.dim("Each one can be taken back with people unmerge."));
   }
 }
 
@@ -154,19 +168,44 @@ function cmdMerge(argv) {
     );
 
   const moved = {};
+  let mergeId = null;
   d.exec("BEGIN IMMEDIATE");
   try {
-    for (const [table, col] of PERSON_TABLES) {
-      // OR IGNORE first: several of these have a unique key on (person_id, x),
-      // so a row that would collide is dropped rather than aborting the merge.
-      const before = d.prepare(`SELECT count(*) n FROM ${table} WHERE ${col} = ?`).get(drop.id).n;
-      d.prepare(`UPDATE OR IGNORE ${table} SET ${col} = ? WHERE ${col} = ?`).run(keep.id, drop.id);
-      d.prepare(`DELETE FROM ${table} WHERE ${col} = ?`).run(drop.id);
-      if (before) moved[table] = before;
+    const refs = personRefs(d);
+    // THE PHOTOGRAPH IS OF THE ABSORBED PERSON'S ROWS ONLY, taken as each
+    // table is folded. The survivor's own rows are never touched by a merge,
+    // so undo has no business with them: the first version photographed both
+    // and an unmerge rewrote edits made to the survivor since (review,
+    // 2026-10-21). Each row is marked moved (same rowid, now the survivor's)
+    // or collided (deleted because the survivor already had its twin).
+    const snapshot = { people: [drop], tables: {} };
+    const fold = (table, col, where, args, setSql, setArgs) => {
+      const rows = d.prepare(`SELECT rowid AS __rowid, * FROM ${table} WHERE ${where}`).all(...args);
+      if (!rows.length) return;
+      d.prepare(`UPDATE OR IGNORE ${table} SET ${setSql} WHERE ${where}`).run(...setArgs, ...args);
+      const stayed = new Set(
+        d.prepare(`SELECT rowid AS r FROM ${table} WHERE ${where}`).all(...args).map((r) => r.r),
+      );
+      d.prepare(`DELETE FROM ${table} WHERE ${where}`).run(...args);
+      const bucket = (snapshot.tables[table] ??= []);
+      for (const r of rows) bucket.push({ ...r, __col: col, __moved: !stayed.has(r.__rowid) });
+      moved[table] = (moved[table] || 0) + rows.length;
+    };
+    for (const [table, col] of refs) {
+      // Scores are rebuilt from observations, so they are folded but never
+      // photographed: restoring a stale cache is worse than recomputing it.
+      if (DERIVED.has(table)) {
+        d.prepare(`UPDATE OR IGNORE ${table} SET ${col} = ? WHERE ${col} = ?`).run(keep.id, drop.id);
+        d.prepare(`DELETE FROM ${table} WHERE ${col} = ?`).run(drop.id);
+        continue;
+      }
+      fold(table, col, `${col} = ?`, [drop.id], `${col} = ?`, [keep.id]);
     }
-    for (const col of ["from_id", "to_id"]) {
-      d.prepare(`UPDATE OR IGNORE relationships SET ${col} = ? WHERE ${col} = ?`).run(keep.id, drop.id);
-      d.prepare(`DELETE FROM relationships WHERE ${col} = ?`).run(drop.id);
+    for (const [table, col, kind] of POLY_REFS) {
+      if (!hasTable(d, table)) continue;
+      // OR IGNORE like everything else: two people with the same live rule
+      // (both "everyone") hit vis_unique_live and aborted the whole merge.
+      fold(table, col, `${kind} = 'person' AND ${col} = ?`, [drop.id], `${col} = ?`, [keep.id]);
     }
     // A blank field on the survivor takes the other's value. A field with
     // something in it is never overwritten: merging must not lose a fact.
@@ -198,8 +237,15 @@ function cmdMerge(argv) {
       d.prepare(`UPDATE people SET ${sets.join(", ")}, updated_at = datetime('now') WHERE id = ?`)
         .run(...vals, keep.id);
     }
-    d.prepare("DELETE FROM relationships WHERE from_id = ? OR to_id = ?").run(drop.id, drop.id);
     d.prepare("DELETE FROM people WHERE id = ?").run(drop.id);
+    const filled = sets.map((s) => s.split(" ")[0]);
+    mergeId = d
+      .prepare(
+        `INSERT INTO merges (keep_id, drop_id, keep_name, drop_name, filled, snapshot)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(keep.id, drop.id, keep.name, drop.name, JSON.stringify(filled), JSON.stringify(snapshot))
+      .lastInsertRowid;
     d.exec("COMMIT");
   } catch (e) {
     d.exec("ROLLBACK");
@@ -210,8 +256,158 @@ function cmdMerge(argv) {
   say(`  ${c.b(keep.name)} ${c.dim("absorbed")} ${c.b(drop.name)}`);
   for (const [table, n] of Object.entries(moved)) say(c.dim(`    ${n} ${table}`));
   if (!Object.keys(moved).length) say(c.dim("    nothing was attached to the other record"));
+  say(c.dim(`    take it back with: people unmerge ${mergeId}`));
   say("");
   if (!flags.quiet) say(c.dim("Scores are stale after a merge. Run: people score"));
+}
+
+function hasTable(d, name) {
+  return !!d.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`).get(name);
+}
+
+// ---------------------------------------------------------------- unmerge
+// Without undo a wrong merge costs data nobody can get back, so every
+// uncertain pair waits for a human. With it, a wrong merge costs one command.
+// A FAKE UNDO IS WORSE THAN NONE: putting the person back without the phone
+// numbers or messages the merge moved leaves them worse off for having trusted
+// it, so this restores every photographed row or refuses.
+
+function cmdMerges(argv) {
+  const { flags } = parseArgs(argv);
+  const d = db();
+  const rows = d
+    .prepare(
+      `SELECT id, keep_name, drop_name, filled, merged_at, undone_at FROM merges
+        ORDER BY id DESC LIMIT ?`,
+    )
+    .all(Number(flags.limit || 20));
+  if (!rows.length) return say(c.dim("no merges recorded yet"));
+  say("");
+  for (const r of rows) {
+    const took = JSON.parse(r.filled || "[]");
+    const state = r.undone_at ? c.dim(`undone ${r.undone_at.slice(0, 16)}`) : c.dim(r.merged_at.slice(0, 16));
+    say(`  ${c.b(String(r.id).padStart(4))}  ${c.b(r.keep_name || "?")} ${c.dim("absorbed")} ${r.drop_name || "?"}  ${state}`);
+    if (took.length) say(c.dim(`        took ${took.join(", ")} from ${r.drop_name}`));
+  }
+  say("");
+}
+
+function cmdUnmerge(argv) {
+  const { rest, flags } = parseArgs(argv);
+  const d = db();
+  const arg = rest[0];
+  if (!arg) die("Unmerge which? people merges lists them: people unmerge <id> (or last)");
+  const m =
+    arg === "last"
+      ? d.prepare(`SELECT * FROM merges WHERE undone_at IS NULL ORDER BY id DESC LIMIT 1`).get()
+      : d.prepare(`SELECT * FROM merges WHERE id = ?`).get(Number(arg));
+  if (!m) die(`No merge ${arg}. people merges lists them.`, 2);
+  if (m.undone_at) die(`Merge ${m.id} was already undone at ${m.undone_at}.`, 2);
+  if (d.prepare(`SELECT 1 FROM people WHERE id = ?`).get(m.drop_id))
+    die(`${m.drop_name} already exists again (id ${m.drop_id}), so this would make two of them.`, 2);
+  const keepNow = d.prepare(`SELECT * FROM people WHERE id = ?`).get(m.keep_id);
+  if (!keepNow) die(`${m.keep_name} is gone from the store, so there is nothing to split apart.`, 2);
+
+  const snap = JSON.parse(m.snapshot);
+  const dropRow = snap.people.find((p) => p.id === m.drop_id);
+  const restored = {};
+  const lost = [];
+  const kept = [];
+  d.exec("BEGIN IMMEDIATE");
+  try {
+    // 1. The absorbed person, first, so their rows have someone to point at.
+    const cols = Object.keys(dropRow);
+    d.prepare(`INSERT INTO people (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`)
+      .run(...cols.map((k) => dropRow[k]));
+
+    // 2. The fields the survivor took. Only those, and only where they still
+    //    hold what the merge put there: an edit made since is the user's.
+    const filled = JSON.parse(m.filled || "[]");
+    for (const f of filled) {
+      if (keepNow[f] === dropRow[f])
+        d.prepare(`UPDATE people SET ${f} = NULL WHERE id = ?`).run(m.keep_id);
+    }
+
+    // 3. Every photographed row, back to the absorbed person.
+    //
+    //    A MOVED row still has its rowid. It goes back only if it is still the
+    //    same row: same rowid, now the survivor's, every other column as
+    //    photographed. Only the person column changes, so nothing is deleted
+    //    and nothing cascades (deleting and reinserting observations took
+    //    their observation_dimensions with them and zeroed a real score,
+    //    2026-10-21). A row edited since stays with the survivor and is
+    //    reported, because the edit is the user's.
+    //
+    //    A COLLIDED row was deleted, so it is inserted. Its old rowid is used
+    //    only if free: SQLite reuses the highest rowid, and writing into a row
+    //    created since the merge would overwrite somebody's new data.
+    //
+    //    One row failing (its circle deleted since, say) is reported, not fatal.
+    const refCols = new Map();
+    for (const [tb, col] of personRefs(d)) refCols.set(tb, [...(refCols.get(tb) || []), col]);
+    for (const [tb, col] of POLY_REFS) refCols.set(tb, [...(refCols.get(tb) || []), col]);
+    for (const [table, rows] of Object.entries(snap.tables)) {
+      if (!hasTable(d, table)) {
+        lost.push(`${table} (${rows.length})`);
+        continue;
+      }
+      const skip = new Set(["__rowid", "__col", "__moved", ...(refCols.get(table) || [])]);
+      let n = 0;
+      for (const r of rows) {
+        const row = Object.fromEntries(Object.entries(r).filter(([k]) => !k.startsWith("__")));
+        const same = Object.keys(row).filter((k) => !skip.has(k));
+        try {
+          if (r.__moved) {
+            const cond = same.map((k) => `${k} IS ?`).join(" AND ");
+            const res = d
+              .prepare(
+                `UPDATE OR IGNORE ${table} SET ${r.__col} = ? WHERE rowid = ? AND ${r.__col} = ?${cond ? ` AND ${cond}` : ""}`,
+              )
+              .run(m.drop_id, r.__rowid, m.keep_id, ...same.map((k) => row[k]));
+            if (res.changes) n++;
+            else kept.push(`${table} row ${r.__rowid}`);
+          } else {
+            const keys = Object.keys(row);
+            const ph = keys.map(() => "?").join(", ");
+            const free = !d.prepare(`SELECT 1 FROM ${table} WHERE rowid = ?`).get(r.__rowid);
+            const res = free
+              ? d
+                  .prepare(`INSERT OR IGNORE INTO ${table} (rowid, ${keys.join(", ")}) VALUES (?, ${ph})`)
+                  .run(r.__rowid, ...keys.map((k) => row[k]))
+              : d
+                  .prepare(`INSERT OR IGNORE INTO ${table} (${keys.join(", ")}) VALUES (${ph})`)
+                  .run(...keys.map((k) => row[k]));
+            if (res.changes) n++;
+            else lost.push(`${table} row ${r.__rowid}`);
+          }
+        } catch (e) {
+          lost.push(`${table} row ${r.__rowid}: ${String(e.message || e).slice(0, 80)}`);
+        }
+      }
+      if (n) restored[table] = n;
+    }
+    d.prepare(`UPDATE merges SET undone_at = datetime('now') WHERE id = ?`).run(m.id);
+    if (lost.length && !flags.force) {
+      d.exec("ROLLBACK");
+      say(c.yel(`  Not undone: ${lost.length} row(s) could not go back exactly:`));
+      for (const l of lost.slice(0, 10)) say(c.dim(`    ${l}`));
+      say(c.dim("  Nothing was changed. --force undoes the rest and leaves those out."));
+      process.exitCode = 1;
+      return;
+    }
+    d.exec("COMMIT");
+  } catch (e) {
+    d.exec("ROLLBACK");
+    throw e;
+  }
+  recomputeScores();
+  say("");
+  say(`  ${c.b(m.drop_name)} ${c.dim("is back, split from")} ${c.b(m.keep_name)}`);
+  for (const [table, n] of Object.entries(restored)) say(c.dim(`    ${n} ${table}`));
+  if (kept.length)
+    say(c.yel(`    ${kept.length} row(s) changed or removed since the merge, left with ${m.keep_name}`));
+  if (lost.length) say(c.yel(`    ${lost.length} row(s) could not go back (--force)`));
+  say("");
 }
 
 // ---------------------------------------------------------------- purge
@@ -390,5 +586,5 @@ function cmdPruneBroadcasts(argv) {
 }
 
 module.exports = {
-  cmdPurge, cmdDedupe, cmdMerge, cmdOrgs, cmdPruneBroadcasts,
+  cmdPurge, cmdDedupe, cmdMerge, cmdMerges, cmdUnmerge, cmdOrgs, cmdPruneBroadcasts,
 };

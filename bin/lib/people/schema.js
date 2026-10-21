@@ -403,6 +403,25 @@ CREATE TABLE IF NOT EXISTS event_scan_state (
 CREATE INDEX IF NOT EXISTS ess_day_idx ON event_scan_state (day);
 `;
 
+// A MERGE YOU CAN TAKE BACK. Every row a merge is about to change is
+// photographed inside the merge's own transaction, so `people unmerge` can put
+// the absorbed person back with their phones, notes and messages. No foreign
+// key on the ids: the absorbed person does not exist while the merge stands.
+// Upstream: `amber/id/src/db/contact-merge-undo.js`.
+const SCHEMA_V6 = `
+CREATE TABLE IF NOT EXISTS merges (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  keep_id    TEXT NOT NULL,
+  drop_id    TEXT NOT NULL,
+  keep_name  TEXT,
+  drop_name  TEXT,
+  filled     TEXT NOT NULL DEFAULT '[]',
+  snapshot   TEXT NOT NULL,
+  merged_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  undone_at  TEXT
+);
+`;
+
 const SEED_TEMPLATE = [
   ["how_we_met", "How did you meet?", 10],
   ["works_on", "What are they working on?", 20],
@@ -413,5 +432,5 @@ const SEED_TEMPLATE = [
 ];
 
 module.exports = {
-  SCHEMA, SEED_DIMENSIONS, SEED_PARAMS, SCHEMA_V3, SCHEMA_V2, SCHEMA_V4, SCHEMA_V5, SEED_TEMPLATE,
+  SCHEMA, SEED_DIMENSIONS, SEED_PARAMS, SCHEMA_V3, SCHEMA_V2, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SEED_TEMPLATE,
 };

@@ -56,7 +56,7 @@ const { cmdTexts } = require("./lib/people/texts");
 const { cmdSend } = require("./lib/people/send");
 const { cmdCalls } = require("./lib/people/calls");
 const {
-  cmdPurge, cmdDedupe, cmdMerge, cmdOrgs, cmdPruneBroadcasts,
+  cmdPurge, cmdDedupe, cmdMerge, cmdMerges, cmdUnmerge, cmdOrgs, cmdPruneBroadcasts,
 } = require("./lib/people/cleanup");
 const { cmdBrief } = require("./lib/people/brief");
 const { cmdDashboard } = require("./lib/people/dashboard");
@@ -71,6 +71,8 @@ const COMMANDS = {
   "prune-broadcasts": cmdPruneBroadcasts,
   brief: cmdBrief,
   merge: cmdMerge,
+  merges: cmdMerges,
+  unmerge: cmdUnmerge,
   note: cmdNote,
   me: cmdMe,
   log: cmdLog,

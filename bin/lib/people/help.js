@@ -49,6 +49,8 @@ const HELP = `${c.b("people")} ${c.dim("- everything you know about the people i
 
   ${c.b("people dedupe")}                        likely duplicate records
   ${c.b("people merge <keep> <absorb>")}         fold one record into another
+  ${c.b("people merges")}                        merges so far, with what each one took
+  ${c.b("people unmerge <id|last>")}             take a merge back, rows and all
   ${c.b("people events scan")}                   log what happened, from your texts
 
   ${c.b("people texts sync")}                    pull new iMessage and WhatsApp in (local only)

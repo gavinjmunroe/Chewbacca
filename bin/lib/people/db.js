@@ -10,7 +10,7 @@ const os = require("node:os");
 const crypto = require("node:crypto");
 const { die } = require("./output");
 const {
-  SCHEMA, SEED_DIMENSIONS, SEED_PARAMS, SCHEMA_V3, SCHEMA_V2, SCHEMA_V4, SCHEMA_V5, SEED_TEMPLATE,
+  SCHEMA, SEED_DIMENSIONS, SEED_PARAMS, SCHEMA_V3, SCHEMA_V2, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SEED_TEMPLATE,
 } = require("./schema");
 
 let DatabaseSync;
@@ -93,6 +93,7 @@ function migrate(d) {
   d.exec(SCHEMA_V3);
   d.exec(SCHEMA_V4);
   d.exec(SCHEMA_V5);
+  d.exec(SCHEMA_V6);
   // AFTER the CREATE TABLEs, not before. `messages` is created by SCHEMA_V3, so
   // running this above that exec threw "no such table: messages" on every open
   // of a FRESH database and took every subcommand down with it. An existing

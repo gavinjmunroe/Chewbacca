@@ -116,6 +116,15 @@ one call, and a lapsed session renews itself from Chrome:
   image and flattened the nested lists on 2026-10-21 (ACAD 185 A17). Render it
   with pandoc to standalone HTML, then Playwright `page.pdf`, and count images
   with `pdfimages -list` before handing it over.
+- Uploading, only on his word "submit" for that assignment: POST multipart/mixed
+  (a JSON part, then the file) with the d2l cookies and an `X-Csrf-Token` from
+  `/d2l/lp/auth/xsrf-tokens` (`referrerToken`). Individual folders take
+  `/d2l/api/le/1.75/<ou>/dropbox/folders/<id>/submissions/mysubmissions/`. A
+  group folder 404s "Assignment not found" there and takes
+  `.../submissions/group/<groupId>/`, trailing slash required (without it, a bare
+  404). The groupId comes from `brightspace get /lp/1.43/<ou>/groupcategories/<groupTypeId>/groups/`.
+  Check with the `submissions` op after. Never drive the web form in his
+  Chrome: it takes his screen (ACAD 185 A19, 2026-10-22).
 
 Never-dos, in his words (2026-10-11, mid quiz):
 

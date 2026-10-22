@@ -232,6 +232,24 @@ When the user says that's what is happening:
   `slop-check --essay` on yours. "Rewrite" means it doesn't go in. On
   2026-10-11 a draft that scored clean on the default check went in, and a
   teammate called it "the slop version" on first read; `--essay` scores it 48.
+- Asked "is it as good as Andy's?" or "is it ready?" near a deadline: name the
+  weak spots AND fix them in the same turn, then recheck the word cap and
+  `slop-check --essay`. Never end on "want me to fix those?" (Caleb,
+  2026-10-21, ACAD 324 Quiz 2 at 11:28pm: the offer drew "Lock in", which
+  meant he'd already said yes).
+
+Before drafting any argument essay, read the assignment prompt PDF and the
+instructor's sample essays in full, and write down the prompt's actual job
+(for a "how does this practice discourage engagement" prompt: name ONE
+practice, prove OTHER students have the engagement problem, say why it
+matters). The thesis has to be something a reader could argue with. The
+user's personal story is evidence for that claim and can't stand in for it.
+On 2026-10-21 a WRIT 150 draft built from his outline notes, with no prompt
+or samples read, came back as "It sucks sounds ai slop is not creative at
+all barely has an opinion and isn't aligned with the prompt be methodical".
+It had taken the safest take available (AI bans are bad) and spent most of
+its words on his own growth. The redo read the prompt and samples first,
+modeled the blunt-thesis sample, and put a sharper practice on trial.
 
 Before drafting any argument essay, read the assignment prompt PDF and the
 instructor's sample essays in full, and write down the prompt's actual job

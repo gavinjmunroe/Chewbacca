@@ -784,7 +784,7 @@ def cmd_files(client, ou, folder, out_dir):
         got.append(("submitted", x["name"], client.raw(
             f"/le/1.75/{ou}/dropbox/folders/{folder}/submissions/{x['submission']}/files/{x['file']}")))
     for kind, name, data in got:
-        dest = out / name.replace("/", "_")
+        dest = _inside(out, out / _safe(name))
         dest.write_bytes(data)
         print(f"  {kind}: {dest} ({len(data)} bytes)")
     if not got:
@@ -793,7 +793,17 @@ def cmd_files(client, ou, folder, out_dir):
 
 
 def _safe(name):
-    return re.sub(r'[\\/:*?"<>|]+', "_", name).strip() or "untitled"
+    # Names come from instructors and teammates. "..", or a slash, would
+    # write outside the download folder.
+    name = re.sub(r'[\\/:*?"<>|]+', "_", str(name)).strip()
+    return "_" if name in ("", ".", "..") else name
+
+
+def _inside(root, dest):
+    root, dest = Path(root).resolve(), Path(dest).resolve()
+    if root != dest and root not in dest.parents:
+        sys.exit(f"brightspace: refusing to write {dest}, outside {root}")
+    return dest
 
 
 def cmd_content(client, ou, out_dir, dry_run):
@@ -810,7 +820,7 @@ def cmd_content(client, ou, out_dir, dry_run):
                 kind = t.get("TypeIdentifier")
                 if kind == "File":
                     name = _safe(Path(t.get("Url") or t["Title"]).name or t["Title"])
-                    dest = folder / name
+                    dest = _inside(out, folder / name)
                     count += 1
                     if dry_run or (dest.exists() and dest.stat().st_size):
                         print(f"  {'would get' if dry_run else 'have'} {dest}")
@@ -855,7 +865,7 @@ def cmd_feedback(client, ou, folder, out_dir):
     out = Path(out_dir).expanduser()
     for f in fb.get("Files", []):
         out.mkdir(parents=True, exist_ok=True)
-        dest = out / _safe(f["FileName"])
+        dest = _inside(out, out / _safe(f["FileName"]))
         dest.write_bytes(client.raw(
             f"/le/1.75/{ou}/dropbox/folders/{folder}/feedback/{entity}/{eid}/attachments/{f['FileId']}"))
         print(f"  feedback file: {dest}")

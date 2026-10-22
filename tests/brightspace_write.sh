@@ -24,6 +24,13 @@ fx = {
       {"Submissions": [{"Id": 77, "SubmissionDate": "2026-10-22T07:21:42Z",
                         "Files": [{"FileId": 8, "FileName": "mine.pdf", "Size": 4}]}]}],
   "/le/1.75/1/dropbox/folders/11/submissions/77/files/8": base64.b64encode(b"MINE").decode(),
+  "/le/1.75/1/dropbox/folders/12": {"Name": "Hostile", "GroupTypeId": None,
+                                     "Attachments": [{"FileId": 6, "FileName": "../../escape.pdf"}]},
+  "/le/1.75/1/dropbox/folders/12/attachments/6": base64.b64encode(b"X").decode(),
+  "/le/1.75/1/dropbox/folders/12/submissions/": [],
+  "/le/1.75/2/content/toc": {"Modules": [{"Title": "..", "Modules": [], "Topics": [
+      {"TopicId": 9, "Title": "x", "TypeIdentifier": "File", "Url": "/content/x.pdf"}]}]},
+  "/le/1.75/2/content/topics/9/file": base64.b64encode(b"Y").decode(),
   "/le/1.75/1/content/toc": {"Modules": [{"Title": "Week 1", "Modules": [], "Topics": [
       {"TopicId": 3, "Title": "Slides", "TypeIdentifier": "File", "Url": "/content/w1/Slides 1.pdf"},
       {"TopicId": 4, "Title": "Reading", "TypeIdentifier": "Link", "Url": "https://example.edu/r"}]}]},
@@ -46,5 +53,14 @@ run files 1 11 --out "$T/dl" >/dev/null || fail "files exited nonzero"
 run content 1 --out "$T/c" >/dev/null || fail "content exited nonzero"
 [ "$(cat "$T/c/Week 1/Slides 1.pdf")" = "SLIDES" ] || fail "content file not written under its module"
 grep -q "https://example.edu/r" "$T/c/links.tsv" || fail "link topic not listed in links.tsv"
+
+# Instructor-chosen names like "../../escape.pdf" or a ".." module must land
+# inside the output folder, never beside it.
+mkdir -p "$T/box"
+run files 1 12 --out "$T/box/dl" >/dev/null 2>&1
+run content 2 --out "$T/box/c" >/dev/null 2>&1
+[ -e "$T/escape.pdf" ] || [ -e "$T/box/escape.pdf" ] && fail "a ../ file name wrote outside the output folder"
+[ -n "$(find "$T/box" -maxdepth 1 -type f)" ] && fail "a .. module wrote outside the output folder"
+[ "$(cat "$T/box/dl/.._.._escape.pdf" 2>/dev/null)" = "X" ] || fail "sanitised attachment not written inside the folder"
 
 echo "  ok brightspace submit routing, files and content downloads"

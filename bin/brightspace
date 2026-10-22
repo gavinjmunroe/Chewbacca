@@ -10,6 +10,19 @@ assignments the coursework ledger never heard of.
   brightspace grades [--json]        every released grade, every current course
   brightspace news [--days 7]        announcements from every current course
   brightspace get <api path>         raw JSON, e.g. /le/1.99/302780/news/
+  brightspace submit <ou> <folder> <file>... [--dry-run]
+                                     upload to a dropbox, group or individual,
+                                     then prove it from the submission list
+  brightspace files <ou> <folder> [--out DIR]
+                                     download the dropbox's attachments and
+                                     every file submitted to it
+  brightspace content <ou> [--out DIR] [--dry-run]
+                                     every Content file, in module folders
+  brightspace feedback <ou> <folder> grade, comments and feedback files
+  brightspace classlist <ou>         everyone in the course, with emails
+  brightspace discuss <ou> [<forum> <topic>]
+                                     forums and topics, or one topic's posts
+  brightspace post <ou> <forum> <topic> --subject S --body-file F [--reply-to ID]
 
 The ledger is built from syllabi, and some assignments only ever exist as a
 Brightspace dropbox. "Presentation Topics" in the BISC lab (due 2026-10-02,
@@ -22,7 +35,8 @@ set, otherwise whichever profile touched Brightspace most recently, so any USC
 student's Mac works without naming one. Courses come from their own current
 enrollments, not a list written for one person. Sessions expire (on 2026-10-03
 a cookie that decrypted fine returned 403 on every call); a page they already
-have open renews it. It never writes to Brightspace and never submits anything.
+have open renews it. Only `submit` and `post` write, and only what they're handed.
+Nothing here opens a window: group uploads run in headless Chromium.
 
 BRIGHTSPACE_FIXTURE=<file.json> replaces the network with {"path": response}
 for tests.
@@ -259,6 +273,15 @@ class Client:
                 self.refresh()
                 return fetch(path, self.cookies)
             raise Forbidden(path)
+
+    def raw(self, path):
+        if self.fixture is not None:
+            import base64
+            return base64.b64decode(self.fixture[path])
+        cookies = _session_cookies(self)
+        _, body = _send(urllib.request.Request(HOST + "/d2l/api" + path, headers={
+            "Cookie": "; ".join(f"{k}={v}" for k, v in cookies.items())}), 120)
+        return body
 
     def refresh(self):
         # No tab is opened to renew. This used to open Brightspace in Chrome,
@@ -573,6 +596,322 @@ def cmd_news(client, days, as_json):
     return 0
 
 
+# Individual dropboxes take a Valence multipart POST to mysubmissions (A16,
+# 2026-10-21). Group dropboxes have no route a cookie session may call: le
+# 1.75 to 1.85 answer 404 for submissions/group/{id} and 1.88 and up answer
+# 403 "No scopes defined for specified requests" (probed 2026-10-22), since
+# that route wants an OAuth app scope. So a group upload drives Brightspace's
+# own submit page in headless Chromium holding the same cookies. It never
+# opens a window: on 2026-10-22 an `open -g` to that page still pulled Chrome
+# to the front mid-task ("WHY DID YOU FLASH BANG ME").
+
+GROUP_SUBMIT_JS = r"""
+async ([name, b64]) => {
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const c = UI.GetControl('FS_sFiles') || UI.GetControl('FU_sFiles');
+  if (!c) return 'no file control on the submit page';
+  c.OpenDialog();
+  let w, d, node = null;
+  // The dialog's My Computer pane loads late: on 2026-10-22 one pass found no
+  // drop zone 3 s after the click, and a polling pass found it.
+  for (let k = 0; k < 30 && !node; k++) {
+    await sleep(1000);
+    const f = [...document.querySelectorAll('iframe')].find(f => f.src.includes('blank.html'));
+    if (!f || !f.contentDocument) continue;
+    w = f.contentWindow; d = f.contentDocument;
+    // MFI_control in a signed-in Chrome, SFI_control in headless Chromium
+    // (2026-10-22): match the drop zone by class, not by id.
+    node = d.querySelector('.d2l-filedrop');
+    if (!node && k % 5 === 0) {
+      const mc = [...d.querySelectorAll('button,a')].find(x => (x.innerText || '').trim() === 'My Computer');
+      if (mc) mc.click();
+    }
+  }
+  if (!node) return 'the Add a File dialog never showed its drop zone';
+  const bin = atob(b64); const u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  const file = new w.File([u], name, {type: 'application/octet-stream'});
+  const dt = new w.DataTransfer(); dt.items.add(file);
+  // A drop runs D2L's own sliced upload into temp storage. The file input
+  // path needs a native picker; the drop path is the one that reached temp.
+  for (const t of ['dragenter', 'dragover', 'drop'])
+    node.dispatchEvent(new w.DragEvent(t, {bubbles: true, cancelable: true, dataTransfer: dt}));
+  for (let k = 0; k < 120 && !(node.d2l_fd_files && node.d2l_fd_files.length); k++) await sleep(1000);
+  if (!(node.d2l_fd_files && node.d2l_fd_files.length)) return 'upload to temp storage timed out';
+  const tf = node.d2l_fd_files[node.d2l_fd_files.length - 1];
+  if (String(tf.m_size) !== String(file.size)) return `temp copy is ${tf.m_size} bytes, file is ${file.size}`;
+  // The dialog's Add button never picked up a dropped file, so the temp file
+  // goes straight into the page's selector the way the dialog hands it over.
+  const info = {FileSystemType: tf.m_fileSystemType, FileId: tf.m_id, FileName: tf.m_name,
+                Size: parseInt(tf.m_size), LastModified: 0, Description: '', PreviewUrl: ''};
+  c.TryAppendFile('My Computer', {GetData: k => k === 'file' ? info : null});
+  const cancels = [...document.querySelectorAll('button')].filter(b => b.innerText.trim() === 'Cancel');
+  if (cancels.length > 1) cancels[cancels.length - 1].click();
+  await sleep(1500);
+  if (c.GetCount() !== 1) return `expected 1 file staged, page shows ${c.GetCount()}`;
+  return 'staged';
+}
+"""
+
+
+def _session_cookies(client):
+    if client.cookies is None:
+        try:
+            client.cookies = chrome_cookies()
+        except NoSession:
+            sys.exit(NO_SESSION)
+    return client.cookies
+
+
+def _send(req, timeout):
+    with OPENER.open(req, timeout=timeout) as resp:
+        return resp.status, resp.read()
+
+
+def _post(client, url, data, content_type):
+    ck = "; ".join(f"{k}={v}" for k, v in _session_cookies(client).items())
+    _, body = _send(urllib.request.Request(HOST + "/d2l/lp/auth/xsrf-tokens", headers={"Cookie": ck}), 25)
+    xsrf = json.loads(body)["referrerToken"]
+    req = urllib.request.Request(HOST + url, data=data, method="POST", headers={
+        "Cookie": ck, "Content-Type": content_type, "X-Csrf-Token": xsrf})
+    return _send(req, 120)
+
+
+def my_group(client, ou, category):
+    me = int(client.get("/lp/1.63/users/whoami")["Identifier"])
+    for g in client.get(f"/lp/1.43/{ou}/groupcategories/{category}/groups/"):
+        if me in [int(x) for x in g.get("Enrollments", [])]:
+            return g["GroupId"], g["Name"]
+    sys.exit(f"brightspace: you're in no group of category {category} in course {ou}")
+
+
+def submitted_files(client, ou, folder):
+    out = []
+    for entity in client.get(f"/le/1.75/{ou}/dropbox/folders/{folder}/submissions/"):
+        for sub in entity.get("Submissions", []):
+            for f in sub.get("Files", []):
+                out.append({"submission": sub["Id"], "date": sub.get("SubmissionDate"),
+                            "file": f["FileId"], "name": f["FileName"], "size": f["Size"]})
+    return out
+
+
+def submit_group_headless(ou, folder, group, path, cookies):
+    import base64
+    from playwright.sync_api import sync_playwright
+    url = (f"{HOST}/d2l/lms/dropbox/user/folder_submit_files.d2l"
+           f"?db={folder}&grpid={group}&isprv=0&bp=0&ou={ou}")
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        try:
+            ctx = browser.new_context()
+            ctx.add_cookies([{"name": k, "value": v, "domain": "brightspace.usc.edu", "path": "/",
+                              "secure": True} for k, v in cookies.items()])
+            page = ctx.new_page()
+            page.goto(url, wait_until="networkidle", timeout=60000)
+            if "folder_submit_files.d2l" not in page.url:
+                return f"the session didn't reach the submit page (landed on {page.url[:80]})"
+            staged = page.evaluate(GROUP_SUBMIT_JS, [path.name, base64.b64encode(path.read_bytes()).decode()])
+            if staged != "staged":
+                return staged
+            # Stops one click short of Submit, so a live run can prove the
+            # upload path without handing in anything.
+            if os.environ.get("BRIGHTSPACE_STAGE_ONLY") == "1":
+                return "ok-staged-only"
+            with page.expect_navigation(timeout=120000):
+                page.locator("button", has_text="Submit").first.click()
+            if "folder_submit_files_results" not in page.url:
+                return f"Submit landed on {page.url[:80]}"
+            return "ok"
+        finally:
+            browser.close()
+
+
+def cmd_submit(client, ou, folder, paths, dry_run):
+    files = [Path(p).expanduser() for p in paths]
+    for f in files:
+        if not f.is_file() or f.stat().st_size == 0:
+            sys.exit(f"brightspace: {f} is missing or empty")
+    meta = client.get(f"/le/1.75/{ou}/dropbox/folders/{folder}")
+    category = meta.get("GroupTypeId")
+    target = "you"
+    if category:
+        gid, gname = my_group(client, ou, category)
+        target = f"group {gname} ({gid})"
+    print(f"{meta.get('Name')}: {len(files)} file(s) for {target}")
+    if dry_run:
+        for f in files:
+            print(f"  would submit {f.name} ({f.stat().st_size} bytes)")
+        return 0
+    before = {(x["name"], x["size"]) for x in submitted_files(client, ou, folder)}
+    for f in files:
+        if category:
+            result = submit_group_headless(ou, folder, gid, f, _session_cookies(client))
+            if result == "ok-staged-only":
+                print(f"  staged {f.name} headless, stopped before Submit")
+                return 0
+            if result != "ok":
+                sys.exit(f"brightspace: {f.name} not submitted: {result}")
+        else:
+            import uuid
+            b = uuid.uuid4().hex
+            head = (f"--{b}\r\nContent-Type: application/json\r\n\r\n"
+                    + json.dumps({"Text": "", "Html": None}) + "\r\n"
+                    + f"--{b}\r\nContent-Disposition: form-data; name=\"\"; filename=\"{f.name}\"\r\n"
+                    + "Content-Type: application/octet-stream\r\n\r\n").encode()
+            _post(client, f"/d2l/api/le/1.75/{ou}/dropbox/folders/{folder}/submissions/mysubmissions/",
+                  head + f.read_bytes() + f"\r\n--{b}--\r\n".encode(), f"multipart/mixed; boundary={b}")
+    # Proof is the folder's own submission list, never the page or the POST.
+    after = submitted_files(client, ou, folder)
+    for f in files:
+        hit = [x for x in after if x["name"] == f.name and x["size"] == f.stat().st_size]
+        if not hit:
+            sys.exit(f"brightspace: {f.name} isn't in the submission list after submitting")
+        again = " (an identical file was already there)" if (f.name, f.stat().st_size) in before else ""
+        print(f"  submitted {f.name}, {hit[-1]['size']} bytes, {hit[-1]['date']}{again}")
+    return 0
+
+
+def cmd_files(client, ou, folder, out_dir):
+    """Pull files down: the folder's own attachments and everything submitted to it."""
+    out = Path(out_dir).expanduser()
+    out.mkdir(parents=True, exist_ok=True)
+    meta = client.get(f"/le/1.75/{ou}/dropbox/folders/{folder}")
+    got = []
+    for a in meta.get("Attachments", []):
+        got.append(("attachment", a["FileName"],
+                    client.raw(f"/le/1.75/{ou}/dropbox/folders/{folder}/attachments/{a['FileId']}")))
+    for x in submitted_files(client, ou, folder):
+        got.append(("submitted", x["name"], client.raw(
+            f"/le/1.75/{ou}/dropbox/folders/{folder}/submissions/{x['submission']}/files/{x['file']}")))
+    for kind, name, data in got:
+        dest = out / name.replace("/", "_")
+        dest.write_bytes(data)
+        print(f"  {kind}: {dest} ({len(data)} bytes)")
+    if not got:
+        print(f"{meta.get('Name')}: no attachments and nothing submitted")
+    return 0
+
+
+def _safe(name):
+    return re.sub(r'[\\/:*?"<>|]+', "_", name).strip() or "untitled"
+
+
+def cmd_content(client, ou, out_dir, dry_run):
+    """Download every file topic in a course, in its module folders."""
+    toc = client.get(f"/le/1.75/{ou}/content/toc")
+    out = Path(out_dir).expanduser()
+    count, links = 0, []
+
+    def walk(modules, here):
+        nonlocal count
+        for m in modules:
+            folder = here / _safe(m.get("Title", "module"))
+            for t in m.get("Topics", []):
+                kind = t.get("TypeIdentifier")
+                if kind == "File":
+                    name = _safe(Path(t.get("Url") or t["Title"]).name or t["Title"])
+                    dest = folder / name
+                    count += 1
+                    if dry_run or (dest.exists() and dest.stat().st_size):
+                        print(f"  {'would get' if dry_run else 'have'} {dest}")
+                        continue
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    try:
+                        dest.write_bytes(client.raw(f"/le/1.75/{ou}/content/topics/{t['TopicId']}/file"))
+                        print(f"  got {dest}")
+                    except Exception as err:  # one locked topic shouldn't stop the rest
+                        print(f"  skipped {t['Title']}: {err}", file=sys.stderr)
+                else:
+                    links.append(f"{t.get('Title')}\t{kind}\t{t.get('Url')}")
+            walk(m.get("Modules", []), folder)
+
+    walk(toc.get("Modules", []), out)
+    if links and not dry_run:
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "links.tsv").write_text("title\ttype\turl\n" + "\n".join(links) + "\n")
+    print(f"{count} file(s), {len(links)} link or page topic(s) listed in {out / 'links.tsv'}")
+    return 0
+
+
+def cmd_feedback(client, ou, folder, out_dir):
+    """Grade, written feedback and feedback files for one dropbox."""
+    meta = client.get(f"/le/1.75/{ou}/dropbox/folders/{folder}")
+    if meta.get("GroupTypeId"):
+        entity, eid = "group", my_group(client, ou, meta["GroupTypeId"])[0]
+    else:
+        entity, eid = "user", client.get("/lp/1.63/users/whoami")["Identifier"]
+    try:
+        fb = client.get(f"/le/1.75/{ou}/dropbox/folders/{folder}/feedback/{entity}/{eid}")
+    except (KeyError, Forbidden):
+        fb = None
+    if not fb:
+        print(f"{meta.get('Name')}: no feedback released")
+        return 0
+    score = fb.get("Score")
+    print(f"{meta.get('Name')}: {score if score is not None else '-'} / {meta.get('Assessment', {}).get('ScoreDenominator') or meta.get('OutOf') or '?'}")
+    text = (fb.get("Feedback") or {}).get("Text") or plain((fb.get("Feedback") or {}).get("Html") or "")
+    if text:
+        print(text.strip())
+    out = Path(out_dir).expanduser()
+    for f in fb.get("Files", []):
+        out.mkdir(parents=True, exist_ok=True)
+        dest = out / _safe(f["FileName"])
+        dest.write_bytes(client.raw(
+            f"/le/1.75/{ou}/dropbox/folders/{folder}/feedback/{entity}/{eid}/attachments/{f['FileId']}"))
+        print(f"  feedback file: {dest}")
+    return 0
+
+
+def cmd_classlist(client, ou, as_json):
+    try:
+        rows = client.get(f"/le/1.75/{ou}/classlist/")
+    except Forbidden:
+        # ACAD 185 returns 403 here for a student and its classlist page 303s
+        # away (2026-10-22): the instructor hid it, so say that plainly.
+        print(f"course {ou} hides its classlist from students")
+        return 0
+    people = [{"name": r.get("DisplayName"), "email": r.get("Email"), "role": r.get("ClasslistRoleDisplayName"),
+               "id": r.get("Identifier")} for r in rows]
+    if as_json:
+        print(json.dumps(people, indent=1))
+    else:
+        for p in people:
+            print(f"{p['name']:<32} {p['role'] or '':<12} {p['email'] or ''}")
+    return 0
+
+
+def cmd_discuss(client, ou, forum, topic, as_json):
+    if forum is None:
+        for f in client.get(f"/le/1.75/{ou}/discussions/forums/"):
+            print(f"forum {f['ForumId']}  {f['Name']}")
+            for t in client.get(f"/le/1.75/{ou}/discussions/forums/{f['ForumId']}/topics/"):
+                print(f"  topic {t['TopicId']}  {t['Name']}  due {t.get('EndDate') or '-'}")
+        return 0
+    posts = client.get(f"/le/1.75/{ou}/discussions/forums/{forum}/topics/{topic}/posts/")
+    rows = [{"id": p["PostId"], "parent": p.get("ParentPostId"), "by": p.get("PostingUserDisplayName"),
+             "date": p.get("DatePosted"), "subject": p.get("Subject"),
+             "text": (p.get("Message") or {}).get("Text") or plain((p.get("Message") or {}).get("Html") or "")}
+            for p in posts]
+    if as_json:
+        print(json.dumps(rows, indent=1))
+    else:
+        for r in rows:
+            print(f"[{r['id']}] {r['by']} {r['date']}{'  reply to ' + str(r['parent']) if r['parent'] else ''}")
+            print(f"  {r['subject']}\n  {r['text'].strip()[:600]}\n")
+    return 0
+
+
+def cmd_post(client, ou, forum, topic, subject, body_file, parent):
+    text = Path(body_file).expanduser().read_text()
+    payload = {"ParentPostId": int(parent) if parent else None, "Subject": subject,
+               "Message": {"Content": text, "Type": "Text"}, "IsAnonymous": False}
+    status, body = _post(client, f"/d2l/api/le/1.75/{ou}/discussions/forums/{forum}/topics/{topic}/posts/",
+                         json.dumps(payload).encode(), "application/json")
+    post = json.loads(body)
+    print(f"posted {post.get('PostId')} in topic {topic}: {subject}")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(prog="brightspace")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -587,6 +926,25 @@ def main():
     nw.add_argument("--json", action="store_true")
     g = sub.add_parser("get")
     g.add_argument("path")
+    sm = sub.add_parser("submit", help="upload files to a dropbox, group or individual, headless")
+    sm.add_argument("ou"); sm.add_argument("folder"); sm.add_argument("files", nargs="+")
+    sm.add_argument("--dry-run", action="store_true")
+    fl = sub.add_parser("files", help="download a dropbox's attachments and submitted files")
+    fl.add_argument("ou"); fl.add_argument("folder")
+    fl.add_argument("--out", default="~/Downloads/brightspace")
+    ct = sub.add_parser("content", help="download every file in a course's Content, by module")
+    ct.add_argument("ou"); ct.add_argument("--out", default=None); ct.add_argument("--dry-run", action="store_true")
+    fb = sub.add_parser("feedback", help="grade, written feedback and feedback files for a dropbox")
+    fb.add_argument("ou"); fb.add_argument("folder"); fb.add_argument("--out", default="~/Downloads/brightspace")
+    cl = sub.add_parser("classlist", help="everyone in a course, with emails")
+    cl.add_argument("ou"); cl.add_argument("--json", action="store_true")
+    ds = sub.add_parser("discuss", help="list forums and topics, or read one topic's posts")
+    ds.add_argument("ou"); ds.add_argument("forum", nargs="?"); ds.add_argument("topic", nargs="?")
+    ds.add_argument("--json", action="store_true")
+    ps = sub.add_parser("post", help="post to a discussion topic, text from a file")
+    ps.add_argument("ou"); ps.add_argument("forum"); ps.add_argument("topic")
+    ps.add_argument("--subject", required=True); ps.add_argument("--body-file", required=True)
+    ps.add_argument("--reply-to", default=None)
     args = ap.parse_args()
     client = Client()
     if args.cmd == "whoami":
@@ -594,6 +952,20 @@ def main():
         print(me.get("FirstName"), me.get("LastName"))
     elif args.cmd == "get":
         print(json.dumps(client.get(args.path), indent=1))
+    elif args.cmd == "submit":
+        sys.exit(cmd_submit(client, args.ou, args.folder, args.files, args.dry_run))
+    elif args.cmd == "files":
+        sys.exit(cmd_files(client, args.ou, args.folder, args.out))
+    elif args.cmd == "content":
+        sys.exit(cmd_content(client, args.ou, args.out or f"~/Downloads/brightspace/{args.ou}", args.dry_run))
+    elif args.cmd == "feedback":
+        sys.exit(cmd_feedback(client, args.ou, args.folder, args.out))
+    elif args.cmd == "classlist":
+        sys.exit(cmd_classlist(client, args.ou, args.json))
+    elif args.cmd == "discuss":
+        sys.exit(cmd_discuss(client, args.ou, args.forum, args.topic, args.json))
+    elif args.cmd == "post":
+        sys.exit(cmd_post(client, args.ou, args.forum, args.topic, args.subject, args.body_file, args.reply_to))
     elif args.cmd == "grades":
         sys.exit(cmd_grades(client, args.json))
     elif args.cmd == "news":

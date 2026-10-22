@@ -914,6 +914,11 @@ if group "installer"; then
   check  "brightspace flags dropboxes missing from the ledger" \
     bash "$ROOT/tests/brightspace.sh" "$ROOT"
 
+  # A group upload had no route but a visible Chrome tab, which flashed over
+  # Caleb on 2026-10-22. submit, files and content run headless and offline here.
+  check  "brightspace submit routes groups and downloads write real bytes" \
+    bash "$ROOT/tests/brightspace_write.sh" "$ROOT"
+
   # A calendar that repeats a title months later must not become a second
   # reminder, and a scan must not download anything without --apply.
   check  "brightspace-sync lists each item once and scans without writing" \

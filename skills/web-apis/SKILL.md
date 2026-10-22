@@ -53,9 +53,9 @@ Read them before the first call: most failures are a param format they spell out
 | handshake     | searchJobs, getJob, events, careerFairs                                                             | the student's connectSC session; .json endpoints only, the pages write on load                                                                |
 | usc-reg       | registrationAppointment, holds, schedule, courseBin, each taking term=<code> (20271 is Spring 2027) | WebReg through the student's USC sign-in; browser tier, 6 to 9 s, run it through `chewbacca jobs submit --net`                                |
 | usc-fees      | registeredTerms, termSummary                                                                        | Registration and Fee Summary: a term's charges, credits, net charges and units (no balance or due date); `chewbacca api login usc-fees` first |
-| usc-parking   | account, activePermits                                                                              | the student's parking balance, unpaid citations, permits and vehicles; signs in through USC by itself, `signedIn: false` means signed out |
-| usc-rec       | facilityTraffic                                                                                     | live head counts at Lyon, Village and HSC gyms and the pools |
-| usc-maps      | searchPlaces                                                                                        | a building or place on the campus map by name or code (SGM, DML), with coordinates |
+| usc-parking   | account, activePermits                                                                              | the student's parking balance, unpaid citations, permits and vehicles; signs in through USC by itself, `signedIn: false` means signed out     |
+| usc-rec       | facilityTraffic                                                                                     | live head counts at Lyon, Village and HSC gyms and the pools                                                                                  |
+| usc-maps      | searchPlaces                                                                                        | a building or place on the campus map by name or code (SGM, DML), with coordinates                                                            |
 | bundled       | google-flights, airbnb, amazon, goodreads, youtube, x, instagram, hacker-news                       | upstream's own                                                                                                                                |
 
 Formats that bit during teaching: LinkedIn job locations in full
@@ -82,6 +82,26 @@ then teach one read-only op for the data you just pulled, as below. A one-off
 page with nothing repeatable (a docs article, one news story) gets
 `api-grow skip <host> "<why>"` instead, so no tab asks again. `chewbacca api
 grow` lists what's been browsed and never taught, most visited first.
+
+## The bar for any site we reverse engineer
+
+Caleb, 2026-10-22: "I want NO ONE to ever open brightspace ever again" and
+"That is the standard for when we reverse engineer ANYTHING". A site counts
+as done when every job a person does on it runs headless, both ways:
+
+- Every read the person does there, not just the first one asked for.
+- Files go up and come down: submit, attach and upload, and download what
+  was handed in, what the site hands out, and the feedback on it.
+- Writes run where no one sees them: the site's own API first, then a
+  headless Chromium holding the session's cookies, driving the site's own
+  page code. Never a tab in his Chrome. `open -g` still pulled Chrome to the
+  front that night.
+- Proof comes from reading the site back afterward, never from the click.
+
+Brightspace's group dropbox is the worked case: the API route wanted an
+OAuth scope a cookie session lacks, so `brightspace submit` runs the submit
+page in headless Chromium, drops the file into D2L's own uploader, and checks
+the submission list for the name and byte size.
 
 ## Teaching a new site
 

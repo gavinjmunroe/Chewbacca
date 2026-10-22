@@ -19,8 +19,8 @@ team builds something nobody asked for.
 
 ## Step 1: self validation
 
-Write the concept in one breath: who it's for, the problem, the product.
-Then answer, in writing:
+Write the concept in the course's sentence: "We are making ___ for ___ so
+they can ___." Then answer, in writing:
 
 - Why Now. Name the inflection: what outside change enables new behavior,
   who desperately wants it, how it changes their lives, and when it crests.
@@ -28,15 +28,28 @@ Then answer, in writing:
   Too early is riskier than too late, and a late entrant picks a niche.
 - Can it be advertised on Meta under Meta's ad policy? The paid test in step 4
   runs there, so a no here changes the plan.
-- Can it use network effects? Write it as Y = M x X^B: B above 1 means each
-  new user makes the product better (superlinear), below 1 is diminishing
-  returns.
+- Can it use network effects? Write growth as Y = M x X^B, where X is
+  usually time, Y usually revenue and M the product. B above 1 is superlinear
+  growth, from network effects, compounding data or viral loops (referrals,
+  notifications, loyalty tiers). 0 to 1 is diminishing returns, below 0 an
+  inverse power law. Name which of NFX's 16 network effects apply: direct
+  (physical, protocol, personal utility, personal, market network,
+  hub-and-spoke), two-sided (marketplace, platform, asymptotic marketplace),
+  data, tech performance, and social (language, belief, bandwagon, tribal),
+  plus expertise. Direct ones are the strongest and physical the most
+  defensible. Data effects tend to be weaker, social ones the hardest to hold
+  long term, and asymptotic marketplaces are more open to competition.
 
 Comparing several ideas: score each on Talent, Market Size, Why Now, Problem
 Space, Desirability, Technical Feasibility, Competitive Feasibility and
 Viability, 1 to 10 by default, 1 to 5 for less critical, 1 to 20 for the one
 that matters most, and write why each weight is what it is. The test of the
 dashboard: "could you make a decision from this?"
+
+A pitch answers: the problem, the solution, why now, market size, the
+initial audience against the eventual one, the revenue model, and the plan to
+get superlinear growth. A project brief adds the target audience, the
+qualitative validation argument and a competitive analysis.
 
 Investor lens, when the idea will raise money: strong team, Why Now plus a
 differentiated insight, a large market, a real business model with traction,
@@ -66,12 +79,25 @@ the idea. Then 3 to 5 questions that would surface those Signs. The rules:
 - Never ask "Would you use this?", "Is this a good idea?" or "What would you
   pay?" Ask "How much have you spent trying to solve this?"
 - Listen more than you talk. Don't lead.
-- Close with a next step (try a prototype on their next real purchase).
 - Be willing to walk away from the idea.
+- Close by asking "Who else should I talk to about this?" and whether they
+  want updates when it launches.
+
+From the assigned Mom Test reading: talk about their life, never your idea,
+or you drift into pitching. Bring a second person to catch pitching and bad
+questions. "You want facts and commitments, not compliments." Questions that
+work: "Talk me through the last time that happened," "Why do you bother?",
+"What are the implications of that?" Instead of asking about price, ask what
+they do now or ask for money. Instead of "is this a good idea," ask them to
+show how they handle it now, what they love and hate about it, what they've
+tried, and whether they're looking for a replacement. Take notes with their
+exact words and mark the emotion.
 
 Run at least 3 recorded 15 minute calls, 5 is better, and log every outreach.
-Set the bar before the calls ("4 of 7 show signs 1 and 2"), then score each
-call against it. A yes from someone whose workaround "works fine" is a false
+Set the bar before the calls, then score each call against it. The course's
+gate (A8) is that a majority of the team has a recorded conversation that
+validates the project; the Kyber team wrote theirs as "4 of 7 show signs 1
+and 2." A yes from someone whose workaround "works fine" is a false
 positive.
 
 Fail: change the audience, iterate the idea, or table it, then run step 3
@@ -127,8 +153,9 @@ Fail after fixes: pivot (back to step 2 or 3) or kill.
 - Never write interview questions about the product before questions about
   their last real experience of the problem.
 - Never quote an eROAS, CAC or pass/fail from mental math. Run funnel.py.
-- Never recommend scaling a test with under about 50 reservations without
-  saying the sample is thin.
+- Never recommend scaling off a small sample without saying so. House rule,
+  not a course number: under about 50 reservations is thin. In Caleb's A10
+  set, 767% on 23 reservations was the riskier bet than 321% on 161.
 
 ## References
 

@@ -1,6 +1,6 @@
 ---
 name: launch-funnel
-description: "Write a product's persona, messaging, ad, landing page and $1 reservation page in one chain, or tear down a competitor's page section by section. From Chris Swain's ACAD 185 at USC."
+description: "Write a product's persona, messaging, ad, landing page and $1 reservation page in one chain, or tear down a competitor's or any admired page section by section. From Chris Swain's ACAD 185 at USC."
 triggers: >-
   Write or review the pieces of a launch or validation funnel the way USC ACAD 185 (Chris Swain) teaches them: a target persona, a messaging and direction summary, competitor teardowns, a Facebook or Instagram ad, a landing page, a waitlist or preorder page with a deposit. Use when the user asks for landing page copy, a hero headline, a waitlist or reservation page, ad copy for a launch, a persona, a positioning or messaging doc, value propositions, or wants to reverse engineer someone's landing page. Also use before designing any landing page, so the copy exists before the layout.
 ---
@@ -58,8 +58,8 @@ tier), imagery, judgments (write three fake reviews), feelings, resonance.
 ## 3. Competitor teardown
 
 Per competitor, seven answers: price; key messaging quoted from their site;
-landing page screenshots; ad screenshots (Meta Ad Library); points of
-difference; what reviews praise; what reviews complain about. Quote real
+landing page screenshots; ad screenshots (the Meta Ad Library is a good
+source, though the course doesn't name one); points of difference; what reviews praise; what reviews complain about. Quote real
 reviews with where they came from. Capture pages headless, never in the
 user's visible browser.
 
@@ -70,12 +70,23 @@ for your own product next to it.
 
 ## 4. The ad
 
-Primary text: "This [category] has everything you need," then the feature
-lines, then the offer. An image or video that shows the product in use.
-Headline: the offer ("Get huge prelaunch discounts"). The ad has to match the
-page it lands on, or L-CR drops.
+Primary text: "This [category] has everything you need:" and six feature
+spotlight lines (the template), or a short paragraph that ends on the offer
+(the Lomi example). An image or video. Headline: the offer ("Get huge
+prelaunch discounts"). The ad's job is to generate interest or curiosity:
+intriguing, fascinating, satisfying, exciting or surprising. It has to match
+the page it lands on, or L-CR drops.
 
 ## 5. The landing page
+
+The order (W9S18): hero title and image, CTA 1, benefit 1, benefit 2,
+benefit 3, benefit 4 (optional), use case or how to or reaction testimonials,
+mission or brand story, CTA 2, then the reservation with its button. Each
+part has a job: the hero sets expectations and builds hype, the benefits
+fulfill expectations and then break them, the use case lets them imagine
+life using it, the mission gives the reason that brings people together, and
+the close leaves resonance and belonging. The worksheet's sections 3 to 5
+are benefits 1 to 3.
 
 - Section 1, hero. Headline is the unique selling proposition in 7 to 15
   words: "The world's [superlative] [category] to do [value 1] and
@@ -86,7 +97,8 @@ page it lands on, or L-CR drops.
 - Section 2, sign-up form. "We're launching soon. Get an exclusive discount
   by signing up now!" Button: "Reserve my launch invite."
 - Sections 3 to 5, headlines of 7 to 9 words, subtext either a list or a
-  paragraph under two sentences, and never both together. Section 3 shows how you're
+  paragraph under two sentences, not both, except a 5-word intro to a
+  list. Section 3 shows how you're
   similar to what they know (familiarity). Section 4 breaks expectations with
   the most differentiating feature. Section 5 shows the feature that best
   represents the mission. Section types: features, benefits, pain points,
@@ -98,20 +110,42 @@ page it lands on, or L-CR drops.
 
 "Save X% when you reserve [product] today!" A $1 deposit locks the discount
 off the regular price, and the page says the final total. Show the five
-numbers: deposit, discounted price, regular price, the discount in dollars,
-the discount percent, and check the math before shipping it.
+numbers: deposit, discounted price, regular price, the discount in dollars
+(regular minus discounted) and the discount percent (discount divided by
+regular). Recompute them before shipping: the course's own Lomi example says
+37.5% off when $400 off $899 is 44.5%, and its headline says 44%.
 
 ## 7. Visual storytelling on the page
 
-From Bruce Block's visual structure, as the course applies it: contrast
-raises intensity and grabs attention, affinity lowers it and feels calm. Use
-contrast where the eye should go (the CTA, the headline) and affinity
-everywhere else. The levers are space, line, shape, tone, color, movement and
-rhythm. Diagonal lines and vanishing points pull the eye; a complementary hue
-makes a button stand out (a red button on a green page), analogous hues keep
-the reader flowing. Brightness decides what's seen first. Movement is seen
-before anything else. Pick color by the feeling it carries: blue for trust,
-green for growth or health, orange for friendly, black for premium.
+From Bruce Block's visual structure, as the course applies it to conversion:
+contrast (difference) raises visual intensity and pulls attention, affinity
+(similarity) lowers it and feels calm. Use contrast where the eye has to go,
+like the CTA and the headline, and analogous, low-contrast choices where you
+want users to "feel guided, not jolted." The seven components:
+
+- Space. Depth cues: a vanishing point (the eye goes where lines converge),
+  textural diffusion, tonal separation (bright reads closer, dark farther),
+  color separation (warm closer, cool farther), focus. Space types: flat
+  (high affinity), deep (high contrast), limited, ambiguous.
+- Line, the most important component: it controls space, movement, rhythm and
+  attention. Imaginary lines form by closure between points of interest.
+  Diagonals create contrast and draw the eye, verticals create order.
+- Shape and tone: tone is brightness, black to white, and it's what makes
+  lines and shapes visible.
+- Color. Hue defines the emotional character, brightness directs attention,
+  saturation controls intensity. Complementary hues are the highest contrast
+  (a red button on a green site), analogous hues give continuity and calm.
+  The deck's meanings: red energy, danger, love, passion; orange warm,
+  friendly, fun, energy; yellow joy, intellect, attention, concentration;
+  green growth, success, health, peace, nature, environment; blue
+  trustworthy, professional, calm, refreshing; purple romance, luxury,
+  success, abundance; pink innocence, optimism, femininity; brown outdoors,
+  restraint, trust, earthy; white spirituality, science, pureness,
+  cleanliness; black luxury, prestige, strength, mystery.
+- Movement is seen first: object, camera, point of attention, induced.
+  Consistent movement is affinity, sudden changes are contrast.
+- Rhythm: repetition, tempo ("slow = tension or grandeur; fast = urgency or
+  chaos") and alternation, each with an affinity and a contrast form.
 
 ## Never
 
@@ -120,7 +154,8 @@ green for growth or health, orange for friendly, black for premium.
   untested prices and features as a best guess.
 - Never describe a section's purpose in product terms during a teardown.
 - Never ship the reservation math without recomputing it.
-- Never put body text and a bullet list in the same section.
+- Never put body text and a bullet list in the same section, beyond a 5-word
+  intro to the list.
 
 Related: [[venture-validation]] reads the test this funnel runs,
 [[community-content]] feeds it free traffic, [[interface]] and [[site-spec]]

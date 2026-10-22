@@ -93,6 +93,17 @@ one call, and a lapsed session renews itself from Chrome:
   `chewbacca api call brightspace <grades|announcements|quizzes|discussions|content> orgUnitId=<id>`
   (ids from `chewbacca api call brightspace myCourses`)
 - Anything else: `brightspace get /le/1.75/<ou>/<path>`
+- An assignment brief (the dropbox instructions, with its Google Doc template
+  links and attachments): `brightspace get /le/1.99/<ou>/dropbox/folders/<folderId>`,
+  then read `CustomInstructions.Html`. The path starts at `/le`, never
+  `/d2l/api/le` (that 404s). folderIds come from the `assignments` op.
+  `SubmissionType` 3 means observed in person: nothing gets uploaded, the work
+  lives where the brief says (often the master spreadsheet). No `Availability`
+  end date means a late upload still goes through.
+- A worksheet with screenshots or nested lists: `chewbacca pdf` dropped every
+  image and flattened the nested lists on 2026-10-21 (ACAD 185 A17). Render it
+  with pandoc to standalone HTML, then Playwright `page.pdf`, and count images
+  with `pdfimages -list` before handing it over.
 
 Never-dos, in his words (2026-10-11, mid quiz):
 

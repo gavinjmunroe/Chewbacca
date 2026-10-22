@@ -112,6 +112,11 @@ Never-dos, in his words (2026-10-11, mid quiz):
   never grep, `find`, `chewie web` or a screenshot.
 - "STOP FLASH BANGING ME": no read opens a window, a tab or a headless
   browser with a Dock icon. A sign-out is a BLOCKED line, nothing more.
+- "Wait I alr figured that out, no?" (2026-10-22, BISC lab presentation
+  topic): Gmail, Brightspace and the ledger only hold what was written down.
+  When they're silent on something he could have heard in lab or in person
+  (a topic, a presenting week, a makeup slot), ask him in one line first.
+  Never offer to email the instructor to find it out.
 
 A quiz's questions 403 until the student opens an attempt, so no tool can
 read them first. Ask them to paste the questions; never start an attempt.

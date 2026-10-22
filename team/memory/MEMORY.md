@@ -416,3 +416,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - reference_sharing_a_claude_setup: Give a friend the setup as a prompt md + idempotent install.sh merging into their ~/.claude, never chewbacca setup.sh (Colin, 10/19)
 - feedback_slow_mac_is_memory_not_cpu: A slow Mac was swap plus leaked processes, not CPU; orphan-reap sweeps every 5 min with --pressure (load 110, 10/19)
 - feedback_chewbacca_main_only: Chewbacca keeps one branch, main, locally and on GitHub; detached worktrees plus chewbacca land, never push a branch (Caleb, 10/19)
+- feedback_drafted_texts_get_scored: drafted texts in unlabeled fences went out unscored and 2 contrasts scored 0 (10/21); --chat scores those fences now

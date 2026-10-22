@@ -127,3 +127,29 @@ def test_essay_density_tells_fire_on_paired_quote_quilt():
 def test_essay_density_tells_stay_quiet_on_narrative_and_without_flag():
     assert not {"both-symmetry", "quote-confetti"} & fired(NARRATIVE, "--essay")
     assert not {"both-symmetry", "quote-confetti"} & fired(PAIRED)
+
+
+# 2026-10-21: a drafted text inside an unlabeled fence went out unscored, and
+# both contrasts in it scored 0 anyway. "Not this, phrase, phrase".
+@pytest.mark.parametrize(
+    "text",
+    [
+        "And it doesn't just give me answers, it gives me a problem.",
+        "For basic studying the model barely matters. They're all good enough. It's HOW u use it",
+    ],
+)
+def test_doesnt_just_and_barely_matters_fire(text):
+    assert "not-just-contrast" in rules_fired(text, chat=True)
+
+
+def test_chat_scores_unlabeled_fence_but_not_code():
+    draft = "Here:\n```\nIt doesn't just quiz me, it teaches me.\n```\n"
+    assert "not-just-contrast" in rules_fired(draft, chat=True)
+    code = "Here:\n```python\nx = 'doesn\\'t just, it'\n```\n"
+    assert "not-just-contrast" not in rules_fired(code, chat=True)
+
+
+def test_plain_studying_line_stays_clean():
+    assert "not-just-contrast" not in rules_fired(
+        "For basic studying any of them work fine. I care way more abt how it's set up", chat=True
+    )

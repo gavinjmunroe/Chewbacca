@@ -90,7 +90,13 @@ RULES = [
         "X, not just Y / but it was also: state the claim you mean",
         re.compile(
             r"(?:,\s+not (?:just|only|merely)\b|\bnot only\b[^.\n]{3,60}\bbut\b"
-            r"|,\s+but (?:it|they|he|she|this|that) (?:was|were|is|are) also\b)",
+            r"|,\s+but (?:it|they|he|she|this|that) (?:was|were|is|are) also\b"
+            # 2026-10-21, a text drafted for Caleb to send: "it doesn't just give
+            # me answers, it gives me a problem" and "the model barely matters.
+            # They're all good enough. It's HOW u use it". He wrote "Not this,
+            # phrase, phrase" and both had scored 0.
+            r"|\b(?:does|do|did)n'?t just\b[^.\n]{2,60},\s*(?:it|they|he|she|i|we|u|you)\b"
+            r"|\b(?:barely|hardly|doesn'?t|don'?t) matters?\b[^\n]{0,60}?\bit'?s (?:how|what|the)\b)",
             re.I,
         ),
     ),
@@ -178,7 +184,7 @@ RULES = [
 ]
 
 
-def strip_code(text):
+def strip_code(text, chat=False):
     """Blank out code so a snippet's contents never count as prose.
 
     Replaced with newlines rather than deleted, so reported line numbers still
@@ -188,7 +194,16 @@ def strip_code(text):
     def blank(m):
         return "\n" * m.group(0).count("\n")
 
-    text = re.sub(r"```.*?```", blank, text, flags=re.S)
+    # In a chat reply an unlabeled fence is a drafted text for Caleb to paste
+    # and send, so it is prose and gets scored. On 2026-10-21 three drafts in
+    # a row went out inside fences, never scored, and he asked "Bro did you
+    # break? What happend to the hooks/rules/tests?". Labeled fences are code.
+    if chat:
+        text = re.sub(r"```[ \t]*\n", "\n", text)
+        text = re.sub(r"```[A-Za-z0-9_+-]+.*?```", blank, text, flags=re.S)
+        text = text.replace("```", "")
+    else:
+        text = re.sub(r"```.*?```", blank, text, flags=re.S)
     text = re.sub(r"^ {4,}\S.*$", "", text, flags=re.M)
     text = re.sub(r"`[^`\n]*`", "", text)
     # Blockquotes are somebody else's sentence. Scoring them means telling the
@@ -277,7 +292,7 @@ def scan(text, chat=False, essay=False):
     long document at 100 and made the score useless for ranking. Distinct rules
     firing is the real signal, so repeats of one rule are worth steadily less.
     """
-    prose = strip_code(text)
+    prose = strip_code(text, chat=chat)
     findings, per_rule = [], {}
     for rid, weight, why, pattern in RULES:
         # Caleb texts with emojis (about 1 message in 25: 🥀 😓 🔜 😭 🔥) and

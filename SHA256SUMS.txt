@@ -66,7 +66,7 @@ cc50c2a07f59b11f165690ad20f5103c45f3150f6faa47bec4663f3027666e71  .claude/hooks/
 669edb92bf2514e7e8a2cabd962158ec6b12c0fe7cebfeeee1d03a7c736b78b9  .claude/hooks/skill-gate.sh
 a176571c1fc0376648f87d4e84c994142242275bf1fbbd53c0358609a3375137  .claude/hooks/skill-route-shadow.sh
 c4bfd00d39d2163966bc6f7d1a8272c4ef3ae6f74be20b76d119cfdd2ee5707e  .claude/hooks/skill-route.sh
-6ffe5938f7e8a91068dc1ce760b334a45964c2c6b52ae6721ba53d15b9e10b62  .claude/hooks/skim-guard.sh
+fdc284c1c5f57de296faed3009f272200c40067108b6f062e1ba11a4f291d00d  .claude/hooks/skim-guard.sh
 84c734c22d4b9c898f1a9b9901c6e8e9fcc62f83758e8da798cfc4bebee8ad91  .claude/hooks/slop-guard.sh
 0aeb3e7c5d08db6e967001ddd1fc845791f500c5186c3616f9f99d49367c2695  .claude/hooks/stale-read-guard.sh
 6a02b63a1166d249ab763f5cfad1c996f96e0c9773a5ff39d290ffb1692d2c74  .claude/hooks/statusline.sh

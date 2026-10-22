@@ -41,6 +41,11 @@
       "type": "replay",
       "test": "tests/test_break_it.py",
       "corpus": "tests/fixtures/break_it/cases.json"
+    },
+    ".claude/hooks/skim-guard.sh": {
+      "type": "replay",
+      "test": "tests/test_skim_guard_replay.py",
+      "corpus": "tests/fixtures/steering/skim_replies_2026_10_22.json"
     }
   },
   "grandfathered": [

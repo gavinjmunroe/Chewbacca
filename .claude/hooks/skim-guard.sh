@@ -37,7 +37,8 @@ import json, os, re, shlex
 msg = os.environ["SG_MSG"]
 CLAIM = re.compile(
     r"\b(read|went through|ingested|covered|reviewed|pulled in)\b[^.\n]{0,40}\b(all|every|everything|each|whole|fully|entire)\b"
-    r"|\bevery (line|page|slide|deck|file|doc)\b|\bfully (read|ingested)\b|\bingested (it|them|everything|all)\b",
+    r"|\bevery (line|page|slide|deck|file|doc)\b|\bfully (read|ingested)\b|\bingested (it|them|everything|all)\b"
+    r"|\beverything got (pulled|read|ingested)\b",
     re.I)
 HONEST = re.compile(r"\bskim\w*|\bNOT READ\b|BLOCKED:|\bpartially\b|\bcut (it|them) off\b", re.I)
 if not CLAIM.search(msg) or HONEST.search(msg):
@@ -45,6 +46,7 @@ if not CLAIM.search(msg) or HONEST.search(msg):
 
 DOC = re.compile(r"[\x22\x27]?([^\s\x22\x27|;&<>]*?\.(?:txt|md|csv|pdf|html|json|docx|xlsx|srt|vtt))[\x22\x27]?", re.I)
 TRUNC = re.compile(r"\|\s*(head|tail)\b|\b(head|tail)\s+-|\|\s*cut\s+-c|\bcut\s+-c|\bsed\s+-n\s+[\x27\x22]?\d+,\d+p|\bawk\b[^|]*NR\s*[<>]")
+READERS = {"cat", "nl", "less", "head", "tail", "cut", "sed", "awk", "grep"}
 READER = re.compile(r"\b(cat|less|grep|sed|awk|head|tail|cut|python3?)\b")
 
 state = {}    # key: "partial" | "full"
@@ -129,25 +131,37 @@ with open(os.environ["SG_TRANSCRIPT"], encoding="utf-8", errors="replace") as fh
                     mark(k, "full")
             elif name == "Bash":
                 cmd = inp.get("command") or ""
-                if not READER.search(cmd):
-                    continue
-                files = doc_tokens(cmd)
-                if not files:
-                    continue
                 cd = re.search(r"\bcd\s+(\S+)", cmd)
                 here = cd.group(1).strip("\x27\x22") if cd else cwd
-                rng = None
-                m = re.search(r"\bsed\s+-n\s+[\x27\x22]?(\d+),(\d+)p", cmd)
-                if m:
-                    rng = (int(m.group(1)), int(m.group(2)))
-                m = re.search(r"\bhead\s+-n?\s*(\d+)", cmd)
-                if m and not rng:
-                    rng = (1, int(m.group(1)))
-                how = "partial" if TRUNC.search(cmd) or rng else ("full" if re.search(r"\bcat\b", cmd) else None)
-                if how is None:
-                    continue
-                for f in files:
-                    mark(key_of(f, here), how, rng if len(files) == 1 else None)
+                # Only files handed to a reading command count: a file passed to
+                # slop-check or pdftotext and then piped to tail was not read.
+                loops = {m.group(1): doc_tokens(m.group(2))
+                         for m in re.finditer(r"\bfor\s+(\w+)\s+in\s+(.*?);\s*do\b", cmd)}
+                for pipeline in re.split(r";|&&|\|\||\bdo\b|\bdone\b|\bthen\b", cmd):
+                    segs = pipeline.split("|")
+                    head_seg = segs[0].strip()
+                    words = head_seg.split()
+                    if not words or words[0] not in READERS:
+                        continue
+                    files = doc_tokens(head_seg)
+                    for var, listed in loops.items():
+                        if re.search(r"\$\{?" + var + r"\b", head_seg):
+                            files += listed
+                    if not files:
+                        continue
+                    rng = None
+                    m = re.search(r"\bsed\s+-n\s+[\x27\x22]?(\d+),(\d+)p", head_seg)
+                    if m:
+                        rng = (int(m.group(1)), int(m.group(2)))
+                    m = re.search(r"\bhead\s+-n?\s*(\d+)", head_seg)
+                    if m and not rng:
+                        rng = (1, int(m.group(1)))
+                    trunc = rng or words[0] in ("head", "tail", "cut") or TRUNC.search(pipeline)
+                    how = "partial" if trunc else ("full" if words[0] in ("cat", "nl", "less") else None)
+                    if how is None:
+                        continue
+                    for f in files:
+                        mark(key_of(f, here), how, rng if len(files) == 1 else None)
 
 for k in list(state):
     if state[k] == "partial" and covered(k):

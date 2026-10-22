@@ -1118,6 +1118,8 @@ if group "installer"; then
     bash "$ROOT/tests/scope_guard.sh"
   check  "skim-guard refuses a read-everything claim after a truncated read" \
     bash "$ROOT/tests/skim_guard.sh"
+  check  "skim-guard replays the real 2026-10-22 ingest replies" \
+    python3 "$ROOT/tests/test_skim_guard_replay.py"
   check  "ready-guard refuses a launch-ready claim without a fresh signed gtme ready" \
     bash "$ROOT/tests/ready_guard.sh"
   check  "link-guard refuses a reply whose file links don't open from the session root" \

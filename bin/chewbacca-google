@@ -61,8 +61,44 @@ def gws(*args, params=None, cwd=None):
         data = {}
     if r.returncode != 0 or "error" in data:
         msg = (data.get("error") or {}).get("message") if isinstance(data.get("error"), dict) else data.get("error")
-        sys.exit(f"chewbacca google: {msg or r.stderr.strip() or 'gws failed'}")
+        msg = str(msg or r.stderr.strip() or "gws failed")
+        if revoked(msg) and heal():
+            return gws(*args, params=params, cwd=cwd)
+        sys.exit(f"chewbacca google: {msg}")
     return data
+
+
+def revoked(msg):
+    return "invalid_grant" in msg or "expired or revoked" in msg
+
+
+# The sign-in app is in Google's "Testing" status, which expires every refresh
+# token after 7 days: the main login made Oct 11 died Oct 18 and every read
+# failed until someone noticed on Oct 21. A revoked login re-consents itself
+# once, in a background browser tab, then the call is retried.
+_HEALED = False
+
+
+def heal():
+    global _HEALED
+    if _HEALED or os.environ.get("CHEWBACCA_GOOGLE_NO_HEAL"):
+        return False
+    _HEALED = True
+    home = os.environ.get("CHEWBACCA_EMAIL_HOME", os.path.expanduser("~/.chewbacca/email"))
+    addr = ""
+    try:
+        addr = open(os.path.join(home, "main")).read().strip()
+    except OSError:
+        pass
+    if not addr:
+        dirs = sorted(d for d in os.listdir(home) if "@" in d) if os.path.isdir(home) else []
+        addr = dirs[0] if dirs else ""
+    if not addr:
+        return False
+    print(f"chewbacca google: sign-in expired, renewing {addr}...", file=sys.stderr)
+    r = subprocess.run([os.environ.get("CHEWBACCA_BIN", "chewbacca"), "email", "add", addr],
+                       capture_output=True, text=True, timeout=180)
+    return r.returncode == 0
 
 
 def file_id(ref):

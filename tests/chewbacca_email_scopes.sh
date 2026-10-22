@@ -71,5 +71,33 @@ grep -q "^$tmp/home/.config/gws auth login" "$tmp/gws.log" ||
   { echo "FAIL: a dead main sign-in was not re-consented"; cat "$tmp/gws.log"; fail=1; }
 [ -d "$tmp/home/.chewbacca/email/other@example.com" ] && { echo "FAIL: dead main left the add in a per-inbox copy"; fail=1; }
 
+# The consent tab opens in the background, never in front of him (2026-10-22).
+grep -q 'open -g "$url' "$f" || { echo "FAIL: the consent tab no longer opens in the background"; fail=1; }
+
+# Behaviour: chewbacca google on a revoked login renews it once and retries.
+# The app sits in Google's Testing status, so refresh tokens die every 7 days
+# (main login Oct 11, dead Oct 18, noticed Oct 21).
+g="${GOOGLE_CLI:-$ROOT/bin/chewbacca-google}"
+mkdir -p "$tmp/heal/email"; echo me@example.com >"$tmp/heal/email/main"
+cat >"$tmp/bin/gws2" <<'EOF2'
+#!/bin/bash
+if [ -f "$HEAL_MARK" ]; then echo '{"files":[]}'; exit 0; fi
+echo "Authentication failed: invalid_grant: Token has been expired or revoked." >&2; exit 1
+EOF2
+cat >"$tmp/bin/fakechewb" <<'EOF2'
+#!/bin/bash
+[ "$1 $2 $3" = "email add me@example.com" ] && touch "$HEAL_MARK"
+EOF2
+chmod +x "$tmp/bin/gws2" "$tmp/bin/fakechewb"
+out=$(CHEWBACCA_GWS="$tmp/bin/gws2" CHEWBACCA_BIN="$tmp/bin/fakechewb" CHEWBACCA_EMAIL_HOME="$tmp/heal/email" \
+  HEAL_MARK="$tmp/heal/mark" python3 "$g" recent 3 2>&1); rc=$?
+[ -f "$tmp/heal/mark" ] || { echo "FAIL: a revoked login did not trigger email add for the main address"; fail=1; }
+[ $rc -eq 0 ] || { echo "FAIL: chewbacca google did not retry after renewing: $out"; fail=1; }
+rm -f "$tmp/heal/mark"
+printf '#!/bin/bash\nexit 1\n' >"$tmp/bin/fakechewb"
+out=$(CHEWBACCA_GWS="$tmp/bin/gws2" CHEWBACCA_BIN="$tmp/bin/fakechewb" CHEWBACCA_EMAIL_HOME="$tmp/heal/email" \
+  HEAL_MARK="$tmp/heal/mark" python3 "$g" recent 3 2>&1); rc=$?
+{ [ $rc -ne 0 ] && printf '%s' "$out" | grep -q invalid_grant; } || { echo "FAIL: a failed renewal must exit with the real error"; fail=1; }
+
 [ $fail -eq 0 ] && echo "ok: chewbacca email scopes"
 exit $fail

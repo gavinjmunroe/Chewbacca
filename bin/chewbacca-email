@@ -116,7 +116,10 @@ add() {
   while [ -z "$url" ] && [ $waited -lt 20 ]; do
     url=$(grep -o 'https://accounts.google.com[^ ]*' "$LOG" | head -1); sleep 1; waited=$((waited + 1))
   done
-  [ -n "$url" ] && open "$url&login_hint=$(python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1]))' "$addr")"
+  # -g: the consent tab opens behind whatever he's doing, never in front of it
+  # ("STOP FLASH BANGING ME", 2026-10-22). A login he already granted finishes
+  # with no click.
+  [ -n "$url" ] && open -g "$url&login_hint=$(python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1]))' "$addr")"
   wait "$pid"
   # gws keeps serving the old access token, with the old scopes, from
   # token_cache.json after a new login; the fresh scope 403'd until it was
@@ -126,6 +129,8 @@ add() {
   got=$(whoami_in "$cfg")
   if [ "$got" = "$addr" ]; then
     [ -n "$backup" ] && rm -f "$backup"
+    # chewbacca google re-consents this address when the main login expires.
+    [ "$cfg" = "$DEFAULT_CFG" ] && { mkdir -p "$HOME_DIR"; printf '%s\n' "$addr" >"$HOME_DIR/main"; }
     say "Connected $addr. Pulling its mail in..."
     command -v people >/dev/null 2>&1 && people texts sync --quiet >/dev/null 2>&1
     say "Done."

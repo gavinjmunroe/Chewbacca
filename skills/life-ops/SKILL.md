@@ -98,6 +98,32 @@ If someone is describing something beyond a hard week, say so once, plainly,
 point at the real resource, and do not turn the session into a counseling
 session you are not equipped to run. Then help with the two things.
 
+## Money owed to family or friends
+
+An "everything I owe you" list is an accounting. Build it from evidence, not
+from the person's memory, and do the digging before you write a single
+`[NEED:]` line.
+
+1. **Read the thread with the person owed, the whole year.** Pull every message
+   with a dollar amount, plus every "pay you back", "I owe", "reimburse" and
+   "lend", with the lines around it for context. People often already wrote a
+   partial tally in a text. Start from that one and check its arithmetic.
+2. **Search every connected inbox for receipts** before marking a line unknown.
+   Run `chewbacca email` to list the inboxes, then search each with gws (each
+   inbox has its own config dir under `~/.chewbacca/email/<address>`). Vendor
+   receipts carry the exact amount, the date and often the card.
+3. **Cite each line's source** (whose text, which receipt, the date) so the
+   reader can check it.
+4. **Only what's on the other person's own bank statement** (their card, their
+   Zelle) stays `[NEED:]`. Name the statement on that line.
+
+The user, 2026-10-22, after a repay list came back with half its lines marked
+NEED: "Dawg can't you go through my emails and/or accounts to find reciepts?"
+The receipts were in his personal Gmail: $1,525.11 of API credits and $508.26 of
+domains, each one exact to the cent. The same day he had to ask about "things
+where he put money in my account and I told him I would pay him back", and a
+scan of the thread for pay-back phrases would have found those on the first pass.
+
 ## What not to do
 
 - **Do not build a system when a note will do.** The elaborate tracker that gets

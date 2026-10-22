@@ -1116,6 +1116,8 @@ if group "installer"; then
     bash "$ROOT/tests/texts_sync_lock.sh"
   check  "scope-guard refuses a self-chosen cut of scope he set as all" \
     bash "$ROOT/tests/scope_guard.sh"
+  check  "skim-guard refuses a read-everything claim after a truncated read" \
+    bash "$ROOT/tests/skim_guard.sh"
   check  "ready-guard refuses a launch-ready claim without a fresh signed gtme ready" \
     bash "$ROOT/tests/ready_guard.sh"
   check  "link-guard refuses a reply whose file links don't open from the session root" \

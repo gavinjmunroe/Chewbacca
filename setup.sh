@@ -2286,6 +2286,12 @@ _register("SessionStart", hooks_dir + "/orphan-reap.sh", timeout=10,
 _register("Stop", hooks_dir + "/scope-guard.sh", timeout=10,
           status="Checking the scope he asked for...")
 
+# A reply may not say everything was read when this session read a source only
+# in part. 2026-10-22: two ACAD 185 decks went through head -260 and the reply
+# said the class was in. Caleb: "Did you ingest everything or just skim?"
+_register("Stop", hooks_dir + "/skim-guard.sh", timeout=10,
+          status="Checking every source was read whole...")
+
 # A launch is ready only when `chewbacca gtme ready` says READY, signed and
 # under 2 hours old. 2026-10-12: a Zeutara launch was called good "until Jonah
 # responds" with 1 of 14 campaigns graded, gates 3 to 5 NOT CHECKED and an

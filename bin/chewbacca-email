@@ -93,8 +93,14 @@ add() {
   # surface and meeting follow-ups read, since they call plain `gws`. When the
   # address is the account already signed in there, re-consent that config in
   # place; a per-inbox copy would hold the new scopes where none of them look.
-  local cfg="$HOME_DIR/$addr" backup=""
-  if [ "$(status_user "$DEFAULT_CFG")" = "$addr" ]; then
+  # A main sign-in whose token Google revoked names no user at all, so the
+  # match above never fires and every add lands in a per-inbox copy while the
+  # readers stay dead (2026-10-22: both inboxes "Connected", chewbacca google
+  # still invalid_grant). A dead main gets re-consented by whichever add runs.
+  local cfg="$HOME_DIR/$addr" backup="" main_user
+  main_user=$(status_user "$DEFAULT_CFG")
+  if [ "$main_user" = "$addr" ] ||
+     { [ -z "$main_user" ] && [ -f "$DEFAULT_CFG/credentials.enc" ] && [ -z "$(whoami_in "$DEFAULT_CFG")" ]; }; then
     cfg="$DEFAULT_CFG"
     if [ -f "$cfg/credentials.enc" ]; then
       backup="$cfg/credentials.enc.before-reconsent"

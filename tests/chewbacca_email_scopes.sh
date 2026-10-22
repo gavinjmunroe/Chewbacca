@@ -53,5 +53,23 @@ grep -q "^$tmp/home/.config/gws auth login" "$tmp/gws.log" ||
 [ "$(cat "$tmp/home/.config/gws/credentials.enc")" = old ] || { echo "FAIL: failed re-consent did not restore credentials"; fail=1; }
 [ -e "$tmp/home/.config/gws/credentials.enc.before-reconsent" ] && { echo "FAIL: failed re-consent left its backup behind"; fail=1; }
 
+# Behaviour: a main config whose token was revoked reports no user and no
+# profile. Adding any address must repair the main config, not make a copy.
+: >"$tmp/gws.log"; rm -rf "$tmp/home/.chewbacca"
+cat >"$tmp/bin/gws" <<'EOF2'
+#!/bin/bash
+echo "$GOOGLE_WORKSPACE_CLI_CONFIG_DIR $*" >>"$FAKE_GWS_LOG"
+case "$1 $2" in
+  "auth status") echo '{"auth_method":"oauth2"}' ;;
+  "gmail users") exit 1 ;;
+  "auth login") echo "https://accounts.google.com/o/oauth2/auth?x=1"; exit 1 ;;
+esac
+EOF2
+CHEWBACCA_GWS="$tmp/bin/gws" HOME="$tmp/home" CHEWBACCA_EMAIL_HOME="$tmp/home/.chewbacca/email" FAKE_GWS_LOG="$tmp/gws.log" \
+  PATH="$tmp/bin:$PATH" bash "$f" add other@example.com >/dev/null 2>&1
+grep -q "^$tmp/home/.config/gws auth login" "$tmp/gws.log" ||
+  { echo "FAIL: a dead main sign-in was not re-consented"; cat "$tmp/gws.log"; fail=1; }
+[ -d "$tmp/home/.chewbacca/email/other@example.com" ] && { echo "FAIL: dead main left the add in a per-inbox copy"; fail=1; }
+
 [ $fail -eq 0 ] && echo "ok: chewbacca email scopes"
 exit $fail

@@ -295,6 +295,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_shared_checkout_mid_merge: The shared checkout can be mid-merge by another tab; never stage there to fix a gate, build the fix in a detached worktree of HEAD
 - feedback_save_wip_without_switching: Saving shared dirty work by commit-and-switch wipes other agents' untracked files; snapshot with a temp index or git stash create
 - feedback_google_signin_calendar_write: Google sign-in asks for calendar write; never improvise gws auth login, clear token_cache.json after re-login
+- feedback_click_allow_on_own_google_signin: agents click Allow on Chewbacca's own Google sign-in, never ask ("always click allow", 10/22); a revoked main gws config is re-consented by the next email add
 - project_chewbacca_refactor_waits_on_b2b_b2c: Audience refactor (private repo, personal docs in docs/plans, first-run surface) waits on the B2B vs B2C call; checklist inside
 - feedback_people_scratch_is_people_dir: people CLI scratch store is PEOPLE_DIR; a guessed PEOPLE_DB wrote a test person into the real store (purged)
 - project_lessons_enforcement_audit: chewbacca lessons, 79 of 233 corrections enforced by code on 10/11 (was 26%); durable-guard loop now fires; 149,809-token first turn

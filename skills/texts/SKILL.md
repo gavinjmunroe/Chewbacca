@@ -32,6 +32,7 @@ my texts" as permission to read, not permission to republish.
 people texts sync                     # pull new messages in, incremental
 people texts --days 3                 # the running log
 people texts maggie                   # one person: newest 300, full text, one call
+people texts maggie --limit 5000       # "all texts": the default stops at 300 (10/22, Colin thread was ~5,900 lines)
 people texts search "the japan trip"  # full text, all history
 people texts stats                    # how much is stored, when it last synced
 ```
@@ -205,33 +206,6 @@ On 2026-10-06, asked to read the call with Gavin, the session searched Anarlog
 the user had to say "the transcript is there". It was one message, found in one
 `people texts search`. In raw chat.db a long message has a null `text` column
 and lives only in `attributedBody`, so a query on `text` alone misses it.
-
-## A guide for someone, built from their thread
-
-When he asks for help guiding a friend ("help Colin get into a creative flow,
-scan all texts with him"), the thread is the source and the friend's own words
-are the material. Quote what they said about being stuck, use ideas they
-already texted, and leave a `[ASK HIM]` blank where the thread has nothing.
-Never invent a thesis for their project.
-
-If the friend uses Claude a lot, the guide has to say how they should use it,
-as a sparring partner that asks and pushes, never as a ghostwriter: a paste-in
-instruction that refuses to write their copy, plus prompts that make them
-think. On 2026-10-17 the first Colin guide left Claude out and Caleb had to
-add it: "he uses claude a lot so that def should be integrated as a mega
-helping tool to make him actually critically think not j outsourcing". In the
-same turn he asked for quick MCQs to open the session with, so ship those by
-default too: 5 or 6 one-circle questions, with a key that says what each
-answer changes in the plan.
-
-The MCQs are the structure, not a quiz bolted on. Caleb, same day: "they
-should influence the rewriting/structuring of the guide". Write the first
-version with the branches spelled out, and when the answers come back,
-rewrite the guide around them: drop the branches, say what each answer set
-up, and move the step the answers expose (Colin's "no idea" on his through-line)
-to the front. Ask who will hold the guide before writing it. A guide for the
-friend to run alone is written to them in second person, with the check-ins
-to Caleb built into the calendar.
 
 ## Answering from it
 

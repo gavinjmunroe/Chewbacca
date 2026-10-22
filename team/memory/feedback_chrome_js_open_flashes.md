@@ -20,3 +20,5 @@ synthetic clicks and scroll (only the date picker accepts them), and the page
 CSP blocks injected scripts, so the time has to be set by a real click.
 Upload works by pushing the file in base64 chunks with `--match` and handing a
 DataTransfer File to the `input[type=file]`; fetching from localhost is blocked.
+
+2026-10-22: `open -g -a "Google Chrome" <url>` flashed him too ("WHY DID YOU FLASH BANG ME") while uploading ACAD 185 group PDFs. -g does NOT keep Chrome back. Group dropbox uploads also fail over the API (1.75 404, 1.88+ "No scopes defined" with cookie auth), so a group submit has no silent path yet.

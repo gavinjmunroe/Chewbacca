@@ -129,6 +129,11 @@ Never-dos, in his words (2026-10-11, mid quiz):
   When they're silent on something he could have heard in lab or in person
   (a topic, a presenting week, a makeup slot), ask him in one line first.
   Never offer to email the instructor to find it out.
+- "WHY DID YOU FLASH BANG ME" and "I want NO ONE to ever open brightspace
+  ever again" (2026-10-22, A15/A17 group upload): a write goes through
+  `brightspace submit`, never his Chrome. `open -g` to a Brightspace page
+  still came to the front. When a job has no command yet, build one that
+  runs headless before doing the job, never "just this once" in a tab.
 
 A quiz's questions 403 until the student opens an attempt, so no tool can
 read them first. Ask them to paste the questions; never start an attempt.

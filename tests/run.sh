@@ -1255,6 +1255,8 @@ if group "installer"; then
   check  "the browser gate refuses pixels on a browser until the DOM is tried" \
     bash "$ROOT/tests/browser_ux_guard.sh" "$ROOT"
     bash "$ROOT/tests/focus_guard.sh" "$ROOT"
+  check  "bulk-loop-guard refuses per-item Apple Event loops; contacts-bulk plans right" \
+    bash "$ROOT/tests/bulk_loop_guard.sh" "$ROOT"
   check "chewie web's Chrome is headless unless a person asks to see it" \
     bash "$ROOT/tests/web_headless.sh"
   check  "font-guard refuses code that names a not-installed macOS font" \

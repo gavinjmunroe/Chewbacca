@@ -50,6 +50,20 @@ JXA when you want real data structures back:
 chewie run --js 'JSON.stringify(Application("Notes").notes().slice(0,5).map(n => n.name()))'
 ```
 
+## A whole collection is one event per field, never a loop
+
+Every property read is a round trip to the app. `repeat with p in people` that reads six
+fields costs cards x 6 events; on 2026-10-21 that was still running at 5 minutes. Ask for
+the column instead: `people.lastName()` in JXA or `get last name of every person` in
+AppleScript returns every card's value in one event (the same six fields: 3.7 s). Filter
+in memory, then write back only the matches by id. `bulk-loop-guard` refuses the loop
+shape. For Contacts, `contacts-bulk find <text>` and `contacts-bulk replace <old> <new>`
+already do this, with a snapshot and `contacts-bulk undo`.
+
+The same rule holds off the Mac: one query with `IN (...)` over N single-row queries, one
+batch API call over a loop of single calls, `git cat-file --batch` over a process per file.
+When unsure, time it on 20 items and multiply before starting the full run.
+
 ## Reading is usually faster from the file
 
 For history and search, skip the app entirely.
@@ -97,9 +111,9 @@ Go to layer 3, and remember they need `chewie see --force-ax` first.
 
 ## Failure signatures
 
-| Error | Fix |
-|-------|-----|
-| -600 "Application isn't running" | `open -a "App"` first, then poll |
-| -1743 "Not authorized" | TCC denied. `tccutil reset AppleEvents`, retry in the foreground |
-| -1712 timeout | `with timeout of 300 seconds`. Also check for a modal blocking the app |
-| -1728 "Can't get..." | The object does not exist. Check the dictionary, not the permissions |
+| Error                            | Fix                                                                    |
+| -------------------------------- | ---------------------------------------------------------------------- |
+| -600 "Application isn't running" | `open -a "App"` first, then poll                                       |
+| -1743 "Not authorized"           | TCC denied. `tccutil reset AppleEvents`, retry in the foreground       |
+| -1712 timeout                    | `with timeout of 300 seconds`. Also check for a modal blocking the app |
+| -1728 "Can't get..."             | The object does not exist. Check the dictionary, not the permissions   |

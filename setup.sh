@@ -1999,6 +1999,13 @@ _register("PreToolUse", hooks_dir + "/focus-guard.sh", timeout=10,
           matcher="Bash",
           status="Checking nothing jumps to the front of the screen...")
 
+# A `repeat with p in people` reading six fields per card ran 5+ minutes on
+# 2026-10-21; the bulk read took 3.7 s. Refuses per-item Apple Event loops
+# over a whole collection and names the bulk form and contacts-bulk.
+_register("PreToolUse", hooks_dir + "/bulk-loop-guard.sh", timeout=10,
+          matcher="Bash",
+          status="Checking this script reads in bulk, not one item at a time...")
+
 # "Downloading font Nanum Brush Script" popped over Caleb's work at 7:11pm on
 # 2026-10-11 ("permission should never be asked to download things"). Refuses
 # code that names a macOS font that is downloadable but not installed.

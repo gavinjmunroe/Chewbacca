@@ -17,3 +17,5 @@ What worked:
 The pane's account may not be the one the user wants (it was the personal gmail, not USC), so say which account owns the Doc.
 
 Related: [[reference_google_docs_write_via_gws]], [[feedback_google_signin_calendar_write]].
+
+A Doc you made can become the user's working copy. On 2026-10-21 the Doc made that afternoon had been renamed by Caleb, shared with a peer reviewer, and filled with 11 of her comments. Reopening it to push a revision, the agent pressed select-all before it noticed. Replacing the text would have deleted every comment anchor. So a revision always goes into a NEW Doc from docs.new. Before any edit, check document.title and the comment count in `export?format=txt` against what you made.

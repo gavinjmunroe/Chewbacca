@@ -140,3 +140,7 @@ yes.** The draft is `noindex`, the repo is private, and the owner's live site
 stays live. Photos of other people, including the owner's own personal account,
 are inspiration and never go on the page unless the owner picks them. The owner
 decides what is theirs to show.
+
+## Related
+
+- [launch-funnel](../launch-funnel/SKILL.md): for a product launch, waitlist or preorder page, the persona, messaging and section formulas come from there before any layout.

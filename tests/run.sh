@@ -1024,6 +1024,8 @@ if group "installer"; then
     bash "$ROOT/tests/chewbacca_google.sh" "$ROOT"
   check  "chewbacca email signs in with calendar write, Docs and Gmail compose, re-consents the main gws config in place, pins the account, and drops the stale token cache" \
     bash "$ROOT/tests/chewbacca_email_scopes.sh" "$ROOT"
+  check  "venture-validation funnel.py reproduces the graded ACAD 185 A10 verdicts and levers" \
+    bash "$ROOT/tests/venture_funnel.sh" "$ROOT"
   # 2026-10-03: diagram was vendored from diagram-design. Its geometry checker
   # must still refuse a label mask under a later node, on our fixtures and theirs.
   check  "diagram geometry checker passes clean and refuses overlaps" \

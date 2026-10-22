@@ -1,0 +1,26 @@
+{
+  "skill": "community-content",
+  "cases": [
+    {
+      "prompt": "Give me TikTok ideas for our club page",
+      "expect_tools": [
+        "community-content"
+      ],
+      "why": "niche and 80/20 before hooks"
+    },
+    {
+      "prompt": "Why did my reel only get 200 views?",
+      "expect_tools": [
+        "community-content"
+      ],
+      "why": "read the flop in metric order"
+    },
+    {
+      "prompt": "How often should we post on TikTok?",
+      "expect_tools": [
+        "community-content"
+      ],
+      "why": "the course's posting and metric numbers"
+    }
+  ]
+}

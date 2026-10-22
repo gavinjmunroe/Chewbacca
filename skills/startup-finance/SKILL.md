@@ -58,3 +58,7 @@ Lead with the answer in one sentence, then the numbers behind it. Report spend a
 ## For this user's orgs
 
 Amber, TTS and BMA are different entities with different obligations; ask which one and what its legal form is before using the calendar. Ask for the bank export before answering a categorization or leak question. Read the CSV they hand over and write nothing back.
+
+## Related
+
+- [venture-validation](../venture-validation/SKILL.md): whether the idea is worth funding at all, the VC screen, and the paid test math. Its course map points to the ACAD 185 cap table, valuation and liquidation preference lecture.

@@ -112,6 +112,7 @@ Done when every number on every screenshot is either recorded or listed as skipp
 - [video-edit](../video-edit/SKILL.md): turns the finished script and footage into the cut.
 - [animated-video](../animated-video/SKILL.md): when the script will be animated instead of filmed.
 - [demo](../demo/SKILL.md): scripting a product demo starts from the product's code, not an idea backlog.
+- [community-content](../community-content/SKILL.md): for a social feed, the niche, the 80/20 split and the hook come first, and the posting and metric rules decide what gets scripted next.
 ## Credits
 
 Adapted from cstack by Charles Zheng (MIT), https://github.com/goodnight000/cstack

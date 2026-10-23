@@ -154,6 +154,13 @@ with nothing team-specific in the kit:
 Code lives once, in the kit. The team repo holds only its rulings, copy,
 lists and ledger (`ops/README.md` in gavinjmunroe/firm-foundation is the model).
 
+- A built batch or a dated week sheet is not a send. Before saying a week
+  went out, or planning the next one, read the client's `sent.jsonl`: no file
+  means nothing ever sent. On 2026-10-23 FF's THIS-WEEK.csv still said "Mon
+  10/19" for 30 churches whose three batches were built 10/18 and never sent,
+  and the 10/18 audit lines had gone five days stale. A first line older than
+  three days gets re-audited before it goes out.
+
 ## Video in outbound (2026-10-12, Firm Foundation)
 
 Caleb: "The video will make response rate 100x" and "This gotta result in a

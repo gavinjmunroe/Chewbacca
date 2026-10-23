@@ -156,6 +156,12 @@ Fail after fixes: pivot (back to step 2 or 3) or kill.
 - Never recommend scaling off a small sample without saying so. House rule,
   not a course number: under about 50 reservations is thin. In Caleb's A10
   set, 767% on 23 reservations was the riskier bet than 321% on 161.
+- Never call a name clear off a USPTO zero you didn't control. On
+  2026-10-23 (Mudcub) `tmsearch.uspto.gov/search/search-results?query=` URLs
+  showed "No results found" for MUDBUGS, which has live registrations, and the
+  API answers plain POSTs with 405. Type the term into the page's search box,
+  run a known registered mark first as the control, then check the goods
+  class (diapers sit in 005). Say "knockout search, not clearance" every time.
 
 ## References
 

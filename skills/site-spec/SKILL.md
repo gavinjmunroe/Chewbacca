@@ -110,6 +110,27 @@ check`, `story` and `idle` also pass on every route.
 - **A formatter reflows files between edits.** Patch by line number or re-read,
   and check that the count of changed lines matches.
 
+## Personal sites: three corrections from the Patrick Kellogg draft (2026-10-23)
+
+- **Every nav button opens a real page in the new design.** The first draft
+  linked each tile back to the owner's old pages. Caleb: "Make sure the
+  buttons for diff pages actually make new pages lmao". Build one page per
+  section from a shared shell (`build.py` writing `public/*.html`), and only
+  link out to files that can't move (mp3s, resumes, very long reviews).
+- **No stack of full-width numbered bands.** "01 Work, 02 Games..." sections
+  read as slides. Caleb: "Make sure i'ts not a slidedeck!" The home page is
+  one board of tiles in different sizes that you browse.
+- **Tone comes from the owner's own social, not their old site.** A 2000s
+  homepage read as gingham-and-paper cute. His Instagram (leather jacket,
+  trucker cap) said otherwise. Caleb: "I feel like he'd want it tuffer?" Look
+  at the owner's current photos before picking the palette and type.
+- **A Cloudflare-fronted site blocks curl but not the browser pane.** Crawl
+  with same-origin `fetch` inside the pane. Getting a big crawl out of the
+  page fails two ways: a Blob download never lands, and a POST to
+  127.0.0.1 is blocked. Return each page's text in chunks through the JS
+  tool and write it to `research/corpus/` as you go, because the pane can
+  close and take the crawl with it.
+
 ## When they ask for an intro animation
 
 The Cowboy Cubans draft got a five second duel on first load (two silhouettes,

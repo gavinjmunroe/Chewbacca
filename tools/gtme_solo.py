@@ -93,8 +93,13 @@ OPT_OUT = "If you'd rather not hear from me, reply stop and I won't email you ag
 # What one customer's package costs us each month, before anything is sold.
 # Mailforge lists about $3 a mailbox (bitscale.ai review, 2026-10-11) and a
 # .com is about $12 a year; the data budget is a cap, not a forecast.
-PACKAGE_DEFAULTS = {"data_budget_usd": 25.0, "mailboxes": 10, "mailbox_usd": 3.0, "domains": 4,
+PACKAGE_DEFAULTS = {"shape": "retainer", "data_budget_usd": 25.0, "mailboxes": 10, "mailbox_usd": 3.0, "domains": 4,
                     "domain_usd_year": 12.0, "price_usd": None}
+# The three ways a founder buys it (Caleb, 2026-10-23, after the UCLA showcase:
+# "retainer, one-time list or software they run themselves"). Only a retainer
+# sends from mailboxes and domains we pay for; the other two send from theirs.
+SHAPES = {"retainer": "we run it every week, a month", "one_time_list": "a list and its copy, once",
+          "self_serve": "they run it on their own inboxes, a month"}
 
 
 class Refused(Exception):
@@ -447,7 +452,7 @@ def cmd_verify(a) -> int:
 def cmd_package(a) -> int:
     plan = plan_of(a.client)
     pkg = package_of(plan)
-    for k in ("data_budget_usd", "mailboxes", "mailbox_usd", "domains", "domain_usd_year", "price_usd"):
+    for k in ("shape", "data_budget_usd", "mailboxes", "mailbox_usd", "domains", "domain_usd_year", "price_usd"):
         v = getattr(a, k)
         if v is not None:
             pkg[k] = v
@@ -464,22 +469,26 @@ def cmd_costs(a) -> int:
         data = treg_client.month_spend(cdir(a.client) / "spend.jsonl", now)
     except treg_client.Refused as err:
         raise Refused(str(err))
-    inboxes = pkg["mailboxes"] * pkg["mailbox_usd"]
-    domains = pkg["domains"] * pkg["domain_usd_year"] / 12
+    shape = pkg["shape"]
+    ours = shape == "retainer"
+    inboxes = pkg["mailboxes"] * pkg["mailbox_usd"] if ours else 0.0
+    domains = pkg["domains"] * pkg["domain_usd_year"] / 12 if ours else 0.0
     total = data + inboxes + domains
     sent = sum(1 for r in jsonl(cdir(a.client) / "sent.jsonl") if r["at"][:7] == now.strftime("%Y-%m"))
-    out = {"month": now.strftime("%Y-%m"), "data_usd": round(data, 2), "data_budget_usd": pkg["data_budget_usd"],
+    out = {"month": now.strftime("%Y-%m"), "shape": shape, "data_usd": round(data, 2), "data_budget_usd": pkg["data_budget_usd"],
            "mailboxes_usd": round(inboxes, 2), "domains_usd": round(domains, 2), "total_usd": round(total, 2),
            "emails_sent": sent, "price_usd": pkg["price_usd"],
            "margin_usd": round(pkg["price_usd"] - total, 2) if pkg["price_usd"] is not None else None}
     if getattr(a, "json", False):
         print(json.dumps(out, indent=1))
         return 0
-    print(f"{a.client}, {out['month']}: data ${data:.2f} of a ${pkg['data_budget_usd']:.2f} budget (treg's own "
-          f"charges), {pkg['mailboxes']} mailboxes ${inboxes:.2f}, {pkg['domains']} domains ${domains:.2f} a month. "
-          f"Total ${total:.2f}, {sent} emails sent.")
+    sending = (f"{pkg['mailboxes']} mailboxes ${inboxes:.2f}, {pkg['domains']} domains ${domains:.2f} a month"
+               if ours else "no mailboxes or domains, they send from their own")
+    print(f"{a.client}, {SHAPES[shape]}, {out['month']}: data ${data:.2f} of a ${pkg['data_budget_usd']:.2f} budget "
+          f"(treg's own charges), {sending}. Total ${total:.2f}, {sent} emails sent.")
     if pkg["price_usd"] is not None:
-        print(f"At ${pkg['price_usd']:.0f} a month that leaves ${out['margin_usd']:.2f}.")
+        per = "once" if shape == "one_time_list" else "a month"
+        print(f"At ${pkg['price_usd']:.0f} {per} that leaves ${out['margin_usd']:.2f}.")
     else:
         print("No price set yet, so no margin.")
     return 0
@@ -1270,6 +1279,7 @@ def main(argv=None) -> int:
     p.add_argument("--spend", type=float, help="dollars approved for checks (without it: price one only)")
     p = sub.add_parser("package", help="what this customer's subscription includes, and what it costs us")
     p.add_argument("--client", required=True)
+    p.add_argument("--shape", choices=sorted(SHAPES), help="retainer, one_time_list or self_serve")
     p.add_argument("--data-budget", dest="data_budget_usd", type=float)
     p.add_argument("--mailboxes", type=int)
     p.add_argument("--mailbox-cost", dest="mailbox_usd", type=float)

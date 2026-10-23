@@ -241,6 +241,21 @@ class Paid(test_gtme_solo.Solo):
         self.assertEqual(c["domains_usd"], 4)
         self.assertEqual(c["margin_usd"], round(300 - (0.014502 + 30 + 4), 2))
 
+    def test_only_a_retainer_pays_for_mailboxes_and_domains(self):
+        self.ready()
+        import io
+        from contextlib import redirect_stdout
+        for shape in ("one_time_list", "self_serve"):
+            self.run_cli("package", "--client", "Dana Co", "--shape", shape, "--price", "500")
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                self.run_cli("costs", "--client", "Dana Co", "--json")
+            c = json.loads(buf.getvalue())
+            self.assertEqual((c["shape"], c["mailboxes_usd"], c["domains_usd"]), (shape, 0, 0))
+            self.assertEqual(c["margin_usd"], 500)
+        with self.assertRaises(SystemExit):
+            self.run_cli("package", "--client", "Dana Co", "--shape", "percent_of_deals")
+
 
 # Solo's own tests assume Solo's list and run in test_gtme_solo.py. Naming them
 # one by one here broke whenever Solo gained a test: on 2026-10-13 four new ones

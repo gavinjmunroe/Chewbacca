@@ -157,6 +157,20 @@ class InvestorsTest(unittest.TestCase):
         self.assertNotIn("avery@quillseed.example", self.emails(rows))
         self.assertEqual(stats["dropped"]["suppressed"], 1)
 
+    def test_a_formula_in_a_name_or_firm_is_defused_in_the_csv(self):
+        rows, _ = self.build()
+        rows[0]["full_name"] = "=HYPERLINK(\"http://evil.example\")"
+        rows[0]["organization"] = "@SUM(A1)"
+        rows[0]["title"] = "-2+3"
+        out = self.tmp / "defused.csv"
+        gi.write_csv(rows, out)
+        with out.open() as fh:
+            got = next(csv.DictReader(fh))
+        self.assertEqual(got["full_name"], "'=HYPERLINK(\"http://evil.example\")")
+        self.assertEqual(got["organization"], "'@SUM(A1)")
+        self.assertEqual(got["title"], "'-2+3")
+        self.assertEqual(got["email"], rows[0]["email"], "a clean cell is left alone")
+
     def test_bad_config_is_refused(self):
         with self.assertRaises(gi.ConfigError):
             gi.check_block({"thesis": []})

@@ -320,11 +320,18 @@ def build(con: sqlite3.Connection, block: dict) -> tuple[list[dict], dict]:
 
 
 def write_csv(rows: list[dict], path: Path) -> None:
+    """Names, firms and titles come from strangers, and the file is opened in
+    Sheets and Excel, so every string cell goes through the kit's one defuse
+    helper (OWASP CSV injection), the same one gtme_solo uses."""
+    sys.path.insert(0, str(ROOT / "tools"))
+    import gtme_operator as op
+
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as fh:
         w = csv.DictWriter(fh, fieldnames=COLUMNS)
         w.writeheader()
-        w.writerows(rows)
+        for row in rows:
+            w.writerow({k: op.csv_cell(v) if isinstance(v, str) else v for k, v in row.items()})
 
 
 # list-audit fields that mean this tool let a defect through. It always exits

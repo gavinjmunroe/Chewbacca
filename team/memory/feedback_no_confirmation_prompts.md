@@ -31,3 +31,5 @@ Two-layer rule. Both apply.
 - System prompts must NOT instruct the agent to ask before acting, even for "external" coordination, "destructive" operations, etc. Caleb's stance: just do it, errors are recoverable, asking is worse than wrong.
 - When in doubt: rip the gate. Adding gates back is easy if a real failure case emerges; removing them after Caleb complains a 3rd time is harder.
 - See a private note for the analogous "don't lecture, just act" pattern, same root preference.
+
+**2026-10-23, Patrick Kellogg site tab:** the Claude desktop app's end-of-turn box has an `ask` field with buttons, and this tab used it twice for go-aheads ("Build Patrick's draft now, or wait till Ruchir okays Mudcub?", "Spin up the diaper venture doc?"). Caleb: "BRO FIX CHEWBS/CLAUDE WHY DO YOU KEEP ASKING FOR PERMISSION?" Those buttons are permission asks too. Do the work, and put only real either/or decisions the work can't settle in that field, never a "build it now?"

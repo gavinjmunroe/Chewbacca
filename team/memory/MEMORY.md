@@ -421,3 +421,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_chewbacca_main_only: Chewbacca keeps one branch, main, locally and on GitHub; detached worktrees plus chewbacca land, never push a branch (Caleb, 10/19)
 - feedback_drafted_texts_get_scored: drafted texts in unlabeled fences went out unscored and 2 contrasts scored 0 (10/21); --chat scores those fences now
 - feedback_shared_artifact_read_via_browser: someone else's claude.ai artifact = browser pane, tall viewport, screenshots; never ask him for an ok to read a link he sent (10/23)
+- feedback_app_store_cancel_is_his_click: App Store subscription cancels are his click (Kyber overlay + sheet web view block computer-use); load the page with -g, give the rows, no grant cards or "want me to" (10/23)

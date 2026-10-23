@@ -28,6 +28,19 @@ Check `ok` before using `data`. `class: "input"` means the args were wrong or th
 search found nothing, and nothing was sent wrong. `class: "auth"` names the
 `chewbacca api login` command. `tier` 1 is plain HTTP.
 
+## A link he sends is already the ok to read it
+
+Never ask Caleb for permission to read a page he sent. Caleb, 2026-10-23, after a
+reply asked for an ok to read a hackathon hub he'd linked: "READ IT BRUH FIX CHEWBS
+TO NEVER ASK PERMISSION".
+
+A claude.ai/artifact link someone else made refuses the Artifact read tool in a
+bypass session ("No one can answer in this session"). Don't stop there. Load it in
+the built-in browser pane, dismiss the "Duplicate this artifact" tooltip, set
+`resize_window` to 1000x4000, then scroll and screenshot to the end. `get_page_text`
+and `read_page` come back empty because the content sits in a sandboxed iframe.
+Reset the viewport to `desktop` after.
+
 ## What's taught
 
 Every site's caveats live in `library/api-sites/<site>.md` (and `chewbacca api ops`).

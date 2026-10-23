@@ -11,7 +11,9 @@ Calls booked: Junto (Reed Watne, AI for MSPs, uses Apollo and HubSpot, skeptical
 
 Each founder needs one of three motions (customers, channel partners, investors) and one of three pricing shapes (retainer, one-time list, self-serve), set per client. Prices are not set yet. Data comes from treg first, Clay only for what only Clay does, investor lists from Prometheus.
 
-Kit gap as of 10/23: `gtme package` models only a monthly subscription, and plan.json has no field for the motion or the pricing shape, so per-founder config for one-time lists and self-serve isn't code yet.
+Calls on Caleb's USC calendar (read through gws with his USC inbox's config under ~/.chewbacca/email, since gog has no calendar token): Wed 10/28 Junto 1:30pm, Justin 4:00pm, Noah 4:30pm PT. Sabo's Tue 10/27 sync comes first.
+
+Pricing shape is code since 6fa20111: `chewbacca gtme package --client X --shape retainer|one_time_list|self_serve`, and only a retainer counts our mailboxes and domains as cost. Per-founder config lives in ~/.chewbacca/gtm/clients/<client>.json, with sabo.json as the model.
 
 **Why:** Caleb wants this repeatable as kit code plus per-client config, not one-offs, and wants to build up UCLA's ecosystem (Venture Accelerator, Bruin Angels) before USC's.
 

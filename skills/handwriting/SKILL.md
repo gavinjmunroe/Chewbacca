@@ -81,6 +81,34 @@ All on the Amber fridge, 2026-10-06 to 07. Each line is something Caleb caught.
    porous stock, and lets the surface show through its dye. Ink also has to
    follow the surface's creases and light (`follow=`), or it sits on top.
 
+9. **Building textures before reading this skill.** On 2026-10-23 a desk
+   render for Patrick Kellogg's site put his apple list, postcards and a
+   cassette label in Bradley Hand and Noteworthy on PIL-noise paper, rule 1
+   broken again, because the textures were written in a scene script before
+   anyone opened this file. Caleb: "Always rmr what we learned abt
+   handwriting, making it look realistic, and making the writing surface
+   look realistic and the combination of the 2 to look realistic". So any
+   texture script that puts writing on a surface imports `handwrite` and
+   `paper.sheet` from here at the top, and a font is only for print (a
+   business card, a postcard's "POST CARD").
+
+## Writing, surface and the two together, in a 3D render
+
+Hand and paper can each pass on their own and still read fake once they're
+in a scene. What the desk and fridge renders taught:
+
+- The writing: learned strokes (`write_learned`), one writer per object,
+  baselines on the printed rules, the right tool for the object (ballpoint on
+  an index card, fineliner on a postcard, Sharpie on a cassette label).
+- The surface: a scanned sheet (`sheet`), never one colour plus noise. In the
+  scene it's a mesh with thickness (Solidify, about 0.4 mm), a slight bow,
+  and contact shadow on what it lies on.
+- The combination: ink takes the surface's light, so it goes into the
+  texture before the render and never on top of the finished frame. Watch
+  exposure, because a first render at default exposure blew the paper out
+  and washed the ink to grey. Check a crop at full size: the ink has to sit
+  in the paper's fibre and dim with its shading.
+
 ## Before keeping anything
 
 Run the standard's final quality gate, then these, on a zoomed crop:

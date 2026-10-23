@@ -105,3 +105,15 @@ anywhere. The version that held up came from `MIYAKE-SECTION-SPEC.md`, built
 from Andy's five paragraph jobs. Caleb: "never 1 shot anything creative EVER".
 `essay-gate` now refuses a Google Doc write of 300+ words when no
 `*SPEC*.md` or `*OUTLINE*.md` file from the last 24 hours exists.
+
+## A startup idea: check the premise before riffing on it
+
+When a call or a text builds an idea on a claim about the market ("nobody
+makes a microplastic-free diaper", "no one's doing X"), search it before
+repeating it back or building on it. Then say what exists, with sources,
+and where the real gap is. On 2026-10-23 a reply to Caleb's diaper call
+flagged that claim as unchecked and handed the check back instead of
+running it. One search found DYPER, Nest, Eco by Naty and Hevea, and it
+showed the plastic sits in the gel core and the leak barrier. That was
+the actual design problem, and it changed the advice. The fabric swap
+the call had planned would just have leaked.

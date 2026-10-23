@@ -113,6 +113,24 @@ isn't a connected inbox goes on its own line in `~/.chewbacca/email/me`. One of 
 that night was a check-scam asking for a bank name, so scan the hidden ones
 before saying nobody else is waiting.
 
+## "Who did I miss": after an invite blast
+
+He sends one invite to dozens of threads, then asks who he left out (Caleb,
+2026-10-23, ~75 threads for a networking event). Three steps, CLI only:
+raw SQL on people.db is refused by chatdb-guard and costs a round trip.
+
+```bash
+people texts search "<a unique bit of the invite, like the link id>"   # who got it
+people texts --days 45                                                  # who he talks to
+```
+
+Count lines per thread in the 45-day log, drop everyone the search found, and
+lead with the top ones by volume. Check the people in `core/people.md`
+(roommate, weekly rhythms, co-founders) by name against the invited list,
+because a frequent thread is not the same as a close friend. Watch same-first-name
+traps (Tyler Law got it, Tyler Larsen did not). Say who already replied no.
+Never send to the missing ones until he names them: the list is his call.
+
 ## "What should I respond to X": draft first, dig second
 
 Answer from `people texts <name>` in one or two calls, then fetch anything

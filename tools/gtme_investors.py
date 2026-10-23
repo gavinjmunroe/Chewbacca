@@ -1,0 +1,421 @@
+#!/usr/bin/env python3
+"""chewbacca gtme investors: a per-client investor list from the Prometheus file.
+
+    gtme-investors --client acme                     reads ~/.chewbacca/gtm/clients/acme.json
+    gtme-investors --config path/to/client.json --out list.csv
+    gtme-investors --client acme --dry-run           counts only, writes nothing
+    gtme-investors --check-config path.json          validate the investors block
+
+Every client that is raising wants the same step: pull the seed and pre-seed
+investors who fit its thesis out of the investor database, drop the rows that
+would break a send, and hand back one deduped, audited CSV. The only thing
+that differs per client is the `investors` block in its config file, so no
+client name appears in this file.
+
+The investors block (every field optional except thesis):
+
+    {"investors": {
+       "thesis": ["saas", "software", "it services"],   sector words, matched as words
+       "thesis_text": ["msp", "managed services"],      also matched in firm name and title
+       "stage": ["seed", "pre-seed", "early stage"],    words that mark an early investor
+       "max_check_musd": 3.0,                           a parsed check size above this is not early
+       "org_types": ["VC", "Angel", "Investor"],
+       "countries": ["united states", "usa", "us"],
+       "regions": ["north america"],
+       "exclude_sectors": ["crypto", "real estate"],
+       "exclude_orgs": ["some fund"],                    substring of the firm name
+       "seniority": ["A_founder_cxo", "B_vp_director"],
+       "include_unknown_sector": true,                   generalists with a blank sector, ranked last
+       "limit": 500,
+       "out": "~/Downloads/Client/investors.csv",
+       "suppress": ["~/path/already-emailed.csv"],       any CSV with an email column
+       "db": "~/path/prometheus.db"}}
+
+The database path comes from --db, then the block's "db", then $PROMETHEUS_DB.
+
+What the file is, measured 2026-09-20 against the 1,039,715-row original: 52,350
+people with an email and grade A or B, 984 of them role inboxes, the company
+column junk on 48% (the literal "Person", blank, "Unknown", Airtable image
+URLs), and sectors blank or "unknown" on 43%. A sector filter silently drops
+that 43%, so `include_unknown_sector` keeps generalists and ranks them below
+every thesis match instead of losing them. Where a LinkedIn slug shares no
+token with the name, 89.7% were confirmed wrong, so those slugs are blanked.
+
+Writes nothing but the CSV. Never sends, never reads the network. After
+writing it runs `list-audit` on the file and prints the result; exit 1 when
+the audit finds a defect the tool should have removed.
+"""
+from __future__ import annotations
+
+import argparse
+import csv
+import json
+import os
+import re
+import sqlite3
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+
+# Role inboxes are not people. 984 of 52,350 in the original file, attached to
+# a real person's name so they pass a spreadsheet eyeball check.
+ROLE_LOCALS = {
+    "info", "contact", "hello", "admin", "support", "sales", "team", "office",
+    "inquiries", "enquiries", "general", "ir", "press", "marketing", "careers",
+    "jobs", "help", "noreply", "no-reply", "mail", "email", "hi", "invest",
+    "investments", "investors", "deals", "dealflow", "pitch", "pitches",
+    "submissions", "partners", "founders", "media", "hr", "accounts",
+    "billing", "operations", "ops", "enquiry", "inquiry", "funding", "apply",
+}
+# The company column's four kinds of junk, plus values a scraper writes.
+COMPANY_JUNK = {"person", "company", "unknown", "n/a", "na", "none", "-", "null",
+                "nan", "self", "self-employed", "private", "individual", "angel",
+                "investor", "independent"}
+EMAIL_RE = re.compile(r"^[a-z0-9._%+'-]+@[a-z0-9.-]+\.[a-z]{2,}$")
+
+SENIORITY_RANK = {"A_founder_cxo": 2, "B_vp_director": 1}
+GRADE_RANK = {"A": 1, "B": 0}
+
+COLUMNS = ["first_name", "full_name", "title", "organization", "org_type", "email",
+           "website", "linkedin", "city", "state", "country", "sectors", "check_size",
+           "grade", "thesis_match", "stage_match", "fit_score", "why", "record_id"]
+
+
+class ConfigError(ValueError):
+    pass
+
+
+def expand(p: str | None) -> str | None:
+    return os.path.expanduser(p) if p else p
+
+
+def clients_dir() -> Path:
+    base = os.environ.get("GTME_CLIENTS_DIR")
+    if base:
+        return Path(base).expanduser()
+    home = os.environ.get("GTME_HOME")
+    return (Path(home).expanduser() if home else Path.home() / ".chewbacca" / "gtm") / "clients"
+
+
+def load_block(config_path: Path) -> dict:
+    try:
+        doc = json.loads(config_path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ConfigError(f"cannot read {config_path}: {exc}") from exc
+    block = doc.get("investors") if isinstance(doc, dict) else None
+    if not isinstance(block, dict):
+        raise ConfigError(f"{config_path} has no investors block")
+    check_block(block)
+    return block
+
+
+LIST_FIELDS = ("thesis", "thesis_text", "stage", "org_types", "countries", "regions",
+               "exclude_sectors", "exclude_orgs", "seniority", "suppress")
+
+
+def check_block(block: dict) -> None:
+    for key in LIST_FIELDS:
+        val = block.get(key, [])
+        if not isinstance(val, list) or not all(isinstance(v, str) for v in val):
+            raise ConfigError(f"investors.{key} must be a list of strings")
+    if not block.get("thesis") and not block.get("thesis_text"):
+        raise ConfigError("investors.thesis is empty: name at least one sector word")
+    for key in ("max_check_musd", "limit"):
+        if key in block and not isinstance(block[key], (int, float)):
+            raise ConfigError(f"investors.{key} must be a number")
+
+
+def word_re(words: list[str]) -> re.Pattern | None:
+    words = [w.strip().lower() for w in words if w.strip()]
+    if not words:
+        return None
+    return re.compile(r"(?<![a-z0-9])(" + "|".join(re.escape(w) for w in words) + r")(?![a-z0-9])")
+
+
+def is_role(email: str) -> bool:
+    local = email.split("@", 1)[0]
+    return local in ROLE_LOCALS or local.split("+")[0] in ROLE_LOCALS
+
+
+def company_ok(org: str) -> bool:
+    o = (org or "").strip()
+    low = o.lower()
+    if not o or low in COMPANY_JUNK:
+        return False
+    if "airtable.com" in low or low.startswith("http") or re.search(r"\.(jpg|jpeg|png|gif)\b", low):
+        return False
+    return len(re.sub(r"[^a-z]", "", low)) >= 2
+
+
+# A ticker or legal suffix reads wrong in "{{company}}": "Morgan Stanley (NYS: MS)",
+# "SilkRoad Equity LLC". Measured on the first client pull, 2026-10-23: 31 of 500.
+LEGAL_SUFFIX = re.compile(r"(,?\s+(llc|l\.l\.c\.|inc\.?|l\.p\.|lp|ltd\.?|corp\.?|co\.))+$", re.I)
+TICKER = re.compile(r"\s*\((nys|nas|nasdaq|nyse|lon|tse|amex|otc)\s*:[^)]*\)", re.I)
+
+
+def clean_company(org: str) -> str:
+    out = TICKER.sub("", org or "").strip()
+    out = LEGAL_SUFFIX.sub("", out).strip().rstrip(",").strip()
+    return out or (org or "").strip()
+
+
+def linkedin_matches(name: str, slug: str) -> bool:
+    parts = [w for w in re.split(r"[^a-z]+", (name or "").lower()) if len(w) > 2]
+    return bool(slug) and any(w in slug.lower() for w in parts)
+
+
+def first_name(full: str) -> str:
+    tokens = [t for t in re.split(r"\s+", (full or "").strip()) if t]
+    while tokens and tokens[0].rstrip(".").lower() in {"dr", "mr", "mrs", "ms", "prof", "sir"}:
+        tokens.pop(0)
+    if not tokens:
+        return ""
+    t = tokens[0].strip(",")
+    if len(re.sub(r"[^A-Za-z]", "", t)) < 2:
+        return ""
+    return t[:1].upper() + t[1:].lower() if t.isupper() or t.islower() else t
+
+
+def check_max(check: str) -> float | None:
+    """The top of a check-size range in $M, or None when it can't be read."""
+    nums = [float(n) for n in re.findall(r"\d+(?:\.\d+)?", check or "")]
+    return max(nums) if nums else None
+
+
+def suppressed_emails(paths: list[str]) -> set[str]:
+    out: set[str] = set()
+    for p in paths:
+        path = Path(expand(p))
+        if not path.exists():
+            raise ConfigError(f"suppress file not found: {path}")
+        with path.open(newline="", encoding="utf-8", errors="replace") as fh:
+            for row in csv.DictReader(fh):
+                for k, v in row.items():
+                    if k and "email" in k.lower() and v:
+                        out.add(v.strip().lower())
+    return out
+
+
+def build(con: sqlite3.Connection, block: dict) -> tuple[list[dict], dict]:
+    thesis = word_re(block.get("thesis", []) + block.get("thesis_text", []))
+    thesis_text = word_re(block.get("thesis_text", []))
+    stage = word_re(block.get("stage", []))
+    excl = word_re(block.get("exclude_sectors", []))
+    excl_orgs = [o.lower() for o in block.get("exclude_orgs", [])]
+    org_types = {o.lower() for o in block.get("org_types", [])}
+    countries = {c.lower() for c in block.get("countries", [])}
+    regions = {r.lower() for r in block.get("regions", [])}
+    seniority = set(block.get("seniority", []))
+    max_check = block.get("max_check_musd")
+    keep_unknown = block.get("include_unknown_sector", True)
+    suppress = suppressed_emails(block.get("suppress", []))
+
+    cols = {r[1] for r in con.execute("PRAGMA table_info(contacts)")}
+    flags = [c for c in ("d_org_junk", "d_name_nan") if c in cols]
+    sql = ("SELECT record_id, full_name, title, organization, org_type, email, website, linkedin,"
+           " city, state, country, region, sectors_norm, check_size, grade, grade_score,"
+           " seniority_tier" + "".join(f", {c}" for c in flags) +
+           " FROM contacts WHERE entity_kind='Person' AND grade IN ('A','B')"
+           " AND email IS NOT NULL AND email != ''")
+    stats = {"pool": 0, "dropped": {}}
+
+    def drop(reason):
+        stats["dropped"][reason] = stats["dropped"].get(reason, 0) + 1
+
+    rows = []
+    for r in con.execute(sql):
+        stats["pool"] += 1
+        rec = dict(zip(["record_id", "full_name", "title", "organization", "org_type", "email",
+                        "website", "linkedin", "city", "state", "country", "region", "sectors",
+                        "check_size", "grade", "grade_score", "seniority"] + flags, r))
+        email = (rec["email"] or "").strip().lower()
+        sectors = (rec["sectors"] or "").lower()
+        org = (rec["organization"] or "").strip()
+        if org_types and (rec["org_type"] or "").lower() not in org_types:
+            drop("org_type"); continue
+        if countries or regions:
+            c = (rec["country"] or "").strip().lower()
+            g = (rec["region"] or "").strip().lower()
+            if not (c in countries or (not c and g in regions)):
+                drop("geography"); continue
+        if seniority and rec["seniority"] not in seniority:
+            drop("seniority"); continue
+        if not EMAIL_RE.match(email):
+            drop("malformed email"); continue
+        if is_role(email):
+            drop("role inbox"); continue
+        if any(rec.get(f) for f in flags) or not company_ok(org) or not first_name(rec["full_name"]):
+            drop("junk company or name"); continue
+        if any(o in org.lower() for o in excl_orgs):
+            drop("excluded firm"); continue
+        if excl and excl.search(sectors):
+            drop("excluded sector"); continue
+        if email in suppress:
+            drop("suppressed"); continue
+        text = f"{org} {rec['title'] or ''}".lower()
+        sector_hit = thesis.search(sectors) if thesis and sectors and sectors != "unknown" else None
+        text_hit = thesis_text.search(text) if thesis_text else None
+        known_sector = bool(sectors) and sectors != "unknown"
+        if not (sector_hit or text_hit):
+            if known_sector or not keep_unknown:
+                drop("off thesis"); continue
+        cmax = check_max(rec["check_size"])
+        check_text = (rec["check_size"] or "").lower()
+        stage_hit = bool(stage and (stage.search(sectors) or stage.search(text) or stage.search(check_text)))
+        if (rec["org_type"] or "").lower() == "angel":
+            stage_hit = True
+        if max_check is not None and cmax is not None:
+            if cmax > max_check * 10:
+                drop("check too large"); continue
+            stage_hit = stage_hit or cmax <= max_check
+        hit = sector_hit or text_hit
+        score = ((3 if hit else 0) + (2 if stage_hit else 0)
+                 + SENIORITY_RANK.get(rec["seniority"], 0) + GRADE_RANK.get(rec["grade"], 0))
+        why = []
+        if hit:
+            why.append(f"thesis: {hit.group(1)}")
+        else:
+            why.append("generalist, sector not on file")
+        if stage_hit:
+            why.append("early stage")
+        if rec["check_size"]:
+            why.append(f"check {rec['check_size']}")
+        slug = rec["linkedin"] or ""
+        rows.append({
+            "first_name": first_name(rec["full_name"]),
+            "full_name": (rec["full_name"] or "").strip(),
+            "title": (rec["title"] or "").strip(),
+            "organization": clean_company(org),
+            "org_type": rec["org_type"] or "",
+            "email": email,
+            "website": rec["website"] or "",
+            "linkedin": slug if linkedin_matches(rec["full_name"], slug) else "",
+            "city": rec["city"] or "", "state": rec["state"] or "", "country": rec["country"] or "",
+            "sectors": rec["sectors"] or "", "check_size": rec["check_size"] or "",
+            "grade": rec["grade"] or "",
+            "thesis_match": "yes" if hit else "no",
+            "stage_match": "yes" if stage_hit else "no",
+            "fit_score": score,
+            "why": "; ".join(why),
+            "record_id": rec["record_id"],
+            "_rank": (score, float(rec["grade_score"] or 0), 1 if slug else 0),
+        })
+    rows.sort(key=lambda x: x["_rank"], reverse=True)
+    seen_email, seen_person, out = set(), set(), []
+    for row in rows:
+        person = (row["full_name"].lower(), row["organization"].lower())
+        if row["email"] in seen_email or person in seen_person:
+            drop("duplicate"); continue
+        seen_email.add(row["email"]); seen_person.add(person)
+        row.pop("_rank")
+        out.append(row)
+    stats["matched"] = len(out)
+    stats["thesis_rows"] = sum(1 for r in out if r["thesis_match"] == "yes")
+    limit = int(block.get("limit") or 0)
+    if limit:
+        out = out[:limit]
+    return out, stats
+
+
+def write_csv(rows: list[dict], path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=COLUMNS)
+        w.writeheader()
+        w.writerows(rows)
+
+
+# list-audit fields that mean this tool let a defect through. It always exits
+# 0, so the verdict is read from its JSON rather than its exit code.
+AUDIT_DEFECTS = ("company_cell_is_junk", "nan_strip_names", "nan_strip_other_fields",
+                 "linkedin_confirmed_wrong", "junk_rows", "no_org_rows")
+
+
+def audit(path: Path) -> dict:
+    tool = ROOT / "bin" / "list-audit"
+    if not tool.exists():
+        return {"ran": False, "why": "list-audit not found"}
+    proc = subprocess.run([sys.executable, str(tool), str(path), "--json"],
+                          capture_output=True, text=True, timeout=300)
+    try:
+        doc = json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        return {"ran": False, "why": (proc.stderr or proc.stdout).strip()[-400:]}
+    defects = {k: doc.get(k) for k in AUDIT_DEFECTS if doc.get(k)}
+    return {"ran": True, "rows": doc.get("rows"), "usable": doc.get("usable_rows"),
+            "qualified": doc.get("qualified_rows"), "free_mail": doc.get("free_mail_rows"),
+            "with_linkedin": doc.get("with_linkedin"), "defects": defects}
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    src = ap.add_mutually_exclusive_group(required=True)
+    src.add_argument("--client", help="client slug; reads <clients dir>/<slug>.json")
+    src.add_argument("--config", help="path to a client config with an investors block")
+    src.add_argument("--check-config", help="validate a config's investors block and exit")
+    ap.add_argument("--db", help="Prometheus sqlite path (default: block's db, then $PROMETHEUS_DB)")
+    ap.add_argument("--out", help="CSV path (default: block's out)")
+    ap.add_argument("--limit", type=int)
+    ap.add_argument("--dry-run", action="store_true", help="count only, write nothing")
+    ap.add_argument("--no-audit", action="store_true")
+    ap.add_argument("--json", action="store_true", help="print the summary as JSON")
+    a = ap.parse_args(argv)
+
+    try:
+        if a.check_config:
+            load_block(Path(expand(a.check_config)))
+            print(f"ok    {a.check_config}")
+            return 0
+        cfg = Path(expand(a.config)) if a.config else clients_dir() / f"{a.client}.json"
+        block = load_block(cfg)
+        if a.limit is not None:
+            block["limit"] = a.limit
+        db = expand(a.db or block.get("db") or os.environ.get("PROMETHEUS_DB"))
+        if not db or not Path(db).exists():
+            print(f"no Prometheus db at {db!r}: pass --db or set PROMETHEUS_DB", file=sys.stderr)
+            return 2
+        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        rows, stats = build(con, block)
+    except ConfigError as exc:
+        print(f"config error: {exc}", file=sys.stderr)
+        return 2
+
+    out = expand(a.out or block.get("out"))
+    summary = {"config": str(cfg), "pool": stats["pool"], "matched": stats["matched"],
+               "thesis_matched": stats["thesis_rows"], "written": 0 if a.dry_run else len(rows),
+               "dropped": stats["dropped"], "out": out}
+    code = 0
+    if not a.dry_run:
+        if not out:
+            print("no output path: pass --out or set investors.out", file=sys.stderr)
+            return 2
+        write_csv(rows, Path(out))
+        if not a.no_audit:
+            result = audit(Path(out))
+            summary["audit"] = result
+            code = 1 if (not result["ran"] or result["defects"]) else 0
+    if a.json:
+        print(json.dumps(summary, indent=1))
+    else:
+        print(f"  pool {summary['pool']:,} people with an email and grade A or B")
+        print(f"  {summary['matched']:,} fit after filters, {summary['thesis_matched']:,} on thesis")
+        for k, v in sorted(stats["dropped"].items(), key=lambda kv: -kv[1]):
+            print(f"    dropped {v:>7,}  {k}")
+        if a.dry_run:
+            print("  dry run, nothing written")
+        else:
+            print(f"  wrote {len(rows):,} rows to {out}")
+            au = summary.get("audit")
+            if au and au["ran"]:
+                print(f"  list-audit: {au['rows']:,} rows, {au['qualified']:,} qualified "
+                      f"(person, real company, work email), {au['free_mail']:,} on a personal mailbox, "
+                      f"defects: {au['defects'] or 'none'}")
+            elif au:
+                print(f"  list-audit did not run: {au['why']}")
+    return code
+
+
+if __name__ == "__main__":
+    sys.exit(main())

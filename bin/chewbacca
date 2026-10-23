@@ -76,6 +76,7 @@ COMMANDS=(
   "gtme-library|index and search a local source corpus"
   "gtme-dedupe|cluster duplicate people across contact CSVs"
   "gtme-signals|list recent SEC Form D raises as buying signals"
+  "gtme-investors|a client's seed investor list from the Prometheus file, deduped and audited"
   "gtme-grade|run the five pre-send gates on one campaign; launch-guard needs its pass"
   "gtme-reply|classify a cold-email reply, clean its text, and gate auto-send, offline"
   "rea|how another app does one thing: REA status, a scoped Electron trace, a native overview (optional)"
@@ -145,7 +146,7 @@ repo_version() { cat "$ROOT/VERSION" 2>/dev/null || echo "unknown"; }
 installed_version() { cat "$STATE/version" 2>/dev/null || echo "unrecorded"; }
 
 case "${1:-}" in
-task-graph|graph-fuse|review-gate|break-it|work-ledger|tabs|ux-learning|jev|decision-lab|ux-decision|ux-policy|clay-review|gtme-math|gtme-graph|gtme-learning|gtme-library|gtme-signals|gtme-grade|gtme-reply|gtme-rules|gtme-dnc|gtme-score|gtme-interview|resolve|gtm|gtm-memory|gtme|clay-fixture-check|oss-apps)
+task-graph|graph-fuse|review-gate|break-it|work-ledger|tabs|ux-learning|jev|decision-lab|ux-decision|ux-policy|clay-review|gtme-math|gtme-graph|gtme-learning|gtme-library|gtme-signals|gtme-investors|gtme-grade|gtme-reply|gtme-rules|gtme-dnc|gtme-score|gtme-interview|resolve|gtm|gtm-memory|gtme|clay-fixture-check|oss-apps)
   tool="$1"
   shift
   exec python3 "$ROOT/bin/$tool" "$@"

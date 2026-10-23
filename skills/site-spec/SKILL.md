@@ -19,6 +19,13 @@ none of these tools: "scrape everything from every page and use all the cool
 stuff we've built ... I should NEVER have to say this again." Every item
 lands on disk, and `site-gate research <repo>` exits 1 until it does.
 
+Draw the task graph before the first fetch. The audit of their site, research
+on reference sites in the genre, and research outside the genre don't depend
+on each other, so the two research tracks go to background agents in the
+first message while the audit runs here, and the questions or the draft wait
+for all three. Caleb, 2026-10-23, mid-way through Parker Manley's film site
+audit with the research still serial: "Rmr to graph engineer".
+
 1. **Every page, through api-anything.** Teach it the site, then pull the
    whole thing. A WordPress site answers `/wp-json/wp/v2/posts` and `/pages`
    (Erik's: 132 posts, 34 pages, 108k words, 367 images, 25 videos). Add

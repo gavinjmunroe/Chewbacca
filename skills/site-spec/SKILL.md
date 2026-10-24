@@ -19,6 +19,15 @@ none of these tools: "scrape everything from every page and use all the cool
 stuff we've built ... I should NEVER have to say this again." Every item
 lands on disk, and `site-gate research <repo>` exits 1 until it does.
 
+Before any styling, write the person's taste answers word for word into
+`research/VIBE-SPEC.md` (the films, songs, brands and adjectives they named)
+and map each to a concrete design move; an answer with no move is a bug. Every
+section needs something a PDF can't do, and a hover target and what it changes
+sit on screen together with zero layout shift. Caleb, 2026-10-23, on Parker
+Manley's v1, which kept the logistics and dropped rustic, Lord of the Rings,
+Grand Budapest and the song: "NEVER MAKE A SITE THAT COULDVE BEEN A PDF" and
+"DID YOU JUST SKIM EVERYTHING HE SAID?"
+
 Draw the task graph before the first fetch. The audit of their site, research
 on reference sites in the genre, and research outside the genre don't depend
 on each other, so the two research tracks go to background agents in the

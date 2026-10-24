@@ -33,3 +33,7 @@ Rules that held:
   fsmonitor can execute code. Read the branch with `git symbolic-ref` instead.
 - Strip togari, medha, composio, Clay and the GTM packs. They're client work,
   not tools a friend needs.
+
+## Intel Macs have no Homebrew (2026-10-23)
+
+Ogo's Intel MacBook Pro printed "Homebrew on macOS is only supported on Apple Silicon processors!", so a setup that blocks on brew never starts there. `calebnewtonusc/ogo-claude-setup` (public, 2026-10-23) is the no-brew version: git and python3 from `xcode-select --install` (a dialog, no password), then node from nodejs.org `latest-v22.x`, uv from astral's installer, gh and ripgrep from their latest GitHub release assets, jq from `jqlang/jq/releases/latest/download/jq-macos-amd64`, all into `~/.local/bin` with a `.zprofile` PATH line. `NO_BREW=1` forces that path on a Mac that has brew, which is how it was tested here. A public repo for a friend means scrubbing names first: Amber is stealth, and copied skills quote Caleb and private paths.

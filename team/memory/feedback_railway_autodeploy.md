@@ -17,3 +17,5 @@ When deploying to Railway, prefer `git push origin main` over `railway up --ci`.
 - Verify by tailing `railway logs` or curling the service URL a minute or two later.
 - Reserve `railway up` for cases where you can't push (uncommitted local changes you want to deploy without committing, fresh service that hasn't been linked to GitHub yet, debugging a build that's not getting picked up from the repo). Even then, mention you're using it and why.
 - Env-var changes via `railway variables --set` should also trigger an auto-redeploy unless you pass `--skip-deploys`. Don't follow them with `railway up` either.
+
+**Exception, 2026-10-24 (Anchored hackathon, 4pm code freeze):** autodeploy can silently skip a push. Commit 7e8ed28 sat on origin/main for 6 minutes with no new deployment in `railway deployment list` while earlier pushes had deployed in 77 to 126s. "Done" means the live asset changed: grep the served CSS or HTML for the new value, never trust the push. If no new deployment appears within about 3 minutes of the push, run `railway up --detach` from the repo and verify again. Watch for untracked files in the checkout, since `railway up` uploads them too.

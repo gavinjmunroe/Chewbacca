@@ -604,6 +604,8 @@ if group "gtme"; then
     python3 "$ROOT/tests/test_gtme_config.py"
   check "shipped code works on anyone's machine: no home paths, personal mailboxes or client ids" \
     bash "$ROOT/tests/portable_code.sh" "$ROOT"
+  check "no shipped shell uses perl-mode grep, which exits 2 on macOS and passes the check it sits in" \
+    bash "$ROOT/tests/no_grep_p.sh" "$ROOT"
   check "a post tagging a client waits for a fresh, clean gtme done" \
     bash "$ROOT/tests/client_ask_guard.sh"
   check "agents never post in a client's Slack conversations as Caleb; Togari does" \

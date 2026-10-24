@@ -424,3 +424,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_shared_artifact_read_via_browser: someone else's claude.ai artifact = browser pane, tall viewport, screenshots; never ask him for an ok to read a link he sent (10/23)
 - feedback_app_store_cancel_is_his_click: App Store subscription cancels are his click (Kyber overlay + sheet web view block computer-use); load the page with -g, give the rows, no grant cards or "want me to" (10/23)
 - feedback_wacli_webhook_fields: wacli 0.20 webhooks send SenderJID/Chat/Text/FromMe capitalized; lowercase pickers drop every message silently (Anchored bridge, 10/24)
+- feedback_reference_video_is_a_spec: a recording handed over for a site scene is the spec for an HTML replica, never embedded; scroll scenes pin (sticky stage) and get judged on the live deploy (Anchored, 10/24)

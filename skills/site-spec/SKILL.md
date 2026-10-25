@@ -103,6 +103,16 @@ check`, `story` and `idle` also pass on every route.
    draft 3 tn" and nobody sent it. He had to ask "Any update on draft 3?"
    the next afternoon, and Caleb wrote "parker asked for draft 3 we never got
    him it!"
+11. **Never ship a section that could have been a slideshow.** Crossfading
+   one image and caption after another on scroll is a slideshow, whatever it's
+   styled as. Each section is an object from the subject's own world that does
+   something only it can do: for a filmmaker, a marquee, a camera monitor whose
+   settings move, an edit timeline with live transitions, a call sheet. The
+   seams between sections are deliberate too (a splice, an intertitle), never a
+   hairline or a fade-to-ground gradient. Caleb on Parker Manley's site,
+   2026-10-25: "NEVER make anything that could've been a slideshow!",
+   "Uncreative unintentional ahh section transitions", "Unintentional ah lame
+   gradient".
 
 ## Food and drink sites: what the practitioners agree on
 

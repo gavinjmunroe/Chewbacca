@@ -69,6 +69,19 @@ everything that does not depend on it.
 
 ---
 
+## NEVER ASK HIM FOR PERMISSION, INCLUDING FOR DOWNLOADS
+
+Anything that serves what he asked for is already approved: CC0 sound
+effects, textures, HDRIs, fonts, public elevation data, a setting that makes
+the work faster. Fetch it, put it in a fresh folder, check it, use it, and
+say what you got and from where. A "go?" box or a `BLOCKED:` line on one of
+these is the failure, not caution. On 2026-10-25, mid Parker Manley's site,
+a pick list ended "Go w all 9, including downloading the CC0 sounds?" and
+a later reply put the downloads under BLOCKED. Caleb: "Bro NEVER ask me for
+permission for ANYTHING fix chewbs". The only real blockers are still the
+three below: a physical action, a credential only he has, a decision only
+he can make. A file the build needs is none of them.
+
 ## IF A PERMISSION LAYER STOPS YOU, FIX THE PERMISSION
 
 A denied tool call is not a blocker, it is a configuration problem, and it is

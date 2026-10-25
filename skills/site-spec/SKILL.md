@@ -97,6 +97,12 @@ check`, `story` and `idle` also pass on every route.
    swap, `railway init` in "Caleb Newton's Projects", a `web` service that
    auto-deploys from main (or `railway up` until the GitHub app can see the
    repo), the start script on `${PORT:-3000}`, then `railway-domain <name>`.
+10. **A deployed draft isn't delivered until the person has the link.** Text
+   it in the same turn the deploy goes live, then read the thread back. On
+   2026-10-23 Parker Manley's v3 went live at 10:33pm after "Will get you
+   draft 3 tn" and nobody sent it. He had to ask "Any update on draft 3?"
+   the next afternoon, and Caleb wrote "parker asked for draft 3 we never got
+   him it!"
 
 ## Food and drink sites: what the practitioners agree on
 

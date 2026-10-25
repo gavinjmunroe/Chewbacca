@@ -456,6 +456,11 @@ function closeStatus(d, due) {
   return daysBetween(today(), due) < -GRACE_DAYS ? "assumed-done" : status;
 }
 
+function timeInNotes(notes) {
+  const m = String(notes || "").match(/\b(1[0-2]|0?[1-9])(?::([0-5]\d))?\s*([ap])\.?m\b/i);
+  return m ? `${m[1]}:${m[2] || "00"}${m[3].toLowerCase()}m` : null;
+}
+
 // Anything that is no longer an action item, however it got that way.
 function isOpen(d) {
   return d.status !== "done" && d.status !== "assumed-done";
@@ -476,7 +481,10 @@ function deliverables(courses) {
         // JSON consumers read `date`, not `due`. A Date serializes to UTC, and
         // a local-midnight deadline lands on the previous day east of Greenwich.
         date: due ? iso(due) : null,
-        at: d.at || null,
+        // A deadline time often lives only in the notes ("11:59pm, Brightspace
+        // dropbox"). On 2026-10-24 `due` said "tomorrow" for WP2 and hid the
+        // 11:59pm that sat in its notes, so the answer needed a second lookup.
+        at: d.at || timeInNotes(d.notes),
         type: d.type || "assignment",
         weight:
           d.weight != null ? d.weight : d.points != null ? d.points : null,
@@ -576,7 +584,7 @@ function cmdDue(args) {
     const tint = left <= 1 ? c.red : left <= 3 ? c.yellow : (s) => s;
     const weight = d.weight != null ? c.dim(`  ${d.weight}`) : "";
     say(
-      `  ${pad(d.course, 12)} ${pad(d.name, 38)} ${tint(pad(when, 9))} ${c.dim(fmt(d.due))}${weight}`,
+      `  ${pad(d.course, 12)} ${pad(d.name, 38)} ${tint(pad(when, 9))} ${c.dim(fmt(d.due) + (d.at ? " " + d.at : ""))}${weight}`,
     );
   }
   if (undated.length) {

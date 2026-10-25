@@ -425,3 +425,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_app_store_cancel_is_his_click: App Store subscription cancels are his click (Kyber overlay + sheet web view block computer-use); load the page with -g, give the rows, no grant cards or "want me to" (10/23)
 - feedback_wacli_webhook_fields: wacli 0.20 webhooks send SenderJID/Chat/Text/FromMe capitalized; lowercase pickers drop every message silently (Anchored bridge, 10/24)
 - feedback_reference_video_is_a_spec: a recording handed over for a site scene is the spec for an HTML replica, never embedded; scroll scenes pin (sticky stage) and get judged on the live deploy (Anchored, 10/24)
+- project_anchored_os_2026_10_24: Anchored OS, the hackathon build grown into a church ecosystem for FF (plan repo calebnewtonusc/anchored-os, 58 credited ideas, nothing decided)

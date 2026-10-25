@@ -306,6 +306,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - project_chewbacca_live_genui_service: Chewbacca Live (apps/live) is ours, hosted genui for clients; BMA/Amber is a customer, Togari only a data source (10/10)
 - feedback_hud_lag_is_the_mac: "HUD laggy" 10/10 was load 95 from 14 tabs + builds + Xprotect, Kyber at 1.4%; measure uptime and Kyber CPU before touching HUD code
 - project_mog_plan: The 6-step plan to prove Chewbacca learns (ledger cc438a52) + 10/10 baseline: r@5 ~55%, 49/190 enforced, 0 kept self-fixes
+- project_chewbacca_mog_one_agent_company: 10/25 goal, research only: run Phil Hewinson's one-agent company easily (37 roles mapped: 8 have, 16 partial, 13 missing, Finance all missing) and beat Omarchy; CB-523
 - project_chewbacca_reengineer_2026_10: hookd Rust gate on 13 guards, hook CPU 5.5s->2.6s per call, replay tools, 16-step flat plan running overnight (10/11)
 - project_main_ci: bin/main-ci runs the full suite on origin/main's newest commit on this Mac, on demand only; never unattended
 - feedback_vendor_names_need_a_source: Vendor or tool names on a client site need a usage source; "X or Y or whatever" on a call is a research task (FF site, 10/10)

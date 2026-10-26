@@ -35,5 +35,13 @@ printf 'Zed\n' >"$T/l2.tsv"
 "$BIN" "$T/l2.tsv" "$T/r2.log" --go --gap 0-0 -- "hi" >"$T/out" 2>&1; rc=$?
 [ $rc = 1 ] && grep -qx "FAIL Zed" "$T/r2.log" && ok "stops on a failed send" || no "kept going after a failure"
 
+printf 'Emma\n' >"$T/l3.tsv"; echo "STARTED Emma" >"$T/r3.log"; : >"$T/calls"
+cat >"$T/people" <<'S'
+#!/bin/bash
+echo "$*" >>"$CALLS"
+S
+"$BIN" "$T/l3.tsv" "$T/r3.log" --go --gap 0-0 -- "hi" >"$T/out" 2>&1
+[ ! -s "$T/calls" ] && ok "a person cut off mid-send is not texted again" || no "re-sent a half-sent person"
+
 echo "  $pass passed, $fail failed"
 [ $fail = 0 ]

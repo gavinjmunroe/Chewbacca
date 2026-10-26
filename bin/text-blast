@@ -32,7 +32,10 @@ done
 [ -f "$LIST" ] || { echo "no list at $LIST"; exit 2; }
 touch "$LOG"
 
-sent_already() { grep -qxF "SENT $1" "$LOG"; }
+# STARTED is written before the first text goes out. A name with STARTED and no
+# SENT was cut off mid-person (Emma got the first text twice on 2026-10-26 when
+# the loop was killed between her two texts), so it's held for a person to check.
+sent_already() { grep -qxF "SENT $1" "$LOG" || grep -qxF "STARTED $1" "$LOG"; }
 
 todo=0 done_n=0
 while IFS=$'\t' read -r name handle; do
@@ -48,6 +51,7 @@ while IFS=$'\t' read -r name handle; do
   sent_already "$name" && continue
   to=(); [ -n "${handle:-}" ] && to=(--to "$handle")
   ok=1 first=1
+  echo "STARTED $name" >>"$LOG"
   for msg in "$@"; do
     [ "$first" = 1 ] || sleep 1
     first=0

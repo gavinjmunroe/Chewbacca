@@ -1093,8 +1093,15 @@ def own_in_flight(full):
     finish's prayer ("what's still waiting") and steering case 5's "Still running
     in other tabs, not me" tripped it."""
     for s in sentences(full):
+        # A quoted line is a report about a status, not one. 2026-10-26 the
+        # reply explaining this fix was refused for "it read "No Parker renders
+        # are running or queued" as still running": the quote, and a guard's
+        # reading of it ("read X as still running"), describe someone else.
+        s = QUOTED_RE.sub(' ', s)
         m = IN_FLIGHT_RE.search(s)
         if not m or OTHERS_RE.search(s) or PRAYER_RE.search(s):
+            continue
+        if REPORTED_RE.search(s[:m.start()]):
             continue
         # "No Parker renders are running or queued" says nothing is in flight.
         # 2026-10-25 it was refused on 3 replies in a row, the last two after a
@@ -1109,6 +1116,9 @@ def own_in_flight(full):
     return []
 
 
+QUOTED_RE = re.compile(r'"[^"\n]{0,300}"|“[^”\n]{0,300}”|`[^`\n]{0,300}`')
+REPORTED_RE = re.compile(r"\b(read|reads|treated|treats|flagged|flags|counted|counts|saw|sees)\b[^,;:]{0,60}\bas\s*$",
+                         re.I)
 NOT_IN_FLIGHT_RE = re.compile(r"\b(no|nothing|none|not|never|zero)\b|n't\b", re.I)
 CLAUSE_SPLIT = re.compile(r"[,;:(]|\s(?:and|but|while|so|though)\s", re.I)
 

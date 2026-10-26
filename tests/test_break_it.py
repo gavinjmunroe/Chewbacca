@@ -95,6 +95,14 @@ class Claims(unittest.TestCase):
                 "and the render agent was told to stop.")
         self.assertEqual(B.stop_verdict([{'kind': 'user', 'text': 'stop the renders'}], text,
                                         live=False, check_disk=False), [])
+        # The reply that explained this fix, word for word (2026-10-26): a quote
+        # and a guard's reading of it are a report, not a status.
+        text = ('All 4 fixes are on main as 99fc7633.\n\n- break-it: it read "No Parker renders are running '
+                'or queued" as still running bc it ignored the "No".')
+        self.assertEqual(B.stop_verdict([{'kind': 'user', 'text': 'fix it'}], text, live=False, check_disk=False), [])
+        got = B.stop_verdict([{'kind': 'user', 'text': 'fix it'}], 'Done. The "no-cache" deploy is still running.',
+                             live=False, check_disk=False)
+        self.assertEqual([b['kind'] for b in got], ['in-flight'])
         # A negation in another clause leaves the in-flight part standing (review, 2026-10-26).
         for text in ("Done. Nothing broke, but the Railway deploy is still running.",
                      "Done. No errors and the render is still running in the background.",

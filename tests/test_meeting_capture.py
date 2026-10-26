@@ -209,6 +209,25 @@ def watching(tmp: Path) -> None:
           stats["chunks"] == 5 and stats["empty"] == 2 and stats["recent"][0]["system_dbfs"] == -30.0
           and "Can you hear" not in json.dumps(stats), stats)
 
+    # A reflection that blows up (disk full on 10/9, a missing hud-verse)
+    # must cost the meeting nothing: the summary was saved before it ran.
+    import meeting_reflect as MR  # noqa: PLC0415
+    real = MR.reflect
+
+    def boom(*_a, **_k):
+        raise OSError("No space left on device")
+
+    MR.reflect = boom
+    try:
+        homeb = tmp / "boom"
+        recorded(homeb)
+        mb = [json.loads(p.read_text()) for p in MC.meeting_files(homeb)]
+    finally:
+        MR.reflect = real
+    check("a reflection that raises still leaves every meeting summarized, ended and saved",
+          mb and all(x.get("ended_at") and x.get("summary") and "No space left" in x.get("reflection_note", "")
+                     for x in mb), [(x.get("ended_at"), bool(x.get("summary")), x.get("reflection_note")) for x in mb])
+
     home2 = tmp / "off"
     _, run2, _ = recorded(home2, env={"CHEWBACCA_MEETING_SUMMARY": "0"})
     m = json.loads(MC.meeting_files(home2)[-1].read_text())

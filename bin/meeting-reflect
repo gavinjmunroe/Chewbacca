@@ -61,11 +61,24 @@ def main(argv=None) -> int:
         if meeting is None:
             print(f"meeting-reflect: no meeting {args.meeting or 'recorded yet'}", file=sys.stderr)
             return 1
+        if not meeting.get("ended_at"):
+            # The watcher still owns an open meeting and rewrites it per chunk;
+            # it reflects on its own when the call closes.
+            print(f"meeting-reflect: {meeting.get('id')} is still open; it reflects on its own when it closes",
+                  file=sys.stderr)
+            return 1
         recorded = True
     MR.reflect(meeting, MC._run, env, home, datetime.now().astimezone())
     if recorded:
-        meeting["updated_at"] = MC.iso(datetime.now().astimezone())
-        MC.write_private(MC.meetings_dir(home) / f"{meeting['id']}.json", meeting)
+        # Reread before writing: the model took a while, and only the two
+        # reflection fields are ours to set.
+        target = MC.meetings_dir(home) / f"{meeting['id']}.json"
+        fresh = MC.load(target) or meeting
+        for key in ("reflection", "reflection_note"):
+            if key in meeting:
+                fresh[key] = meeting[key]
+        fresh["updated_at"] = MC.iso(datetime.now().astimezone())
+        MC.write_private(target, fresh)
     r = meeting.get("reflection")
     if r is None:
         print(meeting.get("reflection_note") or "No reflection.", file=sys.stderr)

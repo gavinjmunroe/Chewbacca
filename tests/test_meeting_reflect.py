@@ -68,6 +68,12 @@ def main() -> int:
           and not v["Acts 4:32"]["checked"], r["verses"])
     check("a repeated reference is kept once", [x["ref"] for x in r["verses"]].count("Psalm 23:1") == 1)
     check("at most MAX_VERSES verses", len(r["verses"]) == MR.MAX_VERSES, len(r["verses"]))
+    q = MR.shape({"verses": [{"ref": "John 14:27", "why": 'Says \u201cPeace I leave with you, my peace\u201d to him'},
+                             {"ref": "John 3:16 For God so loved", "why": "x"},
+                             {"ref": "Hezekiah 3:16", "why": "x"}]}, known)
+    check("a quoted line in the model's why is dropped, so it can't pass as the verse",
+          "Peace I leave" not in q["verses"][0]["why"], q["verses"])
+    check("a ref carrying text is dropped", not any("loved" in x["ref"] for x in q["verses"]), q["verses"])
     check("non-string lines are dropped", r["flesh"] == ["Wants to win the argument."], r["flesh"])
     kinds = [m["kind"] for m in r["moves"]]
     check("a move of an unknown kind is dropped", "send_money" not in kinds, kinds)
@@ -91,9 +97,13 @@ def main() -> int:
         check("the prompt offers the checked verse list", "Psalm 23:1" in claude[0][-1])
         adds = [c for c in run.calls if len(c) > 1 and c[1] == "add"]
         titles = [a for c in adds for a in c if a.startswith("--title=")]
-        check("one ledger add per move, keyed reflect:<id>:m<n>",
-              len(adds) == MR.MAX_MOVES and all(f"--source-key=reflect:rc-test-1:m{n}" in c
-                                                for n, c in enumerate(adds, 1)), adds)
+        keys = [a for c in adds for a in c if a.startswith("--source-key=")]
+        check("one ledger add per move, keyed by kind and who so a rerun finds the same row",
+              len(adds) == MR.MAX_MOVES and "--source-key=reflect:rc-test-1:call_back:sam" in keys
+              and "--source-key=reflect:rc-test-1:repent:sam" in keys, keys)
+        rep = next(c for c in adds if f"--title={MR.REPENT_TITLE}" in c)
+        check("a repent row's note names neither the meeting nor the person",
+              not any("Sam" in a for a in rep), rep)
         check("a repent move's ledger title names nobody and says nothing private",
               f"--title={MR.REPENT_TITLE}" in titles and not any("girlfriend" in a for c in adds for a in c), titles)
         check("a call-back move's title names who", "--title=Call back Sam" in titles, titles)

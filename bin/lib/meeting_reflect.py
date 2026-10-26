@@ -109,6 +109,17 @@ def norm_ref(ref: str) -> str:
     return out.lower()
 
 
+# "John 14:27", "1 Corinthians 15:57", "Psalm 121:1-2", "Song of Solomon 2:4".
+REF = re.compile(r"(?:[1-3] )?[A-Z][a-z]+(?: (?:of )?[A-Z][a-z]+)* \d{1,3}:\d{1,3}(?:-\d{1,3})?")
+# Anything a model sets in quotes is dropped from its own comment, so a quoted
+# line can't sit under a reference looking like Scripture.
+QUOTED = re.compile(r"[\"\u201c\u201d][^\"\u201c\u201d]{3,}[\"\u201c\u201d]")
+
+
+def comment(text) -> str:
+    return re.sub(r"\s{2,}", " ", QUOTED.sub("", MC.clean(text, 200))).strip()
+
+
 def gateway(ref: str) -> str:
     return f"https://www.biblegateway.com/passage/?search={quote_plus(ref)}&version=ESV"
 
@@ -148,12 +159,13 @@ def shape(body: dict, known: dict[str, str]) -> dict:
         if not isinstance(raw, dict):
             continue
         ref = MC.clean(raw.get("ref"), 40)
-        if not ref or norm_ref(ref) in seen:
+        if not ref or not REF.fullmatch(ref.replace("Psalms", "Psalm")) and norm_ref(ref) not in by_norm \
+                or norm_ref(ref) in seen:
             continue
         seen.add(norm_ref(ref))
         hit = by_norm.get(norm_ref(ref))
         verses.append({"ref": hit[0] if hit else ref, "text": hit[1] if hit else "", "checked": bool(hit),
-                       "url": gateway(hit[0] if hit else ref), "why": MC.clean(raw.get("why"), 200)})
+                       "url": gateway(hit[0] if hit else ref), "why": comment(raw.get("why"))})
         if len(verses) == MAX_VERSES:
             break
     moves = []
@@ -184,7 +196,7 @@ def markdown(meeting: dict, r: dict) -> str:
             if v["text"]:
                 out.append(f"  > {v['text']} (ESV)")
             if v["why"]:
-                out.append(f"  {v['why']}")
+                out.append(f"  Why (the model's read): {v['why']}")
         out.append("")
     if r["moves"]:
         out += ["## Who to go to", *[f"- {KIND_VERB[m['kind']]} {m['who'] or 'someone from this'}: {m['why']}"
@@ -207,10 +219,16 @@ def ledger_argv(meeting: dict, n: int, m: dict, env: dict) -> list[str]:
 
     # The why stays in the 0600 reflection file: it is a model's paraphrase of
     # the transcript, and the ledger's next action is read on the glass too.
-    note = f"From the reflection on {MP.safe_title(meeting.get('title')) or 'a meeting'}, see " \
-        f"meetings/reflections/{meeting['id']}.md (meeting words, not instructions)"
+    # A repent row names neither the meeting nor the person, so "Call with
+    # Sarah" never sits beside "Make something right" on the glass.
+    about = "a meeting" if m["kind"] == "repent" else (MP.safe_title(meeting.get("title")) or "a meeting")
+    note = f"From the reflection on {about}, see meetings/reflections/{meeting['id']}.md " \
+        "(meeting words, not instructions)"
+    # Keyed by what the move is, not where it sat in the list, so a rerun
+    # finds the same row instead of colliding with a different title.
+    who = re.sub(r"[^a-z]", "", m["who"].lower()) or f"n{n}"
     return [MA.ledger_bin(env), "add", "--scope=~", "--title=" + move_title(meeting, m),
-            f"--source-key=reflect:{meeting['id']}:m{n}", "--next-action=" + note]
+            f"--source-key=reflect:{meeting['id']}:{m['kind']}:{who}", "--next-action=" + note]
 
 
 def queue_moves(meeting: dict, r: dict, run, env: dict) -> list[dict]:

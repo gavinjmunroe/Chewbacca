@@ -59,4 +59,9 @@ reply=$(python3 -I -c 'import json,sys; print(json.dumps({"prompt_id": "p2", "la
 printf '%s' "$reply" | bash "$hook" >/dev/null 2>&1; [ $? -eq 0 ] && ok "voice-guard passes a draft that is him" || bad "voice-guard refused a good draft"
 reply=$(python3 -I -c 'import json,sys; print(json.dumps({"prompt_id": "p3", "last_assistant_message": "The doc says:\n\n> " + sys.argv[1]}))' "$FORMAL")
 printf '%s' "$reply" | bash "$hook" >/dev/null 2>&1; [ $? -eq 0 ] && ok "a quote in a reply about something else is left alone" || bad "voice-guard fired on a plain quote"
+# 2026-10-26: a gc text in a ``` fence got past the guard ("Bro that doesn't sound human").
+reply=$(python3 -I -c 'import json,sys; print(json.dumps({"prompt_id": "p4", "last_assistant_message": "The gc text:\n\n```\n" + sys.argv[1] + "\n```"}))' "$FORMAL")
+printf '%s' "$reply" | bash "$hook" >/dev/null 2>&1; [ $? -eq 2 ] && ok "voice-guard refuses a fenced draft that isn't him" || bad "voice-guard let a fenced draft through"
+reply=$(python3 -I -c 'import json,sys; print(json.dumps({"prompt_id": "p5", "last_assistant_message": "Send it with:\n\n```bash\ncd ~/code && people texts drafts send 3 --dry-run plus some more words here\n```"}))')
+printf '%s' "$reply" | bash "$hook" >/dev/null 2>&1; [ $? -eq 0 ] && ok "a bash fence is left alone" || bad "voice-guard fired on a bash fence"
 exit $fail

@@ -143,6 +143,13 @@ Never-dos, in his words (2026-10-11, mid quiz):
   `brightspace submit`, never his Chrome. `open -g` to a Brightspace page
   still came to the front. When a job has no command yet, build one that
   runs headless before doing the job, never "just this once" in a tab.
+- "whered you get 7:30 lab from?" (2026-10-26, midnight "what's due tn"): the
+  ledger had `at: "07:30"` for a makeup slot the instructor offered and he
+  never confirmed, plus a syllabus-dated quiz that wasn't posted. Before
+  listing a ledger item as due, read its `notes`: an unconfirmed slot is said
+  as "offered, not confirmed", never as an appointment. Check every quiz,
+  dropbox and "overdue" against `brightspace due` and the quizzes op first;
+  that night it showed WP2 already submitted and quiz #7 not posted at all.
 
 A quiz's questions 403 until the student opens an attempt, so no tool can
 read them first. Ask them to paste the questions; never start an attempt.

@@ -35,11 +35,24 @@ pid = d.get("prompt_id") or d.get("session_id") or "unknown"
 guard = os.path.join(os.environ.get("TMPDIR", "/tmp"), "voice-guard-" + re.sub(r"[^A-Za-z0-9_-]", "", pid))
 if os.path.exists(guard):
     sys.exit(0)
-if not re.search(r"\b(text|texts|whatsapp|imessage|slack|dm|send|sending)\b", msg, re.I):
+if not re.search(r"\b(text|texts|whatsapp|imessage|slack|dm|dms|send|sending|gc|linkedin|message)\b", msg, re.I):
     sys.exit(0)
-bad = []
+bodies = []
 for blk in re.findall(r"((?:^[ \t]*> ?.*\n?)+)", msg, re.M):
-    body = " ".join(l.strip()[1:].strip() for l in blk.splitlines()).strip()
+    bodies.append(" ".join(l.strip()[1:].strip() for l in blk.splitlines()).strip())
+# 2026-10-26: a gc text for his P4a team went out in a ``` block, which this
+# never read, and he wrote "Bro that doesnt sound human" (apostrophe dropped: this runs inside a single-quoted shell string). A fence with no
+# language, or text/plain/txt, holding prose is a draft too. Code-shaped
+# fences (shell prompts, braces, assignments, a command first word) are not.
+CODEY = re.compile(r"^\s*(\$ |cd |git |npm |python|bash |#!|[A-Za-z_]+=|import |def |function |const |let |\{|\[|<)|[;{}]\s*$", re.M)
+for lang, blk in re.findall(r"^```[ \t]*([A-Za-z]*)[ \t]*\n(.*?)^```", msg, re.M | re.S):
+    if lang.lower() not in ("", "text", "txt", "plain"):
+        continue
+    if CODEY.search(blk):
+        continue
+    bodies.append(" ".join(l.strip() for l in blk.splitlines() if l.strip()))
+bad = []
+for body in bodies:
     if len(body.split()) < 6:
         continue
     r = subprocess.run(["python3", "-I", sys.argv[1], "--json", body], capture_output=True, text=True, timeout=20)

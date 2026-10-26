@@ -263,7 +263,7 @@ login_from_profile() {
   # live one turns up, so check it first and import what that leaves. Not on
   # the silent re-import inside `call`: signed out for real, whoami opens the
   # sign-in page, and a read nobody watched must never put a window up.
-  [ "$1" = brightspace ] && [ -z "${2:-}" ] && python3 "$ROOT/bin/brightspace" whoami >/dev/null 2>&1
+  [ "$1" = brightspace ] && [ -z "${2:-}" ] && CHEWBACCA_NO_OPEN=1 python3 "$ROOT/bin/brightspace" whoami >/dev/null 2>&1
   dir="$(mktemp -d)" || return 1
   chmod 700 "$dir"
   # Decrypted Chrome cookies sit in here; a Ctrl-C mid sign-in must not leave them.
@@ -468,7 +468,7 @@ case "$cmd" in
       # Brightspace: a whoami with Chrome's own cookies also keeps that
       # server session from idling out, so he never has to open the site to
       # wake it. It never opens a window, signed out or not.
-      [ "$s" = brightspace ] && python3 "$ROOT/bin/brightspace" whoami >/dev/null 2>&1
+      [ "$s" = brightspace ] && CHEWBACCA_NO_OPEN=1 python3 "$ROOT/bin/brightspace" whoami >/dev/null 2>&1
       if login_from_profile "$s" quiet >/dev/null 2>&1; then say "$s renewed"; else say "$s: signed out in Chrome" >&2; rc=1; fi
     done
     sync_sites --quiet

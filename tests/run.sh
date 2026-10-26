@@ -927,6 +927,11 @@ if group "installer"; then
   check  "brightspace submit routes groups and downloads write real bytes" \
     bash "$ROOT/tests/brightspace_write.sh" "$ROOT"
 
+  # brightspace submit said BLOCKED minutes after a deadline on 2026-10-26
+  # while a background-tab sign-in existed only inside chewbacca usc.
+  check  "a signed-out brightspace signs itself back in, Duo only when asked" \
+    bash "$ROOT/tests/usc_signin.sh" "$ROOT"
+
   # A calendar that repeats a title months later must not become a second
   # reminder, and a scan must not download anything without --apply.
   check  "brightspace-sync lists each item once and scans without writing" \

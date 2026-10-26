@@ -257,10 +257,7 @@ class Client:
                 raise KeyError(f"fixture has no {path}")
             return self.fixture[path]
         if self.cookies is None:
-            try:
-                self.cookies = chrome_cookies()
-            except NoSession:
-                sys.exit(NO_SESSION)
+            self.cookies = _cookies_or_signin()
         try:
             return fetch(path, self.cookies)
         except Expired:
@@ -299,6 +296,9 @@ class Client:
                 return
             except Expired:
                 continue
+        if _signin():
+            self.cookies = chrome_cookies()
+            return
         stale = stale_cookie_message()
         if stale:
             sys.exit(stale)
@@ -656,11 +656,34 @@ async ([name, b64]) => {
 
 def _session_cookies(client):
     if client.cookies is None:
-        try:
-            client.cookies = chrome_cookies()
-        except NoSession:
-            sys.exit(NO_SESSION)
+        client.cookies = _cookies_or_signin()
     return client.cookies
+
+
+def _live_session():
+    try:
+        fetch("/lp/1.63/users/whoami", chrome_cookies())
+        return True
+    except (NoSession, Expired, OSError):
+        return False
+
+
+def _signin():
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+    import usc_signin
+    if not usc_signin.allowed():
+        return False
+    print("brightspace: signing back in through USC in a background tab", file=sys.stderr)
+    return usc_signin.signin(_live_session)
+
+
+def _cookies_or_signin():
+    try:
+        return chrome_cookies()
+    except NoSession:
+        if _signin():
+            return chrome_cookies()
+        sys.exit(NO_SESSION)
 
 
 def _send(req, timeout):

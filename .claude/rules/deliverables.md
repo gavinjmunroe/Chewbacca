@@ -20,6 +20,15 @@ Always on. Any file made for the user to use or pass on follows this.
 - **Evidence goes on the page when it's the point.** If the file has to win an argument, put the exact numbers and where they came from right next to the claim. Otherwise keep sourcing in the notes.
 - **Check it as the reader would.** Read every line as the person holding it, mid-call or mid-email. A line that contradicts another line, or a "don't say X" with X in the opener, gets fixed before it's handed over.
 
+## A how-to guide people will pass around
+
+- **Written for the least technical reader.** Every account they make gets one line on what it's for. Every command gets one gray line on what it does and what will look scary (an invisible password, the lines Homebrew prints under Next steps). Every tool, account and page is a link.
+- **One page, real hierarchy.** Upload styled HTML (`gws drive files update --upload x.html --upload-content-type text/html`), then set margins and `lineSpacing` with `gws docs documents batchUpdate`. Markdown imports flat. Use a big title, numbered section headers in one accent color, paste blocks indented under bold labels, and code in gray monospace. Export the doc to PDF and look at it before saying it's done, including the page count.
+- **It reads like the user made it.** Open with two or three sentences in their voice: who put them on to it, what it gets you, "text me if you get stuck". Credit the friend by name. Sign it.
+- **Install the way a stranger's Mac will.** Codex comes from `npm install -g @openai/codex`. The Homebrew cask is quarantined and macOS says "Apple could not verify codex". Never test an installer with a PATH that makes it `brew install` onto the user's own machine. On 2026-10-26 a test did, and the user got that popup.
+
+Caleb, 2026-10-26, on the USC Codex guide: "Assume the user doesn't hv a github... NON dev", then "Make them make accounts and easily know what they are for", "Include all useful links on the doc!", "the doc is too long... fat wall of text... NO visual heirarchy", "Make it look like I actually wrote it and was intentional".
+
 ## Where this came from
 
 On 2026-10-09 a call prep was handed over as full sentences in a notes folder. The user's fixes, in order: "save them to downloads", ".md if I might edit, PDF if it's for someone else", "it's a fat wall of text", "it just needed more spacing", and "go through the progression of what I should say in the call". Then he said "all chewb files should be given like this".

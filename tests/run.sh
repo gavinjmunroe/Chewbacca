@@ -1127,6 +1127,8 @@ if group "installer"; then
     bash "$ROOT/tests/time_context.sh"
   check  "orphan-reap stops what a dead tab left running and spares the rest" \
     bash "$ROOT/tests/orphan_reap.sh"
+  check  "app-revive restarts an app whose window lost its renderer and spares the rest" \
+    bash "$ROOT/tests/app_revive.sh"
   check  "jobs queue admits, pauses and resumes heavy work against the machine" \
     bash "$ROOT/tests/jobs.sh"
   check  "after a restart, queued and running jobs run again and the daemon's services come back" \

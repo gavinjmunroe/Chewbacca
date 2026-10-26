@@ -3303,6 +3303,13 @@ if command -v brew &>/dev/null; then
   _daemon register verse --every 900 --nice 10 -- /usr/bin/python3 "$_svc_root/bin/hud-verse" &&
     log "a verse on the HUD every 15 min" || warn "could not schedule the verse"
 
+  # An Electron app whose page crashed keeps its window up, blank or frozen,
+  # and never recovers. 2026-10-26: Granola went blank and Slack froze in the
+  # same minute after days of uptime; both needed a kill and a relaunch.
+  # app-revive checks every minute and restarts one seen dead twice in a row.
+  _daemon register app-revive --every 60 --nice 10 -- /usr/bin/python3 "$_svc_root/bin/app-revive" --fix &&
+    log "blank app windows restart themselves" || warn "could not schedule app-revive"
+
   # Install the one LaunchAgent last, and fold in any per-job agent an older
   # install left behind, so Login Items ends with a single Chewbacca row.
   "$_mr_node" "$SCRIPT_DIR/bin/chewbacca-daemon" install 2>&1 | while IFS= read -r _line; do log "$_line"; done

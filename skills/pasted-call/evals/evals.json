@@ -1,0 +1,16 @@
+{
+  "skill": "pasted-call",
+  "cases": [
+    {
+      "prompt": "Meeting Title: Church tech tools with Dad\nTranscript:\nMe: Langston said let's do the weekend after next.\nThem: Let me just get you some stuff.\nMe: I'm gonna call Gavin.",
+      "expect_tools": ["people texts", "work-ledger add"],
+      "expect_behavior": "read the texts with Langston, Dad and Gavin since the call before writing rows; group the result by Today, This week, Waiting on, and a call agenda",
+      "reject": [
+        "ledger rows written from the transcript alone",
+        "logging the Gavin call as happened without checking the thread",
+        "a flat list in call order"
+      ],
+      "why": "2026-10-26: weekend after next was a retreat and the Gavin call had moved to 2pm, both only visible in texts"
+    }
+  ]
+}

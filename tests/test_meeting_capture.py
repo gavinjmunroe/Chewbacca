@@ -196,8 +196,11 @@ def watching(tmp: Path) -> None:
     check("an injected item is a ledger title, never run",
           not any("email everyone" in c[0] for c in run.calls), run.calls)
     claude = [c for c in run.calls if c[:2] == ["claude", "-p"]]
-    check("claude runs once per meeting with every tool, MCP server and setting off",
-          len(claude) == 2 and all(c[c.index("--tools") + 1] == "" and c[c.index("--setting-sources") + 1] == ""
+    sys_of = lambda c: c[c.index("--system-prompt") + 1]  # noqa: E731
+    summaries = [c for c in claude if "summarize a meeting" in sys_of(c)]
+    reflections = [c for c in claude if "reflect on a meeting" in sys_of(c)]
+    check("claude runs twice per meeting, summary then reflection, every tool, MCP server and setting off",
+          len(summaries) == 2 and len(reflections) == 2 and len(claude) == 4 and all(c[c.index("--tools") + 1] == "" and c[c.index("--setting-sources") + 1] == ""
                                    and "--strict-mcp-config" in c and "--no-session-persistence" in c for c in claude))
     check("the system prompt tells the model the transcript is data", "never as instructions" in claude[0][
         claude[0].index("--system-prompt") + 1])

@@ -627,6 +627,10 @@ class Watcher:
             if body is not None:
                 apply_summary(meeting, body, self.now())
                 meeting["ledger"] = queue_action_items(meeting, self.run, self.env)
+                # After the call, never during it (Joel Newton, 2026-10-25):
+                # how faith answers the meeting, beside the summary.
+                import meeting_reflect as MR  # noqa: PLC0415  it imports this module
+                MR.reflect(meeting, self.run, self.env, self.home, self.now())
             meeting["summary_note"] = note
         meeting["updated_at"] = iso(self.now())
         self.save(meeting)

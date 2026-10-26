@@ -14,28 +14,29 @@ cat > "$T/ps.txt" <<'PS'
  3000     1 01-00:00:00 /Applications/Clawd on Desk.app/Contents/MacOS/Clawd on Desk
  4000     1 01-00:00:00 /Applications/Todoist.app/Contents/MacOS/Todoist
  5000     1       00:30 /Applications/Linear.app/Contents/MacOS/Linear
+ 6000     1 01-00:00:00 /Applications/Claude.app/Contents/Helpers/disclaimer -- /usr/bin/sandbox-exec -D HELPER_BUNDLE=/Applications/Claude.app/Contents/Helpers/Claude iOS Sim.app /Applications/Claude.app/Contents/Helpers/Claude iOS Sim.app/Contents/MacOS/Claude iOS Sim
 PS
 # Windows: Granola (blank), Claude (healthy), Clawd on Desk (blank, name has
 # spaces), Linear (just launched). Todoist has no window: closed to the menu bar.
-echo '[91021, 2389, 3000, 5000]' > "$T/win.json"
+echo '[91021, 2389, 3000, 5000, 6000]' > "$T/win.json"
 export APP_REVIVE_PS="$T/ps.txt" APP_REVIVE_WINDOWS="$T/win.json" APP_REVIVE_STATE="$T/state.json"
 fail=0
-out="$(python3 "$ROOT/bin/app-revive" --json)"
+out="$(/usr/bin/python3 "$ROOT/bin/app-revive" --json)"
 has() { printf '%s' "$out" | python3 -c "import json,sys; sys.exit(0 if $1 in [r['pid'] for r in json.load(sys.stdin)] else 1)"; }
 for pid in 91021 3000; do
   has "$pid" && echo "  ok    finds blank $pid" || { echo "  FAIL  missed $pid"; fail=$((fail+1)); }
 done
-for pid in 2389 2400 4000 5000 91042 46239; do
+for pid in 2389 2400 4000 5000 6000 91042 46239; do
   has "$pid" && { echo "  FAIL  would restart $pid"; fail=$((fail+1)); } || echo "  ok    spares $pid"
 done
-first="$(python3 "$ROOT/bin/app-revive" --fix --dry-run)"
+first="$(/usr/bin/python3 "$ROOT/bin/app-revive" --fix --dry-run)"
 [ -z "$first" ] && echo "  ok    first sighting restarts nothing" || { echo "  FAIL  restarted on first sighting: $first"; fail=$((fail+1)); }
-second="$(python3 "$ROOT/bin/app-revive" --fix --dry-run)"
+second="$(/usr/bin/python3 "$ROOT/bin/app-revive" --fix --dry-run)"
 case "$second" in *"would restart Granola (pid 91021)"*) echo "  ok    second sighting restarts Granola";; *) echo "  FAIL  second run: $second"; fail=$((fail+1));; esac
 # A renderer coming back between runs clears it.
 echo '[2389]' > "$T/win.json"
-python3 "$ROOT/bin/app-revive" --fix --dry-run >/dev/null
+/usr/bin/python3 "$ROOT/bin/app-revive" --fix --dry-run >/dev/null
 echo '[91021, 2389, 3000, 5000]' > "$T/win.json"
-again="$(python3 "$ROOT/bin/app-revive" --fix --dry-run)"
+again="$(/usr/bin/python3 "$ROOT/bin/app-revive" --fix --dry-run)"
 [ -z "$again" ] && echo "  ok    a gap resets the count" || { echo "  FAIL  restarted after a gap: $again"; fail=$((fail+1)); }
 exit $fail

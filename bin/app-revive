@@ -47,7 +47,6 @@ MIN_AGE = 120
 # Granola ignored Quit outright on 2026-10-26, so this only bounds the wait.
 QUIT_WAIT = 10
 
-MAIN = re.compile(r"^(/.+?\.app)/Contents/MacOS/")
 
 WINDOWS_JXA = (
     'ObjC.import("CoreGraphics");'
@@ -94,10 +93,25 @@ def window_pids():
         return set()
 
 
+def bundle_of(command):
+    """The .app a main executable lives in, or None. The first /Contents/ must
+    lead to MacOS: a wrapper like Claude's `disclaimer -- sandbox-exec ...
+    Claude iOS Sim.app/Contents/MacOS/...` names a bundle later in its
+    arguments, and a regex that skipped ahead stat'ed a 900-character path
+    (ENAMETOOLONG, exit 1 on the daemon's first run, 2026-10-26)."""
+    bundle, sep, rest = command.partition("/Contents/")
+    if not sep or not bundle.endswith(".app") or not rest.startswith("MacOS/"):
+        return None
+    return bundle
+
+
 def is_electron(bundle):
     if os.environ.get("APP_REVIVE_PS"):
         return True
-    return Path(bundle, "Contents", "Frameworks", "Electron Framework.framework").exists()
+    try:
+        return Path(bundle, "Contents", "Frameworks", "Electron Framework.framework").exists()
+    except OSError:
+        return False
 
 
 def blank_apps(rows, windows):
@@ -106,14 +120,14 @@ def blank_apps(rows, windows):
         kids.setdefault(r["ppid"], []).append(r)
     found = []
     for r in rows:
-        m = MAIN.match(r["command"])
-        if not m or "--type=" in r["command"] or "/Frameworks/" in m.group(1) or not is_electron(m.group(1)):
+        bundle = bundle_of(r["command"])
+        if not bundle or "--type=" in r["command"] or not is_electron(bundle):
             continue
         if r["pid"] not in windows or r["age"] < MIN_AGE:
             continue
         if any("--type=renderer" in k["command"] for k in kids.get(r["pid"], [])):
             continue
-        found.append({"pid": r["pid"], "app": m.group(1), "name": Path(m.group(1)).stem,
+        found.append({"pid": r["pid"], "app": bundle, "name": Path(bundle).stem,
                       "age": r["age"]})
     return found
 

@@ -1,0 +1,25 @@
+{
+  "skill": "order-for-me",
+  "cases": [
+    {
+      "prompt": "Peep what I texted myself plz order all of them, we need them for friday night",
+      "expect_behavior": "reads the iCloud self thread incl. rich ChatGPT shares, then asks sizes, address and whose account pays in one line"
+    },
+    {
+      "prompt": "Order these 4 things, need them by Friday",
+      "expect_behavior": "checks the delivery date of every item to the real ZIP and swaps any that land after the deadline"
+    },
+    {
+      "prompt": "I need the hat with the jake face on it",
+      "expect_behavior": "searches Amazon, Hot Topic, BoxLunch, Target and Walmart and names what each option looks like before suggesting it"
+    },
+    {
+      "prompt": "Just give me the links, my mom will order them",
+      "expect_behavior": "paste-ready lines in his voice, one item and link per line with size, no colon lists"
+    },
+    {
+      "prompt": "You have full permission, pay extra for faster delivery",
+      "expect_behavior": "confirms items and total in one line before placing, picks the fastest shipping that beats the deadline"
+    }
+  ]
+}

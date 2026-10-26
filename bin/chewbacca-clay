@@ -108,12 +108,13 @@ const measured = readJson(MEASURED, {});
 
 // ── args ─────────────────────────────────────────────────────────────────────
 function parseArgv(argv) {
-  const flags = { allowWrites: false, dryRun: false, surface: null, maxTier: null };
+  const flags = { allowWrites: false, dryRun: false, surface: null, maxTier: null, full: false };
   const kv = {};
   const pos = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--allow-writes") flags.allowWrites = true;
+    else if (a === "--full") flags.full = true;
     else if (a === "--dry-run") flags.dryRun = true;
     else if (a === "--surface") {
       flags.surface = argv[++i] ?? "";
@@ -707,15 +708,23 @@ async function attempt(op, cand, flags) {
   if (isWrite(op)) return { ok: false, surface: s.type, class: "refused", reason: "a write is only sent from its approved, frozen request", ms: 0 };
   if (s.type === "api-anything") {
     let r = await callEngine(s.op, bound, flags, false);
-    if (r.ok && r.truncated && op.name === "thread" && s.op === "threadHistory") {
-      // execute.call caps output before returning it. For this exact read-only
-      // endpoint, use the same pinned HTTP sender and frozen request builder
-      // already used below, so complete conversations survive that display cap.
+    const fullThread = op.name === "thread" && s.op === "threadHistory";
+    if (r.ok && r.truncated && (fullThread || flags.full)) {
+      // execute.call caps output at 20,000 chars before returning it. For a
+      // read, use the same pinned HTTP sender and frozen request builder
+      // already used below, so the whole result survives that display cap.
+      // --full extends it past thread: on 2026-10-26 a BMA workspace export
+      // needed all 1,368 resources and the cap showed 76.
       const frozen = deepFreeze(dryRequest(s, bound, validatedSet(bound), bound));
       const url = new URL(frozen.url);
-      if (frozen.method !== "POST" || url.origin !== "https://api.clay.com" ||
-          !/^\/v3\/workspaces\/\d+\/clay-sequencer\/master-inbox\/message-history$/.test(url.pathname) || url.search)
-        return { ok: false, surface: s.type, class: "refused", reason: "complete history requires the exact known read endpoint", ms: Date.now() - t0 };
+      const exactThread = frozen.method === "POST" && !url.search &&
+        /^\/v3\/workspaces\/\d+\/clay-sequencer\/master-inbox\/message-history$/.test(url.pathname);
+      // isWrite(op) already refused above, so this op and its spec entry are
+      // reads; Clay sends some list reads as POST (resources_v2 is one).
+      const plainRead = ["GET", "POST"].includes(frozen.method) && specOps.get(s.op)?.readOnly !== false &&
+        !specWrites(s.op) && /^\/v3\//.test(url.pathname);
+      if (url.origin !== "https://api.clay.com" || !(fullThread ? exactThread : plainRead || exactThread))
+        return { ok: false, surface: s.type, class: "refused", reason: "a complete read needs a read op on api.clay.com/v3 or the exact thread endpoint", ms: Date.now() - t0 };
       if (FIXTURES) {
         const full = fixture("api-anything-full", s.op);
         if (full) r = full;
@@ -2293,6 +2302,8 @@ const HELP = `chewbacca clay: Clay without opening Clay
   --allow-writes                         a write; Caleb's ok at a terminal or in chat, or, for rows, columns
                                          and run-cells, the workspace's standing allowance with room left
   --dry-run                              print the exact request (method, URL, body; no cookie) and send nothing
+  --full                                 a read the 20,000-char display cap cut: refetch it whole (GET on
+                                         api.clay.com/v3 only), for exports
   --session NAME                         use a second Clay login (api-anything only); import it once with
                                          chewbacca clay --session NAME session-login "Profile N"
 

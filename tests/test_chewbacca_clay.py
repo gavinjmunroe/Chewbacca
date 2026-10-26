@@ -231,6 +231,17 @@ def test_no_complete_surface_fails_closed():
         ok(not sent.exists() or not sent.read_text().strip(), "complete-history reads never enter a write-send path")
 
 
+def test_full_flag_reads_a_cut_list_whole():
+    """2026-10-26: exporting a free-plan BMA workspace before the account went
+    away, resources showed 76 of 1,368 and the CLI is off on free plans."""
+    whole = {"resources": [{"id": f"t_{i}", "resourceType": "TABLE"} for i in range(1368)]}
+    fx = {"api-anything/listResources.json": CUT, "api-anything-full/listResources.json": {"ok": True, "data": whole}}
+    code, out, _ = run(fx, {}, "resources", "ws=1")
+    ok(code == 1 and out["class"] == "incomplete", f"without --full a cut list still fails closed: {out}")
+    code, out, _ = run(fx, {}, "resources", "ws=1", "--full")
+    ok(code == 0 and len(out["data"]["resources"]) == 1368, f"--full reads the cut list whole: {str(out)[:300]}")
+
+
 def test_args_pick_the_surface():
     code, route, _ = run({}, {}, "route", "rows", "table=t_example1")
     ok([r["call"] for r in route["order"]] == ["cli:tables rows list {table}"], "no view: only the CLI can page rows")

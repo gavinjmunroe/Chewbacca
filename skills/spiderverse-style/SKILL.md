@@ -154,8 +154,12 @@ Each rule is phrased so it can be built and checked. Source tags follow.
 3. **Different parts can run at different rates.** Spider-Punk: body on twos
    and threes, jacket on fours, guitar on sixes, because separating body
    parts looked like South Park. Alan Hawkins (head of character animation). `[GNO]`
-   (No The Robot reports threes and fours `[NTR]`; trust the head of
-   animation.)
+   (No The Robot reports threes and fours `[NTR]`, and Google's AI Mode on
+   2026-10-26 said guitar on fours, jacket on an offset, citing a YouTube
+   recap. Both are secondhand; trust the head of animation.)
+   Unconfirmed: CG Spectrum says hair and cloth sims stayed on ones under
+   characters on twos, so stepped poses had to sit against smoothly moving
+   fabric. No Imageworks source yet; don't state it as their rule.
 4. **No in-betweens on impacts.** Anticipation pose, then the impact pose,
    held two frames. A smear goes on the second held frame only. `[NTR] [CW]`
 5. **Smears and ink effects live one or two frames.** Any longer and they
@@ -508,6 +512,20 @@ strip. `[ACR-Q]`
 - Random jitter over the whole frame instead of placed imperfections.
 - A dozen comic SFX words on one page.
 - Every section the same palette and the same treatment.
+
+## Stepping time in Blender
+
+Timing is separate from the shading below. Two ways to put a character on twos:
+
+- Select keys in the Dope Sheet or Graph Editor, press T, pick Constant. Holds
+  each key until the next one, which is blocking, not twos: keys must already
+  sit every 2 frames.
+- Add the Stepped Interpolation F-curve modifier (Graph Editor, Modifiers tab)
+  with Step Size 2. Keeps smooth keys underneath and samples them on twos, so
+  the rate changes per channel without rekeying (rule 3: jacket and guitar on
+  their own step sizes). Keep the camera's curves unstepped (rule 1).
+
+In After Effects the same move is Posterize Time on a precomp at 12 fps.
 
 ## Tested in Blender (measured, Waves 1 to 7 of the replica study)
 

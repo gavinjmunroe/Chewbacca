@@ -1,0 +1,20 @@
+{
+  "skill": "college-coach",
+  "cases": [
+    {
+      "prompt": "My friend sent me all his college essays, what else can we do to help him",
+      "expect_tools": ["college-coach"],
+      "why": "helping someone else with their app is the core case"
+    },
+    {
+      "prompt": "He isn't locking in on his portfolio and EA is in a week",
+      "expect_tools": ["college-coach"],
+      "why": "a stuck applicant on a deadline is a named trigger"
+    },
+    {
+      "prompt": "Help my sister with her Common App essay, here's the draft",
+      "expect_tools": ["college-coach"],
+      "why": "a sibling's essay is someone else's app"
+    }
+  ]
+}

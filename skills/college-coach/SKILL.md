@@ -159,6 +159,15 @@ These are his moves, quoted from the thread. Use them as patterns.
   proposing bets, list every repo, site and doc of theirs, find what they
   built that the list hides, and build the bets on that.
 
+- **"A Stanford admit, not some kid who did things for his resume."**
+  Caleb, 10/26. The admit has one question he keeps chasing, and every piece
+  is him chasing it. Look for it in their own brainstorm docs before
+  inventing one: Colin had written "What happens when another person's
+  growth threatens my own advantage?" and never used it. Ask them if it's
+  still theirs, then order activities, essays and the video around it. For
+  USC Trustee: EA by Nov 1 is the merit deadline (admission.usc.edu, read
+  10/26), so the Sunday submission decides it.
+
 ## What to hand them
 
 - The per-person kit repo

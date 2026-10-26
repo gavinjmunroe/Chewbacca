@@ -150,8 +150,8 @@ These are his moves, quoted from the thread. Use them as patterns.
   counting new work until January. Anything not true by the lock morning
   comes off.
 
-- **"Dream bigger... Ur an llm for a reason."** Caleb, 10/26, after the
-  plans only reshuffled facts he and Colin had already handed over. The fix
+- **"Dream bigger... Ur an llm for a reason."** Caleb, 10/26, about Marcus's
+  plan only reshuffling facts he'd handed over (sent to Colin's tab by mistake). The fix
   was reading the applicant's whole GitHub (`gh repo list <them>`), which
   held a live social-confidence app for teens, a focus app born of his
   burnout, teaching repos and three client sites, none of them on his

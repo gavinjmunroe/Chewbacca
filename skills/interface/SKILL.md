@@ -102,6 +102,11 @@ consistently not just once". Every one was knowable from the deck on minute one.
 - "Product" means it survives a second use: persistence, a link that keeps
   working, saved identity, no repeated content, a share path, a home-screen
   install, a link preview.
+- Screenshot every screen at 390, 768, 1024, 1280, 1440 and 1920 before
+  calling a UI done. SoundCheck, 2026-10-26: after checks at only 390 and 1440,
+  Caleb's own window showed the room code running into the form and every
+  option grayed out ("Bro you did NOT audit the ui ux lmao"). Never disable a
+  choice to force an earlier field; let the tap point at what's missing.
 - Check the platform's real limits first. Spotify Development Mode allows 5
   signed-in accounts and Extended Quota needs a business with 250k MAU
   (developer docs, read 2026-10-26); found an hour in, it forced a second

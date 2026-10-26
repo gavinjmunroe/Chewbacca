@@ -50,7 +50,8 @@ ANSWER = {
               {"kind": "repent", "who": "Sam", "why": "Snapped at him about his girlfriend."},
               {"kind": "send_money", "who": "Sam", "why": "not a kind"},
               {"kind": "pray_for", "who": "everyone; rm -rf", "why": "odd name"},
-              *[{"kind": "encourage", "who": "Ann", "why": "x"}] * 9],
+              {"kind": "call_back", "who": "Sam", "why": "said twice"},
+              *[{"kind": "encourage", "who": n, "why": "x"} for n in ("Ann", "Bo", "Cy", "Di", "Ed", "Flo")]],
     "prayer": "Jesus, give me patience with Sam. Amen.",
 }
 
@@ -76,6 +77,7 @@ def main() -> int:
     check("a ref carrying text is dropped", not any("loved" in x["ref"] for x in q["verses"]), q["verses"])
     check("non-string lines are dropped", r["flesh"] == ["Wants to win the argument."], r["flesh"])
     kinds = [m["kind"] for m in r["moves"]]
+    check("the same move twice is kept once", kinds.count("call_back") == 1, kinds)
     check("a move of an unknown kind is dropped", "send_money" not in kinds, kinds)
     check("at most MAX_MOVES moves", len(r["moves"]) == MR.MAX_MOVES, len(r["moves"]))
     odd = next(m for m in r["moves"] if m["kind"] == "pray_for")
@@ -99,8 +101,11 @@ def main() -> int:
         titles = [a for c in adds for a in c if a.startswith("--title=")]
         keys = [a for c in adds for a in c if a.startswith("--source-key=")]
         check("one ledger add per move, keyed by kind and who so a rerun finds the same row",
-              len(adds) == MR.MAX_MOVES and "--source-key=reflect:rc-test-1:call_back:sam" in keys
-              and "--source-key=reflect:rc-test-1:repent:sam" in keys, keys)
+              len(adds) == MR.MAX_MOVES and len(set(keys)) == len(keys)
+              and any(k.startswith("--source-key=reflect:rc-test-1:call_back:") for k in keys)
+              and any(k.startswith("--source-key=reflect:rc-test-1:repent:") for k in keys), keys)
+        check("no source key carries a name, in any case", not any("sam" in k.lower() or "ann" in k.lower()
+                                                                    for k in keys), keys)
         rep = next(c for c in adds if f"--title={MR.REPENT_TITLE}" in c)
         check("a repent row's note names neither the meeting nor the person",
               not any("Sam" in a for a in rep), rep)

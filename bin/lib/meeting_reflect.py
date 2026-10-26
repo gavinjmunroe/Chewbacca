@@ -40,6 +40,7 @@ too, because then nothing about a meeting leaves the Mac.
 """
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import re
@@ -175,6 +176,8 @@ def shape(body: dict, known: dict[str, str]) -> dict:
         who = MC.clean(raw.get("who"), 40)
         if who and not re.fullmatch(r"[A-Z][A-Za-z'.-]+(?: [A-Z][A-Za-z'.-]+)?", who):
             who = ""
+        if who and any(x["kind"] == raw["kind"] and x["who"] == who for x in moves):
+            continue
         moves.append({"kind": raw["kind"], "who": who, "why": MC.clean(raw.get("why"), 200)})
         if len(moves) == MAX_MOVES:
             break
@@ -226,7 +229,8 @@ def ledger_argv(meeting: dict, n: int, m: dict, env: dict) -> list[str]:
         "(meeting words, not instructions)"
     # Keyed by what the move is, not where it sat in the list, so a rerun
     # finds the same row instead of colliding with a different title.
-    who = re.sub(r"[^a-z]", "", m["who"].lower()) or f"n{n}"
+    # The key is printed by `work-ledger list`, so the name goes in hashed.
+    who = hashlib.sha256(f"{meeting['id']}:{m['who'].lower()}".encode()).hexdigest()[:10] if m["who"] else f"n{n}"
     return [MA.ledger_bin(env), "add", "--scope=~", "--title=" + move_title(meeting, m),
             f"--source-key=reflect:{meeting['id']}:{m['kind']}:{who}", "--next-action=" + note]
 

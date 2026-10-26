@@ -86,6 +86,11 @@ Check every section against these before showing it:
   `pointer-events: none` and turn them back on for the window inside it.
 - A sticky pin can't get its room from a last child's bottom margin, because
   the margin collapses out of the parent. Use a spacer element.
+- When a new render lands, every live layer mapped onto it moves with it.
+  A new desk draft enlarged the headshot and the printed call sheet text sat
+  on his face. Lay live text out from the render's exported object boxes,
+  never from fixed percentages, and rerun the seam walk after swapping in any
+  render.
 - A wheel turn or touchmove is not user activation, so audio can't start
   from it. An intro that plays on scroll (Parker's ticket, 2026-10-26) runs
   silent until a click or key. Start sound from the first click, or say so.

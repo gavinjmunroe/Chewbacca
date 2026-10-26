@@ -33,6 +33,13 @@ first="$(/usr/bin/python3 "$ROOT/bin/app-revive" --fix --dry-run)"
 [ -z "$first" ] && echo "  ok    first sighting restarts nothing" || { echo "  FAIL  restarted on first sighting: $first"; fail=$((fail+1)); }
 second="$(/usr/bin/python3 "$ROOT/bin/app-revive" --fix --dry-run)"
 case "$second" in *"would restart Granola (pid 91021)"*) echo "  ok    second sighting restarts Granola";; *) echo "  FAIL  second run: $second"; fail=$((fail+1));; esac
+# A busy audio helper means a meeting is recording: leave the app alone.
+printf '35.0 /Applications/Granola.app/Contents/Frameworks/Granola Helper.app/Contents/MacOS/Granola Helper --type=utility --utility-sub-type=audio.mojom.AudioService\n' > "$T/cpu.txt"
+rec="$(APP_REVIVE_PS_CPU="$T/cpu.txt" /usr/bin/python3 "$ROOT/bin/app-revive" --fix --dry-run)"
+case "$rec" in *"left Granola alone: recording"*) echo "  ok    a recording Granola is left alone";; *) echo "  FAIL  recording run: $rec"; fail=$((fail+1));; esac
+printf '0.0 /Applications/Granola.app/Contents/Frameworks/Granola Helper.app/Contents/MacOS/Granola Helper --type=utility --utility-sub-type=audio.mojom.AudioService\n' > "$T/cpu.txt"
+idle="$(APP_REVIVE_PS_CPU="$T/cpu.txt" /usr/bin/python3 "$ROOT/bin/app-revive" --fix --dry-run)"
+case "$idle" in *"would restart Granola"*) echo "  ok    an idle Granola still restarts";; *) echo "  FAIL  idle run: $idle"; fail=$((fail+1));; esac
 # A renderer coming back between runs clears it.
 echo '[2389]' > "$T/win.json"
 /usr/bin/python3 "$ROOT/bin/app-revive" --fix --dry-run >/dev/null

@@ -23,6 +23,9 @@ whose main process:
 and was in that state on the previous run too. Two runs in a row, a minute
 apart, keeps a renderer that is mid-reload from counting.
 
+NOT WHILE RECORDING. If an audio process of the app is busy (RECORDING_CPU),
+the restart waits: a dead window is better than a cut-off meeting.
+
 THE FIX. Quit through AppleScript, SIGTERM after QUIT_WAIT, SIGKILL after
 that, then `open -g -a`, so the app comes back without taking the screen.
 """
@@ -132,6 +135,28 @@ def blank_apps(rows, windows):
     return found
 
 
+# An audio process of the app at or above this CPU is taken as a recording in
+# progress, and the app is left alone: a restart mid-meeting could cut off
+# what Granola or Fireflies was capturing. Guessed, never measured: Granola's
+# idle audio helper read 0.0% on 2026-10-26, no recording was sampled.
+RECORDING_CPU = 2.0
+
+
+def recording(bundle):
+    fixture = os.environ.get("APP_REVIVE_PS_CPU")
+    text = open(fixture).read() if fixture else subprocess.run(
+        ["ps", "-Ao", "%cpu=,command="], capture_output=True, text=True).stdout
+    for line in text.splitlines():
+        cpu, _, command = line.strip().partition(" ")
+        if bundle + "/" in command and "audio" in command.lower():
+            try:
+                if float(cpu) >= RECORDING_CPU:
+                    return True
+            except ValueError:
+                pass
+    return False
+
+
 def alive(pid):
     try:
         os.kill(pid, 0)
@@ -202,6 +227,10 @@ def main():
         pass
     for f in found:
         if f["pid"] not in before:
+            continue
+        if recording(f["app"]):
+            log("left %s (pid %d) alone: its audio is busy, likely recording" % (f["name"], f["pid"]))
+            print("left %s alone: recording" % f["name"])
             continue
         if a.dry_run:
             print("would restart %s (pid %d)" % (f["name"], f["pid"]))

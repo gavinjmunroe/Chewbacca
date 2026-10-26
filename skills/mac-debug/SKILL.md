@@ -179,6 +179,19 @@ minutes and covers step 4 on its own. If a slowdown happened anyway, find the
 leak it missed, add it to `TAB_JOB` in `bin/orphan-reap` with a fixture row in
 `tests/orphan_reap.sh`, and fix the source that leaked it.
 
+## An app window is blank or frozen ("Granola is tweakin")
+
+An Electron app (Granola, Slack, Notion, Linear, Discord) whose page crashed keeps its window
+up, either empty or frozen on its last frame, and never recovers. On 2026-10-26 Granola showed
+an empty cream pane, and Slack looked fine in a screenshot while it was dead too.
+
+- Never judge it from a screenshot. Run `app-revive`: it lists any app that has a window but no
+  `--type=renderer` process.
+- Fix it with `app-revive --fix` run twice, or quit, force kill, and `open -g -a` the app. Quit
+  alone was ignored on 2026-10-26.
+- The daemon already runs `app-revive --fix` every minute and skips an app that's recording. If
+  one stays blank, check `chewbacca-daemon status | grep app-revive` before anything else.
+
 ## Inspecting an element by hand
 
 When `chewie click "Save"` cannot find something, the element is probably not called

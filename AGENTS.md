@@ -155,6 +155,17 @@ behavior on a later untouched task. Saving a lesson alone is not learning. Read
 `docs/reference/DECISION-STANDARDS.md` for substantial decisions.
 Routine deterministic actions use a direct check, without a new essay or model call.
 
+Before any job that repeats a step more than about a hundred times (an export, a
+scrape, a sync, a bulk fetch), pick the fastest route first and say it in one
+line: time one unit, split where the seconds go (startup, network, the remote
+answer), multiply out the total, and name the cheaper shape if one exists: one
+long-lived process or a batch mode in place of a process per call, bulk
+endpoints over one-by-one, the most valuable data first when access can end. On
+2026-10-26 a Clay export ran a fresh process per read, ~3 s of startup against
+~0.3 s of Clay's answer, and Caleb asked "Ru sure there's not a more efficient
+way to do this?" before anyone had measured. Then: "Fix chewbs to always think
+through the most efficient way to doing smth".
+
 After each substantial phase, compare evidence with the baseline and acceptance
 limits; choose continue, revise or stop. Preserve failures and provenance, test
 retrieval in a later session, and promote only demonstrated scope. Jev can assist

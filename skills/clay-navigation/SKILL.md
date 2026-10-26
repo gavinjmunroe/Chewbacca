@@ -166,6 +166,26 @@ engine or replace the requested platform work with offline work. When a read
 had to come from the page, add it as an op afterwards (below), so the next
 person does not open Clay for it.
 
+## Exports and bulk reads
+
+For anything over about a hundred reads (backing up a workspace, every row of
+every table), use `chewbacca clay batch --full`: stdin is one JSON array of
+args per line, one JSON line comes back per line in, in order, and writes are
+refused. A process per read spends ~3 s starting against ~0.3 s of Clay's
+answer (measured 2026-10-26 on a 992-table workspace). `--full` refetches a
+read the 20,000-char display cap cut, so a list of 1,368 resources comes back
+whole and not as 76.
+
+- Free-plan workspaces have no CLI (the public API is off) and no Sequencer.
+  Rows come from `row-ids` on every view (a view can filter), then
+  `rows-by-id` 100 ids at a time; check the total against `table-count`.
+- Pull rows before history, sources and credits: an account being removed
+  can lose access mid-export.
+- `segment-history` takes limit 200 at most. Inbox rows name their ids
+  `email_campaign_id` and `email_lead_id`.
+- A worked exporter is in `~/Documents/bma-amber-backup-2026-10-26/tools/`
+  (`export_workspace.py`, `fast_tables.py`, `verify.py`).
+
 ## Reading Clay files from the repo
 
 launch-guard reads the command string, so any Bash call that names a Clay

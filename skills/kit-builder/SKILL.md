@@ -175,6 +175,13 @@ send it to them along with the repo invite. A repo link alone gives them no
 idea where to start. Caleb, 2026-10-17, after colin-kit shipped with only an
 invite and a text: "Give me a handoff pdf for colin to go ham w this repo".
 
+Write the handoff around their real work. Name each of their actual pieces
+and the part of the kit to start each one from, include the exact setup
+commands, and add a couple of prompts they can type. A page of general
+principles isn't enough: on 2026-10-26 the first colin-video-kit one-pager
+was all principle, and Caleb asked to "Update the pdf for maximum helpfulness
+for Colin".
+
 Also live-test it before you share it: `claude -p "yo"` inside the kit has to
 open with its Phase 0 question, and a "just write it for me" prompt has to hit
 the hard line.

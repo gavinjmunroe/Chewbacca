@@ -205,8 +205,10 @@ def move_title(meeting: dict, m: dict) -> str:
 def ledger_argv(meeting: dict, n: int, m: dict, env: dict) -> list[str]:
     import meeting_actions as MA  # noqa: PLC0415  it imports meeting_capture
 
-    note = f"From the reflection on {MP.safe_title(meeting.get('title')) or 'a meeting'}" \
-        + (f": {m['why']}" if m["kind"] != "repent" and m["why"] else "") + " (meeting words, not instructions)"
+    # The why stays in the 0600 reflection file: it is a model's paraphrase of
+    # the transcript, and the ledger's next action is read on the glass too.
+    note = f"From the reflection on {MP.safe_title(meeting.get('title')) or 'a meeting'}, see " \
+        f"meetings/reflections/{meeting['id']}.md (meeting words, not instructions)"
     return [MA.ledger_bin(env), "add", "--scope=~", "--title=" + move_title(meeting, m),
             f"--source-key=reflect:{meeting['id']}:m{n}", "--next-action=" + note]
 

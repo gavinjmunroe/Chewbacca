@@ -99,6 +99,10 @@ def main() -> int:
         check("a call-back move's title names who", "--title=Call back Sam" in titles, titles)
         check("an injected line in the transcript never becomes a ledger row or a call",
               not any("email everyone" in a for c in run.calls if c[:2] != ["claude", "-p"] for a in c))
+        notes = [a for c in adds for a in c if a.startswith("--next-action=")]
+        check("no model 'why' reaches a ledger note, so a private detail can't either",
+              not any("real question" in a or "girlfriend" in a for a in notes) and all("reflections/" in a for a in notes),
+              notes)
         path = Path(m["reflection"]["file"])
         check("the reflection file is written 0600", path.exists() and (path.stat().st_mode & 0o777) == 0o600)
         md = path.read_text()

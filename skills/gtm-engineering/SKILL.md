@@ -350,15 +350,24 @@ opt-outs that had to be blocklisted before Monday.
   sizes with their units (until 10/26 "100K USD" read as $100M and seed checks
   were dropped as too large), takes `min_check_musd` and `require_stage`, and
   prints the strongest rows with why each fit.
-- **An investor list is its on-thesis count, never its limit.** Until 10/26
-  blank-sector generalists padded every list to 500: Thallus had 129 on
-  thesis, HPC 36, and the founder notes said "500 food and climate
-  investors". Now a generalist gets in only on a Jev yes judged from what the
-  firm's own homepage says (`unknown_sector: judge`, the default; `drop` and
-  `keep` also exist). Judged from the firm name alone, Jev let in a venture
-  lender and growth equity for a food startup at 0.70 to 0.76, so a name is
-  never evidence. Quote the ON THESIS line the summary prints, and say how
-  many generalists were judged in, separately.
+- **Investor fit is decided from what the firm backed, never a keyword.**
+  Caleb, 10/26, on a "consumer" keyword patch: "WHY IS THERE BRUTE FORCE WORD
+  KEY STUFF IN CHEWBACCA? I THOUGHT WE HAD MADE AN INTELLIGENT SYSTEM???????"
+  Keywords only pick candidates. `gtme-investors` walks the shared portfolio
+  graph (`gtme-portfolio`, ~/.chewbacca/gtm/graph/portfolio.json: firm
+  -invested_in-> company, every name proved on the firm's own page) and Jev
+  asks of each company whether it is in the pitch's market (the investors
+  block's `pitch`, one plain sentence). A firm is in when it backed one, and
+  the why column names them ("backed Beyond Meat, Impossible Foods"). A firm
+  with no portfolio on file gets one Jev call on its homepage; a yes only
+  earns an on-demand portfolio read, and the walk decides. On Thallus this
+  found Trinity Capital -> Impossible Foods and Kapor -> Air Protein, which a
+  person had marked off thesis, and kept Greylock, Anthemis, a16z and
+  Bessemer out. Batched Jev calls mix rows up (one firm 0.88 in a batch, 0.13
+  alone), so firm calls go one at a time. Grow the graph before a big list:
+  `gtme-portfolio build --csv <candidates.csv>`. A list is never padded to
+  its limit, and with Jev down it falls back to keyword rows with
+  keyword_only set; say so.
 - **One contact per firm, no junior titles, list-gate inside.** The generator
   uses list-gate's own `firm_key` and `JUNIOR` rules and runs list-gate on its
   output, exit 1 on any fail. Lists that go out from different founders'

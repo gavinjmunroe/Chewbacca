@@ -93,13 +93,22 @@ class InvestorsTest(unittest.TestCase):
         self.tmp = Path(self._tmp.name)
         self.db = self.tmp / "contacts.db"
         make_db(self.db)
+        con = sqlite3.connect(self.db)
+        con.execute("UPDATE contacts SET website = record_id || '.example' WHERE website = ''")
+        con.commit(); con.close()
         self.con = sqlite3.connect(f"file:{self.db}?mode=ro", uri=True)
+        self._graph = os.environ.get("GTME_PORTFOLIO_GRAPH")
+        os.environ["GTME_PORTFOLIO_GRAPH"] = str(self.tmp / "portfolio.json")
 
     def tearDown(self):
+        if self._graph is None:
+            os.environ.pop("GTME_PORTFOLIO_GRAPH", None)
+        else:
+            os.environ["GTME_PORTFOLIO_GRAPH"] = self._graph
         self.con.close()
         self._tmp.cleanup()
 
-    def build(self, ask=None, **over):
+    def build(self, ask=None, match=None, **over):
         block = dict(BLOCK, **over)
         gi.check_block(block)
         self.asked = []
@@ -107,7 +116,10 @@ class InvestorsTest(unittest.TestCase):
         def fake(states, question):
             self.asked.append(len(states))
             return (ask or (lambda st: [0.9] * len(st)))(states)
-        return gi.build(self.con, block, ask=fake, says=lambda site: "We back seed-stage software founders.")
+        def portfolio(dom, firm):
+            return {"firm": firm, "companies": [{"name": f"{firm} Portco", "source": f"https://{dom}/portfolio"}]}
+        return gi.build(self.con, block, ask=fake, says=lambda site: "We back seed-stage software founders.",
+                        match=match or (lambda firm, names: [(names[0], 0.9)]), read_portfolio=portfolio)
 
     def emails(self, rows):
         return [r["email"] for r in rows]
@@ -254,46 +266,90 @@ class InvestorsTest(unittest.TestCase):
         for rid, name, title, org, sectors in people:
             con.execute("INSERT INTO contacts VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (rid, name, title, org, "VC", "A", 80, "A_founder_cxo", "Person",
-                         f"{rid}@{rid}.example", "", "", "City", "ST", "United States", "North America",
+                         f"{rid}@{rid}.example", "", f"{rid}.example", "City", "ST", "United States", "North America",
                          "", 0, 0, sectors))
         con.commit(); con.close()
 
-    def test_generalists_never_pad_the_list_without_a_jev_yes(self):
-        # 2026-10-26: 129 on-thesis rows padded to 500 with blank-sector rows.
-        self.add(("g1", "Gil One", "Partner", "One Fund", ""), ("g2", "Gia Two", "Partner", "Two Fund", ""),
+    def test_jev_decides_every_row_and_a_keyword_alone_admits_nobody(self):
+        # 2026-10-26: "consumer" alone put Greylock on a mushroom-protein founder's list.
+        self.add(("gl", "Gia Lock", "Partner", "Greylock Partners", "consumer, software"),
+                 ("fd", "Fern Dale", "Partner", "Dale Food Fund", "consumer, food"),
                  ("g3", "Gus Three", "Managing Director", "Big Bank", ""))
-        rows, stats = self.build(ask=lambda st: [0.9 if s["organization"] != "Big Bank" else 0.1 for s in st],
-                                 limit=500)
+        def fit(st):
+            return [0.9 if "Food" in s["organization"] or "Quill" in s["organization"] else 0.1 for s in st]
+        rows, stats = self.build(ask=fit, thesis=["food", "consumer", "saas"], limit=500,
+                                 match=lambda firm, names: [(names[0], 0.9)] if "Food" in firm or "Quill" in firm
+                                 else [])
         got = self.emails(rows)
-        self.assertNotIn("g3@g3.example", got, "Jev said no, so the banker stays out")
-        self.assertIn("g1@g1.example", got)
+        self.assertNotIn("gl@gl.example", got, "a keyword hit is a candidate, Jev said no")
+        self.assertIn("fd@fd.example", got)
+        self.assertNotIn("g3@g3.example", got)
+        self.assertEqual(stats["judged"], stats["thesis_rows"] + stats["unknown_pool"], "every candidate judged")
+        self.assertGreater(stats["dropped"]["Jev: not a fit for the pitch"], 0)
         self.assertLess(len(rows), 500, "nothing pads to the limit")
-        self.assertEqual(stats["dropped"]["sector unknown, not a Jev yes"], 1)
-        g1 = next(r for r in rows if r["email"] == "g1@g1.example")
-        self.assertIn("Jev judged on thesis 0.90", g1["why"])
-        self.assertTrue(all(r["thesis_match"] == "yes" for r in rows[:stats["thesis_rows"]]), "thesis rows first")
+        fd = next(r for r in rows if r["email"] == "fd@fd.example")
+        self.assertIn("backed Dale Food Fund Portco (Jev 0.90, from its portfolio page)", fd["why"])
+        self.assertEqual(rows[0]["judge_p"], "0.90", "strongest Jev score first")
 
-    def test_unscored_generalists_are_left_out_and_judging_stops_once_the_list_is_full(self):
-        self.add(*[(f"u{i}", f"Uma Number{i}", "Partner", f"Fund {i} Ventures", "") for i in range(30)])
-        rows, stats = self.build(ask=lambda st: [None] * len(st))
-        self.assertEqual(stats["judged_in"], 0)
-        self.assertGreater(stats["unscored"], 0)
-        self.assertTrue(all(r["thesis_match"] == "yes" for r in rows))
-        rows, stats = self.build(limit=stats["thesis_rows"] + 1)
-        self.assertEqual(self.asked, [gi.JUDGE_BATCH], "one batch filled the one open slot")
-        rows, stats = self.build(unknown_sector="keep")
-        self.assertEqual(self.asked, [], "keep never calls Jev")
-        self.assertGreater(stats["unknown_pool"], 30)
+    def test_a_firm_is_in_only_when_it_backed_something_in_the_pitchs_market(self):
+        con = sqlite3.connect(self.db)
+        con.execute("UPDATE contacts SET website='quillseed.example' WHERE record_id='p1'")
+        con.execute("UPDATE contacts SET website='bellangels.example' WHERE record_id='p9'")
+        con.commit(); con.close()
+        (self.tmp / "portfolio.json").write_text(json.dumps({"firms": {
+            "quillseed.example": {"firm": "Quill Seed Fund", "companies": [
+                {"name": "Mycelia Foods", "source": "https://quillseed.example/portfolio"},
+                {"name": "Ledger App", "source": "https://quillseed.example/portfolio"}]},
+            "bellangels.example": {"firm": "Bell Angels", "companies": [
+                {"name": "Pay Rails", "source": "https://bellangels.example/portfolio"}]}}}))
+        walked = []
 
-    def test_a_firm_with_no_site_text_is_unscored_and_never_sent_to_jev(self):
+        def match(firm, names):
+            walked.append((firm, names))
+            return [("Mycelia Foods", 0.9)] if "Mycelia Foods" in names else []
         block = dict(BLOCK)
-        sent = []
-        rows, stats = gi.build(self.con, block, ask=lambda st, q: sent.append(st) or [0.99] * len(st),
-                               says=lambda site: "")
-        self.assertEqual(sent, [])
-        self.assertEqual(stats["judged_in"], 0)
-        self.assertEqual(stats["unscored"], stats["judged"])
+        rows, stats = gi.build(self.con, block, ask=lambda st, q: [0.99] * len(st),
+                               says=lambda site: "We invest in everything.", match=match)
+        got = self.emails(rows)
+        quill = next(r for r in rows if r["email"] == "avery@quillseed.example")
+        self.assertIn("backed Mycelia Foods (Jev 0.90, from its portfolio page)", quill["why"])
+        self.assertNotIn("hana@bellangels.example", got, "a portfolio with nothing in the market outranks its own site")
+        self.assertIn(("Bell Angels", ["Pay Rails"]), walked)
+        self.assertEqual(stats["by_portfolio"], 1)
+
+    def test_a_homepage_yes_with_no_readable_portfolio_stays_out(self):
+        rows, stats = gi.build(self.con, dict(BLOCK), ask=lambda st, q: [0.95] * len(st),
+                               says=lambda site: "We back great founders.",
+                               match=lambda firm, names: [(names[0], 0.9)],
+                               read_portfolio=lambda dom, firm: {"firm": firm, "companies": []})
+        self.assertEqual(rows, [])
+        self.assertGreater(stats["dropped"]["site reads as a fit, no portfolio to prove it"], 0)
+
+    def test_the_pitch_is_the_question(self):
+        self.assertIn("mushroom protein", gi.judge_question({"pitch": "mushroom protein for restaurants"}))
+        self.assertIn("food", gi.judge_question({"thesis_text": ["food"]}))
+
+    def test_with_jev_down_the_list_falls_back_to_keywords_and_says_so(self):
+        rows, stats = self.build(ask=lambda st: [None] * len(st))
+        self.assertTrue(stats["keyword_only"])
+        self.assertTrue(rows)
         self.assertTrue(all(r["thesis_match"] == "yes" for r in rows))
+
+    def test_a_generalist_with_no_site_text_is_never_sent_to_jev(self):
+        sent = []
+        block = dict(BLOCK)
+        rows, stats = gi.build(self.con, block, ask=lambda st, q: sent.extend(st) or [0.99] * len(st),
+                               says=lambda site: "")
+        self.assertTrue(sent, "keyword rows still go, judged on their sectors")
+        self.assertTrue(all(s["sectors"] for s in sent), "a blank-sector row with no site is never asked")
+        self.assertGreater(stats["unscored"], 0)
+
+    def test_keyword_mode_is_the_offline_match(self):
+        rows, stats = self.build(ask=lambda st: self.fail("keyword mode never calls Jev"),
+                                 judge={"mode": "keyword"})
+        self.assertTrue(all(r["thesis_match"] == "yes" for r in rows))
+        with self.assertRaises(gi.ConfigError):
+            gi.check_block(dict(BLOCK, judge={"mode": "vibes"}))
 
     def test_a_website_cell_with_two_hosts_never_crashes_a_run(self):
         import gtme_solo

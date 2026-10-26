@@ -133,6 +133,8 @@ def check_block(block: dict) -> None:
             raise ConfigError(f"investors.{key} must be a list of strings")
     if not block.get("thesis") and not block.get("thesis_text"):
         raise ConfigError("investors.thesis is empty: name at least one sector word")
+    if (block.get("judge") or {}).get("mode", "all") not in ("all", "generalists", "keyword"):
+        raise ConfigError("investors.judge.mode must be all, generalists or keyword")
     if block.get("unknown_sector") not in (None, *UNKNOWN_MODES):
         raise ConfigError(f"investors.unknown_sector must be one of {', '.join(UNKNOWN_MODES)}")
     if "require_stage" in block and not isinstance(block["require_stage"], bool):
@@ -263,6 +265,10 @@ UNKNOWN_MODES = ("judge", "keep", "drop")
 # sector, a wrong no is one row a judged pool can refill.
 JUDGE_YES = 0.7
 JUDGE_BATCH = 20
+# A firm judged on its homepage alone, with no portfolio on file, is kept at
+# 0.6. Measured 2026-10-26 on 18 Thallus firms labelled by hand, one call
+# each: the clear fits scored 0.64 to 0.87 and the misfits 0.12 to 0.53.
+FIRM_YES = 0.6
 
 
 def jev_judge(states: list[dict], question: str) -> list[float | None]:
@@ -307,14 +313,16 @@ def site_says(website: str) -> str:
 def judge_question(block: dict) -> str:
     if (block.get("judge") or {}).get("question"):
         return block["judge"]["question"]
-    words = ", ".join((block.get("thesis_text") or block.get("thesis") or [])[:8])
-    return (f"From what the firm's own site says about itself (firm_site_says), does this firm write early "
-            f"(pre-seed or seed) checks into startups in: {words}? Answer no when the site says nothing about "
-            f"that sector or stage, and for investment banks, lenders, wealth managers, endowments, funds of "
-            f"funds and growth or buyout equity.")
+    pitch = block.get("pitch") or ("a startup in " + ", ".join((block.get("thesis_text") or block.get("thesis") or [])[:8]))
+    return (f"The founder's pitch: {pitch}. From this firm's own site (firm_site_says) and the sectors on file, "
+            f"would this firm plausibly write an early (pre-seed or seed) check into this exact startup? A firm "
+            f"whose site and sectors point somewhere else (fintech, enterprise software, real estate) is no even "
+            f"if one broad word overlaps. Investment banks, lenders, wealth managers, endowments, funds of funds "
+            f"and growth or buyout equity are no.")
 
 
-def build(con: sqlite3.Connection, block: dict, ask=jev_judge, says=None) -> tuple[list[dict], dict]:
+def build(con: sqlite3.Connection, block: dict, ask=jev_judge, says=None, match=None,
+          read_portfolio=None) -> tuple[list[dict], dict]:
     thesis = word_re(block.get("thesis", []) + block.get("thesis_text", []))
     thesis_text = word_re(block.get("thesis_text", []))
     stage = word_re(block.get("stage", []))
@@ -328,6 +336,10 @@ def build(con: sqlite3.Connection, block: dict, ask=jev_judge, says=None) -> tup
     min_check = block.get("min_check_musd")
     require_stage = bool(block.get("require_stage"))
     unknown_mode = block.get("unknown_sector") or ("judge" if block.get("include_unknown_sector", True) else "drop")
+    # judge: "all" (the default) has Jev decide every candidate against the
+    # pitch; "generalists" judges only rows with no keyword hit; "keyword"
+    # is the old offline match with no judge at all.
+    judge_mode = (block.get("judge") or {}).get("mode", "all")
     keep_unknown = unknown_mode != "drop"
     gate = list_gate()
     suppress = suppressed_emails(block.get("suppress", []))
@@ -460,46 +472,113 @@ def build(con: sqlite3.Connection, block: dict, ask=jev_judge, says=None) -> tup
         row.pop("_rank")
         out.append(row)
     limit = int(block.get("limit") or 0)
-    thesis_rows = [r for r in out if r["thesis_match"] == "yes"]
-    pool = [r for r in out if r["thesis_match"] != "yes"]
-    stats.update(thesis_rows=len(thesis_rows), unknown_pool=len(pool), judged=0, judged_in=0, unscored=0)
-    if unknown_mode == "judge":
-        room = (limit - len(thesis_rows)) if limit else len(pool)
-        kept, q = [], judge_question(block)
-        # Judged in rank order, a batch at a time, only until the list is full.
-        for i in range(0, len(pool), JUDGE_BATCH):
-            if len(kept) >= room:
-                break
-            chunk = pool[i:i + JUDGE_BATCH]
-            with concurrent.futures.ThreadPoolExecutor(8) as ex:
-                text = list(ex.map(lambda r: (says or site_says)(r["website"]), chunk))
-            # No site text is no evidence: unscored, never sent to Jev. On the
-            # 10/26 sample an empty page scored 0.88 under a looser question.
-            asked = [(r, {**{k: r[k] for k in ("full_name", "title", "organization", "org_type", "check_size")},
-                          "firm_site_says": t}) for r, t in zip(chunk, text) if t]
-            got = dict(zip((id(r) for r, _ in asked), ask([st for _, st in asked], q))) if asked else {}
-            for r in chunk:
-                prob = got.get(id(r))
-                stats["judged"] += 1
-                if prob is None:
-                    stats["unscored"] += 1
-                elif prob >= JUDGE_YES:
-                    r["why"] = r["why"].replace("generalist, sector not on file",
-                                                f"generalist, Jev judged on thesis {prob:.2f}")
-                    r["judge_p"] = f"{prob:.2f}"
-                    kept.append(r)
-        stats["judged_in"] = len(kept)
-        pool = kept[:room]
-        drop_n = stats["unknown_pool"] - len(pool)
-        if drop_n:
-            stats["dropped"]["sector unknown, not a Jev yes"] = drop_n
-    elif unknown_mode == "drop":
-        pool = []
-    stats["matched"] = len(thesis_rows) + len(pool)
-    out = thesis_rows + pool
+    stats.update(thesis_rows=sum(1 for r in out if r["thesis_match"] == "yes"),
+                 unknown_pool=sum(1 for r in out if r["thesis_match"] != "yes"), judged=0, judged_in=0, unscored=0,
+                 keyword_only=False)
+    if judge_mode == "keyword" or (unknown_mode == "drop" and judge_mode != "all"):
+        out = [r for r in out if r["thesis_match"] == "yes" or unknown_mode == "keep"]
+    else:
+        out = judge_all(out, block, ask, says, stats, judge_mode, match, read_portfolio)
+    stats["matched"] = len(out)
     if limit:
         out = out[:limit]
     return out, stats
+
+
+def judge_all(rows: list[dict], block: dict, ask, says, stats: dict, mode: str, match=None,
+              read_portfolio=None) -> list[dict]:
+    """Every candidate is decided against the founder's pitch from evidence,
+    never from a keyword. Caleb, 2026-10-26, on a "consumer" keyword patch:
+    "WHY IS THERE BRUTE FORCE WORD KEY STUFF IN CHEWBACCA? I THOUGHT WE HAD
+    MADE AN INTELLIGENT SYSTEM???????" Keywords only choose who to look at.
+
+    Two paths, strongest evidence first:
+    1. The firm is in the portfolio graph: walk firm -invested_in-> company,
+       and Jev asks of EACH company whether it is in the pitch's market. A
+       firm is in when it backed at least one, and the row names them. On
+       2026-10-26 this found Kapor -> Air Protein and Maveron -> Imperfect
+       Foods for a mushroom-protein founder, firms a person had marked off
+       thesis, and kept Greylock out.
+    2. No portfolio on file: one Jev call per firm on its homepage and
+       sectors (batched calls mixed rows up: a firm with no evidence scored
+       0.88 in a batch of 20 and 0.13 alone). A yes only earns a portfolio
+       read, built on demand into the graph, and then path 1 decides. On the
+       first full run a homepage yes alone let a16z, Bessemer and Scribble in
+       for a mushroom-protein founder; a generic "we back great founders"
+       page reads as a fit to anything. A firm whose portfolio can't be read
+       stays out, counted.
+    With Jev unreachable every row is unscored, and the list falls back to the
+    keyword rows with keyword_only set so the summary says so."""
+    import gtme_portfolio
+    graph = gtme_portfolio.load()
+    q = judge_question(block)
+    pitch = block.get("pitch") or ", ".join(block.get("thesis_text") or block.get("thesis") or [])
+    match = match or (lambda firm, names: gtme_portfolio.matches(firm, names, pitch, graph))
+    read_portfolio = read_portfolio or gtme_portfolio.build_one
+    candidates = rows if mode == "all" else [r for r in rows if r["thesis_match"] != "yes"]
+    fixed = [] if mode == "all" else [r for r in rows if r["thesis_match"] == "yes"]
+    stats.update(by_portfolio=0, site_unproved=0, portfolio_firms=0)
+
+    def decide(r):
+        names = [c["name"] for c in gtme_portfolio.companies(gtme_portfolio.domain_of(r["website"]), graph)]
+        if names:
+            hits = match(r["organization"], names)
+            if hits is None:
+                return r, None, "portfolio", []
+            best = max((p for _, p in hits), default=0.0)
+            return r, (best if hits else 0.0), "portfolio", hits
+        text = (says or site_says)(r["website"])
+        if not (text or r["thesis_match"] == "yes"):
+            return r, None, "none", []
+        st = {**{k: r[k] for k in ("full_name", "title", "organization", "org_type", "sectors", "check_size")},
+              "firm_site_says": text}
+        got = ask([st], q)
+        prob = got[0] if got else None
+        if prob is None or prob < FIRM_YES:
+            return r, prob, "site", []
+        dom = gtme_portfolio.domain_of(r["website"])
+        node = read_portfolio(dom, r["organization"]) if dom else {"companies": []}
+        with gtme_portfolio._lock:
+            if dom:
+                graph["firms"][dom] = node
+        names = [c["name"] for c in node.get("companies") or []]
+        if not names:
+            return r, prob, "site_unproved", []
+        hits = match(r["organization"], names)
+        if hits is None:
+            return r, None, "portfolio", []
+        return r, (max(p for _, p in hits) if hits else 0.0), "portfolio", hits
+
+    kept = []
+    with concurrent.futures.ThreadPoolExecutor(8) as ex:
+        for r, prob, path, hits in ex.map(decide, candidates):
+            stats["judged"] += 1
+            if path == "portfolio":
+                stats["portfolio_firms"] += 1
+            if prob is None:
+                stats["unscored"] += 1
+                continue
+            r["judge_p"] = f"{prob:.2f}"
+            if path == "portfolio" and hits:
+                names = ", ".join(n for n, _ in sorted(hits, key=lambda h: -h[1])[:3])
+                r["why"] = f"backed {names} (Jev {prob:.2f}, from its portfolio page); " + r["why"]
+                stats["by_portfolio"] += 1
+                kept.append(r)
+            elif path == "site_unproved":
+                stats["site_unproved"] += 1
+    stats["judged_in"] = len(kept)
+    if stats["judged"] and stats["unscored"] == stats["judged"] and mode == "all":
+        stats["keyword_only"] = True
+        return [r for r in rows if r["thesis_match"] == "yes"]
+    gtme_portfolio.save(graph)
+    stats["dropped"]["Jev: not a fit for the pitch"] = (stats["judged"] - stats["unscored"] - len(kept)
+                                                         - stats["site_unproved"])
+    if stats["site_unproved"]:
+        stats["dropped"]["site reads as a fit, no portfolio to prove it"] = stats["site_unproved"]
+    if stats["unscored"]:
+        stats["dropped"]["no evidence to judge (no portfolio, site or sector)"] = stats["unscored"]
+    kept.sort(key=lambda r: (-float(r["judge_p"]), -r["fit_score"]))
+    return fixed + kept
 
 
 def write_csv(rows: list[dict], path: Path) -> None:

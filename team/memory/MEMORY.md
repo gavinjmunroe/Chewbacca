@@ -431,3 +431,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - project_anchored_os_2026_10_24: Anchored OS, the hackathon build grown into a church ecosystem for FF (plan repo calebnewtonusc/anchored-os, 58 credited ideas, nothing decided)
 - feedback_per_founder_lists_get_per_sender: one list per founder in a folder = a .per-sender marker, or list-guard calls every shared investor a dupe (10/26, a55b979b)
 - feedback_people_texts_lags_new_messages: people texts lagged a 14:54 doc link at 14:57; when he says it's in the text and the CLI shows nothing, one raw chat.db query of the last 20 min (10/26)
+- feedback_self_text_rich_message_unread: self-texted ChatGPT shares read as unsupported content; self thread is the icloud handle, decode attributedBody (10/26)

@@ -202,6 +202,19 @@ section, a row of color swatches and a grid of generic silhouette people.
   shared) and mark everything still open as their call, with a toggle that
   hides the notes.
 
+- **A batch of sites starts with the full list, read from the source.** On
+  2026-10-26 a handed-down brief cut "whoever we can" from a showcase to the
+  4 founders with calls booked. The showcase transcript and the founders folder
+  named about 15 more, and nobody read them. Caleb: "Bro there's so many other
+  companies you're leaving out!!!!!!!! Bro did you read the innovation ucla
+  transcript thing?" Before the first build, read the event's own record
+  (transcript, PDF, folder), list every company with its site, and show that
+  list. His scope words beat the brief that was passed down.
+- **Pause means stop, and a teammate tab doesn't override it.** The same day,
+  after "Pause and evaluate", a peer session asked for teardowns and this tab
+  kept working until he wrote "PAUSE BRUH". After a pause, reply with where
+  things stand and run nothing until he answers. A peer request waits.
+
 ## When they ask for an intro animation
 
 The Cowboy Cubans draft got a five second duel on first load (two silhouettes,

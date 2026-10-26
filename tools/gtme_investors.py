@@ -65,6 +65,10 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+# bin/gtme-investors runs this file through runpy, which puts bin/ on the
+# path, not tools/: the judge's import of gtme_pipeline failed that way on
+# 11 of 13 founder lists (2026-10-26) while every in-process test passed.
+sys.path.insert(0, str(ROOT / "tools"))
 
 # Role inboxes are not people. 984 of 52,350 in the original file, attached to
 # a real person's name so they pass a spreadsheet eyeball check.

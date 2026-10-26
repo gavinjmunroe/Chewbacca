@@ -309,6 +309,16 @@ class InvestorsTest(unittest.TestCase):
             os.environ.pop("GTME_LIST_CACHE")
         self.assertEqual(seen, ["https://www.aim13.example"])
 
+    def test_the_judge_runs_from_the_installed_entry_point(self):
+        # 2026-10-26: bin/gtme-investors could not import gtme_pipeline for the judge.
+        proc = subprocess.run(
+            [sys.executable, "-c", "import runpy,sys; ns = runpy.run_path(sys.argv[1], run_name='x'); "
+             "print(repr(ns['site_says']('firm.example')))", str(TOOL)],
+            capture_output=True, text=True, timeout=60, cwd=str(self.tmp),
+            env=dict(os.environ, GTME_FIXTURES=str(self.tmp), PYTHONPATH=""))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stdout.strip(), "''")
+
     def test_one_contact_per_firm_and_no_junior_titles(self):
         self.add(("s1", "Sam Stone", "Managing Partner", "Stonepeak Partners", "saas"),
                  ("s2", "Sue Stone", "Partner", "Stonepeak", "saas"),

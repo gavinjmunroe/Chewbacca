@@ -186,6 +186,22 @@ questions, "More qustions bruh I want her to yap to make this awesome".
 - End with a send-me list: original video files (not screen recordings), photos,
   logo, screenshots of kind texts or reviews.
 
+## A scaffold draft for the person filling in the vision
+
+A draft that shows where things go is still a site, and it still gets judged
+as one. Caleb, 2026-10-26, on draft 0 of the SMHS dance site: "BRO NO AI SLOP".
+That draft had headlines nobody said ("Four levels, one stage", "Come see a
+show"), a small kicker over every heading, all-caps display type on every
+section, a row of color swatches and a grid of generic silhouette people.
+
+- Headings are plain labels or the person's own words from their intake doc.
+  Never write a slogan into a scaffold.
+- Open slots are empty dashed frames with the question in them, never
+  stand-in people or stock shapes.
+- Use their real footage wherever it exists (their insta, the album they
+  shared) and mark everything still open as their call, with a toggle that
+  hides the notes.
+
 ## When they ask for an intro animation
 
 The Cowboy Cubans draft got a five second duel on first load (two silhouettes,

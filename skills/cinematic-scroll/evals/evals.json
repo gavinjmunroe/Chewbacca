@@ -1,0 +1,29 @@
+{
+  "skill": "cinematic-scroll",
+  "cases": [
+    {
+      "prompt": "Make my friend's film portfolio feel like one continuous movie as you scroll",
+      "expect_tools": ["cinematic-scroll"],
+      "why": "the Parker site rules: SPEC from every message, low poly preview before renders, same-object hand-offs",
+      "reject": ["queuing final renders before a preview", "a fade between unrelated images"]
+    },
+    {
+      "prompt": "This section looks like a slideshow, fix it",
+      "expect_tools": ["cinematic-scroll"],
+      "why": "a section must be a thing happening, never cards that swap",
+      "reject": ["adding a carousel", "swapping static cards on scroll"]
+    },
+    {
+      "prompt": "Put his film on the monitor in the render",
+      "expect_tools": ["cinematic-scroll", "nalana"],
+      "why": "render the screen empty, export its quad, map the video in with matrix3d",
+      "reject": ["an absolutely positioned video laid over the render"]
+    },
+    {
+      "prompt": "There's a weird doubling strip at the top when I scroll into the next scene",
+      "expect_tools": ["cinematic-scroll"],
+      "why": "generic section padding offset the pin; measure rects, zero padding, rerun full_bleed and walk_seams",
+      "reject": ["tweaking the transition timing without measuring"]
+    }
+  ]
+}

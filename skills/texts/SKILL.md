@@ -401,6 +401,24 @@ The rest of that night's corrections, all on the same Sagar text:
 The version he sent answered Sagar's three numbered questions in order, then
 gave short lines on his position. Sagar: "Thank you I will think about this".
 
+### A blast to many people: show the final list, then never re-send
+
+On 2026-10-26 a link blast to ~86 USC friends went out from three lists Caleb
+had said "all 3" to, without the final names ever shown to him. He saw Jet get
+it and wrote "U DIDNT TELL ME UR TEXTING SOME PPL LIKE JET WHAT / STOP / Bro."
+Two restarts (one to fix a skip check, one to go faster) re-sent to Jet and
+Andrea, because a link this machine sends reads back as `unsupported content`
+in `mac messages history`, so a grep for the URL never finds it.
+
+- Before the first send, print every recipient as one plain line each and wait
+  for his yes on that exact list. "All" on a list of lists still needs this.
+- The record of who got it is the send loop's own log, written before it moves
+  on. On restart, skip every name in that log. Never decide "already sent" by
+  searching the thread for the link.
+- A person he texted himself shows the link as text; check that too, but only
+  as a second filter.
+- Never kill a send loop and restart it without first reading its log.
+
 ## Sending
 
 To send, use `people send`, and only when the user asked for a specific

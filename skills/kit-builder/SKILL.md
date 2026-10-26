@@ -179,6 +179,27 @@ Also live-test it before you share it: `claude -p "yo"` inside the kit has to
 open with its Phase 0 question, and a "just write it for me" prompt has to hit
 the hard line.
 
+## A kit for someone else carries everything we already know
+
+Code alone is the smallest part of what we can hand over. Before calling a
+repo for another person done, inventory and pull in, scrubbed of client names,
+faces, voices and machine paths:
+
+- the skills that own the work (`skills/<name>/` into the repo's `.claude/skills/`)
+- the lessons on that work, from team memory and the brain, rewritten for them
+- the hooks and tests that would have caught our mistakes
+- the rules that apply (`research-the-craft` for anything creative)
+- the things we built or recreated in that genre: past builds, replicas, studies
+- the handoff one-pager, in the same turn
+
+Client code stays out (only a style study of their public site), and so do
+other people's photos and voices. On 2026-10-26 colin-video-kit shipped as 8
+components, and Caleb sent eight messages adding to it: "Bro there's SO much
+more we can include in the video kit!!!!!!!! Skills, tests, hooks, rules,
+lessons learned", then the Lemma replica, Nalana, the Firm Foundation video,
+the T Combinator dots, microbots, and a one-pager so he runs with it instead
+of "regurgitating what is in there".
+
 ## Write the marker, or it will get rebuilt
 
 Every kit carries a `.kit` file at its root. This is not optional. It is what makes the

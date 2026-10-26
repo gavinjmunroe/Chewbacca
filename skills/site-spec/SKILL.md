@@ -215,6 +215,23 @@ section, a row of color swatches and a grid of generic silhouette people.
   kept working until he wrote "PAUSE BRUH". After a pause, reply with where
   things stand and run nothing until he answers. A peer request waits.
 
+- **A firm that sells trust gets the register its buyers trust.** Medrano
+  Partners v1 (2026-10-26) used a serif headline with a gold italic word in
+  every heading, mono uppercase kickers and a drawn daisy, copied up from the
+  client's own Playfair-and-gold site. Caleb: "looks slop bro so far from
+  professional". v2 took the stance from the reader (gloo.com and
+  bridgespan.org for faith and nonprofit leaders): one light sans display,
+  the client's own photos full width, one accent that means "act", and the
+  method shown as a real engagement timeline. Push a client's identity
+  further, but drop the parts of it that are the generated-median look.
+- **Measure the client's site before quoting it.** OPTRA's counters read
+  $273K, $309K, then $323K over nine seconds; the real value was in their JS
+  bundle. A "0+ countries" on another page was a counter that hadn't run yet.
+  Read the bundle or wait and re-read before a number goes in a teardown.
+- **site-gate quirks seen 10/26:** its contrast check misreads `oklch()` (use
+  rgb tokens), and `scroll-behavior: smooth` on `html` makes the
+  heading-paint check flaky (glide anchors in JS instead).
+
 ## When they ask for an intro animation
 
 The Cowboy Cubans draft got a five second duel on first load (two silhouettes,

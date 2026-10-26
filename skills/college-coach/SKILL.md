@@ -1,6 +1,6 @@
 ---
 name: college-coach
-description: "Coach someone else through a college application the way Caleb coached a senior into his IYA push: they write every word, you change how they think. Use for helping a friend or sibling with essays, a portfolio, supplements or a deadline sprint."
+description: "Coach someone else through a college application the way Caleb coached a senior into his IYA push: they write every word, you change how they think."
 triggers: >-
   Coach someone else's college application: a friend, sibling or mentee's essays, Common App, supplements, portfolio videos, SlideRoom, or an early deadline sprint. Use when the user says help X with college apps, X sent me their essays, what else can we do for X, X is stuck, X isn't locking in, or give X feedback. Not for the user's own applications (that's apply-kit).
 ---
@@ -135,6 +135,20 @@ These are his moves, quoted from the thread. Use them as patterns.
   people on the applicant's private kit, so check who can see it.
 - **Sends are the coach's.** "Hold the text, I'll send it myself." Draft
   texts in the coach's voice and let him send them.
+
+- **"Larp harder."** Caleb, 10/26, on Colin's activities list: "he needs to
+  larp harder its not impressive enough at all... be ambitous abt what we can
+  do this week I'll do anythign for him." It means the most ambitious TRUE
+  list, never padded lines: Colin had turned down ED that day as "not
+  honorable", so he'd delete an inflated line himself, and interviewers poke
+  at exactly those. Make the list bigger by doing things before the lock
+  date: split what the coach's hands can build (ship their app, settle
+  titles and numbers from the coach's records, an intro to a professor) from
+  one-text asks of the applicant (a supervisor's sentence, screenshots, the
+  missing activity). This overrides "zero new projects" when the coach does
+  the building. Check every round's date first: a school moved to RD keeps
+  counting new work until January. Anything not true by the lock morning
+  comes off.
 
 ## What to hand them
 

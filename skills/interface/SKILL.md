@@ -85,6 +85,28 @@ where the data comes from. All four of those are written down here, once.
 
 Steps 1 to 3 are lookups and should cost almost nothing. That is the point.
 
+## A deck handed over means the product the deck promises
+
+2026-10-26, SoundCheck: Caleb dropped his team's pitch deck and said "COOK".
+The first build was a demo-grade quiz, and four corrections followed in an
+hour: "MATCH EXACT VIBE OF THE SLIDESHOW", "we're making an actual product
+not just an MVP", "Did u include EVERYTHING talked abt on the slides???",
+then "ready for me to send to diff groups of friends and they will use it
+consistently not just once". Every one was knowable from the deck on minute one.
+
+- Before code, write the slide-by-slide checklist: every feature, mode, card,
+  "what comes next" item and architecture logo becomes a line, and the build
+  isn't done until each line is built or named as not built.
+- Pull the deck's colors from its pixels and its type from its slides; each
+  screen is one of its slides (cover, how-it-works, the product mock).
+- "Product" means it survives a second use: persistence, a link that keeps
+  working, saved identity, no repeated content, a share path, a home-screen
+  install, a link preview.
+- Check the platform's real limits first. Spotify Development Mode allows 5
+  signed-in accounts and Extended Quota needs a business with 250k MAU
+  (developer docs, read 2026-10-26); found an hour in, it forced a second
+  data path (catalog-search quick picks, export upload).
+
 ## A tool someone practises with is a session, never a page of cards
 
 2026-10-11, a guitar midterm study app the night before the exam: five tabs

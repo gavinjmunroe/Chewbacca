@@ -54,6 +54,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import unquote
 
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+import transcript_rows  # noqa: E402  # mid-turn messages ride in attachment rows
+
 HOME = Path.home()
 
 # ---------------------------------------------------------------- redaction
@@ -637,6 +640,7 @@ def _text_of(content) -> str:
 
 def claude_items(e: dict):
     """(role, text) pieces of one Claude Code entry worth searching."""
+    e = transcript_rows.as_user_row(e)
     kind = e.get("type")
     if kind not in ("user", "assistant"):
         return

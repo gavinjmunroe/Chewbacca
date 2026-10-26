@@ -65,9 +65,16 @@ sub asked_about_school {
   my $size = -s $fh; seek($fh, $size > 524288 ? $size - 524288 : 0, 0);
   local $/; my $data = <$fh>; close $fh;
   for my $line (reverse split /\n/, $data) {
-    next unless index($line, '"user"') >= 0;
+    next unless index($line, '"user"') >= 0 || index($line, 'queued_command') >= 0;
     require JSON::PP;
     my $row = eval { JSON::PP->new->utf8->decode($line) } or next;
+    # A message typed mid-turn is an attachment row (bin/lib/transcript_rows.py).
+    if (($row->{type} // "") eq "attachment") {
+      my $a = $row->{attachment};
+      next unless ref $a eq "HASH" && ($a->{type} // "") eq "queued_command"
+        && ((ref $a->{origin} eq "HASH" ? $a->{origin}{kind} : undef) // "human") eq "human";
+      $row = {type => "user", message => {content => $a->{prompt}}};
+    }
     next if ($row->{type} // "") ne "user" or $row->{isMeta} or $row->{isSidechain};
     my $c = ($row->{message} // {})->{content};
     my $t = ref $c eq "ARRAY" ? join(" ", map { ref $_ eq "HASH" && ($_->{type} // "") eq "text" ? $_->{text} : "" } @$c)

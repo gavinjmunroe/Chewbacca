@@ -18,10 +18,13 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import time
 from pathlib import Path
 
-import decision_log
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import decision_log  # noqa: E402
+import transcript_rows  # noqa: E402  # mid-turn messages ride in attachment rows
 
 PROJECTS = Path(os.environ.get("CLAUDE_CONFIG_DIR", Path.home() / ".claude")) / "projects"
 FLOORS = Path(os.environ.get("BOB_DECISION_FLOORS", str(Path.home() / ".bob" / "decision-floors.json")))
@@ -32,6 +35,7 @@ STEPS = (0.5, 0.6, 0.7, 0.8, 0.9, 0.95)
 
 
 def _user_text(row: dict) -> str | None:
+    row = transcript_rows.as_user_row(row)
     m = row.get("message")
     if row.get("type") != "user" or not isinstance(m, dict) or row.get("isMeta"):
         return None

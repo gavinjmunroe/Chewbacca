@@ -77,7 +77,8 @@ where the data comes from. All four of those are written down here, once.
 7. **For a website, run `site-gate check <every page url>` and get exit 0.**
    It refuses console errors, horizontal scroll at 390, dead links, controls
    with no hover or focus state, and loops that run under reduced motion.
-   Then `site-gate idle <url>` and confirm the ambient layer you planned is
+   Then `site-gate slideshow <url>` (nothing that could have been a
+   slideshow), and `site-gate idle <url>` and confirm the ambient layer you planned is
    moving. The four layers a site needs (layout, choreography, ambience,
    response) are in [library/crafts/website.md](../../library/crafts/website.md); read it
    before building, because three of the four never show in a screenshot.
@@ -133,12 +134,12 @@ vision. Two rules came out of it:
 the person on the surface. Choose it from the surface, not the product: a
 tool's landing page is still Persuade, a docs index is still Read.
 
-| Mode           | The visitor                                                 | Surfaces                                    |
-| -------------- | ----------------------------------------------------------- | ------------------------------------------- |
-| **Persuade**   | decides and acts; the design is the product                 | landing, marketing, campaigns, pricing      |
+| Mode           | The visitor                                                 | Surfaces                                     |
+| -------------- | ----------------------------------------------------------- | -------------------------------------------- |
+| **Persuade**   | decides and acts; the design is the product                 | landing, marketing, campaigns, pricing       |
 | **Operate**    | completes a task; scanability and native expectations first | app UI, dashboards, editors, admin, settings |
-| **Read**       | understands something; structure for comprehension first    | docs, articles, guides, help, changelogs    |
-| **Experience** | is inside the work; the interface recedes                   | portfolios, galleries, case studies         |
+| **Read**       | understands something; structure for comprehension first    | docs, articles, guides, help, changelogs     |
+| **Experience** | is inside the work; the interface recedes                   | portfolios, galleries, case studies          |
 
 Most templates in the taxonomy are Operate. The Amber Circles landing was
 Persuade, in the signage stance: mode and stance are separate calls.
@@ -457,6 +458,18 @@ Read them before drafting any club or startup landing page.
   two pages never close on the same box. `site-gate repeat <url>...` fails a
   sentence of five words or more shown twice. It only catches literal
   repeats, so reread for the same promise reworded.
+- Never make anything that could have been a slideshow (Caleb, 2026-10-25,
+  on the Parker Manley site: "NEVER make anything that could've been a
+  slideshow! Fix chewbs"). If a section's content could be exported as N
+  stills and clicked through with nothing lost, it's a slideshow: a pinned
+  stage that holds still and swaps a card, a plate or a caption every screen
+  of scroll, a carousel, a row of slides with dots. Every section is a thing
+  happening, a film playing, a camera rolling, an edit session, where
+  something moves on every step of scroll and one object carries from start
+  to end. Before building a scene, say what moves between its beats; if the
+  answer is "the next image fades in", redesign it. `site-gate slideshow
+<url>` must pass, and `site-gate research` refuses carousel libraries and
+  slide markup in source.
 - One object changing beats three side by side. A why told as three drawings
   on a rule, or promises as three cards, read as slides; one drawing whose
   parts move between beats, or one signed sheet with the promises as its

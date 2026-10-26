@@ -62,7 +62,7 @@ probe "only waiting on X" 2 "All 14 drafts are set. Only waiting on Jonah's addr
 probe "just needs X" 2 "The launch just needs the footer, then we start." "$GTM_T"
 probe "ready to launch" 2 "Tier A is ready to launch Monday." "$GTM_T"
 probe "perfect" 2 "Perfect, the campaigns look right." "$GTM_T"
-probe "good to go, no client named in the reply" 2 "Everything is good to go." "$GTM_T"
+probe "good to go, no client named in the reply" 2 "Everything is good to go on the campaigns." "$GTM_T"
 
 write_result "NOT READY" 12 0
 probe "a NOT READY result on file does not unlock it" 2 "We're good to go on the launch." "$GTM_T"
@@ -89,6 +89,21 @@ probe "no readiness claim" 0 "Pushed the copy to all 14 drafts and graded them."
 probe "a claim in a session with no GTM work" 0 "The build is good to go." "$PLAIN_T"
 probe "school progress in a GTM session (manager tab, 2026-10-16)" 0 \
   "A13 is done, and A14 only needs ur engagement-metrics cell." "$GTM_T"
+# 2026-10-25/26: Parker site and school replies in sessions that once touched a
+# client. The reply has to be about a GTM launch, never the bare word.
+probe "Parker deploy: we're good now (2026-10-25)" 0 \
+  "We're good now, but we weren't 5 min ago. The deploy had been failing quietly. /preview/ is up w the draft stand-ins. The hall is queued." "$GTM_T"
+probe "a render: ready to send as a draft (2026-10-25)" 0 \
+  "When ur back it'll be ready to send as a draft, w the red in-progress frames on." "$GTM_T"
+probe "nothing else is queued (2026-10-25)" 0 "No Parker renders are running and nothing else is queued." "$GTM_T"
+probe "a bare good to go in a GTM session" 0 "Everything is good to go." "$GTM_T"
+probe "a client named with a deploy, no launch" 0 "Firm Foundation SoCal site deploy is fixed, we're good now." "$GTM_T"
+probe "a client named with what goes out still refuses" 2 "Firm Foundation SoCal copy is in, we're good to go." "$GTM_T"
+probe "drafts good to go, no client named (review, 2026-10-26)" 2 \
+  "All 14 drafts are good to go, just needs the footer." "$GTM_T"
+probe "the wave, no client named" 2 "Monday's wave is good to go." "$GTM_T"
+probe "Clay, no client named" 2 "Clay is all set." "$GTM_T"
+probe "a site launch is not a GTM launch" 0 "Parker site launched, we're good now." "$GTM_T"
 probe "the same shape about a launch still refuses" 2 \
   "Ivy A is done, and the launch only needs the footer." "$GTM_T"
 probe "a quoted claim in a report about the guard (2026-10-16)" 0 \

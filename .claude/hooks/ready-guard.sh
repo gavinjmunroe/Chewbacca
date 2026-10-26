@@ -115,19 +115,36 @@ def mentioned(text):
 # "Only needs", "good until", "nothing left" are how anyone reports progress.
 # On 2026-10-16 the manager tab's "A13 is done, and A14 only needs ur
 # engagement-metrics cell" (school assignments, no launch in it) was refused
-# because the session had touched campaigns earlier. These generic shapes count
-# only when the reply itself is about a launch or names a client.
-GENERIC = set(STRONG[1:5])
-LAUNCH_CTX = re.compile(r"\b(launch\w*|campaigns?|sequences?|drafts?|outbound|clay|cold[- ]emails?|"
-                        r"tier [ab]|wave|sends?|go live|footer|pre[-_ ]send)\b")
+# because the session had touched campaigns earlier.
+#
+# So the reply itself has to be about a GTM launch; session context alone is
+# never enough. 2026-10-25/26, 7 refusals in 2 days on Parker site and school
+# tabs: "we're good now" about a site deploy, "ready to send as a draft" about
+# a render, "nothing else needs u before church". Each passed the old filter
+# because the reply said "draft" or "queued", or the session had once touched a
+# client. Standalone, only outbound words count: plural "drafts" and "sends"
+# (the Parker replies said "a draft" and "to send"), a wave, a footer, Clay
+# that isn't a clay render. "Launch" counts unless the reply is about a site,
+# page, app, deploy or render. A client name counts with a word about what goes
+# out, so "Jonah" plus "footer" is a launch and "Firm Foundation" plus "deploy"
+# is not. Bare "ready" never is.
+REPLY_GTM = re.compile(r"\b(campaigns?|cam_[a-z0-9]+|sequencer|sequences?|gtme|outbound|cold[- ]emails?|"
+                       r"pre[-_ ]send|send list|tier [ab]|drafts|sends|wave|footer|go live|"
+                       r"clay(?! (render|material|model|shader|sculpt|look|pass))(?!-))\b")
+LAUNCH_WORD = re.compile(r"\blaunch(es|ed|ing)?\b")
+NOT_OUTBOUND = re.compile(r"\b(site|page|app|deploy\w*|render\w*|build|preview|vision pro)\b")
+CLIENT_CTX = re.compile(r"\b(copy|drafts?|footer|lists?|sends?|wave|emails?|leads?|mailbox(es)?|inbox(es)?)\b")
+about = (REPLY_GTM.search(low) or (LAUNCH_WORD.search(low) and not NOT_OUTBOUND.search(low))
+         or (mentioned(low) and CLIENT_CTX.search(low)))
+if not about:
+    print("ok"); raise SystemExit
+
 claim = None
 for m in re.finditer(r"[^.!?\n]+[.!?]?", low):
     sent = m.group(0)
     if sent.rstrip().endswith("?"):
         continue
     pats = STRONG + (WEAK if LAUNCH.search(sent) else [])
-    if not (LAUNCH_CTX.search(low) or mentioned(low)):
-        pats = [p for p in pats if p not in GENERIC]
     for p in pats:
         hit = re.search(p, sent)
         if hit and not NEG.search(sent[:hit.start()]):

@@ -28,6 +28,11 @@ library/crafts/website.md. Prose does not fire, so this is the half that does.
                                        deck: three or more sections in a row
                                        with the same shape, or every section
                                        edge a flat cut nothing crosses
+    site-gate slideshow <url>...       exit 1 if a pinned scene could have been
+                                       a slideshow: it holds still on most
+                                       scroll steps and swaps on a few
+                                       (research also refuses carousel
+                                       libraries and slide markup in source)
     site-gate parity <url>...          exit 1 if the phone version is thinner
                                        than desktop: figure share or screens
                                        with motion under 75% of desktop's, or
@@ -1177,6 +1182,126 @@ def repeat(pw, urls):
     return repeat_fails(pages)
 
 
+# Caleb, 2026-10-25, on the Parker Manley site: "NEVER make anything that
+# could've been a slideshow! Fix chewbs". The scenes he rejected were pinned
+# stages that sat still while he scrolled and then swapped one card or plate
+# for the next. A scene is a thing happening (a film playing, a camera
+# rolling, an edit session), so its frames change a little on most scroll
+# steps. A slideshow's frames change on a few steps and hold on the rest.
+#
+# The live half walks every pinned scene in 40px steps and diffs consecutive
+# frames of the stage alone. Measured 2026-10-26 on two synthetic pages, a
+# three-card swap and a ball rolling across the stage: the swap read 0.000 on
+# 65 of 67 steps and 0.011 and 0.019 on the two swaps (pastel grounds diff
+# little in grey); the rolling ball read 0.006 to 0.016 on every step. So a
+# step "holds" under 0.002, a "swap" is a step over 0.005 that stands 5x above
+# the scene's median step, and a scene that holds on 70% of its steps with 2 or
+# more swaps is a slideshow. Not yet measured on a real site Caleb called a
+# slideshow; do that on the next one and move these.
+SLIDE_STEP = 40
+SLIDE_HOLD = 0.002
+SLIDE_SWAP_MIN = 0.005
+SLIDE_SWAP_RATIO = 5
+SLIDE_HOLD_SHARE = 0.7
+SLIDE_MIN_SWAPS = 2
+
+# The source half: a carousel library or slide markup is a slideshow before a
+# browser ever opens. Runs with `site-gate research`.
+SLIDE_LIBS = re.compile(r"""["'](swiper|@splidejs/[\w-]+|@glidejs/glide|keen-slider|slick-carousel|react-slick|"""
+                        r"""embla-carousel[\w-]*|flickity|owl\.carousel|react-responsive-carousel|"""
+                        r"""@egjs/[\w-]*flicking|tiny-slider)["']""")
+# Whole class names only: tailwindcss-animate's slide-in-from-top-2 and a
+# slide-up reveal are motion utilities on every shadcn site, not slides.
+SLIDE_MARKUP = re.compile(r"""\bclass(Name)?=["'{`][^"'}`>]*(?<![\w-])(slide-deck|slideshow|slides|slide|carousel)(?![\w-])""")
+SLIDE_SUFFIXES = {".tsx", ".ts", ".jsx", ".js", ".mjs", ".html", ".vue", ".svelte", ".astro"}
+SLIDE_SKIP = {"node_modules", ".git", "dist", "build", ".next", "out", "research", "vendor", ".cache"}
+
+
+def slideshow_lint(root: Path) -> list[str]:
+    fails = []
+    pkg = root / "package.json"
+    if pkg.is_file():
+        try:
+            deps = json.loads(pkg.read_text(errors="ignore"))
+        except ValueError:
+            deps = {}
+        names = {**deps.get("dependencies", {}), **deps.get("devDependencies", {})}
+        for n in sorted(names):
+            if SLIDE_LIBS.search(f'"{n}"'):
+                fails.append(f"package.json depends on {n}, a carousel: never make anything that could have been a slideshow")
+    for f in sorted(root.rglob("*")):
+        if f.suffix not in SLIDE_SUFFIXES or any(p in SLIDE_SKIP for p in f.relative_to(root).parts):
+            continue
+        if not f.is_file() or f.stat().st_size > 2_000_000:
+            continue
+        text = f.read_text(errors="ignore")
+        hit = SLIDE_LIBS.search(text) or SLIDE_MARKUP.search(text)
+        if hit:
+            fails.append(f"{f.relative_to(root)}: {hit.group(0)[:60]!r} is a slideshow; make the section a thing "
+                         f"happening (a film playing, a camera rolling), never cards that change")
+    return fails
+
+
+def slideshow_fails(scenes: list) -> list[str]:
+    """scenes: [{'name', 'changes': [share of the stage changed, per scroll step]}]."""
+    fails = []
+    for s in scenes:
+        ch = s["changes"]
+        if len(ch) < 4:
+            continue
+        held = sum(1 for c in ch if c < SLIDE_HOLD) / len(ch)
+        median = sorted(ch)[len(ch) // 2]
+        swaps = sum(1 for c in ch if c > SLIDE_SWAP_MIN and c >= SLIDE_SWAP_RATIO * median)
+        if held >= SLIDE_HOLD_SHARE and swaps >= SLIDE_MIN_SWAPS:
+            fails.append(f"pinned scene {s['name']!r} holds still on {held:.0%} of its scroll and swaps {swaps} times: "
+                         f"that is a slideshow; make something happen on every step")
+    return fails
+
+
+PINNED_SCENES = r"""() => [...document.querySelectorAll('body *')].filter(e => {
+    if (getComputedStyle(e).position !== 'sticky' || !e.parentElement) return false;
+    return e.getBoundingClientRect().height >= 0.6 * innerHeight
+      && e.parentElement.getBoundingClientRect().height >= 1.5 * innerHeight;
+  }).map((e, i) => { e.dataset.sgPin = i; const p = e.parentElement.getBoundingClientRect();
+    const h = e.querySelector('h1, h2, h3');
+    return { pin: i, name: ((h && h.innerText) || e.id || e.className || e.tagName).toString().trim().slice(0, 40),
+             top: Math.round(p.top + scrollY), runway: Math.round(p.height - innerHeight) }; })"""
+
+
+def slideshow(pw, url, size=(1440, 900)):
+    from PIL import Image, ImageChops
+    W, H = size
+    b = launch(pw); pg = b.new_page(viewport={"width": W, "height": H}, is_mobile=W < 700, has_touch=W < 700)
+    pg.goto(url, wait_until="networkidle", timeout=60000); pg.wait_for_timeout(1500)
+    scenes = []
+    for sc in pg.evaluate(PINNED_SCENES):
+        # only the stage: the rest of the screen scrolls past and is not the scene
+        def grab():
+            r = pg.evaluate(f"""() => {{ const r = document.querySelector('[data-sg-pin="{sc['pin']}"]').getBoundingClientRect();
+                return {{x: Math.max(0, r.left), y: Math.max(0, r.top), width: Math.min(innerWidth, r.right) - Math.max(0, r.left),
+                         height: Math.min(innerHeight, r.bottom) - Math.max(0, r.top)}}; }}""")
+            if r["width"] < 4 or r["height"] < 4:
+                return None  # off screen at this size, a drawer at 390
+            im = Image.open(io.BytesIO(pg.screenshot(clip=r))).convert("L")
+            return im.resize((max(1, im.width // 4), max(1, im.height // 4)))
+        pg.evaluate(f"scrollTo(0,{sc['top']})"); pg.wait_for_timeout(300)
+        prev, changes = grab(), []
+        for y in range(sc["top"] + SLIDE_STEP, sc["top"] + sc["runway"], SLIDE_STEP):
+            pg.evaluate(f"scrollTo(0,{y})"); pg.wait_for_timeout(120)
+            cur = grab()
+            if cur is None or prev is None:
+                prev = cur
+                continue
+            if cur.size != prev.size:
+                prev = prev.resize(cur.size)
+            diff = ImageChops.difference(prev, cur).point(lambda v: 255 if v > DIFF_LEVEL else 0).histogram()[255]
+            changes.append(diff / (cur.width * cur.height))
+            prev = cur
+        scenes.append({"name": sc["name"], "changes": changes})
+    b.close()
+    return scenes, slideshow_fails(scenes)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -1193,6 +1318,7 @@ def main():
     f = sub.add_parser("flash"); f.add_argument("urls", nargs="+")
     pa = sub.add_parser("parity"); pa.add_argument("urls", nargs="+")
     dk = sub.add_parser("deck"); dk.add_argument("urls", nargs="+")
+    sl = sub.add_parser("slideshow"); sl.add_argument("urls", nargs="+")
     fo = sub.add_parser("focus"); fo.add_argument("urls", nargs="+")
     rp = sub.add_parser("repeat"); rp.add_argument("urls", nargs="+")
     i = sub.add_parser("idle"); i.add_argument("url"); i.add_argument("--ref")
@@ -1201,7 +1327,8 @@ def main():
     r.add_argument("repo", nargs="?", default=".")
     a = ap.parse_args()
     if a.cmd == "research":
-        fails = research(Path(a.repo).resolve()) + motion_lint(Path(a.repo).resolve())
+        root = Path(a.repo).resolve()
+        fails = research(root) + motion_lint(root) + slideshow_lint(root)
         for f in fails:
             print(f"FAIL  {f}")
         print(f"site-gate research: {len(fails)} problem(s)" if fails else "ok    research receipt complete")
@@ -1253,6 +1380,16 @@ def main():
                       f"{sum(1 for c in crossings if c['crossed'] or not c['sameGround'])} of {len(crossings)} edges carried across")
                 for x in fails:
                     print(f"        {x}")
+            sys.exit(1 if bad else 0)
+        if a.cmd == "slideshow":
+            bad = 0
+            for u in a.urls:
+                for size in SIZES:
+                    scenes, fails = slideshow(pw, u, size)
+                    bad += bool(fails)
+                    print(f"{'FAIL' if fails else 'ok  '}  {u} at {size[0]}  {len(scenes)} pinned scene(s)")
+                    for x in fails:
+                        print(f"        {x}")
             sys.exit(1 if bad else 0)
         if a.cmd == "parity":
             bad = 0

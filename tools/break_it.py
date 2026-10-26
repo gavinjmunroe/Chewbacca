@@ -43,6 +43,8 @@ import tempfile
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'bin' / 'lib'))
+import transcript_rows  # noqa: E402  mid-turn messages ride in attachment rows
 CLIENT_NAMES = ROOT / 'config/break-it/client-names.txt'
 
 # Words that say the work is finished. Kept to the five Caleb's brief named plus
@@ -152,9 +154,14 @@ def read_transcript(path):
             d = json.loads(raw)
         except ValueError:
             continue
+        ts = d.get('timestamp', '')
+        queued = transcript_rows.human_prompt(d)
+        if queued is not None:
+            # Said mid-turn: part of the ask, but not where the turn starts.
+            events.append({'kind': 'user', 'text': _text(queued), 'ts': ts, 'queued': True})
+            continue
         msg = d.get('message') or {}
         content = msg.get('content')
-        ts = d.get('timestamp', '')
         if d.get('type') == 'user':
             if isinstance(content, list) and any(isinstance(b, dict) and b.get('type') == 'tool_result'
                                                  for b in content):
@@ -197,7 +204,7 @@ def turn_events(events):
     """Events since the latest human message: the stretch a done claim covers."""
     start = 0
     for i, e in enumerate(events):
-        if e['kind'] == 'user' and is_human(e['text']):
+        if e['kind'] == 'user' and not e.get('queued') and is_human(e['text']):
             start = i
     return events[start:]
 
@@ -1086,9 +1093,55 @@ def own_in_flight(full):
     finish's prayer ("what's still waiting") and steering case 5's "Still running
     in other tabs, not me" tripped it."""
     for s in sentences(full):
-        if IN_FLIGHT_RE.search(s) and not OTHERS_RE.search(s) and not PRAYER_RE.search(s):
-            return [{'kind': 'in-flight', 'where': '', 'detail': s[:160]}]
+        m = IN_FLIGHT_RE.search(s)
+        if not m or OTHERS_RE.search(s) or PRAYER_RE.search(s):
+            continue
+        # "No Parker renders are running or queued" says nothing is in flight.
+        # 2026-10-25 it was refused on 3 replies in a row, the last two after a
+        # held attack on that exact claim.
+        # Only a negation in the same clause counts: "Nothing broke, but the
+        # deploy is still running" and "No errors and the render is still
+        # running" are still in flight.
+        clause = CLAUSE_SPLIT.split(s[:m.start()])[-1]
+        if NOT_IN_FLIGHT_RE.search(clause[-40:]):
+            continue
+        return [{'kind': 'in-flight', 'where': '', 'detail': s[:160]}]
     return []
+
+
+NOT_IN_FLIGHT_RE = re.compile(r"\b(no|nothing|none|not|never|zero)\b|n't\b", re.I)
+CLAUSE_SPLIT = re.compile(r"[,;:(]|\s(?:and|but|while|so|though)\s", re.I)
+
+
+def checked_since(turn, claim_at):
+    """True when a break-it check passed after the done claim at `claim_at`: a
+    `break-it run` that printed "nothing broke", or a `break-it attack` that
+    held. The agent was told to run one, so its passing result settles the
+    in-flight line the claim raised (2026-10-25, the Parker tab ran the attack,
+    got "held", and was refused for the same line twice more)."""
+    results = {e.get('id'): e for e in turn if e['kind'] == 'result'}
+    for e in turn[claim_at + 1:]:
+        if e['kind'] != 'tool' or e.get('error'):
+            continue
+        cmd = command_of(e)
+        out = (results.get(e.get('id')) or {}).get('text', '')
+        if re.search(r'break[-_]it(\.py)? run\b', cmd) and 'nothing broke' in out and 'BROKE' not in out:
+            return True
+        if re.search(r'break[-_]it(\.py)? attack\b', cmd) and re.search(r'(?m)^held\b', out) \
+                and 'BROKE' not in out:
+            return True
+    return False
+
+
+def claim_index(turn):
+    """Where the claim the in-flight line came from was made: the last wrap_up.
+    With no wrap_up the claim is the reply, so a check counts only after the
+    last write: one that ran before the work it would vouch for proves nothing."""
+    wrap = max((i for i, e in enumerate(turn) if e['kind'] == 'tool' and e['name'].endswith('wrap_up')),
+               default=-1)
+    if wrap >= 0:
+        return wrap
+    return max((i for i, e in enumerate(turn) if e['kind'] == 'tool' and e['name'] in WRITE_TOOLS), default=-1)
 
 
 def receipt_ok(repo, reply):
@@ -1108,6 +1161,9 @@ def stop_verdict(events, reply, live=True, check_disk=True, probe_budget=8):
     if not claims_done(full):
         return []
     out = own_in_flight(full)
+    passed = checked_since(turn, claim_index(turn))
+    if passed:
+        out = []
     repos = code_repos(turn, live)
     ask_texts = asks(events)
     for repo, paths in repos.items():
@@ -1127,7 +1183,8 @@ def stop_verdict(events, reply, live=True, check_disk=True, probe_budget=8):
             for r in edge_attacks(Path(repo), rel, timeout=6, budget=probe_budget):
                 if not r['ok']:
                     found.append({'kind': 'attack-broke', 'where': r['what'], 'detail': r['detail'] or r['what']})
-        out += [dict(b, repo=repo) for b in unreported(found, full) if b['kind'] in BLOCKING]
+        out += [dict(b, repo=repo) for b in unreported(found, full)
+                if b['kind'] in BLOCKING and not (passed and b['kind'] == 'in-flight')]
     return out
 
 

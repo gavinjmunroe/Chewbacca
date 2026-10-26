@@ -64,6 +64,12 @@ def subject():
                     event = json.loads(line)
                 except ValueError:
                     continue
+                # A message typed mid-turn is an attachment row
+                # (bin/lib/transcript_rows.py); it can be the latest prompt.
+                att = event.get("attachment") if event.get("type") == "attachment" else None
+                if isinstance(att, dict) and att.get("type") == "queued_command" \
+                        and (att.get("origin") or {}).get("kind", "human") == "human":
+                    event = {"type": "user", "message": {"content": att.get("prompt")}}
                 # Hook feedback, agent messages and the compaction summary are
                 # user events too. Only the person's own prompt names a commit.
                 if event.get("type") != "user" or event.get("isMeta") or event.get("isCompactSummary"):

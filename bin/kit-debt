@@ -34,6 +34,8 @@ def _kit_root():
     return here.parent.parent
 
 ROOT = _kit_root()
+sys.path.insert(0, str(ROOT / "bin" / "lib"))
+import transcript_rows  # noqa: E402  # mid-turn messages ride in attachment rows
 
 def git(args, cwd=ROOT):
     r = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
@@ -89,7 +91,7 @@ def corrections(transcript):
     try:
         for line in open(transcript, encoding="utf-8", errors="ignore"):
             try:
-                ev = json.loads(line)
+                ev = transcript_rows.as_user_row(json.loads(line))
             except ValueError:
                 continue
             if ev.get("type") != "user":

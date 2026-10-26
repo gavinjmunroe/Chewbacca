@@ -43,11 +43,15 @@ import os
 import re
 import sqlite3
 import subprocess
+import sys
 import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Callable, Iterable
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import transcript_rows  # noqa: E402  # mid-turn messages ride in attachment rows
 
 DECISION = "decision"
 RECEIPT = "receipt"
@@ -736,10 +740,11 @@ def status_asks(projects: Path, day: str) -> dict:
             continue
         with fh:
             for line in fh:
-                if '"type":"user"' not in line and '"type": "user"' not in line:
+                if '"type":"user"' not in line and '"type": "user"' not in line \
+                        and transcript_rows.MARKER not in line:
                     continue
                 try:
-                    r = json.loads(line)
+                    r = transcript_rows.as_user_row(json.loads(line))
                 except ValueError:
                     continue
                 if r.get("type") != "user" or r.get("isMeta") or r.get("isSidechain") \

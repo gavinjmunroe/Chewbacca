@@ -17,8 +17,12 @@ import json
 import os
 import re
 import statistics
+import sys
 import time
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import transcript_rows  # noqa: E402  # mid-turn messages ride in attachment rows
 
 HOME = Path.home()
 REPO = Path(__file__).resolve().parent.parent.parent
@@ -155,10 +159,10 @@ def human_asks(days: float = 14, roots: list[Path] | None = None) -> list[dict]:
                     # A cheap skip before parsing: most lines are tool output.
                     # Not '"type":"user"', which silently missed any writer
                     # that puts a space after the colon.
-                    if '"user"' not in line:
+                    if not transcript_rows.maybe_user_line(line):
                         continue
                     try:
-                        e = json.loads(line)
+                        e = transcript_rows.as_user_row(json.loads(line))
                     except ValueError:
                         continue
                     if (e.get("type") != "user" or e.get("isSidechain") or e.get("isMeta")

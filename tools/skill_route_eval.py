@@ -34,6 +34,8 @@ import tempfile
 import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, "bin", "lib"))
+import transcript_rows  # noqa: E402  # mid-turn messages ride in attachment rows
 HOOK = os.path.join(ROOT, ".claude", "hooks", "skill-route.sh")
 LABELS = os.path.expanduser("~/second-brain/systems/skill-route-eval.jsonl")
 
@@ -53,7 +55,7 @@ def user_texts(path):
     with open(path, errors="replace") as f:
         for line in f:
             try:
-                row = json.loads(line)
+                row = transcript_rows.as_user_row(json.loads(line))
             except ValueError:
                 continue
             if row.get("type") != "user" or row.get("isMeta"):

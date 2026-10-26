@@ -89,6 +89,47 @@ class Claims(unittest.TestCase):
             self.assertEqual(B.stop_verdict([{'kind': 'user', 'text': 'land it'}], text,
                                             live=False, check_disk=False), [], text)
 
+    def test_a_negated_in_flight_line_is_not_in_flight(self):
+        # The Parker tab's recap, 2026-10-25, refused on 3 replies in a row.
+        text = ("Done. No Parker renders are running or queued. The roll-in polish job is killed "
+                "and the render agent was told to stop.")
+        self.assertEqual(B.stop_verdict([{'kind': 'user', 'text': 'stop the renders'}], text,
+                                        live=False, check_disk=False), [])
+        # A negation in another clause leaves the in-flight part standing (review, 2026-10-26).
+        for text in ("Done. Nothing broke, but the Railway deploy is still running.",
+                     "Done. No errors and the render is still running in the background.",
+                     "Done. I did not wait: the build is still running."):
+            got = B.stop_verdict([{'kind': 'user', 'text': 'ship it'}], text, live=False, check_disk=False)
+            self.assertEqual([b['kind'] for b in got], ['in-flight'], text)
+
+    def test_a_check_before_the_last_write_clears_nothing(self):
+        ev = [{'kind': 'user', 'text': 'land it'},
+              {'kind': 'tool', 'name': 'Bash', 'id': 'a', 'error': False,
+               'input': {'command': 'chewbacca break-it run --transcript t.jsonl'}},
+              {'kind': 'result', 'id': 'a', 'error': False, 'text': 'nothing broke'},
+              {'kind': 'tool', 'name': 'Write', 'id': 'w', 'error': False, 'input': {'file_path': '/tmp/n.md'}}]
+        got = B.stop_verdict(ev, 'Done. The suite is still running.', live=False, check_disk=False)
+        self.assertEqual([b['kind'] for b in got], ['in-flight'])
+
+    def test_a_passing_check_after_the_claim_clears_in_flight(self):
+        recap = "Done. The suite is still running in the background."
+        ev = [{'kind': 'user', 'text': 'land it'},
+              {'kind': 'tool', 'name': 'mcp__ccd_turn__wrap_up', 'id': 'w', 'input': {'recap': recap}, 'error': False}]
+        self.assertEqual([b['kind'] for b in B.stop_verdict(ev, 'Done.', live=False, check_disk=False)],
+                         ['in-flight'])
+        for cmd, out in (('chewbacca break-it attack -m "suite finished" -- sh -c true',
+                          'held  suite finished (exit 0, wanted ok)'),
+                         ('chewbacca break-it run --transcript t.jsonl', 'break-it (full) on abc\nnothing broke')):
+            with self.subTest(cmd):
+                ran = ev + [{'kind': 'tool', 'name': 'Bash', 'id': 'a', 'input': {'command': cmd}, 'error': False},
+                            {'kind': 'result', 'id': 'a', 'error': False, 'text': out}]
+                self.assertEqual(B.stop_verdict(ran, 'Checked again.', live=False, check_disk=False), [])
+        broke = ev + [{'kind': 'tool', 'name': 'Bash', 'id': 'a', 'error': False,
+                       'input': {'command': 'chewbacca break-it attack -m "suite finished" -- false'}},
+                      {'kind': 'result', 'id': 'a', 'error': False, 'text': 'BROKE suite finished (exit 1, wanted ok)'}]
+        self.assertEqual([b['kind'] for b in B.stop_verdict(broke, 'Checked.', live=False, check_disk=False)],
+                         ['in-flight'])
+
     def test_ask_reads_a_side_session_brief_behind_reminders(self):
         ev = [{'kind': 'user', 'text': '<system-reminder>worktree</system-reminder>\nBuild the thing and test it'}]
         self.assertEqual(B.asks(ev), ['Build the thing and test it'])

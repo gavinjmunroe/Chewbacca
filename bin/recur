@@ -48,6 +48,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(ROOT / "bin" / "lib"))
 import learnloop as L  # noqa: E402
+import transcript_rows  # noqa: E402  # mid-turn messages ride in attachment rows
 
 HOME = Path.home()
 CACHE = Path(os.environ.get("CHEWBACCA_RECUR_CACHE") or HOME / ".chewbacca" / "cache" / "recur" / "asks.json")
@@ -172,10 +173,10 @@ def _parse(path: Path) -> list[dict]:
         return out
     with fh:
         for line in fh:
-            if '"user"' not in line:
+            if not transcript_rows.maybe_user_line(line):
                 continue
             try:
-                e = json.loads(line)
+                e = transcript_rows.as_user_row(json.loads(line))
             except ValueError:
                 continue
             if e.get("type") != "user" or e.get("isSidechain") or e.get("isMeta") or e.get("isCompactSummary"):

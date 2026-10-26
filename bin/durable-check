@@ -40,6 +40,9 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+import transcript_rows  # noqa: E402  # mid-turn messages ride in attachment rows
+
 HOME = Path(os.environ.get("CHEWBACCA_HOME") or Path.home() / ".chewbacca").expanduser()
 WRITE_LOG = Path(os.environ.get("CHEWBACCA_WRITE_LOG") or HOME / "write-log.tsv").expanduser()
 LESSONS = Path(os.environ.get("CHEWBACCA_LESSONS_DIR") or HOME / "lessons").expanduser()
@@ -248,10 +251,10 @@ def last_prompt(transcript, budget=1 << 20):
     except OSError:
         return "", None
     for line in reversed(data.splitlines()):
-        if '"user"' not in line:
+        if not transcript_rows.maybe_user_line(line):
             continue
         try:
-            row = json.loads(line)
+            row = transcript_rows.as_user_row(json.loads(line))
         except ValueError:
             continue
         if row.get("type") != "user" or row.get("isMeta") or row.get("isSidechain") or row.get("isCompactSummary"):

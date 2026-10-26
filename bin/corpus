@@ -31,8 +31,12 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 from collections import Counter
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+import transcript_rows  # noqa: E402  # mid-turn messages ride in attachment rows
 
 PROJECTS = Path.home() / ".claude" / "projects"
 
@@ -63,7 +67,7 @@ def turns(path):
         with path.open(encoding="utf-8", errors="ignore") as fh:
             for line in fh:
                 try:
-                    e = json.loads(line)
+                    e = transcript_rows.as_user_row(json.loads(line))
                 except Exception:
                     continue
                 m = e.get("message") or {}

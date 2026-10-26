@@ -31,8 +31,12 @@ import glob
 import json
 import os
 import re
+import sys
 from collections import Counter, defaultdict
 from zoneinfo import ZoneInfo
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bin", "lib"))
+import transcript_rows  # noqa: E402  # mid-turn messages ride in attachment rows
 
 LA = ZoneInfo("America/Los_Angeles")
 # A gap over 10 minutes between rows is a tab sitting idle, not work. Guessed,
@@ -127,6 +131,7 @@ def collect(day: str, claude_glob: str, codex_glob: str) -> tuple[list[dict], di
                 if not t or not (start <= t < end):
                     continue
                 stamps.append(t)
+                row = transcript_rows.as_user_row(row)
                 if row.get("type") != "user" or row.get("isMeta") or row.get("isSidechain"):
                     continue
                 content = (row.get("message") or {}).get("content")

@@ -33,6 +33,16 @@ Check every section against these before showing it:
 6. **Cues are obvious but not forced.** The way on from the Mac was the
    Dock's own attention bounce, not an arrow saying "scroll".
 
+7. **Every film on screen is one click from watching it**, including the one
+   playing on a monitor or a theater screen inside a render.
+8. **Nothing shows up unmotivated.** That covers a header that slides in, a
+   scene visible for a split second before the opening frame paints, and an
+   intro that scales down for no story reason. First paint is the opening
+   frame. Decide the leader or opening state in an inline head script.
+9. **Sound is part of the take.** Music fades in and out over about 2 s with
+   the scroll, both ways, and an outro song carries through everything that
+   belongs to the ending. Camera and UI effects stay quiet.
+
 ## Order of work
 
 1. Write `SPEC.md` from every message the client sent. Extract them from the
@@ -79,6 +89,13 @@ Check every section against these before showing it:
 - `overflow-x: auto` on a row clips hover cards vertically. Pad the row and
   pay the padding back with a negative margin.
 
+## While renders run
+
+Say what's rendering, its frame count, the per-frame time you measured and an
+ETA, before anyone asks. "What's rendering again?" and "Roughly how much
+longer?" both got asked. Pause heavy renders while the person is using the
+Mac.
+
 ## Checks after every change
 
 ```bash
@@ -86,7 +103,11 @@ python3 ~/code/chewbacca/skills/cinematic-scroll/scripts/full_bleed.py <url> ".p
 python3 ~/code/chewbacca/skills/cinematic-scroll/scripts/walk_seams.py <url> ".scene-a:0,.scene-a:0.99,.scene-b:0" seams.png
 ```
 
-The first fails if a pinned layer doesn't fill the window. The second shoots a
+Then walk the whole site as each person who'll see it (for Parker that was a
+crew lead, an SCA professor and a friend on a phone), the way Caleb asked:
+"brute force put yourself in the pov of everyone who will see it".
+
+The first script fails if a pinned layer doesn't fill the window. The second shoots a
 frame just before and after each listed scroll point at 1000x506 (Caleb's
 window) and writes one sheet. Look at the sheet. A diff can't prove a seam.
 

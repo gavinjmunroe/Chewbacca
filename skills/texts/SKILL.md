@@ -418,6 +418,9 @@ in `mac messages history`, so a grep for the URL never finds it.
 - A person he texted himself shows the link as text; check that too, but only
   as a second filter.
 - Never kill a send loop and restart it without first reading its log.
+- Use `text-blast list.tsv run.log -- "msg" "link"`: it prints the list and
+  sends nothing until `--go`, writes each name to run.log as it goes, and skips
+  every logged name on a rerun. Never hand-roll a send loop.
 
 ## Sending
 

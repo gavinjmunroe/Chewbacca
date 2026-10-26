@@ -1,0 +1,60 @@
+#!/bin/bash
+# text-blast: send the same short texts to a list of people, one person at a time.
+#
+#   text-blast list.tsv run.log -- "Peep this free game" "https://..."         prints the list, sends nothing
+#   text-blast list.tsv run.log --go -- "Peep this free game" "https://..."    sends
+#
+# list.tsv is one person per line: name, then optionally a tab and the handle
+# people send should use. run.log is this blast's own record: a name is written
+# there the moment its last text goes out, and any name already in it is
+# skipped, so a stopped and restarted blast never texts anyone twice.
+#
+# On 2026-10-26 a link blast went out to people Caleb never saw listed ("U DIDNT
+# TELL ME UR TEXTING SOME PPL LIKE JET WHAT"), and two restarts re-sent to Jet and
+# Andrea, because a link sent from this Mac reads back as "unsupported content"
+# and a thread search for it found nothing. So the default prints and stops, and
+# "already sent" comes only from run.log.
+set -uo pipefail
+PEOPLE="${PEOPLE_BIN:-people}"
+GO=0 GAP_MIN=4 GAP_MAX=8
+[ $# -ge 2 ] || { sed -n '3,6p' "$0"; exit 2; }
+LIST="$1" LOG="$2"; shift 2
+while [ $# -gt 0 ] && [ "$1" != "--" ]; do
+  case "$1" in
+    --go) GO=1 ;;
+    --gap) GAP_MIN="${2%-*}" GAP_MAX="${2#*-}"; shift ;;
+    *) echo "unknown flag: $1"; exit 2 ;;
+  esac
+  shift
+done
+[ "${1:-}" = "--" ] && shift
+[ $# -ge 1 ] || { echo "no message given after --"; exit 2; }
+[ -f "$LIST" ] || { echo "no list at $LIST"; exit 2; }
+touch "$LOG"
+
+sent_already() { grep -qxF "SENT $1" "$LOG"; }
+
+todo=0 done_n=0
+while IFS=$'\t' read -r name handle; do
+  [ -n "$name" ] || continue
+  if sent_already "$name"; then echo "  already sent  $name"; done_n=$((done_n+1))
+  else echo "  will send     $name"; todo=$((todo+1)); fi
+done <"$LIST"
+echo "$todo to send, $done_n already sent (from $LOG)"
+[ "$GO" = 1 ] || { echo "Nothing sent. Show this list, then rerun with --go."; exit 0; }
+
+while IFS=$'\t' read -r name handle; do
+  [ -n "$name" ] || continue
+  sent_already "$name" && continue
+  to=(); [ -n "${handle:-}" ] && to=(--to "$handle")
+  ok=1 first=1
+  for msg in "$@"; do
+    [ "$first" = 1 ] || sleep 1
+    first=0
+    "$PEOPLE" send "$name" "$msg" ${to[@]+"${to[@]}"} </dev/null >/dev/null 2>&1 || { ok=0; break; }
+  done
+  if [ "$ok" = 1 ]; then echo "SENT $name" >>"$LOG"; echo "  sent  $name"
+  else echo "FAIL $name" >>"$LOG"; echo "  FAILED  $name (stopping, read $LOG before rerunning)"; exit 1; fi
+  sleep $((GAP_MIN + RANDOM % (GAP_MAX - GAP_MIN + 1)))
+done <"$LIST"
+echo "done"

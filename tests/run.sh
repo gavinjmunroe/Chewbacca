@@ -1062,6 +1062,10 @@ if group "installer"; then
   # said it was running. The user caught it, not the kit.
   check  "agent-claim-guard refuses an unlaunched agent claim" \
     bash "$ROOT/tests/agent_claim_guard.sh" "$ROOT"
+  # A link blast on 2026-10-26 reached people he never saw listed and re-sent
+  # to two of them after a restart.
+  check  "text-blast lists before sending and never texts anyone twice" \
+    bash "$ROOT/tests/text_blast.sh"
     bash "every refusing hook is tested both ways" "$ROOT"
 
   # This line lost its `check` keyword and its script path in f24d6d0, so it

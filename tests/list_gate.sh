@@ -25,6 +25,19 @@ printf '%s\nD1,Jane Roe,Partner,Company,jane@acme.com\n' "$H" > "$TMP/placeholde
 printf '%s\nE1,Jane Roe,Partner,Andreessen Horowitz,jane@a16z.com\nE2,Bob Poe,Partner,Andreessen Horowitz LLC,bob@a16z.com\n' "$H" > "$TMP/firm.csv"
 "$GATE" "$TMP/firm.csv" >/dev/null 2>&1 && no "same firm twice should fail" || ok "same firm under two spellings fails"
 
+# a Form D title that lists "Secretary" next to CEO is the CEO (Anvion Bio, 2026-10-26)
+printf 'record_id,full_name,title,organization,email\nK1,Larry Braga,"Executive Officer, Director, Chief Executive Officer and Secretary",Anvion Bio,larry@anvion.example\n' > "$TMP/ceosec.csv"
+"$GATE" "$TMP/ceosec.csv" >/dev/null 2>&1 && ok "a CEO who is also Secretary is not junior" || no "CEO and Secretary should pass"
+printf '%s\nK2,Jo Doe,Assistant to the President,Acme Ventures,jo@acme.com\n' "$H" > "$TMP/asst.csv"
+"$GATE" "$TMP/asst.csv" >/dev/null 2>&1 && no "assistant to the president should fail" || ok "assistant to the president is still junior"
+
+# SBIR rows printing the agency's program officer (OPTRA, 2026-10-26)
+printf '%s\nM1,Kevin Brown,Program Manager,Acme Robotics,kevin.m.brown240.civ@army.mil\n' "$H" > "$TMP/gov.csv"
+out="$("$GATE" "$TMP/gov.csv" 2>&1 || true)"
+case "$out" in *government*) ok "a .mil contact fails as an agency officer" ;; *) no ".mil contact should fail" ;; esac
+printf '%s\nM2,Ann Lee,Program Officer,Acme Bio,ann.lee@nih.gov\n' "$H" > "$TMP/gov2.csv"
+"$GATE" "$TMP/gov2.csv" >/dev/null 2>&1 && no ".gov contact should fail" || ok "a .gov contact fails"
+
 # same person on two lists: the 2,121 bug
 printf '%s\nF1,Jane Roe,Partner,Acme Ventures,jane@acme.com\n' "$H" > "$TMP/l1.csv"
 printf '%s\nF1,Jane Roe,Partner,Acme Ventures,jane@acme.com\n' "$H" > "$TMP/l2.csv"

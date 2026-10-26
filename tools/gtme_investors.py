@@ -366,7 +366,7 @@ def build(con: sqlite3.Connection, block: dict, ask=jev_judge, says=None) -> tup
             drop("junk company or name"); continue
         if any(gate.NAN_STRIP.search(str(v or "")) for v in rec.values()):
             drop("NaN-strip corruption"); continue
-        if rec["title"] and gate.JUNIOR.search(rec["title"].strip()):
+        if rec["title"] and gate.is_junior(rec["title"]):
             drop("too junior to decide"); continue
         if any(o in org.lower() for o in excl_orgs):
             drop("excluded firm"); continue

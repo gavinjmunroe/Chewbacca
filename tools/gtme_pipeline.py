@@ -261,9 +261,19 @@ def links_by_text(body: str) -> dict[str, str]:
     for href, label in re.findall(r"(?is)<a[^>]+href=[\"'](https?://[^\"']+)[\"'][^>]*>(.*?)</a>", body):
         label = norm(re.sub(r"<[^>]+>", "", label))
         host = solo.domain_of(href)
-        if label and host and not re.search(r"linkedin|twitter|x\.com|facebook|instagram|youtube", host):
+        if label and host and not gov(host) and not re.search(r"linkedin|twitter|x\.com|facebook|instagram|youtube", host):
             out.setdefault(label, host)
     return out
+
+
+# An award registry (SBIR) prints the agency's program officer beside the
+# company. 2026-10-26: 10 of 265 rows carried a .gov or .mil email, one army.mil
+# officer on two companies, and 27 rows took their domain from it.
+GOV_HOST = re.compile(r"(^|\.)[a-z0-9-]+\.(gov|mil)(\.[a-z]{2})?$", re.I)
+
+
+def gov(host_or_email: str) -> bool:
+    return bool(GOV_HOST.search((host_or_email or "").rsplit("@", 1)[-1].strip().lower()))
 
 
 def matches(value: str, allowed: list[str]) -> bool:
@@ -296,6 +306,15 @@ def seed(block: dict) -> tuple[list[dict], dict]:
                     report["dropped"]["excluded by the client"] = report["dropped"].get("excluded by the client", 0) + 1
                     continue
                 rec["registry_source"] = url
+                if gov(rec.get("email", "")) or gov(rec.get("domain", "")):
+                    report["dropped"]["agency contact, not the company"] = report["dropped"].get(
+                        "agency contact, not the company", 0) + 1
+                    if gov(rec.get("email", "")):
+                        rec.pop("email", None)
+                        rec.pop("full_name", None)
+                        rec.pop("title", None)
+                    if gov(rec.get("domain", "")):
+                        rec.pop("domain", None)
                 if not rec.get("domain") and links.get(norm(rec["company"])):
                     rec["domain"], rec["domain_source"] = links[norm(rec["company"])], url
                 if rec.get("full_name"):

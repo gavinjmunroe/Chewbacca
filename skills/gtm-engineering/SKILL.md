@@ -364,6 +364,12 @@ opt-outs that had to be blocklisted before Monday.
   output, exit 1 on any fail. Lists that go out from different founders'
   inboxes are checked with `list-gate --per-sender`: a person on two founders'
   lists is a warning, not a fail.
+- **An award registry's contact can be the agency's.** SBIR rows printed the
+  program officer: 10 of 265 OPTRA rows had a .gov or .mil email, one army.mil
+  officer on two companies, and 27 rows took their domain from it (10/26).
+  list-gate now fails any .gov or .mil contact, and `gtme list` drops an
+  agency email, its name and an agency domain from a registry row. A title
+  like "Chief Executive Officer and Secretary" counts as the CEO, not junior.
 - **Outreach is drafts.** `chewbacca gtme outreach --client <slug>` drafts a
   LinkedIn note (300-character cap, counted; the line's later sentences drop
   first, and a note that still won't fit is held, never cut) and, with an `outreach.email`

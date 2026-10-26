@@ -321,6 +321,10 @@ class InvestorsTest(unittest.TestCase):
         self.assertNotIn("j1@j1.example", self.emails(rows))
         self.assertNotIn("j2@j2.example", self.emails(rows))
         self.assertEqual(stats["dropped"]["too junior to decide"], 2)
+        self.add(("c1", "Larry Braga", "Executive Officer, Director, Chief Executive Officer and Secretary",
+                  "Braga Seed Fund", "saas"))
+        rows, _ = self.build()
+        self.assertIn("c1@c1.example", self.emails(rows), "a CEO who is also Secretary is the CEO")
 
     def test_the_output_passes_list_gate(self):
         self.add(("s1", "Sam Stone", "Managing Partner", "Stonepeak Partners", "saas"),

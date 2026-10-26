@@ -30,6 +30,25 @@ ROLE = re.compile(r"^(info|contact|admin|hello|hi|team|office|support|sales|enqu
 JUNIOR = re.compile(r"(executive assistant|assistant|coordinator|receptionist|intern\b|"
                     r"^analyst|^associate$|^senior associate$|office manager|secretary|"
                     r"^mr\.?$|^ms\.?$|^mrs\.?$)", re.I)
+# A decision-maker title that also lists a junior word is still the
+# decision-maker. 2026-10-26, from a Form D: "Executive Officer, Director,
+# Chief Executive Officer and Secretary" failed as junior on "secretary".
+SENIOR = re.compile(r"\b(ceo|chief executive|founder|co-founder|president|owner|managing partner|"
+                    r"general partner)\b", re.I)
+WORKS_FOR = re.compile(r"\b(assistant|secretary)\s+to\b", re.I)
+
+
+def is_junior(title):
+    t = (title or "").strip()
+    return bool(JUNIOR.search(t)) and (bool(WORKS_FOR.search(t)) or not SENIOR.search(t))
+
+
+# A government address on a customer or investor list is an agency's officer,
+# never the buyer. 2026-10-26: 10 of 265 SBIR award rows printed the program
+# officer (one army.mil address on two companies) and 27 rows took their
+# company domain from that address. Neither gate caught it.
+GOV_MAIL = re.compile(r"@([a-z0-9-]+\.)*[a-z0-9-]+\.(gov|mil)(\.[a-z]{2})?$", re.I)
+
 NULL_ORG = {"", "unknown", "person", "company", "n/a", "none", "-", "null", "test"}
 FREE = {"gmail.com","hotmail.com","yahoo.com","yahoo.co.in","yahoo.co.uk","yahoo.com.ph",
         "rediffmail.com","mail.ru","live.com","outlook.com","aol.com","icloud.com","me.com",
@@ -94,7 +113,8 @@ def main():
         bad_mail   = [r for r in rows if ROLE.match(g(r, "email"))]
         bad_syntax = [r for r in rows if g(r, "email") and not EMAIL_OK.match(g(r, "email"))]
         freemail   = [r for r in rows if g(r, "email").split("@")[-1].lower() in FREE]
-        junior     = [r for r in rows if g(r, "title") and JUNIOR.search(g(r, "title"))]
+        junior     = [r for r in rows if g(r, "title") and is_junior(g(r, "title"))]
+        govmail    = [r for r in rows if GOV_MAIL.search(g(r, "email"))]
         nullorg    = [r for r in rows if g(r, "company").lower() in NULL_ORG]
         corrupt    = [r for r in rows if any(NAN_STRIP.search(v or "") for v in r.values())]
 
@@ -109,6 +129,8 @@ def main():
         if bad_mail:   fails.append(f"{name}: {len(bad_mail)} shared mailboxes (info@, ir@) nobody reads")
         if bad_syntax: fails.append(f"{name}: {len(bad_syntax)} malformed email addresses")
         if junior:     fails.append(f"{name}: {len(junior)} contacts too junior to decide")
+        if govmail:    fails.append(f"{name}: {len(govmail)} government (.gov/.mil) addresses, an agency's "
+                                    f"officer, not the buyer, e.g. {g(govmail[0], 'email')}")
         if nullorg:    fails.append(f"{name}: {len(nullorg)} rows whose company is a placeholder")
         if corrupt:    fails.append(f"{name}: {len(corrupt)} rows carry NaN-strip corruption (Ficial/Ferdez)")
         if overfirm:

@@ -150,6 +150,24 @@ class PipelineTest(unittest.TestCase):
         self.assertIn("add its domain", beta["gaps"])
         self.assertEqual(rows[0]["company"], "Acme IT", "strongest first")
 
+    def test_an_agency_officer_in_an_award_registry_never_becomes_the_contact(self):
+        awards = ("<table><tr><td>Company</td><td>Name</td><td>Email</td><td>Website</td></tr>"
+                  "<tr><td>Acme Robotics</td><td>Kevin Brown</td><td>kevin.m.brown240.civ@army.mil</td>"
+                  "<td>army.mil</td></tr>"
+                  "<tr><td>Beta Bio</td><td>Ann Lee</td><td>ann@betabio.example</td><td>betabio.example</td></tr>"
+                  "</table>")
+        (self.tmp / "fx" / "sites" / "awards.example_list.html").write_text(awards)
+        rows, report = gp.seed({"sources": [{"urls": ["https://awards.example/list"],
+                                             "extract": {"columns": {"Company": "company", "Name": "full_name",
+                                                                     "Email": "email", "Website": "domain"}}}]})
+        acme = next(r for r in rows if r["company"] == "Acme Robotics")
+        self.assertNotIn("email", acme)
+        self.assertNotIn("full_name", acme, "the officer's name goes with the officer's email")
+        self.assertNotIn("domain", acme)
+        self.assertEqual(report["dropped"]["agency contact, not the company"], 1)
+        beta = next(r for r in rows if r["company"] == "Beta Bio")
+        self.assertEqual(beta["email"], "ann@betabio.example")
+
     def test_unjudged_rows_are_held_and_a_no_is_left_out(self):
         rows, _ = gp.build(BLOCK, ask=lambda s, q: [None] * len(s))
         self.assertTrue(all(r["tier"] == "hold" for r in rows))

@@ -37,6 +37,13 @@ people texts search "the japan trip"  # full text, all history
 people texts stats                    # how much is stored, when it last synced
 ```
 
+When he says something just came in ("text", "he sent it", "check the text"),
+run `people texts sync` before reading. The store lags the last few minutes:
+on 2026-10-26 Colin texted his activities list as a Doc link at 14:54, a
+14:57 `people texts Colin` still ended at 14:41, and the agent burned six
+calls on Drive, Gmail and attachment folders while Caleb wrote "text". Sync,
+then read; never go hunting in other apps for a message he says is in texts.
+
 WhatsApp lands in the same store. `sync` refreshes the WhatsApp Desktop copy
 (`wacrawl import`) and the linked device (`wacli sync --once`), then files those
 rows next to iMessage, so `people texts maggie` and `search` cover both. A

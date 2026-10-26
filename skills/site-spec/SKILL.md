@@ -163,6 +163,29 @@ check`, `story` and `idle` also pass on every route.
   tool and write it to `research/corpus/` as you go, because the pane can
   close and take the crawl with it.
 
+## When someone has to brain-dump the vision
+
+When the facts live in a person's head (the owner, or a friend handing over for
+them), send a Google Doc they fill in, not a text list or a form. Caleb,
+2026-10-26, on the intake for Ava's dance teacher's site: "Make it a google doc
+and make the space wehre she types her answers hv blue text", then, at 15
+questions, "More qustions bruh I want her to yap to make this awesome".
+
+- **Upload HTML to Drive as a Doc** with `gws drive files create`, the
+  `application/vnd.google-apps.document` mimeType and `--upload doc.html
+  --upload-content-type text/html`; `files update` on the same id revises it.
+  Questions are bold black. Under each goes a blue (`#1a73e8`) "Type here..."
+  span, so what they type over it stays blue. Read the doc back with `gws docs
+  documents get` and count blue slots against questions.
+- **About 45 questions, mostly scenes and stories.** "Walk me through one class
+  like I'm sitting in the corner", catchphrases, the funniest moment, one story
+  about a student, "if they read the site and teared up, what would it have
+  said?", their world as a song or a movie scene, what it should NOT feel like.
+  Logistics (hours, prices, address) go last. The top of the doc says long
+  answers are good and a voice memo per section is fine.
+- End with a send-me list: original video files (not screen recordings), photos,
+  logo, screenshots of kind texts or reviews.
+
 ## When they ask for an intro animation
 
 The Cowboy Cubans draft got a five second duel on first load (two silhouettes,

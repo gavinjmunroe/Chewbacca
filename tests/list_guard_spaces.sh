@@ -18,5 +18,18 @@ printf 'full_name,title,organization,email\nJane Roe,Partner,Acme Ventures,info@
 out=$(cd "$TMP" && echo '{}' | bash "$HOOK" 2>/dev/null)
 printf '%s' "$out" | grep -q "role.csv: 1 shared mailboxes" && ok "bad list in a spaced folder still fails by its real name" || no "bad list in a spaced folder not caught: $out"
 
+# Per-sender folder: the same investor on two founders' lists is two senders, not a dupe.
+mkdir -p "$TMP/senders"
+printf 'full_name,title,organization,email\nJane Roe,Partner,Acme Ventures,jane@acme.com\n' > "$TMP/senders/a-investors.csv"
+printf 'full_name,title,organization,email\nJane Roe,Partner,Acme Ventures,jane@acme.com\n' > "$TMP/senders/b-investors.csv"
+out=$(cd "$TMP/senders" && echo '{}' | bash "$HOOK" 2>/dev/null)
+printf '%s' "$out" | grep -q "more than one list" && ok "without a marker, one person on two lists still fails" || no "dupe across lists not caught: $out"
+touch "$TMP/senders/.per-sender"
+out=$(cd "$TMP/senders" && echo '{}' | bash "$HOOK" 2>/dev/null)
+[ -z "$out" ] && ok ".per-sender folder gates each list as its own sender" || no ".per-sender folder still refused: $out"
+printf 'full_name,title,organization,email\nJoe Doe,Partner,Beta VC,info@beta.com\n' > "$TMP/senders/c-investors.csv"
+out=$(cd "$TMP/senders" && echo '{}' | bash "$HOOK" 2>/dev/null)
+printf '%s' "$out" | grep -q "shared mailboxes" && ok ".per-sender still fails a real defect" || no ".per-sender hid a defect: $out"
+
 printf '\nlist_guard_spaces: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -231,3 +231,34 @@ Thirty-six corrections across two nights, most of them the same few mistakes.
   resolve paths from `__file__`, one `render.sh` with every knob as a commented
   env var, the history log, CLAUDE.md plus AGENTS.md, and the skills. Never put
   a login in it, and test a render from a fresh unzip before calling it done.
+
+## Making a web 3D scene read as real: from Maia's crate site (2026-10-26)
+
+Caleb on the CSS-3D record crate: "I like the 3d but it ws kinda tweak ngl".
+What fixed it, so the next interactive site starts here.
+
+- **Render the props, keep the interaction in CSS.** Pre-render each real object
+  in Nalana as transparent PNG layers and composite them around the live CSS 3D
+  pieces. Her crate became `crate_back` (behind the sleeves, w a shadow catcher)
+  and `crate_front` (over them). The vinyl became `grooves`, which spins, and
+  `sheen`, which stays still and goes on with `mix-blend-mode: screen`, so the
+  light doesn't spin w the record. Script: `maia-rocha-upgrade/nalana/render.py`.
+- **Open the client's own GLBs before trusting them.** Her "vinyls" were flat
+  1024-face cylinders, which is why the original read as slabs. Use her models
+  where they're real (the wire basket) and model the rest.
+- **Split a leaning wall by its own depth at each height.** One y threshold cut
+  the front wall in half, because a basket wall flares out toward the rim. Bin
+  vertices by z, take the nearest y per bin, and call a face front if it's
+  within wire thickness of that.
+- **Write the projected geometry out** (`crate_geo.json`: floor front and back,
+  rims, in 0 to 1 image coords) and place the CSS pieces from those numbers.
+  Then check the CSS against them with `getBoundingClientRect`, not by eye.
+- **A multiply texture gets its light divided out first.** The raw paper render
+  was 97 to 165 gray. Divide by a 60px blur, add back a gentle gradient, and land
+  the mean near 242, or every cover goes muddy.
+- **Never put `filter` on a child of a `preserve-3d` stack.** In WebKit it
+  paints the stack in DOM order, so the back record covered the front one.
+  Shade through a CSS variable in a pseudo-element instead.
+- **The in-app browser pane's screenshots lag CSS transitions.** Three frames
+  in a row showed mid-animation states. Use headless Playwright w a wait, and
+  check WebKit as well as Chromium.

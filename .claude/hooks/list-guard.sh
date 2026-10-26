@@ -30,16 +30,17 @@ CANDIDATES=$(find . -maxdepth 3 -name '*.csv' -newermt '-20 minutes' \
 [ -n "$CANDIDATES" ] || exit 0
 
 # A contact list, not any CSV. Needs an email-ish and a name-ish column.
-LISTS=""
+# An array, not a string: "UCLA founders/x.csv" split on its space into two
+# missing files and the gate refused a list that passed (2026-10-26).
+LISTS=()
 while IFS= read -r f; do
   head -1 "$f" 2>/dev/null | grep -qiE '(^|,)"?(email|email_address|work_email)"?(,|$)' || continue
   head -1 "$f" 2>/dev/null | grep -qiE '(full_name|fullname|name|organization|company)' || continue
-  LISTS="$LISTS $f"
+  LISTS+=("$f")
 done <<< "$CANDIDATES"
-[ -n "${LISTS// /}" ] || exit 0
+[ "${#LISTS[@]}" -gt 0 ] || exit 0
 
-# shellcheck disable=SC2086
-REPORT=$("$GATE" $LISTS 2>/dev/null) && exit 0
+REPORT=$("$GATE" "${LISTS[@]}" 2>/dev/null) && exit 0
 DETAIL=$(printf '%s' "$REPORT" | grep -E '^\s+(FAIL|warn)' | head -25)
 [ -n "$DETAIL" ] || exit 0
 

@@ -920,6 +920,11 @@ if group "installer"; then
   check  "list-gate refuses the defects it exists for" \
     bash "$ROOT/tests/list_gate.sh" "$ROOT"
 
+  # "UCLA founders/x.csv" split on its space and a passing list got refused
+  # (2026-10-26). The hook has to hand each path over whole.
+  check  "list-guard passes paths with spaces as one file" \
+    bash "$ROOT/tests/list_guard_spaces.sh" "$ROOT"
+
   # BISC lab "Presentation Topics" lived only on Brightspace and was found a
   # day late on 2026-10-03. brightspace due has to flag what the ledger lacks.
   check  "brightspace flags dropboxes missing from the ledger" \

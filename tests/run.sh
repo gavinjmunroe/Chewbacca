@@ -508,6 +508,8 @@ if group "gtme"; then
   check "gtme-investors drops role inboxes and junk firms, ranks thesis first, audits clean" \
     python3 "$ROOT/tests/test_gtme_investors.py"
   check "gtme-investors dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-investors --help
+  check "gtme list runs the registry method from config, verifies a sample, drafts outreach without sending" \
+    python3 "$ROOT/tests/test_gtme_pipeline.py"
   check "Clay exports match the frozen fixture by stable identity" python3 "$ROOT/tests/test_clay_fixture_check.py"
   check "clay-inbox filters by campaign and reports a refused read" python3 "$ROOT/tests/test_clay_inbox.py"
   check "gtme-dedupe merges one person across lists, never two on name alone" python3 "$ROOT/tests/test_gtme_dedupe.py"

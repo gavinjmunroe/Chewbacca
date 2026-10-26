@@ -210,7 +210,7 @@ class _Guarded(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-def fetch(url: str) -> str:
+def fetch(url: str, limit: int = FETCH_BYTES) -> str:
     fx = os.environ.get("GTME_FIXTURES")
     parts = urllib.parse.urlsplit(url)
     if fx:
@@ -226,7 +226,7 @@ def fetch(url: str) -> str:
         with opener.open(req, timeout=FETCH_TIMEOUT) as r:
             if "html" not in (r.headers.get("Content-Type") or "html"):
                 return ""
-            return decode_body(r.read(FETCH_BYTES), r.headers.get("Content-Encoding") or "",
+            return decode_body(r.read(min(limit, PAGE_CHARS)), r.headers.get("Content-Encoding") or "",
                                r.headers.get_content_charset() or "utf-8")
     except (urllib.error.URLError, OSError, ValueError, zlib.error):
         return ""
@@ -449,13 +449,41 @@ def cmd_verify(a) -> int:
     return 0
 
 
+def client_terms(client: str) -> dict:
+    """Motion and pricing from the founder's client json, when one exists.
+    The plan's own values win; these fill only what the plan never set."""
+    import gtme_pipeline
+    try:
+        _, cfg = gtme_pipeline.config_for(client)
+        return {"motion": gtme_pipeline.motions_of(cfg), **gtme_pipeline.pricing_of(cfg)}
+    except gtme_pipeline.Refused as err:
+        if "no client config" in str(err):
+            return {}
+        raise Refused(f"the client config: {err}")
+
+
+def motion_of(plan: dict, client: str) -> list[str]:
+    return list(plan.get("motion") or client_terms(client).get("motion") or [])
+
+
 def cmd_package(a) -> int:
     plan = plan_of(a.client)
     pkg = package_of(plan)
+    terms = client_terms(a.client)
+    if not (plan.get("package") or {}).get("shape") and terms.get("shape"):
+        pkg["shape"] = terms["shape"]
+    if (plan.get("package") or {}).get("price_usd") is None and terms.get("price") is not None:
+        pkg["price_usd"] = terms["price"]
     for k in ("shape", "data_budget_usd", "mailboxes", "mailbox_usd", "domains", "domain_usd_year", "price_usd"):
         v = getattr(a, k)
         if v is not None:
             pkg[k] = v
+    if a.motion:
+        import gtme_pipeline
+        try:
+            plan["motion"] = gtme_pipeline.motions_of({"motion": [m.strip() for m in a.motion.split(",") if m.strip()]})
+        except gtme_pipeline.Refused as err:
+            raise Refused(str(err))
     plan["package"] = pkg
     op.write_json(cdir(a.client) / "plan.json", plan)
     return cmd_costs(a)
@@ -475,7 +503,8 @@ def cmd_costs(a) -> int:
     domains = pkg["domains"] * pkg["domain_usd_year"] / 12 if ours else 0.0
     total = data + inboxes + domains
     sent = sum(1 for r in jsonl(cdir(a.client) / "sent.jsonl") if r["at"][:7] == now.strftime("%Y-%m"))
-    out = {"month": now.strftime("%Y-%m"), "shape": shape, "data_usd": round(data, 2), "data_budget_usd": pkg["data_budget_usd"],
+    motion = motion_of(plan, a.client)
+    out = {"month": now.strftime("%Y-%m"), "shape": shape, "motion": motion, "data_usd": round(data, 2), "data_budget_usd": pkg["data_budget_usd"],
            "mailboxes_usd": round(inboxes, 2), "domains_usd": round(domains, 2), "total_usd": round(total, 2),
            "emails_sent": sent, "price_usd": pkg["price_usd"],
            "margin_usd": round(pkg["price_usd"] - total, 2) if pkg["price_usd"] is not None else None}
@@ -484,6 +513,8 @@ def cmd_costs(a) -> int:
         return 0
     sending = (f"{pkg['mailboxes']} mailboxes ${inboxes:.2f}, {pkg['domains']} domains ${domains:.2f} a month"
                if ours else "no mailboxes or domains, they send from their own")
+    if motion:
+        print(f"{a.client} sells to " + ", then ".join(m.replace("_", " ") for m in motion) + ".")
     print(f"{a.client}, {SHAPES[shape]}, {out['month']}: data ${data:.2f} of a ${pkg['data_budget_usd']:.2f} budget "
           f"(treg's own charges), {sending}. Total ${total:.2f}, {sent} emails sent.")
     if pkg["price_usd"] is not None:
@@ -1286,6 +1317,7 @@ def main(argv=None) -> int:
     p.add_argument("--domains", type=int)
     p.add_argument("--domain-cost", dest="domain_usd_year", type=float, help="per domain per year")
     p.add_argument("--price", dest="price_usd", type=float, help="what the customer pays a month")
+    p.add_argument("--motion", help="who they sell to, in order: customers,channel_partners,investors")
     p.add_argument("--json", action="store_true")
     p = sub.add_parser("costs", help="this month's cost for one customer")
     p.add_argument("--client", required=True)

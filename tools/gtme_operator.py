@@ -3,7 +3,11 @@
 
     gtme                     same as `gtme start`
     gtme start               plain questions about your business -> ICP, offer, first campaign plan
-    gtme list --client NAME  build the first list from public sources and dedupe it (free, read only)
+    gtme list --client NAME  build the first list from public sources and dedupe it (free, read only);
+                             with `sources` in the client json: the whole registry, confirmed on each
+                             firm's own site, Jev-judged, tiered and spot-verified (tools/gtme_pipeline.py)
+    gtme list-verify --client NAME | --csv FILE   re-open a sample of sources, fail any fact not there
+    gtme outreach --client NAME | --founders   LinkedIn notes, emails and texts as drafts, never sent
     gtme setup               connect Clay (if you have it), name each workspace, run the first sync
     gtme brief [--sync]      the morning standup: replies to answer, alarms, credits, top 3 actions
     gtme next                every client's to-do list, each with its command and its gate
@@ -2441,6 +2445,11 @@ def main(argv=None) -> int:
     if argv and argv[0] == "recovery-preview":
         import gtme_recovery
         return gtme_recovery.main(argv[1:])
+    if argv and argv[0] in ("list", "list-verify", "outreach") and not {"-h", "--help"} & set(argv[1:2]):
+        import gtme_pipeline
+        code = gtme_pipeline.main(argv)
+        if code != gtme_pipeline.LEGACY:
+            return code
     if argv and argv[0] in ("sender", "find", "verify", "batch", "send", "inbox", "reply", "today", "package",
                             "costs", "autosend", "share", "copy", "week"):
         import gtme_solo

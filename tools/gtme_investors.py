@@ -18,7 +18,9 @@ The investors block (every field optional except thesis):
        "thesis": ["saas", "software", "it services"],   sector words, matched as words
        "thesis_text": ["msp", "managed services"],      also matched in firm name and title
        "stage": ["seed", "pre-seed", "early stage"],    words that mark an early investor
-       "max_check_musd": 3.0,                           a parsed check size above this is not early
+       "max_check_musd": 3.0,                           the round: a smallest check above this is dropped
+       "min_check_musd": 0.05,                          a largest check under this is dropped
+       "require_stage": false,                          true drops rows with no early-stage evidence
        "org_types": ["VC", "Angel", "Investor"],
        "countries": ["united states", "usa", "us"],
        "regions": ["north america"],
@@ -122,7 +124,9 @@ def check_block(block: dict) -> None:
             raise ConfigError(f"investors.{key} must be a list of strings")
     if not block.get("thesis") and not block.get("thesis_text"):
         raise ConfigError("investors.thesis is empty: name at least one sector word")
-    for key in ("max_check_musd", "limit"):
+    if "require_stage" in block and not isinstance(block["require_stage"], bool):
+        raise ConfigError("investors.require_stage must be true or false")
+    for key in ("max_check_musd", "min_check_musd", "limit"):
         if key in block and not isinstance(block[key], (int, float)):
             raise ConfigError(f"investors.{key} must be a number")
 
@@ -178,10 +182,37 @@ def first_name(full: str) -> str:
     return t[:1].upper() + t[1:].lower() if t.isupper() or t.islower() else t
 
 
+CHECK_NUM = re.compile(r"(\d+(?:,\d{3})*(?:\.\d+)?)\s*([kmb])?(?![a-z])", re.I)
+UNIT_MUSD = {"k": 0.001, "m": 1.0, "b": 1000.0}
+
+
+def check_range(check: str) -> tuple[float, float] | None:
+    """A check-size cell as (smallest, largest) in $M, or None when it can't be read.
+
+    Until 2026-10-26 the units were ignored, so "100K USD" read as $100M and
+    "500K - 2.5M" as $500M: 147 + 43 rows of the Prometheus file, seed checks
+    all of them, were dropped as "check too large". A number with no unit
+    takes the unit of the next number that has one ("0 - 2.5M"); with none at
+    all, 1,000 or more is dollars and anything smaller is $M, the file's own
+    convention for bare ranges like "50.00 - 200.00"."""
+    hits = [(float(n.replace(",", "")), (u or "").lower()) for n, u in CHECK_NUM.findall(check or "")]
+    if not hits:
+        return None
+    vals = []
+    for i, (n, unit) in enumerate(hits):
+        unit = unit or next((u for _, u in hits[i + 1:] if u), "")
+        vals.append(n * UNIT_MUSD[unit] if unit else n / 1e6 if n >= 1000 else n)
+    return min(vals), max(vals)
+
+
 def check_max(check: str) -> float | None:
     """The top of a check-size range in $M, or None when it can't be read."""
-    nums = [float(n) for n in re.findall(r"\d+(?:\.\d+)?", check or "")]
-    return max(nums) if nums else None
+    rng = check_range(check)
+    return rng[1] if rng else None
+
+
+def fmt_musd(v: float) -> str:
+    return f"${v * 1000:g}K" if v < 1 else f"${v:g}M"
 
 
 def suppressed_emails(paths: list[str]) -> set[str]:
@@ -209,6 +240,8 @@ def build(con: sqlite3.Connection, block: dict) -> tuple[list[dict], dict]:
     regions = {r.lower() for r in block.get("regions", [])}
     seniority = set(block.get("seniority", []))
     max_check = block.get("max_check_musd")
+    min_check = block.get("min_check_musd")
+    require_stage = bool(block.get("require_stage"))
     keep_unknown = block.get("include_unknown_sector", True)
     suppress = suppressed_emails(block.get("suppress", []))
 
@@ -261,26 +294,43 @@ def build(con: sqlite3.Connection, block: dict) -> tuple[list[dict], dict]:
         if not (sector_hit or text_hit):
             if known_sector or not keep_unknown:
                 drop("off thesis"); continue
-        cmax = check_max(rec["check_size"])
+        rng = check_range(rec["check_size"])
         check_text = (rec["check_size"] or "").lower()
-        stage_hit = bool(stage and (stage.search(sectors) or stage.search(text) or stage.search(check_text)))
-        if (rec["org_type"] or "").lower() == "angel":
-            stage_hit = True
-        if max_check is not None and cmax is not None:
-            if cmax > max_check * 10:
-                drop("check too large"); continue
-            stage_hit = stage_hit or cmax <= max_check
+        stage_word = stage and (stage.search(check_text) or stage.search(sectors) or stage.search(text))
+        stage_why = f"stage: {stage_word.group(1)}" if stage_word else ""
+        if not stage_why and (rec["org_type"] or "").lower() == "angel":
+            stage_why = "stage: angel"
+        # A range is read as the checks they write. Their smallest over what
+        # this round takes means they don't write a check this size; their
+        # largest under min_check_musd means too small to be worth a slot.
+        if rng and max_check is not None and rng[0] > max_check:
+            drop("check too large"); continue
+        if rng and min_check is not None and rng[1] < min_check:
+            drop("check too small"); continue
+        check_why = ""
+        if rng:
+            span = fmt_musd(rng[1]) if rng[0] == rng[1] else f"{fmt_musd(rng[0])} to {fmt_musd(rng[1])}"
+            fits = max_check is None or rng[1] <= max_check
+            check_why = f"checks {span}" + (f", inside the {fmt_musd(max_check)} round" if max_check and fits
+                                             else f", overlaps the {fmt_musd(max_check)} round" if max_check else "")
+            if fits and max_check is not None and not stage_why:
+                stage_why = "stage: check size fits the round"
+        stage_hit = bool(stage_why)
+        if require_stage and not stage_hit:
+            drop("no early-stage evidence"); continue
         hit = sector_hit or text_hit
         score = ((3 if hit else 0) + (2 if stage_hit else 0)
                  + SENIORITY_RANK.get(rec["seniority"], 0) + GRADE_RANK.get(rec["grade"], 0))
         why = []
         if hit:
-            why.append(f"thesis: {hit.group(1)}")
+            why.append(f"thesis: {hit.group(1)}" + (" (sector)" if sector_hit else " (firm or title)"))
         else:
             why.append("generalist, sector not on file")
-        if stage_hit:
-            why.append("early stage")
-        if rec["check_size"]:
+        if stage_why:
+            why.append(stage_why)
+        if check_why:
+            why.append(check_why)
+        elif rec["check_size"]:
             why.append(f"check {rec['check_size']}")
         slug = rec["linkedin"] or ""
         rows.append({
@@ -368,6 +418,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--dry-run", action="store_true", help="count only, write nothing")
     ap.add_argument("--no-audit", action="store_true")
     ap.add_argument("--json", action="store_true", help="print the summary as JSON")
+    ap.add_argument("--show", type=int, default=10, help="print the strongest N rows and why each fit (0: none)")
     a = ap.parse_args(argv)
 
     try:
@@ -392,7 +443,9 @@ def main(argv: list[str] | None = None) -> int:
     out = expand(a.out or block.get("out"))
     summary = {"config": str(cfg), "pool": stats["pool"], "matched": stats["matched"],
                "thesis_matched": stats["thesis_rows"], "written": 0 if a.dry_run else len(rows),
-               "dropped": stats["dropped"], "out": out}
+               "dropped": stats["dropped"], "out": out,
+               "top": [{k: r[k] for k in ("full_name", "organization", "check_size", "fit_score", "why")}
+                       for r in rows[:max(a.show, 0)]]}
     code = 0
     if not a.dry_run:
         if not out:
@@ -410,6 +463,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  {summary['matched']:,} fit after filters, {summary['thesis_matched']:,} on thesis")
         for k, v in sorted(stats["dropped"].items(), key=lambda kv: -kv[1]):
             print(f"    dropped {v:>7,}  {k}")
+        if summary["top"]:
+            print(f"  strongest {len(summary['top'])}, and why each fit:")
+            for r in summary["top"]:
+                print(f"    {r['fit_score']}  {r['full_name']}, {r['organization']}: {r['why']}")
         if a.dry_run:
             print("  dry run, nothing written")
         else:

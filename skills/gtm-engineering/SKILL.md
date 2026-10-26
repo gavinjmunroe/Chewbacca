@@ -84,7 +84,8 @@ they hired, through `chewbacca gtme`:
 4. No Clay account is not a blocker, and for one person with one Gmail it is
    the normal case (2026-10-11, "a gtme any average joe can pay for"). Run the
    own-inbox path, all on their Mac:
-   - `chewbacca gtme list` builds the free list (`chewbacca api`, `gtme-signals formd`).
+   - `chewbacca gtme list` builds the free list (`chewbacca api`, `gtme-signals formd`),
+     or, when the client json names `sources`, the registry method below.
    - `chewbacca gtme sender` saves their name and mailing address. Every cold
      email needs both plus an opt-out (CAN-SPAM); `batch` refuses without them.
    - `chewbacca gtme find` reads each company's own site for an email it
@@ -321,15 +322,42 @@ opt-outs that had to be blocklisted before Monday.
 
 ## Pitch event follow-up, 2026-10-26 (UCLA Draper Showcase)
 
-- **A list brief copies the last good list's method, never a generic ask.**
-  Caleb: "Plz be methodical and use everything you know when you make a
-  list!!!!!!" after two list agents got a short "find about 50 contacts" brief.
-  Before spawning a list builder, point it at the closest finished client
-  (`~/.chewbacca/gtm/clients/junto.json` and its CSV were the model): start
-  from a complete public registry (MSP 501, LA Neighborhood Councils, SBIR
-  awards), confirm each title on the org's own page, a source URL per fact,
-  emails only where printed, a written yes/no judge question per row
-  (perfect-company-list), tier definitions, and no round-number cap.
+- **A list runs the method as code, never a generic ask.** Caleb: "Plz be
+  methodical and use everything you know when you make a list!!!!!!" after two
+  list agents got a short "find about 50 contacts" brief. The method is
+  `chewbacca gtme list --client <slug>` now, driven by the client json in
+  `~/.chewbacca/gtm/clients/<slug>.json` (junto.json is the worked example):
+  `sources` with each registry URL and how to read its table, `titles`,
+  `exclude`, `hook` words and line, a written yes/no `judge` question, and
+  `tiers`. It reads the whole registry (no round-number cap; `--limit` is for
+  test runs and says so), confirms each title on the firm's own site, keeps an
+  email only where the firm printed it for that person, puts a source URL on
+  every fact, has Jev judge every row (unscored rows are held, a no is left
+  out), sorts strongest first, then re-opens a random sample of sources. Rows
+  it can't finish name their gap; an agent fills those by hand and merges
+  them with `--add rows.csv`. Never write a one-off list script.
+- **Verify before a list is shown.** `chewbacca gtme list-verify --csv FILE`
+  re-opens a tenth of the rows (5 at least) fresh and fails any fact not on
+  its page. Run it on hand-built lists too: on 10/26 it found 3 of 31 sampled
+  facts in the hand-built Junto list (all PSA hooks headed for email lines)
+  that their cited page doesn't say.
+- **Motion and pricing are fields.** The client json's `motion` (an ordered
+  list, or a sentence like "customers first, investors second") and
+  `pricing_shape` (retainer, one_time_list or self_serve, with an optional
+  price; a [NEED] marker means unpicked). `gtme package` and `gtme costs` read
+  both, and `gtme list --motion investors` runs `gtme-investors`.
+- **Investor lists honor stage and check size.** `gtme-investors` reads check
+  sizes with their units (until 10/26 "100K USD" read as $100M and seed checks
+  were dropped as too large), takes `min_check_musd` and `require_stage`, and
+  prints the strongest rows with why each fit.
+- **Outreach is drafts.** `chewbacca gtme outreach --client <slug>` drafts a
+  LinkedIn note (300-character cap, counted; the line's later sentences drop
+  first, and a note that still won't fit is held, never cut) and, with an `outreach.email`
+  template, an email per tiered lead from its sourced line. `--founders
+  --event "UCLA Draper" --exclude <slug>` drafts one note per founder naming
+  the lists actually on disk, plus a confirmation email when the config has a
+  `call`. `--queue-texts` adds a text only for someone already in the people
+  store, through `people texts drafts add`. Nothing in it sends.
 - **"Reach out" after an event means every founder from the night.** Caleb:
   "Bro I want to reach out to ALL the founder except my block skin!!!!!!!!"
   after outreach was drafted only for the six he'd talked to. Draft one note

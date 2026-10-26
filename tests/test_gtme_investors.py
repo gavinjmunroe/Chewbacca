@@ -209,6 +209,40 @@ class InvestorsTest(unittest.TestCase):
         self.assertEqual(proc.returncode, 2)
         self.assertIn("no Prometheus db", proc.stderr)
 
+    def test_check_sizes_keep_their_units(self):
+        # 2026-10-26: "100K USD" read as $100M dropped every seed check in K.
+        self.assertEqual(gi.check_range("100K USD"), (0.1, 0.1))
+        self.assertEqual(gi.check_range("500K - 2.5M"), (0.5, 2.5))
+        self.assertEqual(gi.check_range("0 - 2.5M"), (0.0, 2.5))
+        self.assertEqual(gi.check_range("$500K - $1M, $1M - $3M"), (0.5, 3.0))
+        self.assertEqual(gi.check_range("50.00 - 200.00"), (50.0, 200.0), "bare numbers are $M, the file's own way")
+        self.assertEqual(gi.check_range("250,000"), (0.25, 0.25))
+        self.assertIsNone(gi.check_range("Early Stage VC, Seed Round"))
+
+    def test_a_k_check_is_a_seed_investor_with_a_reason(self):
+        con = sqlite3.connect(self.db)
+        con.execute("UPDATE contacts SET check_size='100K USD', sectors_norm='software' WHERE record_id='p2'")
+        con.commit(); con.close()
+        rows, _ = self.build()
+        blake = next(r for r in rows if r["email"] == "blake@rowe.example")
+        self.assertEqual(blake["stage_match"], "yes")
+        self.assertIn("checks $100K, inside the $3M round", blake["why"])
+        self.assertIn("thesis: software (sector)", blake["why"])
+
+    def test_min_check_and_require_stage_drop_with_a_named_reason(self):
+        con = sqlite3.connect(self.db)
+        con.execute("UPDATE contacts SET check_size='10K - 25K' WHERE record_id='p9'")
+        con.commit(); con.close()
+        rows, stats = self.build(min_check_musd=0.05)
+        self.assertNotIn("hana@bellangels.example", self.emails(rows))
+        self.assertEqual(stats["dropped"]["check too small"], 1)
+        rows, stats = self.build(require_stage=True)
+        self.assertNotIn("blake@rowe.example", self.emails(rows), "no stage word, no check size")
+        self.assertGreaterEqual(stats["dropped"]["no early-stage evidence"], 1)
+        self.assertTrue(all(r["stage_match"] == "yes" for r in rows))
+        with self.assertRaises(gi.ConfigError):
+            gi.check_block(dict(BLOCK, require_stage="yes"))
+
     def test_the_tool_names_no_client(self):
         src = TOOL.read_text().lower()
         for word in ("zeutara", "junto", "sabo", "thermoshade", "/users/", "zeutara-data"):

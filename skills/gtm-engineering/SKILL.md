@@ -319,6 +319,29 @@ opt-outs that had to be blocklisted before Monday.
   what's working, and keep process words (Togari, Clay inbox, tags, wave
   names) off the page.
 
+## Pitch event follow-up, 2026-10-26 (UCLA Draper Showcase)
+
+- **A list brief copies the last good list's method, never a generic ask.**
+  Caleb: "Plz be methodical and use everything you know when you make a
+  list!!!!!!" after two list agents got a short "find about 50 contacts" brief.
+  Before spawning a list builder, point it at the closest finished client
+  (`~/.chewbacca/gtm/clients/junto.json` and its CSV were the model): start
+  from a complete public registry (MSP 501, LA Neighborhood Councils, SBIR
+  awards), confirm each title on the org's own page, a source URL per fact,
+  emails only where printed, a written yes/no judge question per row
+  (perfect-company-list), tier definitions, and no round-number cap.
+- **"Reach out" after an event means every founder from the night.** Caleb:
+  "Bro I want to reach out to ALL the founder except my block skin!!!!!!!!"
+  after outreach was drafted only for the six he'd talked to. Draft one note
+  per stage founder and alum, each naming the list already built for them,
+  and leave out only who he excludes.
+- **A pitch-event recording only has the stage.** The 10/22 transcript held
+  the pitches, not his table conversations. Who he talked to comes from his
+  own notes that week; say that, and congratulate a placing only after the
+  organizer's winners email or page names it.
+- LinkedIn connection notes cap at 300 characters. Count each one before
+  handing it over.
+
 ## Sabo takeover lessons, 2026-10-16
 
 - **Start from the client's buyer, then flip it.** Caleb: "be efficient and

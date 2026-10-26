@@ -86,6 +86,12 @@ Check every section against these before showing it:
   `pointer-events: none` and turn them back on for the window inside it.
 - A sticky pin can't get its room from a last child's bottom margin, because
   the margin collapses out of the parent. Use a spacer element.
+- A wheel turn or touchmove is not user activation, so audio can't start
+  from it. An intro that plays on scroll (Parker's ticket, 2026-10-26) runs
+  silent until a click or key. Start sound from the first click, or say so.
+- A page inside a scene (a fake browser tab) needs `overscroll-behavior:
+  contain`, or the wheel leaks out and moves the scene behind it with
+  nothing visible changing. That reads as "the scrolling seems off".
 - `overflow-x: auto` on a row clips hover cards vertically. Pad the row and
   pay the padding back with a negative margin.
 

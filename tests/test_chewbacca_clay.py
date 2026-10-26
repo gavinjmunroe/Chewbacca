@@ -87,7 +87,14 @@ def ok(cond, msg):
     checks += 1
 
 
-def run(fixtures, measured, *args, env_extra=None):
+def run_raw(fixtures, measured, args, stdin="", env_extra=None):
+    """Like run, but feeds stdin and hands back the process for multi-line output."""
+    holder = {}
+    run(fixtures, measured, *args, env_extra=env_extra, stdin=stdin, keep=holder)
+    return holder["p"]
+
+
+def run(fixtures, measured, *args, env_extra=None, stdin=None, keep=None):
     with tempfile.TemporaryDirectory() as d:
         base = Path(d)
         for rel, body in fixtures.items():
@@ -107,7 +114,9 @@ def run(fixtures, measured, *args, env_extra=None):
         # real surface; the one case about NO_SEND sets it itself.
         env.pop("CHEWBACCA_NO_SEND", None)
         env.update(env_extra or {})
-        p = subprocess.run(["node", str(TOOL), *args], capture_output=True, text=True, env=env, timeout=60)
+        p = subprocess.run(["node", str(TOOL), *args], capture_output=True, text=True, env=env, timeout=60, input=stdin)
+        if keep is not None:
+            keep["p"] = p
         try:
             out = json.loads(p.stdout)
         except json.JSONDecodeError:
@@ -229,6 +238,33 @@ def test_no_complete_surface_fails_closed():
                           env_extra={"CHEWBACCA_CLAY_SENT_LOG": str(sent)})
         ok(code == 0 and out["data"]["history"][-1]["email_body"] == "Latest investor request", "full history fallback preserves a reply after a large earlier message")
         ok(not sent.exists() or not sent.read_text().strip(), "complete-history reads never enter a write-send path")
+
+
+def test_batch_runs_many_reads_and_refuses_writes():
+    """2026-10-26: one process per read cost ~3 s of startup against ~0.3 s of Clay."""
+    fx = {"api-anything/creditBalance.json": {"ok": True, "data": {"balance": 7}},
+          "api-anything/listResources.json": CUT,
+          "api-anything-full/listResources.json": {"ok": True, "data": {"resources": [{"id": "t_1"}] * 30}}}
+    lines = "\n".join(json.dumps(x) for x in [
+        ["credits", "ws=1"],
+        ["resources", "ws=1"],
+        ["nope-op"],
+        ["blocklist-add", "ws=1", "email=a@example.com", "--allow-writes"],
+        "not an array",
+        ["credits", "ws=1"],
+    ])
+    with tempfile.TemporaryDirectory() as directory:
+        sent = Path(directory) / "sent.jsonl"
+        p = run_raw(fx, {}, ["batch", "--full"], stdin=lines, env_extra={"CHEWBACCA_CLAY_SENT_LOG": str(sent)})
+        outs = [json.loads(l) for l in p.stdout.splitlines() if l.strip()]
+        ok(len(outs) == 6, f"one line out per line in: {p.stdout[:500]} {p.stderr[-300:]}")
+        ok(outs[0]["ok"] and outs[0]["data"]["balance"] == 7 and outs[5]["ok"], "reads answer in order, and the batch keeps going after failures")
+        ok(outs[1]["ok"] and len(outs[1]["data"]["resources"]) == 30, "--full on the batch reaches every line")
+        ok(outs[2]["class"] == "usage", "an unknown op is refused for its line")
+        ok(outs[3]["class"] == "refused" and "reads only" in outs[3]["reason"], "a write is refused in a batch")
+        ok(outs[4]["class"] == "usage", "a line that isn't a JSON array is refused")
+        ok(not sent.exists() or not sent.read_text().strip(), "nothing in a batch reaches a write-send path")
+        ok(p.returncode != 0, "the batch exit code reflects its worst line")
 
 
 def test_full_flag_reads_a_cut_list_whole():

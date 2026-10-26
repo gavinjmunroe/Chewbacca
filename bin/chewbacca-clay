@@ -81,7 +81,19 @@ function out(obj, code) {
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
     }
   }
+  if (BATCH) throw new BatchLine(code);
   process.exit(code);
+}
+
+// `batch` runs many reads in one process: each line printed ends that read and
+// the next line starts. On 2026-10-26 a 992-table export spent ~3 s of node
+// startup per read against ~0.3 s of Clay's own answer.
+let BATCH = false;
+class BatchLine extends Error {
+  constructor(code) {
+    super("batch line done");
+    this.code = code;
+  }
 }
 
 function readJson(file, fallback) {
@@ -396,18 +408,29 @@ function syncSpec() {
   } catch {}
 }
 
+// Batch reads reuse one lookup and one hash per process; a single call is unchanged.
+const batchMemo = {};
 function engineDist() {
   if (process.env.API_ANYTHING_DIST) return process.env.API_ANYTHING_DIST;
+  if (BATCH && "dist" in batchMemo) return batchMemo.dist;
   const which = spawnSync("sh", ["-c", "command -v api-anything"], { encoding: "utf8" });
   const bin = which.stdout.trim();
-  if (!bin) return null;
-  return path.dirname(fs.realpathSync(bin));
+  const dist = bin ? path.dirname(fs.realpathSync(bin)) : null;
+  if (BATCH) batchMemo.dist = dist;
+  return dist;
 }
 
 // sha256 of dist/*.js in name order. The engine runs with Caleb's Clay session,
 // so only the build made from the pinned commit is trusted; anything else
 // (an install from a moving HEAD) is refused and the next surface answers.
 function distHash(dist) {
+  if (BATCH && batchMemo.hash?.[0] === dist) return batchMemo.hash[1];
+  const digest = distHashNow(dist);
+  if (BATCH) batchMemo.hash = [dist, digest];
+  return digest;
+}
+
+function distHashNow(dist) {
   const h = crypto.createHash("sha256");
   for (const f of fs.readdirSync(dist).filter((x) => x.endsWith(".js")).sort()) h.update(fs.readFileSync(path.join(dist, f)));
   return h.digest("hex");
@@ -2304,6 +2327,10 @@ const HELP = `chewbacca clay: Clay without opening Clay
   --dry-run                              print the exact request (method, URL, body; no cookie) and send nothing
   --full                                 a read the 20,000-char display cap cut: refetch it whole (GET on
                                          api.clay.com/v3 only), for exports
+
+  chewbacca clay batch [--full]          many reads in one process: stdin is one JSON array of args per
+                                         line, e.g. ["rows-by-id","ws=1","table=t_x","rows=r_a,r_b"]; one
+                                         JSON line out per line in, same order; writes are refused
   --session NAME                         use a second Clay login (api-anything only); import it once with
                                          chewbacca clay --session NAME session-login "Profile N"
 
@@ -2311,6 +2338,46 @@ ws is ws=<id>, else $CLAY_WORKSPACE_ID, else the one workspace in
 ~/.chewbacca/gtm/clients.json; with none or several it refuses. Every clay CLI
 call runs in that workspace alone, whatever workspace the CLI is switched to,
 so an op that runs through the CLI takes ws= too. Output is one line of JSON.`;
+
+// Reads only, one JSON array of args per stdin line ("rows-by-id","ws=1",...),
+// one JSON line out per line in, in order. A write, a flag that changes what
+// is sent (--allow-writes), or a non-op command is refused for that line.
+async function batch(outer) {
+  if (outer.allowWrites) out({ ok: false, class: "refused", reason: "batch runs reads only" }, EXIT.refused);
+  const lines = fs.readFileSync(0, "utf8").split("\n").filter((l) => l.trim());
+  BATCH = true;
+  let worst = EXIT.ok;
+  for (const line of lines) {
+    try {
+      let argv;
+      try {
+        argv = JSON.parse(line);
+      } catch {
+        argv = null;
+      }
+      if (!Array.isArray(argv) || !argv.every((a) => typeof a === "string")) out({ ok: false, class: "usage", reason: "each batch line is a JSON array of strings" }, EXIT.usage);
+      const { pos, kv, flags } = parseArgv(argv);
+      const op = opByName.get(pos[0]);
+      if (!op || pos.length !== 1) out({ ok: false, class: "usage", reason: `batch takes one read op per line, not ${pos.join(" ")}` }, EXIT.usage);
+      if (flags.allowWrites || isWrite(op)) out({ ok: false, op: op.name, class: "refused", reason: "batch runs reads only" }, EXIT.refused);
+      await runOp(op.name, kv, { ...flags, full: flags.full || outer.full, surface: flags.surface || outer.surface });
+      out({ ok: false, op: op.name, class: "error", reason: "the op ended without a result" }, EXIT.failed);
+    } catch (e) {
+      if (!(e instanceof BatchLine)) {
+        try {
+          out({ ok: false, class: "error", reason: String(e && e.message ? e.message : e) }, EXIT.failed);
+        } catch (e2) {
+          if (!(e2 instanceof BatchLine)) throw e2;
+          worst = Math.max(worst, e2.code);
+          continue;
+        }
+      }
+      worst = Math.max(worst, e.code ?? EXIT.failed);
+    }
+  }
+  BATCH = false;
+  process.exit(worst);
+}
 
 (async () => {
   const { pos, kv, flags } = parseArgv(process.argv.slice(2));
@@ -2335,5 +2402,6 @@ so an op that runs through the CLI takes ws= too. Output is one line of JSON.`;
   }
   if (cmd === "measure") await measure(rest[0], kv);
   if (cmd === "verify-emails") await verifyEmails(kv, flags);
+  if (cmd === "batch") await batch(flags);
   await runOp(cmd, kv, flags);
 })().catch((e) => out({ ok: false, class: "error", reason: String(e && e.message ? e.message : e) }, EXIT.failed));

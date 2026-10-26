@@ -27,7 +27,10 @@ The investors block (every field optional except thesis):
        "exclude_sectors": ["crypto", "real estate"],
        "exclude_orgs": ["some fund"],                    substring of the firm name
        "seniority": ["A_founder_cxo", "B_vp_director"],
-       "include_unknown_sector": true,                   generalists with a blank sector, ranked last
+       "unknown_sector": "judge",                       blank-sector generalists: judge (a Jev yes only,
+                                                        the default), keep (every one), or drop
+       "judge": {"question": "..."},                    the yes/no Jev asks of each generalist
+       "per_firm": 1,                                   contacts per firm, the best fit first
        "limit": 500,
        "out": "~/Downloads/Client/investors.csv",
        "suppress": ["~/path/already-emailed.csv"],       any CSV with an email column
@@ -39,8 +42,9 @@ What the file is, measured 2026-09-20 against the 1,039,715-row original: 52,350
 people with an email and grade A or B, 984 of them role inboxes, the company
 column junk on 48% (the literal "Person", blank, "Unknown", Airtable image
 URLs), and sectors blank or "unknown" on 43%. A sector filter silently drops
-that 43%, so `include_unknown_sector` keeps generalists and ranks them below
-every thesis match instead of losing them. Where a LinkedIn slug shares no
+that 43%, so `unknown_sector: judge` asks Jev about each generalist and keeps
+only a yes, after every thesis match; the old `include_unknown_sector: false`
+still means drop. A list is never padded to its limit with unjudged rows. Where a LinkedIn slug shares no
 token with the name, 89.7% were confirmed wrong, so those slugs are blanked.
 
 Writes nothing but the CSV. Never sends, never reads the network. After
@@ -50,6 +54,7 @@ the audit finds a defect the tool should have removed.
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import csv
 import json
 import os
@@ -82,7 +87,7 @@ GRADE_RANK = {"A": 1, "B": 0}
 
 COLUMNS = ["first_name", "full_name", "title", "organization", "org_type", "email",
            "website", "linkedin", "city", "state", "country", "sectors", "check_size",
-           "grade", "thesis_match", "stage_match", "fit_score", "why", "record_id"]
+           "grade", "thesis_match", "stage_match", "fit_score", "judge_p", "why", "record_id"]
 
 
 class ConfigError(ValueError):
@@ -124,6 +129,8 @@ def check_block(block: dict) -> None:
             raise ConfigError(f"investors.{key} must be a list of strings")
     if not block.get("thesis") and not block.get("thesis_text"):
         raise ConfigError("investors.thesis is empty: name at least one sector word")
+    if block.get("unknown_sector") not in (None, *UNKNOWN_MODES):
+        raise ConfigError(f"investors.unknown_sector must be one of {', '.join(UNKNOWN_MODES)}")
     if "require_stage" in block and not isinstance(block["require_stage"], bool):
         raise ConfigError("investors.require_stage must be true or false")
     for key in ("max_check_musd", "min_check_musd", "limit"):
@@ -229,7 +236,81 @@ def suppressed_emails(paths: list[str]) -> set[str]:
     return out
 
 
-def build(con: sqlite3.Connection, block: dict) -> tuple[list[dict], dict]:
+def list_gate():
+    """bin/list-gate's own rules, loaded from the file so the generator and
+    the gate can never disagree about what a junior title or one firm is."""
+    import importlib.machinery
+    import importlib.util
+    loader = importlib.machinery.SourceFileLoader("list_gate", str(ROOT / "bin" / "list-gate"))
+    spec = importlib.util.spec_from_loader("list_gate", loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    return mod
+
+
+# Unknown-sector rows, before 2026-10-26, padded every list to its limit:
+# measured that day with --limit 0, Thallus had 129 on-thesis rows of 500
+# written (one of the rest an investment banker), HPC 36, Yeast Bay 98,
+# BioMetal 137, and the founder notes said "500 food and climate investors".
+# Now a generalist only gets in on a Jev yes.
+UNKNOWN_MODES = ("judge", "keep", "drop")
+# A generalist is kept at Jev 0.7. Guessed, never measured on labelled rows:
+# a wrong yes is one founder pitching an investor who doesn't do their
+# sector, a wrong no is one row a judged pool can refill.
+JUDGE_YES = 0.7
+JUDGE_BATCH = 20
+
+
+def jev_judge(states: list[dict], question: str) -> list[float | None]:
+    sys.path.insert(0, str(ROOT / "bin" / "lib"))
+    try:
+        import jev
+    except ImportError:
+        return [None] * len(states)
+    out: list[float | None] = []
+    for i in range(0, len(states), JUDGE_BATCH):
+        chunk = states[i:i + JUDGE_BATCH]
+        qs = {f"row:{j}": {"type": "noul", "instructions": f"Look only at row {j}. {question}"}
+              for j in range(len(chunk))}
+        answers = jev.ask({"rows": chunk}, qs, decision="gtme-investors-judge") or {}
+        for j in range(len(chunk)):
+            a = answers.get(f"row:{j}")
+            out.append(jev.probability(a.get("noul")) if isinstance(a, dict) else None)
+    return out
+
+
+# What the firm's own homepage says about itself, for the judge. Measured
+# 2026-10-26 on Thallus (food): judged from the firm name alone, Jev's yes
+# rate sat at 0.70 to 0.76 and let in a venture lender, growth equity and
+# endowments, and even its top 25 were mostly not food investors. A name is
+# not evidence of a thesis; the firm's own words are the cheapest that is.
+SITE_CHARS = 700
+
+
+def site_says(website: str) -> str:
+    website = (website or "").split()[0] if (website or "").split() else ""
+    if not website:
+        return ""
+    import gtme_pipeline as gp
+    import gtme_solo as solo
+    url = website if "//" in website else f"https://{website}"
+    body = gp.page(url)
+    if not body:
+        return ""
+    return (solo.fact_on(body) + " | " + " ".join(gp.text_of(body).split()))[:SITE_CHARS]
+
+
+def judge_question(block: dict) -> str:
+    if (block.get("judge") or {}).get("question"):
+        return block["judge"]["question"]
+    words = ", ".join((block.get("thesis_text") or block.get("thesis") or [])[:8])
+    return (f"From what the firm's own site says about itself (firm_site_says), does this firm write early "
+            f"(pre-seed or seed) checks into startups in: {words}? Answer no when the site says nothing about "
+            f"that sector or stage, and for investment banks, lenders, wealth managers, endowments, funds of "
+            f"funds and growth or buyout equity.")
+
+
+def build(con: sqlite3.Connection, block: dict, ask=jev_judge, says=None) -> tuple[list[dict], dict]:
     thesis = word_re(block.get("thesis", []) + block.get("thesis_text", []))
     thesis_text = word_re(block.get("thesis_text", []))
     stage = word_re(block.get("stage", []))
@@ -242,7 +323,9 @@ def build(con: sqlite3.Connection, block: dict) -> tuple[list[dict], dict]:
     max_check = block.get("max_check_musd")
     min_check = block.get("min_check_musd")
     require_stage = bool(block.get("require_stage"))
-    keep_unknown = block.get("include_unknown_sector", True)
+    unknown_mode = block.get("unknown_sector") or ("judge" if block.get("include_unknown_sector", True) else "drop")
+    keep_unknown = unknown_mode != "drop"
+    gate = list_gate()
     suppress = suppressed_emails(block.get("suppress", []))
 
     cols = {r[1] for r in con.execute("PRAGMA table_info(contacts)")}
@@ -281,6 +364,10 @@ def build(con: sqlite3.Connection, block: dict) -> tuple[list[dict], dict]:
             drop("role inbox"); continue
         if any(rec.get(f) for f in flags) or not company_ok(org) or not first_name(rec["full_name"]):
             drop("junk company or name"); continue
+        if any(gate.NAN_STRIP.search(str(v or "")) for v in rec.values()):
+            drop("NaN-strip corruption"); continue
+        if rec["title"] and gate.JUNIOR.search(rec["title"].strip()):
+            drop("too junior to decide"); continue
         if any(o in org.lower() for o in excl_orgs):
             drop("excluded firm"); continue
         if excl and excl.search(sectors):
@@ -353,17 +440,59 @@ def build(con: sqlite3.Connection, block: dict) -> tuple[list[dict], dict]:
             "_rank": (score, float(rec["grade_score"] or 0), 1 if slug else 0),
         })
     rows.sort(key=lambda x: x["_rank"], reverse=True)
-    seen_email, seen_person, out = set(), set(), []
+    per_firm = int(block.get("per_firm", 1))
+    seen_email, seen_person, firms, out = set(), set(), {}, []
     for row in rows:
         person = (row["full_name"].lower(), row["organization"].lower())
         if row["email"] in seen_email or person in seen_person:
             drop("duplicate"); continue
+        # One contact per firm, the best fit, the same firm_key list-gate
+        # counts with: on 10/26 every list failed it (Stonepeak 7 on one).
+        fk = gate.firm_key(row["organization"])
+        if per_firm and firms.get(fk, 0) >= per_firm:
+            drop("another contact at the same firm"); continue
         seen_email.add(row["email"]); seen_person.add(person)
+        firms[fk] = firms.get(fk, 0) + 1
         row.pop("_rank")
         out.append(row)
-    stats["matched"] = len(out)
-    stats["thesis_rows"] = sum(1 for r in out if r["thesis_match"] == "yes")
     limit = int(block.get("limit") or 0)
+    thesis_rows = [r for r in out if r["thesis_match"] == "yes"]
+    pool = [r for r in out if r["thesis_match"] != "yes"]
+    stats.update(thesis_rows=len(thesis_rows), unknown_pool=len(pool), judged=0, judged_in=0, unscored=0)
+    if unknown_mode == "judge":
+        room = (limit - len(thesis_rows)) if limit else len(pool)
+        kept, q = [], judge_question(block)
+        # Judged in rank order, a batch at a time, only until the list is full.
+        for i in range(0, len(pool), JUDGE_BATCH):
+            if len(kept) >= room:
+                break
+            chunk = pool[i:i + JUDGE_BATCH]
+            with concurrent.futures.ThreadPoolExecutor(8) as ex:
+                text = list(ex.map(lambda r: (says or site_says)(r["website"]), chunk))
+            # No site text is no evidence: unscored, never sent to Jev. On the
+            # 10/26 sample an empty page scored 0.88 under a looser question.
+            asked = [(r, {**{k: r[k] for k in ("full_name", "title", "organization", "org_type", "check_size")},
+                          "firm_site_says": t}) for r, t in zip(chunk, text) if t]
+            got = dict(zip((id(r) for r, _ in asked), ask([st for _, st in asked], q))) if asked else {}
+            for r in chunk:
+                prob = got.get(id(r))
+                stats["judged"] += 1
+                if prob is None:
+                    stats["unscored"] += 1
+                elif prob >= JUDGE_YES:
+                    r["why"] = r["why"].replace("generalist, sector not on file",
+                                                f"generalist, Jev judged on thesis {prob:.2f}")
+                    r["judge_p"] = f"{prob:.2f}"
+                    kept.append(r)
+        stats["judged_in"] = len(kept)
+        pool = kept[:room]
+        drop_n = stats["unknown_pool"] - len(pool)
+        if drop_n:
+            stats["dropped"]["sector unknown, not a Jev yes"] = drop_n
+    elif unknown_mode == "drop":
+        pool = []
+    stats["matched"] = len(thesis_rows) + len(pool)
+    out = thesis_rows + pool
     if limit:
         out = out[:limit]
     return out, stats
@@ -442,7 +571,8 @@ def main(argv: list[str] | None = None) -> int:
 
     out = expand(a.out or block.get("out"))
     summary = {"config": str(cfg), "pool": stats["pool"], "matched": stats["matched"],
-               "thesis_matched": stats["thesis_rows"], "written": 0 if a.dry_run else len(rows),
+               "thesis_matched": stats["thesis_rows"], "unknown_pool": stats["unknown_pool"],
+               "judged": stats["judged"], "judged_in": stats["judged_in"], "unscored": stats["unscored"], "written": 0 if a.dry_run else len(rows),
                "dropped": stats["dropped"], "out": out,
                "top": [{k: r[k] for k in ("full_name", "organization", "check_size", "fit_score", "why")}
                        for r in rows[:max(a.show, 0)]]}
@@ -455,12 +585,20 @@ def main(argv: list[str] | None = None) -> int:
         if not a.no_audit:
             result = audit(Path(out))
             summary["audit"] = result
-            code = 1 if (not result["ran"] or result["defects"]) else 0
+            gate = subprocess.run([sys.executable, str(ROOT / "bin" / "list-gate"), str(out), "--json"],
+                                  capture_output=True, text=True, timeout=300)
+            try:
+                summary["list_gate"] = json.loads(gate.stdout).get("fails", [])
+            except json.JSONDecodeError:
+                summary["list_gate"] = [f"list-gate did not run: {(gate.stderr or gate.stdout).strip()[-200:]}"]
+            code = 1 if (not result["ran"] or result["defects"] or summary["list_gate"]) else 0
     if a.json:
         print(json.dumps(summary, indent=1))
     else:
         print(f"  pool {summary['pool']:,} people with an email and grade A or B")
-        print(f"  {summary['matched']:,} fit after filters, {summary['thesis_matched']:,} on thesis")
+        print(f"  {summary['thesis_matched']:,} ON THESIS, plus {stats['judged_in']:,} generalists Jev judged a yes "
+              f"of {stats['judged']:,} judged ({stats['unscored']:,} unscored) from {stats['unknown_pool']:,} with "
+              f"no sector on file")
         for k, v in sorted(stats["dropped"].items(), key=lambda kv: -kv[1]):
             print(f"    dropped {v:>7,}  {k}")
         if summary["top"]:
@@ -478,6 +616,10 @@ def main(argv: list[str] | None = None) -> int:
                       f"defects: {au['defects'] or 'none'}")
             elif au:
                 print(f"  list-audit did not run: {au['why']}")
+            for f in summary.get("list_gate") or []:
+                print(f"  list-gate FAIL  {f}")
+            if summary.get("list_gate") == []:
+                print("  list-gate: pass")
     return code
 
 

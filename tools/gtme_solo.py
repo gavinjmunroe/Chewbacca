@@ -228,7 +228,10 @@ def fetch(url: str, limit: int = FETCH_BYTES) -> str:
                 return ""
             return decode_body(r.read(min(limit, PAGE_CHARS)), r.headers.get("Content-Encoding") or "",
                                r.headers.get_content_charset() or "utf-8")
-    except (urllib.error.URLError, OSError, ValueError, zlib.error):
+    # http.client.HTTPException too: a stranger's website cell held two hosts
+    # on two lines ("www.aim13.com\nwww.aim13.nyc", 2026-10-26) and InvalidURL
+    # crashed a 3,000-row investor run an hour in.
+    except (urllib.error.URLError, OSError, ValueError, zlib.error, http.client.HTTPException):
         return ""
 
 

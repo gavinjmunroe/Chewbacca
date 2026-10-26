@@ -15,6 +15,7 @@ So this is the same content as a program that exits 1.
     list-gate out/*.csv
     list-gate out/*.csv --expect andreessen,sequoia,accel     recall test
     list-gate out/*.csv --per-list-firm 1 --json
+    list-gate founders/*-investors.csv --per-sender     each file goes out from its own inbox
 
 Columns are auto-detected. Checks are per-file where that is the right scope and
 across all files where the sender is one sender.
@@ -66,6 +67,9 @@ def main():
     ap.add_argument("--expect", default="", help="comma-separated firms that MUST appear (recall test)")
     ap.add_argument("--per-list-firm", type=int, default=1,
                     help="max contacts from one firm on ONE list (same pitch twice is the offence)")
+    ap.add_argument("--per-sender", action="store_true",
+                    help="each file is a different sender (one founder's inbox each), so a person on two "
+                         "files is two senders' email, warned about but not refused")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args()
 
@@ -114,7 +118,14 @@ def main():
         if freemail:   warns.append(f"{name}: {len(freemail)} free consumer mailboxes")
 
     dupes = {k: v for k, v in seen_people.items() if v > 1 and k}
-    if dupes:
+    # 2026-10-26: 12 founders' investor lists, each sent from that founder's
+    # own inbox, failed here on 1,025 shared investors. Across senders that is
+    # one email from each founder, so it is a warning: the investor still
+    # hears from several of our founders the same week.
+    if dupes and a.per_sender:
+        warns.append(f"ACROSS SENDERS: {len(dupes)} people are on more than one founder's list. Each "
+                     f"gets one email per founder; stagger the sends if that is too many.")
+    elif dupes:
         fails.append(f"ACROSS LISTS: {len(dupes)} people appear on more than one list. "
                      f"One sender means one person gets one email.")
 

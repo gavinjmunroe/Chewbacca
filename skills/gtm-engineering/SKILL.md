@@ -350,6 +350,20 @@ opt-outs that had to be blocklisted before Monday.
   sizes with their units (until 10/26 "100K USD" read as $100M and seed checks
   were dropped as too large), takes `min_check_musd` and `require_stage`, and
   prints the strongest rows with why each fit.
+- **An investor list is its on-thesis count, never its limit.** Until 10/26
+  blank-sector generalists padded every list to 500: Thallus had 129 on
+  thesis, HPC 36, and the founder notes said "500 food and climate
+  investors". Now a generalist gets in only on a Jev yes judged from what the
+  firm's own homepage says (`unknown_sector: judge`, the default; `drop` and
+  `keep` also exist). Judged from the firm name alone, Jev let in a venture
+  lender and growth equity for a food startup at 0.70 to 0.76, so a name is
+  never evidence. Quote the ON THESIS line the summary prints, and say how
+  many generalists were judged in, separately.
+- **One contact per firm, no junior titles, list-gate inside.** The generator
+  uses list-gate's own `firm_key` and `JUNIOR` rules and runs list-gate on its
+  output, exit 1 on any fail. Lists that go out from different founders'
+  inboxes are checked with `list-gate --per-sender`: a person on two founders'
+  lists is a warning, not a fail.
 - **Outreach is drafts.** `chewbacca gtme outreach --client <slug>` drafts a
   LinkedIn note (300-character cap, counted; the line's later sentences drop
   first, and a note that still won't fit is held, never cut) and, with an `outreach.email`

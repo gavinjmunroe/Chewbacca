@@ -99,10 +99,15 @@ class InvestorsTest(unittest.TestCase):
         self.con.close()
         self._tmp.cleanup()
 
-    def build(self, **over):
+    def build(self, ask=None, **over):
         block = dict(BLOCK, **over)
         gi.check_block(block)
-        return gi.build(self.con, block)
+        self.asked = []
+
+        def fake(states, question):
+            self.asked.append(len(states))
+            return (ask or (lambda st: [0.9] * len(st)))(states)
+        return gi.build(self.con, block, ask=fake, says=lambda site: "We back seed-stage software founders.")
 
     def emails(self, rows):
         return [r["email"] for r in rows]
@@ -178,7 +183,8 @@ class InvestorsTest(unittest.TestCase):
             gi.check_block({"thesis": "saas"})
 
     def cli(self, *args, env=None):
-        e = dict(os.environ, PROMETHEUS_DB=str(self.db))
+        # An AMBER_ROOT with no consent file switches Jev off: nothing leaves the machine.
+        e = dict(os.environ, PROMETHEUS_DB=str(self.db), AMBER_ROOT=str(self.tmp / "no-consent"))
         e.update(env or {})
         return subprocess.run([sys.executable, str(TOOL), *args], capture_output=True, text=True,
                               env=e, timeout=120)
@@ -242,6 +248,90 @@ class InvestorsTest(unittest.TestCase):
         self.assertTrue(all(r["stage_match"] == "yes" for r in rows))
         with self.assertRaises(gi.ConfigError):
             gi.check_block(dict(BLOCK, require_stage="yes"))
+
+    def add(self, *people):
+        con = sqlite3.connect(self.db)
+        for rid, name, title, org, sectors in people:
+            con.execute("INSERT INTO contacts VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        (rid, name, title, org, "VC", "A", 80, "A_founder_cxo", "Person",
+                         f"{rid}@{rid}.example", "", "", "City", "ST", "United States", "North America",
+                         "", 0, 0, sectors))
+        con.commit(); con.close()
+
+    def test_generalists_never_pad_the_list_without_a_jev_yes(self):
+        # 2026-10-26: 129 on-thesis rows padded to 500 with blank-sector rows.
+        self.add(("g1", "Gil One", "Partner", "One Fund", ""), ("g2", "Gia Two", "Partner", "Two Fund", ""),
+                 ("g3", "Gus Three", "Managing Director", "Big Bank", ""))
+        rows, stats = self.build(ask=lambda st: [0.9 if s["organization"] != "Big Bank" else 0.1 for s in st],
+                                 limit=500)
+        got = self.emails(rows)
+        self.assertNotIn("g3@g3.example", got, "Jev said no, so the banker stays out")
+        self.assertIn("g1@g1.example", got)
+        self.assertLess(len(rows), 500, "nothing pads to the limit")
+        self.assertEqual(stats["dropped"]["sector unknown, not a Jev yes"], 1)
+        g1 = next(r for r in rows if r["email"] == "g1@g1.example")
+        self.assertIn("Jev judged on thesis 0.90", g1["why"])
+        self.assertTrue(all(r["thesis_match"] == "yes" for r in rows[:stats["thesis_rows"]]), "thesis rows first")
+
+    def test_unscored_generalists_are_left_out_and_judging_stops_once_the_list_is_full(self):
+        self.add(*[(f"u{i}", f"Uma Number{i}", "Partner", f"Fund {i} Ventures", "") for i in range(30)])
+        rows, stats = self.build(ask=lambda st: [None] * len(st))
+        self.assertEqual(stats["judged_in"], 0)
+        self.assertGreater(stats["unscored"], 0)
+        self.assertTrue(all(r["thesis_match"] == "yes" for r in rows))
+        rows, stats = self.build(limit=stats["thesis_rows"] + 1)
+        self.assertEqual(self.asked, [gi.JUDGE_BATCH], "one batch filled the one open slot")
+        rows, stats = self.build(unknown_sector="keep")
+        self.assertEqual(self.asked, [], "keep never calls Jev")
+        self.assertGreater(stats["unknown_pool"], 30)
+
+    def test_a_firm_with_no_site_text_is_unscored_and_never_sent_to_jev(self):
+        block = dict(BLOCK)
+        sent = []
+        rows, stats = gi.build(self.con, block, ask=lambda st, q: sent.append(st) or [0.99] * len(st),
+                               says=lambda site: "")
+        self.assertEqual(sent, [])
+        self.assertEqual(stats["judged_in"], 0)
+        self.assertEqual(stats["unscored"], stats["judged"])
+        self.assertTrue(all(r["thesis_match"] == "yes" for r in rows))
+
+    def test_a_website_cell_with_two_hosts_never_crashes_a_run(self):
+        import gtme_solo
+        self.assertEqual(gtme_solo.fetch("https://www.aim13.example\nwww.aim13.nyc/"), "")
+        seen = []
+        real = gtme_solo.fetch
+        gtme_solo.fetch = lambda url, limit=0: seen.append(url) or ""
+        os.environ["GTME_LIST_CACHE"] = str(self.tmp / "cache")
+        try:
+            gi.site_says("www.aim13.example\nwww.aim13.nyc")
+        finally:
+            gtme_solo.fetch = real
+            os.environ.pop("GTME_LIST_CACHE")
+        self.assertEqual(seen, ["https://www.aim13.example"])
+
+    def test_one_contact_per_firm_and_no_junior_titles(self):
+        self.add(("s1", "Sam Stone", "Managing Partner", "Stonepeak Partners", "saas"),
+                 ("s2", "Sue Stone", "Partner", "Stonepeak", "saas"),
+                 ("j1", "Jay Junior", "Executive Assistant", "Assist Ventures", "saas"),
+                 ("j2", "Ann Alyst", "Analyst", "Alyst Capital", "saas"))
+        rows, stats = self.build()
+        stone = [r for r in rows if "stonepeak" in r["organization"].lower()]
+        self.assertEqual(len(stone), 1, "list-gate's firm_key makes these one firm")
+        self.assertEqual(stats["dropped"]["another contact at the same firm"], 1)
+        self.assertNotIn("j1@j1.example", self.emails(rows))
+        self.assertNotIn("j2@j2.example", self.emails(rows))
+        self.assertEqual(stats["dropped"]["too junior to decide"], 2)
+
+    def test_the_output_passes_list_gate(self):
+        self.add(("s1", "Sam Stone", "Managing Partner", "Stonepeak Partners", "saas"),
+                 ("s2", "Sue Stone", "Partner", "Stonepeak", "saas"),
+                 ("j1", "Jay Junior", "Executive Assistant", "Assist Ventures", "saas"))
+        rows, _ = self.build()
+        out = self.tmp / "gate.csv"
+        gi.write_csv(rows, out)
+        proc = subprocess.run([sys.executable, str(ROOT / "bin" / "list-gate"), str(out)], capture_output=True,
+                              text=True, timeout=60)
+        self.assertEqual(proc.returncode, 0, proc.stdout)
 
     def test_the_tool_names_no_client(self):
         src = TOOL.read_text().lower()

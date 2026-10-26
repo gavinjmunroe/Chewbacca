@@ -29,6 +29,8 @@ printf '%s\nE1,Jane Roe,Partner,Andreessen Horowitz,jane@a16z.com\nE2,Bob Poe,Pa
 printf '%s\nF1,Jane Roe,Partner,Acme Ventures,jane@acme.com\n' "$H" > "$TMP/l1.csv"
 printf '%s\nF1,Jane Roe,Partner,Acme Ventures,jane@acme.com\n' "$H" > "$TMP/l2.csv"
 "$GATE" "$TMP/l1.csv" "$TMP/l2.csv" >/dev/null 2>&1 && no "cross-list duplicate should fail" || ok "cross-list duplicate fails"
+"$GATE" "$TMP/l1.csv" "$TMP/l2.csv" --per-sender >/dev/null 2>&1 && ok "per-sender lists share a person with a warning" || no "per-sender should pass a shared person"
+"$GATE" "$TMP/l1.csv" "$TMP/l2.csv" --per-sender 2>&1 | grep -q "ACROSS SENDERS" && ok "per-sender names the overlap" || no "per-sender should warn about the overlap"
 
 printf '%s\nG1,Jane Roe,Partner,Ficial Services Ltd,jane@acme.com\n' "$H" > "$TMP/nan.csv"
 "$GATE" "$TMP/nan.csv" >/dev/null 2>&1 && no "NaN corruption should fail" || ok "NaN-strip corruption fails"

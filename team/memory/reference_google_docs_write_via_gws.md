@@ -10,7 +10,9 @@ Editing a Google Doc is `gws docs documents batchUpdate`, never clipboard pastes
 1. Read with `gws docs documents get --params '{"documentId":"<id>","includeTabsContent":true}'`. Docs with tabs keep text under `tabs[].documentTab.body.content`, and every location needs that tab's `tabId`.
 2. Pick indices from the paragraphs' `startIndex` and `endIndex`. Insert before a paragraph's closing newline so new paragraphs inherit its style.
 3. Send every request in one batch, highest index first, or each edit shifts the next one's indices. `replaceAllText` with `tabsCriteria` handles typos.
-4. Read the doc back and check that each new string is there. A 200 response is not evidence.
+Never mix a text-changing request (replaceAllText, insertText) into a batch of index-based deletes or styles computed from one read. On 2026-10-26 one replaceAllText near the top of Colin's guides doc ran before 32 deletes and shifted them, so they ate single letters out of 21 lines. Text changes go in their own batch, then re-read for indices.
+
+4. Read the doc back, diff the plain text before and after, and check that each new string is there. A 200 response is not evidence.
 
 Checked 2026-10-13: Docs writes work. gws carries the documents scope, and a revision-pinned `chewbacca google replace` on a scratch Doc wrote, read back and refused a stale revision, in 1.8 s. The safe write path is that command: Drive's `capabilities.canEdit` first (`chewbacca google access <id>`), then one batchUpdate with `writeControl.requiredRevisionId`. Nothing needs the web app's own requests.
 

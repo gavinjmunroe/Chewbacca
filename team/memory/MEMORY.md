@@ -429,3 +429,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_reference_video_is_a_spec: a recording handed over for a site scene is the spec for an HTML replica, never embedded; scroll scenes pin (sticky stage) and get judged on the live deploy (Anchored, 10/24)
 - feedback_offboarding_backup_order: account being deleted = start its Google sign-in in the FIRST message, then the no-click exports; BMA Google died at minute 25 while the GTM tool export was mid-setup ("u went too slow", 10/26)
 - project_anchored_os_2026_10_24: Anchored OS, the hackathon build grown into a church ecosystem for FF (plan repo calebnewtonusc/anchored-os, 58 credited ideas, nothing decided)
+- feedback_per_founder_lists_get_per_sender: one list per founder in a folder = a .per-sender marker, or list-guard calls every shared investor a dupe (10/26, a55b979b)

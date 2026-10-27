@@ -15,6 +15,7 @@ Always on. Any file made for the user to use or pass on follows this.
 ## Shape follows how it gets used
 
 - **Used live** (a call, a meeting, a demo, a pitch): number the sections in the order things happen, and write the lines as what to say or do at that moment. Open, ask, show, ask for the thing, close.
+- **A call two of ours are on**: build it for both people from the first draft. That means a timed run of show at the top, every line tagged with who says it ([C], [G]), a short background for each person, questions split between them, and Live notes at the bottom for whoever isn't talking. Make the Google Doc editable by anyone with the link (`gws drive permissions create`, type anyone, role writer), since the connector's share_file only takes an email. On 2026-10-27 a Holly prep written for one voice had to be redone ("Make the doc optimal for me and gav to both use during the meeting") and then reshared ("make it editable to anyone with the link").
 - **Used for reference** (a plan, a list, a report): group it by the question the reader will come in with.
 - **One glance per line.** Short bullets, with a blank line between them. A dense block reads as a wall of text in Google Docs.
 - **Evidence goes on the page when it's the point.** If the file has to win an argument, put the exact numbers and where they came from right next to the claim. Otherwise keep sourcing in the notes.

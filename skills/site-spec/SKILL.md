@@ -224,6 +224,13 @@ section, a row of color swatches and a grid of generic silhouette people.
   the client's own photos full width, one accent that means "act", and the
   method shown as a real engagement timeline. Push a client's identity
   further, but drop the parts of it that are the generated-median look.
+- **A text swap on scroll is a slideshow, and a page of sections is a book.**
+  10/26 evening, on four founder pages built as a pinned rail where each step
+  swapped a title and a list: "NO WALLS OF TEXT. IF THEY WANTED A SLIDESHOW OR
+  A BOOK WED GIVE THEM A SLIDESHOW OR A BOOK". Each page gets one working
+  object from the client's own product (their inbox you can click through,
+  their app's button you can press) and almost no words: a headline, that
+  object, the proof numbers, one button. Count visible words before shipping.
 - **When he approves one site in a batch, rebuild the rest in that register
   before showing them.** 10/26: Medrano v2 passed ("Medrano is ok now") while
   Junto, OPTRA and Firebox still carried mono uppercase kickers, fake app

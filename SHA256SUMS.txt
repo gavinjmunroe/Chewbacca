@@ -64,7 +64,7 @@ a519c0d18f8b71ebbbe3bf93328a4d1d22bde56518ed72fe08aa61b6cebff125  .claude/hooks/
 cc50c2a07f59b11f165690ad20f5103c45f3150f6faa47bec4663f3027666e71  .claude/hooks/repo-overlap-guard.sh
 08907294967c936a2663c3a86763bf534fa067ee13186cfc2f2ba4f4e3bab892  .claude/hooks/scope-guard.sh
 2e87f09a3d730d5a4dd1af4709ffac34b26cd6c7866e0a7e176479ca74c352ba  .claude/hooks/session-context.sh
-e7e6aeb3d6f69be4b8b4a47b10907cc916b51a5ee7fd88986376b619cb12e048  .claude/hooks/site-stack-gate.sh
+381816d88f89126ee5e036780884b09689cf8a9dcdae9fe416ef4df20ba347e7  .claude/hooks/site-stack-gate.sh
 669edb92bf2514e7e8a2cabd962158ec6b12c0fe7cebfeeee1d03a7c736b78b9  .claude/hooks/skill-gate.sh
 a176571c1fc0376648f87d4e84c994142242275bf1fbbd53c0358609a3375137  .claude/hooks/skill-route-shadow.sh
 c4bfd00d39d2163966bc6f7d1a8272c4ef3ae6f74be20b76d119cfdd2ee5707e  .claude/hooks/skill-route.sh

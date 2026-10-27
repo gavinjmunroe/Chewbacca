@@ -58,13 +58,16 @@ elif has '<nav' && has '<footer' && [ "${SECTIONS:-0}" -ge 3 ]; then
 fi
 [ -n "$SITE" ] || exit 0
 
-# Receipt 1: ux-pick or ux-gen ran as a command in this session. The match is
+# Receipt 1: ux-pick or ux-gen ran as a command in this session. grep reads
+# all of tail's output on purpose: under pipefail, grep -q exits on the first
+# hit, tail dies of SIGPIPE, and the pipeline reads as false. That refused a
+# real ux-pick run three times on 2026-10-27 (Medrano, 17 MB transcript). The match is
 # on the JSON "command" field of a tool call, so this hook's own refusal text,
 # which names ux-pick, never counts as a run.
 RAN_UX=0
 TRANSCRIPT=$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty')
 if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ] \
-   && tail -c 3000000 "$TRANSCRIPT" | grep -qE '"command": ?"[^"]*ux-(pick|gen)([^A-Za-z-]|$)'; then
+   && tail -c 3000000 "$TRANSCRIPT" | grep -E '"command": ?"[^"]*ux-(pick|gen)([^A-Za-z-]|$)' >/dev/null; then
   RAN_UX=1
 fi
 

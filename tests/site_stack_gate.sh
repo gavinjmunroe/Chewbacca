@@ -38,6 +38,14 @@ echo '{"type":"tool_use","name":"Bash","input":{"command":"apps/ux-engine/bin/ux
 out=$(call "$TMP/repo/public/index.html" "$cdn_page")
 denied "$out" && { echo "FAIL refused after ux-pick + research"; fail=1; } || echo "ok   passes once ux-pick ran and research/INDEX.md exists"
 
+# The run sits early in a long transcript. Under pipefail a grep -q exits on the
+# hit, tail fails on the closed pipe and the check reads false: Medrano,
+# 2026-10-27. The hook host runs with SIGPIPE ignored, so tail exits 1 on EPIPE
+# instead of dying quietly; the subshell below ignores it the same way.
+python3 -c 'import sys; print("{\"type\":\"pad\",\"text\":\"" + "x" * 1000 + "\"}\n" * 2800, end="")' >> "$TMP/t.jsonl"
+out=$(trap '' PIPE; call "$TMP/repo/public/index.html" "$cdn_page")
+denied "$out" && { echo "FAIL an early ux-pick run in a 2.8 MB transcript was missed"; fail=1; } || echo "ok   an early ux-pick run in a long transcript still counts"
+
 rm -rf "$TMP/repo/research"
 out=$(call "$TMP/repo/public/index.html" "$cdn_page")
 denied "$out" && echo "ok   ux-pick alone is not enough without the stack" || { echo "FAIL passed without stack"; fail=1; }

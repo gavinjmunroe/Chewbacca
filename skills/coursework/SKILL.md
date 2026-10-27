@@ -116,6 +116,20 @@ one call, and a lapsed session renews itself from Chrome:
   image and flattened the nested lists on 2026-10-21 (ACAD 185 A17). Render it
   with pandoc to standalone HTML, then Playwright `page.pdf`, and count images
   with `pdfimages -list` before handing it over.
+- A dropbox upload is not the whole submission when the class grades in a
+  shared sheet. ACAD 185 has a peer eval tab per assignment (`A18 Peer Eval`
+  in the master spreadsheet) where each student posts a link. Before calling
+  an assignment done, read that tab for the student's row and fill it. Build
+  the work IN the template the brief links (copy a classmate's posted copy if
+  the template link is missing), as a Google Sheet or Doc set to anyone with
+  the link can EDIT. On 2026-10-27 his A18 went in as a custom PDF, his row
+  sat empty mid peer eval, and he wrote "GOOGLE SHEET ANYONE CAN EDIT" and
+  "THEY GAVE US A TEMPALTE AND WE DIDNT USE TI". Copying a template with
+  `gws drive files copy` keeps its merged cells: unmerge the body rows before
+  writing, or every value under a merge silently disappears.
+- Peer evals: Round 1 is columns D to I, Round 2 is J to O. Write only into an
+  empty round. If another student's name is already in that round's evaluator
+  cell, use the other round. Never overwrite them.
 - Uploading, only on his word "submit" for that assignment: POST multipart/mixed
   (a JSON part, then the file) with the d2l cookies and an `X-Csrf-Token` from
   `/d2l/lp/auth/xsrf-tokens` (`referrerToken`). Individual folders take

@@ -168,6 +168,13 @@ These are his moves, quoted from the thread. Use them as patterns.
   USC Trustee: EA by Nov 1 is the merit deadline (admission.usc.edu, read
   10/26), so the Sunday submission decides it.
 
+- **A quote beats a title.** Dad's rule via Caleb, 10/26: every build an
+  applicant ships this week ends in something checkable, a live URL plus a
+  quote from the person it served, in their own words, or real counts
+  against a baseline they already had (Colin's 0 vs 14 volunteers). Write
+  the finish line and a day-by-day where each day ends in proof, and draft
+  the first texts that open the door for them to rewrite in their words.
+
 ## What to hand them
 
 - The per-person kit repo

@@ -11,6 +11,7 @@ Always on. Any file made for the user to use or pass on follows this.
 
 - **Link it by absolute path.** In the reply, link the file as `/Users/<user>/Downloads/<name>` with spaces as `%20`. A link relative to the shell's cwd is dead, because the editor resolves it from the session root (2026-10-11: two `../../Downloads/...` links refused by link-guard on the Chewbacca one-pager).
 - **A one-pager PDF has to be one page.** `chewbacca pdf` has no layout flags, so render from a copy with the blank lines between bullets removed, then read the page count it prints. Over one page means cut bullets, never shrink the type by hand (2026-10-11: 38 bullets spilled 8 lines, 33 fit).
+- **A one-page Google Doc is checked in Google, not locally.** `chewbacca pdf` fits more on a page than a Doc does, so export the Doc as PDF through the Drive connector (`download_file_content`, `exportMimeType: application/pdf`) and count its pages before handing it over. On 2026-10-27 a partner agreement read 1 page in `chewbacca pdf` and Caleb opened the Doc and wrote "It's over a page".
 
 ## Shape follows how it gets used
 

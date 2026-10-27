@@ -367,7 +367,11 @@ opt-outs that had to be blocklisted before Monday.
   it on the firm's page: from the name alone Jev passed W Capital -> Tacala, a
   Taco Bell franchisee, for an MSP founder (10/26), and the second look put it
   at 0.07. A firm is one contact by its domain too (Khosla Impact and Khosla
-  Ventures are one khoslaventures.com). Batched Jev calls mix rows up (one firm 0.88 in a batch, 0.13
+  Ventures are one khoslaventures.com). A proven firm whose own site says it
+  mainly lends (venture debt, equipment financing) stays on the list tagged
+  LENDER, last, and is never counted as proven (UCLA tab ruling, 10/26).
+  Trinity Capital scored 0.90 and TriplePoint 0.85; Plexus, which does debt
+  and equity, scored 0.20 and stays untagged. Batched Jev calls mix rows up (one firm 0.88 in a batch, 0.13
   alone), so firm calls go one at a time. Grow the graph before a big list:
   `gtme-portfolio build --csv <candidates.csv>`. A list is never padded to
   its limit, and with Jev down it falls back to keyword rows with

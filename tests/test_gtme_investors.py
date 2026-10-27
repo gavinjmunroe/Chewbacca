@@ -119,7 +119,8 @@ class InvestorsTest(unittest.TestCase):
         def portfolio(dom, firm):
             return {"firm": firm, "companies": [{"name": f"{firm} Portco", "source": f"https://{dom}/portfolio"}]}
         return gi.build(self.con, block, ask=fake, says=lambda site: "We back seed-stage software founders.",
-                        match=match or (lambda firm, names: [(names[0], 0.9)]), read_portfolio=portfolio)
+                        match=match or (lambda firm, names: [(names[0], 0.9)]), read_portfolio=portfolio,
+                        lender_ask=lambda st, q: [0.0] * len(st))
 
     def emails(self, rows):
         return [r["email"] for r in rows]
@@ -309,7 +310,8 @@ class InvestorsTest(unittest.TestCase):
             return [("Mycelia Foods", 0.9)] if "Mycelia Foods" in names else []
         block = dict(BLOCK)
         rows, stats = gi.build(self.con, block, ask=lambda st, q: [0.99] * len(st),
-                               says=lambda site: "We invest in everything.", match=match)
+                               says=lambda site: "We invest in everything.", match=match,
+                               lender_ask=lambda st, q: [0.0] * len(st))
         got = self.emails(rows)
         quill = next(r for r in rows if r["email"] == "avery@quillseed.example")
         self.assertIn("backed Mycelia Foods (Jev 0.90, from its portfolio page)", quill["why"])
@@ -321,9 +323,23 @@ class InvestorsTest(unittest.TestCase):
         rows, stats = gi.build(self.con, dict(BLOCK), ask=lambda st, q: [0.95] * len(st),
                                says=lambda site: "We back great founders.",
                                match=lambda firm, names: [(names[0], 0.9)],
-                               read_portfolio=lambda dom, firm: {"firm": firm, "companies": []})
+                               read_portfolio=lambda dom, firm: {"firm": firm, "companies": []},
+                               lender_ask=lambda st, q: [0.0] * len(st))
         self.assertEqual(rows, [])
         self.assertGreater(stats["dropped"]["site reads as a fit, no portfolio to prove it"], 0)
+
+    def test_a_lender_stays_but_is_tagged_last_and_never_counted_as_proven(self):
+        def portfolio(dom, firm):
+            return {"firm": firm, "companies": [{"name": "Portco", "source": f"https://{dom}/p"}]}
+        rows, stats = gi.build(self.con, dict(BLOCK), ask=lambda st, q: [0.9] * len(st),
+                               says=lambda site: "We buy equity in seed startups.",
+                               match=lambda firm, names: [("Portco", 0.9)], read_portfolio=portfolio,
+                               lender_ask=lambda st, q: [0.9 if st[0]["organization"] == "Quill Seed Fund" else 0.1])
+        self.assertEqual(rows[-1]["email"], "avery@quillseed.example")
+        self.assertEqual(rows[-1]["lender"], "yes")
+        self.assertTrue(rows[-1]["why"].startswith("LENDER"))
+        self.assertEqual(stats["lenders"], 1)
+        self.assertEqual(stats["by_portfolio"], len(rows) - 1)
 
     def test_the_pitch_is_the_question(self):
         self.assertIn("mushroom protein", gi.judge_question({"pitch": "mushroom protein for restaurants"}))
@@ -339,7 +355,8 @@ class InvestorsTest(unittest.TestCase):
         sent = []
         block = dict(BLOCK)
         rows, stats = gi.build(self.con, block, ask=lambda st, q: sent.extend(st) or [0.99] * len(st),
-                               says=lambda site: "")
+                               says=lambda site: "",
+                               lender_ask=lambda st, q: [0.0] * len(st))
         self.assertTrue(sent, "keyword rows still go, judged on their sectors")
         self.assertTrue(all(s["sectors"] for s in sent), "a blank-sector row with no site is never asked")
         self.assertGreater(stats["unscored"], 0)

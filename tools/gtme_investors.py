@@ -92,7 +92,7 @@ GRADE_RANK = {"A": 1, "B": 0}
 
 COLUMNS = ["first_name", "full_name", "title", "organization", "org_type", "email",
            "website", "linkedin", "city", "state", "country", "sectors", "check_size",
-           "grade", "thesis_match", "stage_match", "fit_score", "judge_p", "why", "record_id"]
+           "grade", "thesis_match", "stage_match", "fit_score", "judge_p", "lender", "why", "record_id"]
 
 
 class ConfigError(ValueError):
@@ -270,6 +270,11 @@ JUDGE_BATCH = 20
 # 0.6. Measured 2026-10-26 on 18 Thallus firms labelled by hand, one call
 # each: the clear fits scored 0.64 to 0.87 and the misfits 0.12 to 0.53.
 FIRM_YES = 0.6
+LENDER_Q = ("From this firm's own site (firm_site_says), is it mainly a lender, offering venture debt, credit, "
+            "loans or equipment financing, rather than buying equity in startups?")
+# Guessed, never measured: a wrong yes only moves an investor to the bottom
+# with a tag, so the bar is the same as a firm call.
+LENDER_YES = 0.6
 
 
 def jev_judge(states: list[dict], question: str) -> list[float | None]:
@@ -340,7 +345,7 @@ def firm_keys(row: dict) -> set[str]:
 
 
 def build(con: sqlite3.Connection, block: dict, ask=jev_judge, says=None, match=None,
-          read_portfolio=None) -> tuple[list[dict], dict]:
+          read_portfolio=None, lender_ask=None) -> tuple[list[dict], dict]:
     thesis = word_re(block.get("thesis", []) + block.get("thesis_text", []))
     thesis_text = word_re(block.get("thesis_text", []))
     stage = word_re(block.get("stage", []))
@@ -500,7 +505,7 @@ def build(con: sqlite3.Connection, block: dict, ask=jev_judge, says=None, match=
     if judge_mode == "keyword" or (unknown_mode == "drop" and judge_mode != "all"):
         out = [r for r in out if r["thesis_match"] == "yes" or unknown_mode == "keep"]
     else:
-        out = judge_all(out, block, ask, says, stats, judge_mode, match, read_portfolio)
+        out = judge_all(out, block, ask, says, stats, judge_mode, match, read_portfolio, lender_ask)
     stats["matched"] = len(out)
     if limit:
         out = out[:limit]
@@ -508,7 +513,7 @@ def build(con: sqlite3.Connection, block: dict, ask=jev_judge, says=None, match=
 
 
 def judge_all(rows: list[dict], block: dict, ask, says, stats: dict, mode: str, match=None,
-              read_portfolio=None) -> list[dict]:
+              read_portfolio=None, lender_ask=None) -> list[dict]:
     """Every candidate is decided against the founder's pitch from evidence,
     never from a keyword. Caleb, 2026-10-26, on a "consumer" keyword patch:
     "WHY IS THERE BRUTE FORCE WORD KEY STUFF IN CHEWBACCA? I THOUGHT WE HAD
@@ -599,7 +604,23 @@ def judge_all(rows: list[dict], block: dict, ask, says, stats: dict, mode: str, 
         stats["dropped"]["site reads as a fit, no portfolio to prove it"] = stats["site_unproved"]
     if stats["unscored"]:
         stats["dropped"]["no evidence to judge (no portfolio, site or sector)"] = stats["unscored"]
-    kept.sort(key=lambda r: (-float(r["judge_p"]), -r["fit_score"]))
+    # A lender's portfolio proves it lent, not that it buys equity: on 10/26
+    # Plexus Capital and Trinity Capital ("Tech Lending, Equipment
+    # Financing") came back proven for 8 founders. A person ruled they stay,
+    # tagged and last, never counted as proven. One Jev call per kept firm.
+    def lender(r):
+        text = (says or site_says)(r["website"])
+        got = (lender_ask or jev_judge)([{"organization": r["organization"], "org_type": r["org_type"],
+                                    "firm_site_says": text}], LENDER_Q) if text else [None]
+        return r, (got[0] if got else None)
+    with concurrent.futures.ThreadPoolExecutor(8) as ex:
+        for r, p in ex.map(lender, kept):
+            if p is not None and p >= LENDER_YES:
+                r["lender"] = "yes"
+                r["why"] = "LENDER, not counted as proven; " + r["why"]
+    stats["lenders"] = sum(1 for r in kept if r.get("lender"))
+    stats["by_portfolio"] -= stats["lenders"]
+    kept.sort(key=lambda r: (bool(r.get("lender")), -float(r["judge_p"]), -r["fit_score"]))
     return fixed + kept
 
 

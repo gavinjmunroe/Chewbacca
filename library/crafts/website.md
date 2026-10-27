@@ -515,3 +515,17 @@ again". Each one below is either a `site-gate check` failure or a rule here.
   props and small motion across the frame.
 - A stale number: a valuation carries its date and source, and the newest
   confirmed figure wins; an unconfirmed round never goes on the page.
+
+## Gift sites and the two things he shouldn't have to say (Meet Mrs. Shen, 2026-10-26)
+
+- Before building, list the elements past sites already proved (Parker's ticket
+  tear and Academy leader, Anchored's pinned scroll stage, a curtain theater)
+  and say which ones fit this story and which don't. Caleb, mid-build: "Think of
+  dope elements/animations/styles weve done before and if they could add to
+  this, dont force anything tho. I should never have to ask this."
+- READY means the deployed URL, not localhost, went through a few rounds of
+  capture at 1440 and 390, site-gate, fix, redeploy. Nothing goes out to the
+  person waiting on it before that. Caleb: "READY means we've iterated at
+  least a few times on the deployed site and get it perfect."
+- Railway: a push to a repo deployed by `railway up` doesn't redeploy. Check the
+  live title after the push, and run `railway up --ci` if it's stale.

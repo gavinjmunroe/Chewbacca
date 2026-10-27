@@ -434,3 +434,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_self_text_rich_message_unread: self-texted ChatGPT shares read as unsupported content; self thread is the icloud handle, decode attributedBody (10/26)
 - feedback_blank_electron_window: blank or frozen app window (Granola, Slack 10/26) = Electron app w no renderer; app-revive restarts it every 60s, skips while recording; a screenshot cannot tell frozen from live, check ps
 - feedback_judgment_is_never_a_keyword: keywords only pick candidates; fit comes from a graph walk judged by Jev per item (investor portfolios, 10/26: "WHY IS THERE BRUTE FORCE WORD KEY STUFF IN CHEWBACCA?")
+- feedback_static_site_serves_whole_repo: Railway static site w Caddy root /app served SPEC.md (private text quotes) publicly on 10/26; root at /app/public, curl /SPEC.md expect 404

@@ -510,6 +510,34 @@ flash <url>` must pass. A bar that hides on scroll turns on travel (24px
   reads the word as a campaign. Screenshot it, or drive it from a
   standalone script.
 
+## A page for one person is built from that person, then turned all the way up
+
+2026-10-26, a hype page for Caleb's roommate walking in from a late night of
+studying. The first draft was written in one go from two facts, and Caleb
+interrupted with "Don't 1 shot it be methodical!!!!!!!". The rebuild started
+from what was actually on disk. The contact name ("Mark Lin Interdimensional
+Portal Holy Spirit Slam Dunk"), a second contact called "MARK LIN FLIP PHONE",
+and his own texts ("i'm running jesus burgers", his 6:44 mile, praying for
+Caleb before his midterm) carried the whole page. After it shipped, his next
+message was "MORE OBNOXIOUS".
+
+- Before markup, run `people brief "<name>"` and read the whole text thread,
+  check Contacts for a photo, and write SPEC.md listing every line of copy
+  with the date it came from. Anything private (family, health, exes, other
+  threads) goes on a "left out on purpose" list, because the URL is public.
+- Render the gate, the entrance, the running state and the full page at 1440
+  and 390 before deploying. Here the first render caught a full-screen beat
+  word sitting on top of his name.
+- A hype or party page starts at maximum loudness, with each addition hitting
+  a different sense: sound (air horn, crowd roar, a spoken announcer through
+  speechSynthesis), motion (slamming stamps, shake), touch (a confetti mouse
+  trail, every key a horn), the tab (title flips, a drawn favicon) and
+  persistence (idle heckles, a beforeunload prompt). Request fullscreen on
+  the first key so nobody has to set it up.
+- The loud parts never cover the name for longer than about a second.
+- A static page goes in `public/` and gets served from there.
+  `root * /app` served SPEC.md, with his dated quotes, at a public URL.
+
 ## The hard line
 
 **Never invent a component that has a name in the taxonomy.** A bespoke variant

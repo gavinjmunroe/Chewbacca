@@ -224,6 +224,15 @@ section, a row of color swatches and a grid of generic silhouette people.
   the client's own photos full width, one accent that means "act", and the
   method shown as a real engagement timeline. Push a client's identity
   further, but drop the parts of it that are the generated-median look.
+- **When he approves one site in a batch, rebuild the rest in that register
+  before showing them.** 10/26: Medrano v2 passed ("Medrano is ok now") while
+  Junto, OPTRA and Firebox still carried mono uppercase kickers, fake app
+  windows with traffic-light dots and "checked" chips, pill tags and a map with
+  tiny labels: "the other ones are complete slop". What carried over and
+  passed: one light display face set very large, the client's real picture
+  (product screenshot, their photo) full width, hairline typographic sections,
+  and the scroll scene as a rail plus steps plus a list that ticks, never a
+  mock UI.
 - **Measure the client's site before quoting it.** OPTRA's counters read
   $273K, $309K, then $323K over nine seconds; the real value was in their JS
   bundle. A "0+ countries" on another page was a counter that hadn't run yet.

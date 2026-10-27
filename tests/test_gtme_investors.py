@@ -392,6 +392,17 @@ class InvestorsTest(unittest.TestCase):
         rows, _ = self.build()
         self.assertIn("c1@c1.example", self.emails(rows), "a CEO who is also Secretary is the CEO")
 
+    def test_two_firm_names_on_one_domain_are_one_firm(self):
+        # Khosla Impact and Khosla Ventures, both khoslaventures.com, 10/26.
+        self.add(("k1", "Vin Kho", "Partner", "Kho Impact", "saas"), ("k2", "Dee Wei", "Partner", "Kho Ventures", "saas"))
+        con = sqlite3.connect(self.db)
+        con.execute("UPDATE contacts SET website='https://www.khoventures.example', email='vk@khoventures.example' WHERE record_id='k1'")
+        con.execute("UPDATE contacts SET website='http://khoventures.example/', email='dw@khoventures.example' WHERE record_id='k2'")
+        con.commit(); con.close()
+        rows, stats = self.build()
+        self.assertEqual(sum(1 for r in rows if "khoventures" in r["email"]), 1)
+        self.assertGreaterEqual(stats["dropped"]["another contact at the same firm"], 1)
+
     def test_the_output_passes_list_gate(self):
         self.add(("s1", "Sam Stone", "Managing Partner", "Stonepeak Partners", "saas"),
                  ("s2", "Sue Stone", "Partner", "Stonepeak", "saas"),

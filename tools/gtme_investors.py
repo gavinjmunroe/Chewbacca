@@ -62,6 +62,7 @@ import re
 import sqlite3
 import subprocess
 import sys
+import urllib.parse
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -321,6 +322,23 @@ def judge_question(block: dict) -> str:
             f"and growth or buyout equity are no.")
 
 
+FREE_MAIL = {"gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "aol.com", "icloud.com", "me.com", "msn.com",
+             "live.com", "protonmail.com", "comcast.net"}
+
+
+def firm_keys(row: dict) -> set[str]:
+    keys = {"name:" + list_gate().firm_key(row["organization"])}
+    site = (row.get("website") or "").split()
+    host = (urllib.parse.urlsplit(site[0] if "//" in site[0] else "http://" + site[0]).hostname or "") if site else ""
+    host = host.lower().removeprefix("www.")
+    mail = (row.get("email") or "").rsplit("@", 1)[-1].lower()
+    if host:
+        keys.add("domain:" + host)
+    if mail and mail not in FREE_MAIL:
+        keys.add("domain:" + mail)
+    return keys
+
+
 def build(con: sqlite3.Connection, block: dict, ask=jev_judge, says=None, match=None,
           read_portfolio=None) -> tuple[list[dict], dict]:
     thesis = word_re(block.get("thesis", []) + block.get("thesis_text", []))
@@ -464,11 +482,15 @@ def build(con: sqlite3.Connection, block: dict, ask=jev_judge, says=None, match=
             drop("duplicate"); continue
         # One contact per firm, the best fit, the same firm_key list-gate
         # counts with: on 10/26 every list failed it (Stonepeak 7 on one).
-        fk = gate.firm_key(row["organization"])
-        if per_firm and firms.get(fk, 0) >= per_firm:
+        # A firm is also its domain: "Khosla Impact" and "Khosla Ventures"
+        # are two firm_keys and one khoslaventures.com, and both made one
+        # founder's list on 10/26. The site wins, then a work email domain.
+        keys = firm_keys(row)
+        if per_firm and any(firms.get(k, 0) >= per_firm for k in keys):
             drop("another contact at the same firm"); continue
         seen_email.add(row["email"]); seen_person.add(person)
-        firms[fk] = firms.get(fk, 0) + 1
+        for k in keys:
+            firms[k] = firms.get(k, 0) + 1
         row.pop("_rank")
         out.append(row)
     limit = int(block.get("limit") or 0)

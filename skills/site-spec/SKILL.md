@@ -142,6 +142,8 @@ check`, `story` and `idle` also pass on every route.
 - **A formatter reflows files between edits.** Patch by line number or re-read,
   and check that the count of changed lines matches.
 
+- **A tab picker is a slideshow.** A list of situations on the left that swaps one service panel on the right hides five of six answers, the same as a carousel. Show every option at once as rows (what they'd say, the service, what they get), stacking on a phone. Caleb, 2026-10-27, on the Medrano services picker an hour before the call: "Slideshow ah". Before shipping, ask of every interactive block: does clicking reveal content that was hidden? If yes, unhide it.
+
 ## Personal sites: three corrections from the Patrick Kellogg draft (2026-10-23)
 
 - **Every nav button opens a real page in the new design.** The first draft

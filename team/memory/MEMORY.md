@@ -435,3 +435,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_blank_electron_window: blank or frozen app window (Granola, Slack 10/26) = Electron app w no renderer; app-revive restarts it every 60s, skips while recording; a screenshot cannot tell frozen from live, check ps
 - feedback_judgment_is_never_a_keyword: keywords only pick candidates; fit comes from a graph walk judged by Jev per item (investor portfolios, 10/26: "WHY IS THERE BRUTE FORCE WORD KEY STUFF IN CHEWBACCA?")
 - feedback_static_site_serves_whole_repo: Railway static site w Caddy root /app served SPEC.md (private text quotes) publicly on 10/26; root at /app/public, curl /SPEC.md expect 404
+- feedback_angel_lists_judge_alone: gtme-investors drops every angel (no portfolio page); an angel pass judges each row ALONE w Jev (batch-20 put "software" on top), email-domain company + MX to pass list-gate; the Mac's Clay login is BMA Old, never spend it (OPAL, 10/26)

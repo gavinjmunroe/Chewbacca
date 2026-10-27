@@ -71,3 +71,16 @@ changelog for a three-line change, no "enhanced" or "robust".
 
 If on the default branch and the change is not trivial, branch first. Never force
 push over a branch someone else may have pulled without saying so out loud.
+
+## Railway deploys come from GitHub, never `railway up`
+
+Caleb, 2026-10-27: "ALWAYS USE GITHUB", "Github auto deploy is always smooth".
+mark-hype was created with `railway up`, so its service source was null and a
+push to main deployed nothing. The agent polled the live URL for minutes and he
+asked "What's taking so long?". Never create or update a Railway service with
+`railway up`. A new site's first step is: GitHub repo, push main, then connect
+the service to it. On any existing service, before the first deploy wait, run
+`railway status --json` and check the service `source`. Null means it is not
+connected: run GraphQL `serviceConnect(id: <serviceId>, input: {repo:
+"owner/name", branch: "main"})` with the token in ~/.railway/config.json, which
+starts a build at once. Details in team/memory/feedback_railway_autodeploy.md.

@@ -175,6 +175,13 @@ These are his moves, quoted from the thread. Use them as patterns.
   the finish line and a day-by-day where each day ends in proof, and draft
   the first texts that open the door for them to rewrite in their words.
 
+- **"A little bit of work so its not lying, and I go ham."** Caleb,
+  10/26. When the coach builds, write down the applicant's floor: the parts
+  that make each line true. They talk to the client themselves, make every
+  design call (choosing from 2 or 3 options the coach builds), run the real
+  event, and write every essay word. The coach does hosting, code and
+  deploys. Put the floor in their doc with an hour estimate.
+
 ## What to hand them
 
 - The per-person kit repo

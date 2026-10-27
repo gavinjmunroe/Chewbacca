@@ -88,6 +88,18 @@ class PortfolioTest(unittest.TestCase):
         self.assertEqual(len(calls), 2, "a new pitch is a new question")
         self.assertIsNone(gpf.matches("Seed Food Fund", ["X"], "a third pitch", gpf.load(), ask=lambda *a: None))
 
+    def test_a_name_only_match_needs_a_second_look_with_page_context(self):
+        # 10/26: W Capital -> Tacala, a Taco Bell franchisee, passed for an MSP founder on its name alone.
+        seen = []
+
+        def ask(state, questions, decision=None):
+            seen.append(state)
+            return {"fit": {"type": "noul", "noul": 0.9 if state["company"] == "Mycelia Foods" else 0.06}}
+        got = gpf.confirm_hits("Seed Food Fund", [("Mycelia Foods", 0.72), ("Oat Lab", 0.74)], "mushroom protein",
+                               lambda n: "https://seedfood.example/portfolio", ask=ask)
+        self.assertEqual(got, [("Mycelia Foods", 0.9)])
+        self.assertIn("Mycelia Foods", seen[0]["page_text_around_it"], "the page around the name is the evidence")
+
     def test_the_tool_names_no_client(self):
         src = (ROOT / "tools" / "gtme_portfolio.py").read_text().lower()
         for word in ("zeutara", "thallus", "junto", "/users/"):

@@ -162,9 +162,14 @@ MATCH_BATCH = 40
 MATCH_YES = 0.7
 
 
+# Bumped when the match method changes, so cached answers from the old
+# method are asked again: v2 added the second look with page context.
+MATCH_VERSION = "v2"
+
+
 def pitch_key(pitch: str) -> str:
     import hashlib
-    return hashlib.sha1(pitch.encode()).hexdigest()[:12]
+    return hashlib.sha1(f"{MATCH_VERSION} {pitch}".encode()).hexdigest()[:12]
 
 
 def match_question(firm: str, name: str, pitch: str) -> str:
@@ -174,7 +179,7 @@ def match_question(firm: str, name: str, pitch: str) -> str:
             f"to consumers too.")
 
 
-def jev_match(firm: str, names: list[str], pitch: str) -> list[tuple[str, float]] | None:
+def jev_match(firm: str, names: list[str], pitch: str, names_source=lambda n: "") -> list[tuple[str, float]] | None:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "bin" / "lib"))
     try:
         import jev
@@ -191,7 +196,57 @@ def jev_match(firm: str, names: list[str], pitch: str) -> list[tuple[str, float]
                 answered = True
                 if p >= MATCH_YES:
                     hits.append((n, round(p, 2)))
-    return hits if answered else None
+    if not answered:
+        return None
+    return confirm_hits(firm, hits, pitch, names_source)
+
+
+# The second look. Asked from the name alone, Jev passed W Capital -> Tacala
+# (a Taco Bell franchisee), G20 -> Bidtellect (ad tech) and Forum -> VendorPM
+# for an MSP software founder at 0.70 to 0.74 (2026-10-26), while the real
+# matches (JMI -> Autotask 0.86, Castile -> Whaleback 0.87) sat higher. Each
+# first-pass hit is asked again with the words around it on the firm's own
+# page. On that second look the three false ones scored 0.06 to 0.07 and
+# Autotask 0.73, so the bar sits at 0.5. Set from those few; never measured
+# on more.
+CONFIRM_YES = 0.5
+SNIPPET = 300
+
+
+def snippet(name: str, source: str) -> str:
+    text = page_text(gp.page(source)) if source else ""
+    i = text.lower().find(name.lower())
+    return text[max(0, i - SNIPPET):i + len(name) + SNIPPET] if i >= 0 else ""
+
+
+def confirm_question(firm: str, name: str, pitch: str) -> str:
+    return (f"The text is from {firm}'s own portfolio page, around the company {name}. Using it and what you "
+            f"know of {name}, is {name} in this startup's market: it sells to the same customers, builds the "
+            f"same kind of product, or is itself the kind of customer this startup sells to? The startup: "
+            f"{pitch}. A company in a different industry is no, even when it is also a business "
+            f"that buys software, also sells to consumers, or shares a buzzword.")
+
+
+def _jev():
+    lib = str(Path(__file__).resolve().parent.parent / "bin" / "lib")
+    if lib not in sys.path[:1]:
+        sys.path.insert(0, lib)
+    import jev
+    return jev
+
+
+def confirm_hits(firm: str, hits: list[tuple[str, float]], pitch: str, source_of, ask=None) -> list[tuple[str, float]]:
+    jev = _jev()
+    ask = ask or jev.ask
+    out = []
+    for name, _ in hits:
+        a = ask({"firm": firm, "company": name, "page_text_around_it": snippet(name, source_of(name))},
+                    {"fit": {"type": "noul", "instructions": confirm_question(firm, name, pitch)}},
+                    decision="gtme-portfolio-confirm") or {}
+        p = jev.probability((a.get("fit") or {}).get("noul"))
+        if p is not None and p >= CONFIRM_YES:
+            out.append((name, round(p, 2)))
+    return out
 
 
 def matches(firm: str, names: list[str], pitch: str, g: dict | None = None, ask=jev_match):
@@ -202,7 +257,8 @@ def matches(firm: str, names: list[str], pitch: str, g: dict | None = None, ask=
     key = pitch_key(pitch)
     if node is not None and key in (node.get("fits") or {}):
         return [tuple(h) for h in node["fits"][key]["hits"]]
-    hits = ask(firm, names, pitch)
+    src = {c["name"]: c.get("source", "") for c in (node or {}).get("companies") or []}
+    hits = ask(firm, names, pitch, lambda n: src.get(n, "")) if ask is jev_match else ask(firm, names, pitch)
     if hits is not None and node is not None:
         with _lock:
             node.setdefault("fits", {})[key] = {"pitch": pitch[:200], "hits": hits,

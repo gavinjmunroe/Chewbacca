@@ -41,6 +41,15 @@ RIGHT: write "ready to submit, awaiting confirmation." Ask "did those go in?"
        in four words next session.
 ```
 
+A status he hasn't announced is not a fact either. On 2026-10-26 he said, in
+passing while prepping a call, "now that I am not with Amber". The agent took
+it as done and started recording it. Two minutes later he wrote "I haven't left
+amber yet and I haven't told Sagar" and "DONT LOG THAT ON THE BRAIN ITS NOT
+OFFICIAL". Leaving a company, a role, a relationship or a team is official only
+once he says the other side knows. Until then keep it out of memory, the brain,
+team notes and anything another person could read, and keep it out of call prep
+lines he'd say out loud.
+
 The reverse fails too: "drafted, not sent" goes stale the moment he sends it
 by hand. Before telling him something is unsent, undone or missed, check the
 place it would have gone (Gmail Sent, the submissions API, the thread). On

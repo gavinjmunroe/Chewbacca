@@ -228,6 +228,10 @@ Togari's capabilities and their Chewbacca equivalents, row by row, are in
 address" across every local source; `gtme-score` ports Togari's lead, affiliation,
 primary-contact, tier and contact-quality rubrics.
 
+## A lead list for someone else starts from their buyer, not ours
+
+Before pulling a single row for a partner or prospect, write down in three lines what they sell, the price, and the signals that say a buyer needs it now and can pay. Then pick sources that carry those signals. On 2026-10-27 a list for John Knox (Medrano Partners, $20K to $40K AI governance and data work for ministries and nonprofits) was started by rerunning Firm Foundation's church-site audit, our ICP, and Caleb said "Ur not being smart ur being monkey see monkey do". What fit him was money from public IRS 990 filings, need from AI or data job posts and leaders speaking on AI, and warm paths through his own network.
+
 ## Client state comes from the graph, never from memory files
 
 Before answering anything about a client (who was emailed, who replied, what is

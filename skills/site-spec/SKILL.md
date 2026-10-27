@@ -142,6 +142,7 @@ check`, `story` and `idle` also pass on every route.
 - **A formatter reflows files between edits.** Patch by line number or re-read,
   and check that the count of changed lines matches.
 
+- **A rebuilt business site has to DO something.** Cutting words and showing everything at once still left a brochure: "Pdf ahh way too much text", then "Their website shouldn't be a pdf!" (Caleb, 2026-10-27, Medrano, three hours before the call). Build at least one tool from their own content that a visitor uses and leaves with something: on Medrano, tapping the lines your team is saying builds a starting plan from their services and a "Send this to John" email prefilled with it. Also no one-idea-per-screen sections with a giant heading, since scrolling those reads as flipping slides. Sections share the viewport.
 - **A tab picker is a slideshow.** A list of situations on the left that swaps one service panel on the right hides five of six answers, the same as a carousel. Show every option at once as rows (what they'd say, the service, what they get), stacking on a phone. Caleb, 2026-10-27, on the Medrano services picker an hour before the call: "Slideshow ah". Before shipping, ask of every interactive block: does clicking reveal content that was hidden? If yes, unhide it.
 
 ## Personal sites: three corrections from the Patrick Kellogg draft (2026-10-23)

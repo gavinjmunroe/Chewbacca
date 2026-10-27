@@ -45,3 +45,14 @@ Everything Homebrew gave has an Intel-safe download (tested 2026-10-23 w NO_BREW
 Correction (cb00d25): never copy `gh auth token` into `claude mcp add -e`, it lands in plain text in ~/.claude.json. Register the GitHub MCP as `sh -c "GITHUB_PERSONAL_ACCESS_TOKEN=$(<abs gh> auth token) exec <abs npx> -y @modelcontextprotocol/server-github"` so the token is read at startup; checked live, the server answered initialize.
 
 The Claude app starts stdio MCP servers with the GUI PATH, which has no ~/.local/bin. On a no-Homebrew Mac every `npx`/`uvx` server showed "Couldn't reconnect git, connection closed" (Ogo, 2026-10-23). ogo-claude-setup 21e-era fix: store the command as an absolute path plus `-e PATH=$HOME/.local/bin:...`, and rerunning the installer removes and re-adds any server whose command is bare. Testing `claude mcp add` in a temp HOME needs the real binary (~/.local/share/claude/versions/<v>), the kit wrapper exits with "no bundled copy".
+
+## Teammate setup repos start from zero (2026-10-27)
+
+Built for team Chip In (ACAD 185): `calebnewtonusc/chip-in-setup`, private. Caleb's corrections mid-build, 2026-10-27:
+
+- "Assume they hv NOTHING setup not even homebrew." So setup.sh installs Homebrew itself (arm64, interactive, password explained), falls back to direct downloads (`NO_BREW=1`, Intel, non-admin), and installs git via Command Line Tools before anything else.
+- "they just made a github acct but didn't set up." Brand new accounts must verify their email before an invite opens, a private repo can't be curled, so the front door is Accept invite, then Download ZIP, then `bash ~/Downloads/<repo>-main/setup.sh`. setup.sh accepts the owner's pending invites itself via `gh api user/repository_invitations` after `gh auth login --web`, and sets the commit email to the GitHub noreply address.
+- "LOCK IN", "GO FASTER": in class he wants the repo pushed in minutes. Write files in batches, one smoke test, ship.
+- "NO AI SLOP": run `slop-check --issues` over every doc before the commit, not after he asks.
+
+Dry runs must not call `gh` (even `--version` writes ~/.local/state/gh/device-id) or `code --list-extensions` (creates ~/Library/Application Support/Code); tests/smoke.sh in chip-in-setup asserts an empty HOME stays empty. A one-page PDF for the group chat follows his own gc messages in order and only adds the walls a new account hits.

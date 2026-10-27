@@ -433,3 +433,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_people_texts_lags_new_messages: people texts lagged a 14:54 doc link at 14:57; when he says it's in the text and the CLI shows nothing, one raw chat.db query of the last 20 min (10/26)
 - feedback_self_text_rich_message_unread: self-texted ChatGPT shares read as unsupported content; self thread is the icloud handle, decode attributedBody (10/26)
 - feedback_blank_electron_window: blank or frozen app window (Granola, Slack 10/26) = Electron app w no renderer; app-revive restarts it every 60s, skips while recording; a screenshot cannot tell frozen from live, check ps
+- feedback_judgment_is_never_a_keyword: keywords only pick candidates; fit comes from a graph walk judged by Jev per item (investor portfolios, 10/26: "WHY IS THERE BRUTE FORCE WORD KEY STUFF IN CHEWBACCA?")

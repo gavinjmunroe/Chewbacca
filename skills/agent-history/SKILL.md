@@ -105,6 +105,15 @@ machine.
   "Did you include every time I sweared". Check coverage with a second pass in
   code before calling it complete. Drop only pasted secrets (two February
   messages carry a live token and a password) and text other people wrote.
+- Never write up a pasted call from that transcript alone when it points back
+  at an earlier call ("didn't we already have a call", "do you have those
+  notes", "we didn't do it though"). Pull every earlier `Meeting Title` paste
+  on the topic from the transcripts first, then check whether the work it led
+  to shipped (PR merged, site live) before calling it a new ask. On 2026-10-27
+  a site-notes PDF for Gav was built from the 10/27 call only, and Caleb said
+  "Bro go through prev transcripts we had talked very specifically abt what
+  needed to be changed before!" The 10/17 call held the 11 specific changes,
+  all built on gavinjmunroe/firm-foundation PR #1 and never merged.
 - Never build a correction counter. `recur` already measures whether a saved
   lesson's mistake came back (`recur --weekly`, `recur <slug>`). On 2026-10-11
   a second tool for this got written before anyone looked, then deleted.

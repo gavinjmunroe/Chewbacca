@@ -1,6 +1,6 @@
 ---
 name: cinematic-scroll
-description: "Build a site as one continuous scroll take: rendered 3D scenes that hand off as the same object, live content mapped into renders, a low poly preview before any final render, and seam checks after every change. Use for a film, portfolio or story site that should feel like a movie."
+description: "Build a site as one continuous scroll take: 3D scenes that hand off as the same object, a low poly preview first, seam and phone checks after every change. For film or portfolio sites."
 triggers: >-
   Use when the ask is a site that should feel like a film or one continuous take, a portfolio for a filmmaker, photographer or artist, a scroll scene, scroll-driven 3D, a section that should "transition into" the next, or when someone says a site looks like a slideshow, a PDF, HTML/CSS, a video game or "claude slop". Learned on the Parker Manley site, 2026-10-23 to 10-26, about 9 hours and roughly 130 corrections.
 ---
@@ -99,6 +99,23 @@ Check every section against these before showing it:
   nothing visible changing. That reads as "the scrolling seems off".
 - `overflow-x: auto` on a row clips hover cards vertically. Pad the row and
   pay the padding back with a negative margin.
+- Never bound a loop by a live layout read that the loop itself changes.
+  The edit bay's ruler ran `for (m...; m * px < strip.scrollWidth; ...)` while
+  appending labels wider than their spacing, so on a phone the width grew
+  forever and iPhone Safari froze before anything showed. Chromium and every
+  desktop width loaded fine (Parker site, 2026-10-26). Measure once first.
+- A hidden scrollbar on a sideways row strands mouse users. Give every row the
+  real tool's arrows (Netflix's edge chevrons); 26 of 32 films were out of
+  reach without a trackpad.
+- A section that is `display:none` on a phone still gets aimed at by menus
+  and scroll math, and lands at 0. Every jump target needs a phone target.
+- Anything that only exists inside a desktop render (photos on the table)
+  needs its own phone home, or the phone never shows it.
+- Fixed controls (sound button, section label) sit over whatever scrolls
+  under them. Check each scene's bottom-right corner on a phone, the Dock and
+  credit names both got covered.
+- A later unconditional `height: 300vh` beats an earlier phone `height:
+  auto`. Scroll room for a pin that isn't sticky on phone is just black.
 
 ## While renders run
 
@@ -112,7 +129,13 @@ Mac.
 ```bash
 python3 ~/code/chewbacca/skills/cinematic-scroll/scripts/full_bleed.py <url> ".pin-a,.pin-b"
 python3 ~/code/chewbacca/skills/cinematic-scroll/scripts/walk_seams.py <url> ".scene-a:0,.scene-a:0.99,.scene-b:0" seams.png
+python3 ~/code/chewbacca/skills/cinematic-scroll/scripts/phone_loads.py <url>
 ```
+
+The third loads the page in phone-size WebKit and fails if it hangs. Run the
+seam walk in WebKit too. A desktop-only, Chromium-only pass called the Parker
+site done while every iPhone froze on it. Caleb, 2026-10-26: "FULL AUDIT ONCE
+U THINK UE DONE BC U PROB NOT DONE".
 
 Then walk the whole site as each person who'll see it (for Parker that was a
 crew lead, an SCA professor and a friend on a phone), the way Caleb asked:

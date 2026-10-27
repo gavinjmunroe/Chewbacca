@@ -46,6 +46,11 @@
       "type": "replay",
       "test": "tests/test_skim_guard_replay.py",
       "corpus": "tests/fixtures/steering/skim_replies_2026_10_22.json"
+    },
+    ".claude/hooks/site-stack-gate.sh": {
+      "type": "replay",
+      "test": "tests/test_site_stack_gate_replay.py",
+      "corpus": "tests/fixtures/site-stack-gate/real_writes_2026_10_27.json"
     }
   },
   "grandfathered": [

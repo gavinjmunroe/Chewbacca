@@ -2219,6 +2219,10 @@ _register("PreToolUse", hooks_dir + "/skill-gate.sh", timeout=5)
 # skill named and never loaded. A whole UI page waits for that skill.
 _register("PreToolUse", hooks_dir + "/interface-first.sh", matcher="Write", timeout=5)
 
+# A Kyber landing page went out on 2026-10-27 as a Tailwind CDN index.html with
+# ux-pick never run. A site page waits for ux-pick plus the house stack.
+_register("PreToolUse", hooks_dir + "/site-stack-gate.sh", matcher="Write", timeout=5)
+
 # ux-engine holds 18 research files, six stances, a motion constant table, a
 # 24-entry effects catalog and 106 psychology principles, and a whole session
 # of UI work on 2026-09-23 consulted none of it: the page shipped at 3

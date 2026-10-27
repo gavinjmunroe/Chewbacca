@@ -1209,6 +1209,12 @@ if group "installer"; then
   check  "interface-first refuses a UI page written before the skill" \
     bash "$ROOT/tests/interface_first.sh" "$ROOT"
 
+  # A Tailwind CDN landing page skipped the UX engine (Kyber, 2026-10-27).
+  check  "site-stack-gate refuses a hand-rolled landing page before ux-pick" \
+    bash "$ROOT/tests/site_stack_gate.sh" "$ROOT"
+  check  "site-stack-gate replays real pages to the recorded verdicts" \
+    /usr/bin/python3 "$ROOT/tests/test_site_stack_gate_replay.py" "$ROOT"
+
   # closeout fans out by group; a regex that finds none falls back to a
   # 9 to 14 minute sequential run (BACKLOG 116).
   check  "closeout finds every suite group to fan out" \

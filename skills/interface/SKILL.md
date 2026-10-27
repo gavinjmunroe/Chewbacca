@@ -306,6 +306,34 @@ him: screenshot every state (default, each open item, each form, success,
 error) at 1440 and 390, read each image against the stance above, and fix or
 list what is wrong first.
 
+## A site starts from the UX engine and the house stack, never a CDN HTML file
+
+Caleb on the Kyber landing page, 2026-10-27, in order: "Bro it looks so ai
+slop html/css", "HTML CSS is so buns bruh", "Haven't we learned so much abt
+designing great things? Don't we literally have a UX engine?", "Fix chewbs to
+never do that again", and "Bro make the iPhone actually look like an iPhone
+with real iMessage and a real looking iMessage app!!!!!!!!!!!!!". The page was
+a hand-written `public/index.html` on the Tailwind CDN with an eyebrow over
+every heading, 3-card grids, tick lists and a small CSS phone.
+
+The rule: every landing page or site starts with `apps/ux-engine/bin/ux-pick
+"<brief>"`, then the house stack (Next.js + `motion` + `lenis`, as in
+TTS-Dev's `package.json`), then `site-gate research`. Never a
+`cdn.tailwindcss.com` HTML file. `site-stack-gate.sh` refuses the Write of a
+150+ line site page until ux-pick has run and the repo has the stack or a
+`research/INDEX.md`. Utility pages (a vote page, a 404, `taste.html`) pass.
+
+A phone mock of iMessage looks like real iOS, every part of it:
+
+- Device frame with the Dynamic Island, real corner radius and side buttons
+- Status bar with the real glyphs: time on the left, signal, Wi-Fi and battery on the right
+- iMessage nav header: back chevron, the contact's round avatar (a group shows stacked avatars), name under it, FaceTime camera icon
+- Bubbles with the iOS tail on the last bubble of a run, blue for sent, gray for received
+- "Delivered" receipt under the last sent bubble
+- An iMessage app extension card in its real shape: image on top, title and subtitle below, inside a rounded bubble
+- Compose bar with the + button, the rounded "iMessage" field and the mic glyph
+- Home indicator bar at the bottom
+
 ## Landing pages: the verdicts already paid for
 
 Caleb on usctts.com, all on 2026-10-09. Each line is a build he rejected.

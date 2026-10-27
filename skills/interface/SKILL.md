@@ -579,3 +579,7 @@ Kyber landing, 2026-10-27, mid-class: "Let's break it down into a bunch of mcqs 
 - Questions live in a plain data file (`taste.js`) so a teammate adds one without touching the flow.
 - Preview fonts with named CSS classes. Tailwind CDN arbitrary `font-[Nunito]` classes in injected HTML rendered as the body font in the first capture.
 - A loader that may finish before the next script runs sets a flag as well as firing its event (`window.copyReady`). The Kyber hero shipped once with the raw `dinner|the Airbnb|...` list showing, because `copy:ready` fired before `app.js` added its listener.
+
+## A rotating word never changes the line count
+
+Kyber hero, 2026-10-27: "Bro the cycling shouldnt change the number of rows since that moves the heigt and position of so much stuff". "dinner" fit on one line and "concert tickets" wrapped to two, so everything below jumped every 2.2s. Size the swapping word for the longest option (`text-[min(1em,11.4cqi)]` inside a `container-type:inline-size` headline), `whitespace-nowrap`, then measure the headline height for every word at 320, 390, 768 and 1440 and confirm it never changes.

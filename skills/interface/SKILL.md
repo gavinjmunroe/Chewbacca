@@ -543,3 +543,11 @@ message was "MORE OBNOXIOUS".
 **Never invent a component that has a name in the taxonomy.** A bespoke variant
 of a table is the recalibration this skill exists to prevent, it will not match
 the next one generated, and nobody asked for it.
+
+## A team deciding taste together gets a live vote page, never a doc
+
+Kyber landing, 2026-10-27, mid-class: "Let's break it down into a bunch of mcqs for us to decide tastewise for the site tgt rn while we're still in class!!!!!!" and then "NO AI SLOP". What worked: a `/taste.html` page on the same deployed site, one question per screen, each option showing a rendered preview (the headline in each font, the swatch, the button), a free-text "something else", name-keyed ballots (latest wins) and a results view that refreshes every 4s. Ship it deployed within minutes, run `slop-check --stdin` on every label and "why" line first, and clear your own test ballots before sharing the link.
+
+- Questions live in a plain data file (`taste.js`) so a teammate adds one without touching the flow.
+- Preview fonts with named CSS classes. Tailwind CDN arbitrary `font-[Nunito]` classes in injected HTML rendered as the body font in the first capture.
+- A loader that may finish before the next script runs sets a flag as well as firing its event (`window.copyReady`). The Kyber hero shipped once with the raw `dinner|the Airbnb|...` list showing, because `copy:ready` fired before `app.js` added its listener.

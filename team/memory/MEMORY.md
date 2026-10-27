@@ -437,3 +437,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_static_site_serves_whole_repo: Railway static site w Caddy root /app served SPEC.md (private text quotes) publicly on 10/26; root at /app/public, curl /SPEC.md expect 404
 - feedback_angel_lists_judge_alone: gtme-investors drops every angel (no portfolio page); an angel pass judges each row ALONE w Jev (batch-20 put "software" on top), email-domain company + MX to pass list-gate; the Mac's Clay login is BMA Old, never spend it (OPAL, 10/26)
 - feedback_sites_start_from_ux_engine: sites start from ux-pick + Next.js/motion/lenis + site-gate research, never a Tailwind CDN index.html; site-stack-gate refuses the write (Kyber, 10/27: "Don't we literally have a UX engine?")
+- feedback_railway_deploys_from_github: a `railway up` service has no repo and ignores pushes (kyber-landing 10/27, "ALWAYS ... deploy through [github]"); connect it via serviceConnect, check repoTriggers

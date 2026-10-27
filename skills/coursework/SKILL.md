@@ -138,6 +138,12 @@ Never-dos, in his words (2026-10-11, mid quiz):
   When they're silent on something he could have heard in lab or in person
   (a topic, a presenting week, a makeup slot), ask him in one line first.
   Never offer to email the instructor to find it out.
+- "I totally missed his email" (2026-10-27, BISC Lab 5 makeup): an
+  instructor picked a slot on 10/22 ("Monday 7:30am"), nobody confirmed it,
+  and Noakes sat in his office alone. When an instructor's reply sets a time,
+  the ledger entry says SLOT SET, UNCONFIRMED and it goes at the top of every
+  `coursework` read until he confirms. Write the real reason in any apology;
+  never invent a better excuse for him.
 - "WHY DID YOU FLASH BANG ME" and "I want NO ONE to ever open brightspace
   ever again" (2026-10-22, A15/A17 group upload): a write goes through
   `brightspace submit`, never his Chrome. `open -g` to a Brightspace page

@@ -182,6 +182,12 @@ These are his moves, quoted from the thread. Use them as patterns.
   event, and write every essay word. The coach does hosting, code and
   deploys. Put the floor in their doc with an hour estimate.
 
+- **"We write as if it is already sunday!"** Caleb, 10/26. The applicant
+  drafts every line tonight at full ambition with a bracket wherever a real
+  number or quote goes ("[N] volunteers signed up by text, up from 0 and
+  14"). The coach keeps a Sunday table of targets with proof and an owner.
+  Saturday 9am, every empty bracket comes out with its sentence.
+
 ## What to hand them
 
 - The per-person kit repo

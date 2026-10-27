@@ -2184,6 +2184,11 @@ _register("PreToolUse", hooks_dir + "/wait-loop-guard.sh", timeout=5,
 _register("PostToolUse", hooks_dir + "/railway-domain-guard.sh", timeout=5,
           matcher="Bash")
 
+# Deploys go through GitHub. On 2026-10-27 kyber-landing's service had no repo
+# because it was fed with railway up, and a pushed fix never deployed.
+_register("PreToolUse", hooks_dir + "/railway-up-guard.sh", timeout=5,
+          matcher="Bash")
+
 # Say the ranking rule out loud before ranking, and name what would falsify
 # the answer. Running someone's list top to bottom is not a method.
 _register("UserPromptSubmit", hooks_dir + "/method-guard.sh", timeout=8,

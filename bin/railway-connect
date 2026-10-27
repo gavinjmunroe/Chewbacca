@@ -1,0 +1,90 @@
+#!/usr/bin/env python3
+"""Connect the linked Railway service to this repo's GitHub origin, so a push to
+main deploys it.
+
+    railway-connect            connect it (no-op when already connected)
+    railway-connect --check    exit 1 and say so when the service has no repo
+
+A service created with `railway up` has no source repo and ignores every push.
+On 2026-10-27 the Kyber landing page sat 10 minutes undeployed after a push for
+exactly that reason, and Caleb wrote "Bro ALWAYS make a github repo and deploy
+through there".
+"""
+import json
+import os
+import re
+import subprocess
+import sys
+import urllib.error
+import urllib.request
+
+API = "https://backboard.railway.com/graphql/v2"
+
+
+def die(msg, code=1):
+    print("railway-connect: " + msg, file=sys.stderr)
+    sys.exit(code)
+
+
+def linked_service(cfg, cwd):
+    # The CLI keys links by directory; a subfolder inherits its parent's link.
+    projects = cfg.get("projects", {})
+    path = cwd
+    while True:
+        if path in projects and projects[path].get("service"):
+            return projects[path]
+        parent = os.path.dirname(path)
+        if parent == path:
+            return None
+        path = parent
+
+
+def gql(token, query, variables):
+    req = urllib.request.Request(
+        API,
+        data=json.dumps({"query": query, "variables": variables}).encode(),
+        # A bare urllib User-Agent gets a Cloudflare 403 (seen 2026-10-27).
+        headers={"Authorization": "Bearer " + token, "Content-Type": "application/json", "User-Agent": "railway-cli/4"},
+    )
+    try:
+        body = json.load(urllib.request.urlopen(req, timeout=20))
+    except urllib.error.HTTPError as e:
+        die("Railway API returned %d" % e.code)
+    if body.get("errors"):
+        die("Railway API: " + body["errors"][0].get("message", "unknown error"))
+    return body["data"]
+
+
+def main():
+    check = "--check" in sys.argv[1:]
+    try:
+        cfg = json.load(open(os.path.expanduser("~/.railway/config.json")))
+    except (OSError, ValueError):
+        die("no Railway login. Run: railway login")
+    token = (cfg.get("user") or {}).get("token")
+    if not token:
+        die("no Railway login. Run: railway login")
+    link = linked_service(cfg, os.getcwd())
+    if not link:
+        die("this folder isn't linked to a Railway service. Run: railway link")
+    origin = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True).stdout.strip()
+    m = re.search(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?$", origin)
+    if not m:
+        die("no GitHub origin here. Make the repo first: gh repo create --source . --push")
+    repo = m.group(1)
+    branch = "main"
+    data = gql(token, "query($id:String!){service(id:$id){name repoTriggers{edges{node{repository branch}}}}}", {"id": link["service"]})
+    triggers = [e["node"] for e in data["service"]["repoTriggers"]["edges"]]
+    if any(t["repository"].lower() == repo.lower() for t in triggers):
+        print("connected: %s deploys from %s on push" % (data["service"]["name"], repo))
+        return
+    if check:
+        print("NOT connected: %s has no repo, so a push deploys nothing. Run: railway-connect" % data["service"]["name"])
+        sys.exit(1)
+    gql(token, "mutation($id:String!,$i:ServiceConnectInput!){serviceConnect(id:$id,input:$i){id}}",
+        {"id": link["service"], "i": {"repo": repo, "branch": branch}})
+    print("connected: %s now deploys from %s %s on push (a build of %s just started)" % (data["service"]["name"], repo, branch, branch))
+
+
+if __name__ == "__main__":
+    main()

@@ -1085,6 +1085,8 @@ if group "installer"; then
     bash "$ROOT/tests/wait_loop_guard.sh"
   check  "railway-domain-guard sends a generated Railway domain to railway-domain" \
     bash "$ROOT/tests/railway_domain_guard.sh"
+  check  "railway-up-guard sends a GitHub repo's deploys through a push" \
+    bash "$ROOT/tests/railway_up_guard.sh"
   check  "vercel-guard refuses Vercel deploys and allows teardown" \
     bash "$ROOT/tests/vercel_guard.sh"
   # Reengineer step 15: prose rules that became checks, and the share ratchet.

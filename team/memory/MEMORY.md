@@ -173,6 +173,8 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 
 ## Lessons
 
+- feedback_pipefail_grep_q_false_fail: under set -o pipefail, `cmd | grep -q X` fails when cmd exits non-zero on purpose (status, BLOCKED); capture to a file, then grep (usc-os sync test, 10/28)
+
 - feedback_campaign_recovery_graph_2026_10_16: a paused-campaign recovery runs as a task graph in one sitting: fan out reads, one writer, blocklist held enrollments, window before resume, native second replies, Vantage wins
 
 - feedback_read_all_of_brightspace: course material can hide behind announcement links (ACAD 185 master spreadsheet links every deck); read news + homepage links and export Google files before saying "0 files" (10/11)

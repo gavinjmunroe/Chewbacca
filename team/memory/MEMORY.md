@@ -106,6 +106,8 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 
 ## References
 
+- reference_anchored_accelerator_apps_2026_10: Anchored YC W27 + speedrun SR008 drafts Doc, vision-led rewrite 10/28, deadlines Nov 1/Nov 2, nothing submitted
+
 - reference_clay_background_reads: Clay with no tab, 10/16: jev-browse allowed on Clay pages, views + view-sort/filter/columns ops, whole reads past the 20k cap, Clay's afterrecordid skips rows (use row-ids + rows-by-id)
 - reference_who_pays_for_ai: Menlo 2026 says about 1 in 3 US adults pay for AI (the 2% was 2025 worldwide); Pew says non-users are uninterested, privacy-worried, distrustful, not cost-blocked
 

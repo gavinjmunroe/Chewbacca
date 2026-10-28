@@ -101,6 +101,14 @@ added. Show drafts to him as plain lines, one text per line, never bullets
 looked up before it's queued, never left for him to check: a guessed $500
 Mac mini was really $799.
 
+When he's helping a teammate get an AI tool working, what he wants is ONE
+paste-ready prompt for their Claude, in a single code block. Don't give a
+text to send, split texts or talking points. On 2026-10-27 he was on a call
+with Angie during Chip In setup. A text draft drew "Im on call wiht her rn",
+talking points drew "Just give me a prompt for her to paste". The voice
+check's length limit is for his texts, so it doesn't apply to a prompt
+someone else pastes into Claude.
+
 Group drafts send too. `people send --room "Sophomore DT" "text"` addresses the
 room by the chat GUID read from chat.db (iMessage) or the @g.us JID (WhatsApp),
 never a member, and only on an exact room name: "Paul" is a group of four, and

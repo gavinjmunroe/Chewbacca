@@ -445,3 +445,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_railway_deploys_from_github: a `railway up` service has no repo and ignores pushes (kyber-landing 10/27, "ALWAYS ... deploy through [github]"); connect it via serviceConnect, check repoTriggers
 - feedback_setup_repos_seamless: setup repos we hand people (chip-in-setup, USC Claude+Brightspace) run from ONE paste in the Code tab, no browser steps, docs tested against the target repo; Angie hit 5 walls 10/27
 - feedback_founder_calls_lead_with_what_they_cant_get: founder call prep leads w a warm intro from our people or the kit running for them, never a public list or site alone ("it needs to be smth they COULDNT hv done on their own", 10/28)
+- feedback_call_prep_plain_english_for_gav: call prep Gav reads live is plain English, full words, jargon explained; shorthand prep got "Send me call prep in English pls" (10/28)

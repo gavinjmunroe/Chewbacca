@@ -139,6 +139,14 @@ check`, `story` and `idle` also pass on every route.
   them small, as polaroids, and ask the owner for originals. The hero needs a
   large cutout from their site.
 - **Brand icons are gone from Lucide.** Draw Instagram and TikTok as inline SVG.
+- **The upgrade lost to the original.** Firebox v2 (2026-10-28) swapped
+  Noah's bold serif hero with its orange italic second line for a thin
+  weight-300 sans, and pinned one frame for 480vh while only text swapped.
+  Caleb: "bro our site SUCKS". Before calling an upgrade done, screenshot
+  theirs and ours at 1440 with the same viewport and put them side by side.
+  Each section has to beat its counterpart on their site. Their strongest
+  element (the hero type here) is kept or pushed further, never weakened, and
+  a pinned scroll track is a slideshow unless the object itself changes.
 - **A formatter reflows files between edits.** Patch by line number or re-read,
   and check that the count of changed lines matches.
 

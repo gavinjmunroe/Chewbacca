@@ -458,3 +458,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_bulk_linkedin_lookup_engines: bulk LinkedIn matching = fan out WebSearch agents; Exa unset, Perplexity out of quota, Brave 429s, DDG challenges, Bing JS-only, his LinkedIn session never bulk (OPTRA 338 rows, 10/28)
 - project_gtm_os_2026_10_28: GTM OS is the outbound product Caleb + Gav are building in its own repo (togari on drugs + chewb GTM tools, plugs into any tool); first milestone is the Junto pilot end to end (10/28)
 - feedback_guards_misfire_on_tab_prompts: voice, scope, launch, skim and ready guards misfired on tab prompts and call coaching on 10/28; each case needs an eval fixture before the guard changes
+- project_product_sync_2026_10_28: shared files between Chewbacca, anchored and usc-os sync via tools/product_sync.py + chewbacca products, personal-data firewall, test-gated pushes; fix shared files in Chewbacca

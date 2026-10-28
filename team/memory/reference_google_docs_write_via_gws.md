@@ -21,3 +21,5 @@ Before a write, ask Drive, not Docs, whether this account may edit. Google check
 A 403 "insufficient authentication scopes" means the sign-in lacks write access. `chewbacca email add <the gws auth status user>` re-consents. Since 2026-10-11 it asks for full account access (mail, Drive, Docs, Sheets, Slides, Calendar, Contacts, Tasks).
 
 Related: [[feedback_google_signin_calendar_write]], [[feedback_never_read_only]].
+
+`createParagraphBullets` deletes the leading tabs it reads as nesting, so every index after a nested run moves back one per tab. On 2026-10-28 three nested bullets in the OPTRA call section shifted the next two bullet runs by 3, and the "6. Close" heading and the Firebox H1 below them turned into bullets. Put nested bullet runs last in the batch (or bottom to top), or re-read between runs.

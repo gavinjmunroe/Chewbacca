@@ -506,3 +506,14 @@ and grading weights that do not sum to 100.
 | `references/syllabus-intake.md` | Ingesting a syllabus into the ledger                                                                                   |
 | `references/grading-models.md`  | Weighted, points-based, or labor-contract grading math                                                                 |
 | `references/lms-ingest.md`      | Reading the term straight out of the LMS (Blackboard Ultra, D2L Brightspace), and checking what was actually submitted |
+
+## Registration and advisor questions (USC)
+
+Lessons from 2026-10-28, when "DID WE MISS THE EARLY REGISTRATION DATE" took 15 minutes to answer:
+
+- A USC registration appointment is when the window OPENS. It stays open through the add deadline (Jan 29 for Spring 2027). Lead with that line, then the exact time.
+- Exact time: `chewbacca api call usc-reg registrationAppointment term=<YYYYT>`. If it returns `HTTP 302` for every term (Fall too), the WebReg Entra/Duo login lapsed and `api renew` won't fix it. Open webreg.usc.edu in his Chrome and say BLOCKED: Duo Touch ID, in the first reply, not after three retries.
+- RNR88 on the appointment page is the priority-registration flag (OSAS), never a hold.
+- Advisor emails (Adrian Coson, coson@usc.edu) are searchable through the Gmail connector: `from:coson@usc.edu`. "Advising Recap - <date>" threads are his written record of each meeting. Before repeating anything "Adrian said" (a promise, a contact, a waiver), read the recap and quote it. On 10/28 Caleb remembered intros for a GE waiver; the 9/22 recap promised none and said a waiver would be a first.
+- "Read Adrian's email" means the newest coson@ thread plus the audit it replies to, then the class sections: `usc-classes getSections` for each required course, and the GE double-count list (dornsife.usc.edu/ge/courses/double-count/) filtered against his fixed classes. Do the section search unasked; don't offer it.
+- GE core literacies A to F must be taken in residence at USC, which makes a GE-B or GE-C waiver unlikely. Tell him to register the GE anyway, since dropping is refundable until the add deadline.

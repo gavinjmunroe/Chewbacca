@@ -451,3 +451,5 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_read_vendor_docs_before_saying_no_api: read the vendor integrations page + API root before saying no API; I said Dripify had none and api.dripify.com has writes (10/28)
 - project_junto_pilot_2026_10_28: Reed (Junto) said yes to a LinkedIn pilot in his Dripify w our 164 MSP owners; waiting on his access, no LinkedIn URLs yet, no price (10/28)
 - feedback_bulk_linkedin_lookup_engines: bulk LinkedIn matching = fan out WebSearch agents; Exa unset, Perplexity out of quota, Brave 429s, DDG challenges, Bing JS-only, his LinkedIn session never bulk (OPTRA 338 rows, 10/28)
+- project_gtm_os_2026_10_28: GTM OS is the outbound product Caleb + Gav are building in its own repo (togari on drugs + chewb GTM tools, plugs into any tool); first milestone is the Junto pilot end to end (10/28)
+- feedback_guards_misfire_on_tab_prompts: voice, scope, launch, skim and ready guards misfired on tab prompts and call coaching on 10/28; each case needs an eval fixture before the guard changes

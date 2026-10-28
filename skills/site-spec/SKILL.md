@@ -278,6 +278,30 @@ pressed Cubans for guns, one drops). What made it work, and what nearly didn't:
 - Keep it in the site's palette with no comic lettering. A sentence of dialogue
   in the letterbox and one iris-out did more than any "BANG" would have.
 
+## Every section does something a PDF can't, from the owner's own words
+
+On 2026-10-27 the We Sue Johns draft (a nonprofit helping trafficking
+survivors sue buyers) kept every word of hers and fixed real problems, and
+Caleb still said "It looks like an ai slop pdf". Stacked text sections are a
+printout. What fixed it came out of her own copy, not decoration:
+
+- Her list of the forms exploitation takes became checkboxes. Tapping one
+  shows her line "You have the right to sue."
+- Her FAQ became an iPhone Messages thread you tap through, copied exactly
+  (status bar, Dynamic Island, blue and gray bubbles with real tails), after
+  "Make it look like actual iMessage". On phones the question chips go inside
+  the screen, or every answer lands off screen.
+- The lies she quotes buyers telling themselves get struck through on scroll.
+- Her line "once the first case goes public, others will follow" became a
+  complaint caption where "John Doe 1 through N" climbs to 50 with the scroll.
+
+Before showing a draft, name the interaction in every section. A section with
+none is a PDF.
+
+For any site where someone may be in danger, Quick Exit is on screen at all
+times and Esc exits unconditionally, even inside a form field: the moment
+someone walks in is the moment she's typing.
+
 ## Hard line
 
 **Never publish it as the business, or let it be indexed, before the owner says

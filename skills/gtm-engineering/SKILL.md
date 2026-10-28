@@ -162,6 +162,14 @@ lists and ledger (`ops/README.md` in gavinjmunroe/firm-foundation is the model).
   and the 10/18 audit lines had gone five days stale. A first line older than
   three days gets re-audited before it goes out.
 
+- Notes drafted in a prep doc are not outreach either. The same turn they're
+  written, add one work-ledger task per send batch (`--scope ~`, owner and
+  deadline in the title), so the drafts can't sit unsent. On 2026-10-28 the 14
+  UCLA showcase LinkedIn notes had been in a Downloads prep doc since 10/23,
+  none sent, with Thallus's Wefunder five days out. Caleb: "We never did
+  outbound to the other ucla innovation event founders!" LinkedIn connection
+  notes are his to send, since the api-anything LinkedIn site is read-only.
+
 ## Video in outbound (2026-10-12, Firm Foundation)
 
 Caleb: "The video will make response rate 100x" and "This gotta result in a

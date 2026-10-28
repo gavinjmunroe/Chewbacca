@@ -13,7 +13,7 @@ What we know about his go-to-market: cold email failed for him in 2026 (10 domai
 
 **How to apply:**
 
-- Waiting on Reed for Dripify access plus an API key, HubSpot access, and an export of his customers to exclude.
+- Caleb emailed Reed the recap on 2026-10-28 at 3:39pm PT, Gavin cc'd, asking for Dripify access plus an API key, the HubSpot export, and which conference he's sponsoring. Waiting on his reply.
 - Our side: LinkedIn URLs for all 164 rows (the list has none), a connection note under 300 characters plus 2 follow-ups he approves, his customers blacklisted before launch.
 - The Dripify Open API (api.dripify.com) can add leads to a campaign, set custom fields, blacklist, and read stats. Campaign creation is done in the app.
 - No price is set. Discussed shapes: retainer, one-off lead contracts, or full service once results are in.

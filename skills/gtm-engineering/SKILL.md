@@ -66,20 +66,21 @@ recipes, and BMA's published offer and case-study numbers. Read
 `references/bma/reply-handling.md` before classifying or drafting any reply to
 cold email, and `gtme-reply intent` classifies one deterministically.
 
-## GTM OS is the product, Chewbacca is the playground (2026-10-28)
+## Dough is the product, Chewbacca is the playground (2026-10-28)
 
-Founder outbound gets built in calebnewtonusc/gtm-os, a private repo with Gavin
-on it, to its `SPEC.md`. Chewbacca is where Caleb and Gavin experiment and where
+Founder outbound gets built in calebnewtonusc/dough, a private repo with Gavin
+on it, to its `SPEC.md`. Caleb named it Dough on 10-28 (it was called GTM OS
+until then, and the repo was gtm-os). He doesn't want "gtm" in the link. Chewbacca is where Caleb and Gavin experiment and where
 anything two products share lives (this skill, team memory, the Mac layer).
 USCOS and Anchored are separate products in their own repos too. New GTM engine
-code goes in gtm-os. Until a `tools/gtme_*` file has moved there, edit it here.
+code goes in dough. Until a `tools/gtme_*` file has moved there, edit it here.
 
-Porting Togari and Amber code into gtm-os is settled. Caleb, 2026-10-28: "Sagar
+Porting Togari and Amber code into dough is settled. Caleb, 2026-10-28: "Sagar
 and Karthik told me that I could port everythign because of my dedicated work"
 and "we're going to be refactoring everything so much it won't even rlly be
 their code anymore". So don't gate a port on authorization, and don't ask about
 it. What still stays out is keys, real prospect or client data, and the Amber
-name in public. Every port gets a row in gtm-os `PROVENANCE.md`.
+name in public. Every port gets a row in dough's `PROVENANCE.md`.
 
 ## You are their GTME
 

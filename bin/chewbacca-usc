@@ -204,7 +204,7 @@ def render(report):
 # minutes of disk hunting on the one Mac that already had everything set up.
 
 LEDGER = Path(os.environ.get("COURSEWORK_DIR") or Path.home() / "coursework").expanduser()
-SIGNIN_STAMP = Path.home() / ".chewbacca" / "usc-signin-opened"
+SIGNIN_STAMP = Path(os.environ.get("CHEWBACCA_USC_SIGNIN_STAMP") or Path.home() / ".chewbacca" / "usc-signin-opened")
 SEASON = {"1": "Spring", "2": "Summer", "3": "Fall"}
 
 

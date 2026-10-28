@@ -1,0 +1,15 @@
+{
+  "why": "The products built out of Chewbacca that ship to other people. chewbacca products reads this to keep each one's shared files in step. Chewbacca itself is never sold.",
+  "products": [
+    {
+      "name": "anchored",
+      "repo": "calebnewtonusc/anchored",
+      "test": "bash scripts/check.sh --all && node --experimental-strip-types --test scripts/intake.test.mjs"
+    },
+    {
+      "name": "usc-os",
+      "repo": "calebnewtonusc/usc-os",
+      "test": "bash tests/all.sh"
+    }
+  ]
+}

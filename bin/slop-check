@@ -26,7 +26,7 @@ import sys
 # (id, weight, explanation, compiled pattern). Weight is how much one hit costs.
 # Anything absolute (an em dash, an emoji) is weighted to fail a file alone.
 RULES = [
-    # The en dash is in here too. "19.5–42.4%" went to Caleb in chat on
+    # The en dash is in here too. "19.5–42.4%" went to the user in chat on
     # 2026-10-07 and he read it as exactly what it looks like: "UR USING EM
     # DASHES". A range is "19.5 to 42.4%".
     ("em-dash", 40, "em or en dash: use a colon, period, comma, or the word 'to'", re.compile(r"[—–]")),
@@ -65,7 +65,7 @@ RULES = [
         ),
     ),
     (
-        # "Not a CRM. Not a Rolodex. Not a Notion doc." Caleb, 2026-10-06, on a
+        # "Not a CRM. Not a Rolodex. Not a Notion doc." The user, 2026-10-06, on a
         # draft that set exactly that on the Amber fridge: "Not this, not that.
         # AI SLOP WTF". A list of what the thing is not, stacked for rhythm,
         # reads as generated even when a human wrote it first. Two negations in
@@ -83,7 +83,7 @@ RULES = [
         # "It was technical, but it was also democratic." "His folding can shape
         # light, not just clothing." "Making people feel something, not just read
         # it." Three of these sat in the Mash Up paper on 2026-10-11, the file
-        # scored clean, and Andy read the half as "the slop version" on sight.
+        # scored clean, and a teammate read the half as "the slop version" on sight.
         # binary-contrast only caught the "it's not X, it's Y" spelling.
         "not-just-contrast",
         12,
@@ -91,7 +91,7 @@ RULES = [
         re.compile(
             r"(?:,\s+not (?:just|only|merely)\b|\bnot only\b[^.\n]{3,60}\bbut\b"
             r"|,\s+but (?:it|they|he|she|this|that) (?:was|were|is|are) also\b"
-            # 2026-10-21, a text drafted for Caleb to send: "it doesn't just give
+            # 2026-10-21, a text drafted for the user to send: "it doesn't just give
             # me answers, it gives me a problem" and "the model barely matters.
             # They're all good enough. It's HOW u use it". He wrote "Not this,
             # phrase, phrase" and both had scored 0.
@@ -194,7 +194,7 @@ def strip_code(text, chat=False):
     def blank(m):
         return "\n" * m.group(0).count("\n")
 
-    # In a chat reply an unlabeled fence is a drafted text for Caleb to paste
+    # In a chat reply an unlabeled fence is a drafted text for the user to paste
     # and send, so it is prose and gets scored. On 2026-10-21 three drafts in
     # a row went out inside fences, never scored, and he asked "Bro did you
     # break? What happend to the hooks/rules/tests?". Labeled fences are code.
@@ -238,7 +238,7 @@ COMMA_JOINERS = {
     "please", "thanks", "hi", "hey", "ok", "okay", "well", "also", "however",
     "e.g.", "i.e.", "etc",
 }
-# Chat is where Caleb reads it, so it costs more there. In reference docs a
+# Chat is where the user reads it, so it costs more there. In reference docs a
 # terse "Three numbers, one concept." is still a tell but the repo gate should
 # go amber, not red, on a style finding in a 400-line manual.
 COMMA_WEIGHT_CHAT = 10
@@ -295,7 +295,7 @@ def scan(text, chat=False, essay=False):
     prose = strip_code(text, chat=chat)
     findings, per_rule = [], {}
     for rid, weight, why, pattern in RULES:
-        # Caleb texts with emojis (about 1 message in 25: 🥀 😓 🔜 😭 🔥) and
+        # The user texts with emojis (about 1 message in 25: 🥀 😓 🔜 😭 🔥) and
         # asked on 2026-09-28 for replies to him to do the same. The ban still
         # holds for files: copy, code, commits, docs.
         if chat and rid == "emoji":
@@ -332,7 +332,7 @@ def scan(text, chat=False, essay=False):
 
     # Phrase, comma, phrase. "Dad, Dr. Reyes." "big sur '23, all 5 of us."
     # "Small moments, big impact." Two verbless fragments spliced on a comma
-    # are a caption pretending to be a sentence, and Caleb flagged the shape
+    # are a caption pretending to be a sentence, and the user flagged the shape
     # by name on 2026-10-06: "phrase comma phrase is often seen as ai slop".
     # A finite verb anywhere in it makes it a real sentence, so it is skipped.
     for line_no, sent in sentences(prose):
@@ -359,13 +359,13 @@ def scan(text, chat=False, essay=False):
 
     if not chat:
         # Two density tells from the Mash Up paper (2026-10-11), measured
-        # against Andy's hand-written section of the same paper. Mine: 10 uses
+        # against a teammate's hand-written section of the same paper. Mine: 10 uses
         # of "both" in 1,285 words and 23 quoted fragments; his: 1 "both" in 948
         # words and 4 quotes. Comparing two people by stacking "both of them..."
         # sentences, and quilting short phrases lifted from museum and press
         # copy, is what read as generated. Thresholds sit between the two.
         words = max(1, len(re.findall(r"[A-Za-z']+", prose)))
-        # Essays only, by flag: memory notes and skills quote Caleb on purpose,
+        # Essays only, by flag: memory notes and skills quote the user on purpose,
         # and run on everything these two hit 38 of 518 repo docs (14 even with a
         # citation-count gate). Graded writing runs `slop-check --essay`.
         if essay and words >= 400:

@@ -317,6 +317,12 @@ browser)
   shift
   exec python3 "$ROOT/bin/chewbacca-browser" "$@"
   ;;
+products)
+  # The products built out of Chewbacca (anchored, usc-os): which shared files
+  # are behind, and a pull that tests each product before pushing its main.
+  shift
+  exec python3 "$ROOT/bin/chewbacca-products" "$@"
+  ;;
 usc)
   # Any USC student's day from Brightspace, dining and the campus calendar,
   # through chewbacca api. Read-only.

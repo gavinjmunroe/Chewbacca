@@ -1,0 +1,15 @@
+{
+  "why": "Read by tools/product_sync.py on every pull into a product. Products ship to other people, so a shared file with any of these stays out until its Chewbacca copy is clean. Kept here, not in the engine, so the engine itself can ship.",
+  "patterns": [
+    "joelnewton",
+    "calebnew@",
+    "calebnewtonusc@",
+    "228436507",
+    "Profile 1\"",
+    "\\bCaleb\\b",
+    "\\bGavin\\b",
+    "\\bSagar\\b",
+    "\\bKarthik\\b",
+    "\\bAndy\\b"
+  ]
+}

@@ -695,6 +695,7 @@ fi
 
 # ── tools ─────────────────────────────────────────────────────────────────────
 if group "tools"; then
+  check  "product sync: landed changes move, firewall holds personal files, red product tests push nothing" bash "$ROOT/tests/product_sync.sh"
   check  "chewie app: background driver refuses Return without --yes, Jev picks map back" python3 "$ROOT/tests/test_appctl.py"
   check "counts handles conflict stages and whitespace paths" python3 "$ROOT/tests/test_counts.py"
   check  "counts --check passes on a clean tree" python3 "$ROOT/tools/counts.py" --check

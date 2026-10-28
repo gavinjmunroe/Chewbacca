@@ -312,6 +312,31 @@ For any site where someone may be in danger, Quick Exit is on screen at all
 times and Esc exits unconditionally, even inside a form field: the moment
 someone walks in is the moment she's typing.
 
+## A product scene is one story, never tabs over lists
+
+OPTRA, 2026-10-28. The scene was five tabs, each over one-line rows. Caleb:
+"Bro our site SUCKS". The next fix put the rows in a window card w status
+chips, and he wrote "NEVER MAKE A PDF NEVER MAKE SMTH 1 DIMENSIONAL VISUALLY".
+Five separate 2D views (grid, flow, Gantt, calendar, page) under the same
+tabs got "This is WORSE than a slideshow bro absolutely 0 storytelling!!!!!!"
+What held up was one example customer walked through one window that never
+gets swapped out, beat by beat (finds the notice, screened, one rule fails,
+the failing tile becomes the fix, lead times against the deadline, the
+verdict flips, they submit), w a deadline countdown driven by scroll.
+
+- No tab bar over a pinned scene. Tabs mean you're picking slides, while beats
+  show what happens next to the same person.
+- No list in a box, and a grid of different charts doesn't count either. Each
+  beat changes the object that's already on screen.
+- Give it a person and a clock: who it's for, what's at stake, how much time
+  is left. An invented example is labeled "Example business".
+- Before showing it, screenshot every beat at 1440, a 1000x560 laptop and 390.
+  If two beats in a row look like different screens, it's a slideshow. Also
+  check the hero headline clears the nav at 1000x560 (it didn't, and he saw it).
+- Look at the LIVE url before saying it's done. A Railway service made w
+  `railway up` ignores pushes (connect it, see
+  feedback_railway_deploys_from_github), and he reviewed the old build twice.
+
 ## Hard line
 
 **Never publish it as the business, or let it be indexed, before the owner says

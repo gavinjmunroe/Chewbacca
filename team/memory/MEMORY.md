@@ -107,6 +107,8 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 ## References
 
 - reference_dripify_open_api: Dripify Open API read 10/28, upload carries custom fields (1,000 a call), blacklist needs a lead id, starting a campaign and making fields are app-only; pinned in gtm-os
+- reference_gtm_service_price_benchmarks: BMA outbound retainers ran 2 to 4K a month for small clients (Joe, Roy) and 20K+ for Sagar's big ones; price founder pilots against it (10/28)
+
 - reference_anchored_accelerator_apps_2026_10: Anchored YC W27 + speedrun SR008 drafts Doc, vision-led rewrite 10/28, deadlines Nov 1/Nov 2, nothing submitted
 
 - reference_clay_background_reads: Clay with no tab, 10/16: jev-browse allowed on Clay pages, views + view-sort/filter/columns ops, whole reads past the 20k cap, Clay's afterrecordid skips rows (use row-ids + rows-by-id)

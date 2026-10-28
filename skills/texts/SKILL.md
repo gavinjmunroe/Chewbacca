@@ -368,6 +368,13 @@ thoughts with a dash, and almost never writes a colon list.
    giveaway bro". The version he took said what happened and what's needed:
    "Miyake part is in!! Lmk if anything's off and I'll fix it before class".
    Never mention voice-check to him either.
+5. A hype or intro text sells the person in words the friend already knows.
+   On 2026-10-28 an intro of Holly Dunlap to Langston listed her resume
+   (Hollywould, Lilly Pulitzer relaunch, Sotheby's) and Caleb wrote "bro thats
+   a bunch of word slop it needs to be every word fire... he has no clue what
+   hollywould or lilly pilitzer are". Turn each credential into what it means
+   to the reader ("built a fashion brand and SOLD it"), keep only the ones that
+   match what the friend asked for, and send it as a few short texts.
 
 `people texts drafts add` and the voice-guard Stop hook both run the same
 check, so a draft that fails never reaches him. When he wrote the words

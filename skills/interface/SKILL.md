@@ -496,6 +496,20 @@ Read them before drafting any club or startup landing page.
   choices: three paths times a Before/After toggle was "6 diff options". Show
   the before where the pain is told and the after where the build is.
   `site-gate focus <url>` must pass.
+- An upgrade draft of someone else's site wears THEIR brand, never the
+  register of the last site we liked (2026-10-28, Junto: "bro our site
+  SUCKS", then "NEVER MAKE SMTH 1 DIMENSIONAL VISUALLY" and "NEVER MAKE A
+  PDF"). v2 reused the Medrano register: dark plum slabs, a green button
+  juntoai.com never uses, a blurry cropped product screenshot, and the
+  ticket story as gray text rows. What fixed it: pull colors from their
+  site's own CSS (research/brand), rebuild their product UI in HTML so it's
+  crisp and alive (their demo ticket running its pipeline in a window at
+  depth, layered chips and an approval card, cursor tilt), and carry that
+  same ticket through a pinned scene where the object itself changes per
+  step. Never invent an id or number to dress a mock (ticket numbers for
+  "earlier crashes" were cut). Check short phones in headless WebKit too:
+  iPhone 13 Safari is about 664px tall, and the scene overlapped there
+  while 844px Chromium looked fine.
 - A promises or mission page is drawn, not listed ("the trust page is 1
   dimensional"): each promise gets a small drawing and a few words, the big
   ones hang across a band's edge, and a why reads as beats on one line.

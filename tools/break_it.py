@@ -619,6 +619,38 @@ def check_claims(reply, events, repo, base):
             ok = bool(runs) if wrote else bool(all_runs)
             out.append({'claim': s[:200], 'ok': ok,
                         'evidence': 'a command ran' if ok else 'only reads ran after the last write'})
+        out += site_claims(s, events)
+    return out
+
+
+# A site called live, up or working needs its own address fetched in this
+# turn, after the last write. 2026-10-28, OPTRA: a reply said the rebuilt site
+# was done while optra-upgrade.up.railway.app still served the old build (the
+# Railway service ignored pushes), and Caleb found out from his own browser
+# twice. Any tool whose input names the host counts: curl, a Playwright script,
+# the browser pane.
+SITE_CLAIM_RE = re.compile(r"\b(is|are|it'?s|now|went|goes|site'?s?)\s+(live|up|deployed|loading|working)\b|"
+                           r"\b(live|deployed) (at|on|now)\b|\bloads (on|fine|now)\b", re.I)
+HOST_RE = re.compile(r'https?://([a-z0-9][a-z0-9.-]*\.[a-z]{2,})|\b([a-z0-9][a-z0-9-]*\.up\.railway\.app)\b', re.I)
+
+
+def site_claims(sentence, events):
+    m = SITE_CLAIM_RE.search(sentence)
+    if not m or NEGATED_RE.search(sentence[:m.start()]):
+        return []
+    hosts = {(a or b).lower().removeprefix('www.') for a, b in HOST_RE.findall(sentence)}
+    if not hosts:
+        return []
+    last = max((i for i, e in enumerate(events) if is_write(e, True)), default=-1)
+    fetched = ' '.join(json.dumps(e.get('input', {})) for e in events[last + 1:]
+                       if e['kind'] == 'tool' and not e.get('error')
+                       and e['name'] not in WRITE_TOOLS).lower()
+    out = []
+    for host in sorted(hosts):
+        ok = host in fetched
+        out.append({'claim': sentence[:200], 'ok': ok,
+                    'evidence': f'{host} was fetched after the last write' if ok else
+                    f'nothing fetched {host} after the last write, so "live" is a guess'})
     return out
 
 

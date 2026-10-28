@@ -23,6 +23,20 @@ input="$(cat)"
 cmd="$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/dev/null)"
 [ -n "$cmd" ] || exit 0
 case "$cmd" in *RAILWAY_UP_OK=*) exit 0 ;; esac
+
+# The same bypass through the API. 2026-10-28, OPTRA: during Railway's
+# "deployments stuck in initializing" outage a session canceled the stuck
+# deploy and fired serviceInstanceDeployV2 at backboard.railway.com from a
+# python heredoc, which skipped GitHub exactly like `railway up` and this guard
+# never saw it. Caleb: "Bro NEVER deploy direectly to railway, alwasy usse
+# github". `railway redeploy` is the CLI spelling of the same thing.
+if printf '%s' "$cmd" | grep -qE '(^|[;&|[:space:]])railway[[:space:]]+redeploy([[:space:]]|$)' \
+  || { printf '%s' "$cmd" | grep -qiE 'backboard\.railway\.(com|app)|railway\.(com|app)/graphql' \
+       && printf '%s' "$cmd" | grep -qE 'serviceInstanceDeploy|serviceInstanceRedeploy|deploymentRedeploy|deploymentInstanceExecutionCreate|environmentTriggersDeploy'; }; then
+  echo "railway-up-guard: deploys go through GitHub only (Caleb, 2026-10-28: \"NEVER deploy directly to railway, always use github\"). Push to main, and if Railway's queue is stuck, check status.railway.com and push an empty commit once they recover. For a deliberate one-off, add RAILWAY_UP_OK='<reason>' to the command." >&2
+  exit 2
+fi
+
 printf '%s' "$cmd" | grep -qE '(^|[;&|[:space:]])railway[[:space:]]+up([[:space:]]|$)' || exit 0
 
 cwd="$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null)"

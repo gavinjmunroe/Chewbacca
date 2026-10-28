@@ -2294,6 +2294,7 @@ if group "reasoning backends"; then
   check "the drawn extent never walks backwards" bash "$ROOT/tests/sweep_monotonic.sh"
   check "the vibe guard refuses claims with no evidence" bash "$ROOT/tests/vibe_guard.sh"
   check "break-it refuses real false-done finishes and passes clean ones" python3 "$ROOT/tests/test_break_it.py"
+  check "a Doc section rewrite never turns the next heading into a bullet" python3 "$ROOT/tests/test_doc_section.py"
   check "transcript readers include messages typed mid-turn" python3 "$ROOT/tests/test_transcript_rows.py"
   check  "closeout streams, answers fast, reuses gates only for this commit" bash "$ROOT/tests/closeout.sh"
   check "stage 8 is enforced: a first-name collision is refused" bash "$ROOT/tests/fusion_guard.sh"

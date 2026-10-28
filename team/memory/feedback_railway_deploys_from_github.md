@@ -19,3 +19,5 @@ Repeat, 2026-10-28: Caleb wrote "NEVER GO DIRECTLY TAO RAILWAY ALWAYS USE GITHUB
 Related: [[feedback_railway_autodeploy]], [[feedback_railway_clean_domain]].
 
 2026-10-28, OPTRA: the optra-upgrade service was also a `railway up` service, so three pushes sat undeployed. It got connected with serviceConnect, which was right. Then, during Railway's "deployments stuck in initializing" outage, a session canceled the stuck deploy and fired `serviceInstanceDeployV2` straight at the API, which skips GitHub just like `railway up` does, and railway-up-guard can't see it. Caleb: "Bro NEVER deploy direectly to railway, alwasy usse github". A git push to main is the ONLY deploy trigger: no `railway up`, `railway redeploy`, or deploy or redeploy mutations through the API. If Railway's queue is stuck, check status.railway.com, wait it out, and push an empty commit to retrigger once they recover.
+
+Enforced since 2026-10-28: railway-up-guard also refuses `railway redeploy` and deploy or redeploy mutations sent to backboard.railway.com (tests/railway_up_guard.sh). Reads and serviceConnect still pass.

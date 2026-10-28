@@ -155,6 +155,24 @@ class Claims(unittest.TestCase):
                                          'input': {'file_path': '/r/team/memory/note.md'}, 'error': False}]
         self.assertTrue(B.check_claims('All 12 tests pass.', ev2, None, None)[0]['ok'])
 
+    def test_a_live_site_claim_needs_its_url_fetched_after_the_last_write(self):
+        # 2026-10-28, OPTRA: called live while the URL still served the old build.
+        claim = "It's live at https://optra-upgrade.up.railway.app now."
+        push = {'kind': 'tool', 'name': 'Bash', 'input': {'command': 'git push origin main'}, 'error': False}
+        edit = {'kind': 'tool', 'name': 'Edit', 'input': {'file_path': '/r/public/app.js'}, 'error': False}
+        curl = {'kind': 'tool', 'name': 'Bash', 'error': False,
+                'input': {'command': 'curl -s https://optra-upgrade.up.railway.app/app.js | grep -c story'}}
+        browse = {'kind': 'tool', 'name': 'mcp__Claude_Browser__navigate', 'error': False,
+                  'input': {'url': 'https://optra-upgrade.up.railway.app'}}
+        site = lambda ev: [c for c in B.check_claims(claim, ev, None, None) if 'fetched' in c['evidence']]
+        self.assertFalse(site([edit, push])[0]['ok'])
+        self.assertFalse(site([curl, edit, push])[0]['ok'], 'a fetch before the last write is stale')
+        self.assertTrue(site([edit, push, curl])[0]['ok'])
+        self.assertTrue(site([edit, push, browse])[0]['ok'])
+        self.assertEqual(B.check_claims("It's not live at optra-upgrade.up.railway.app yet.", [edit], None, None), [])
+        self.assertEqual(B.check_claims('The site is live.', [edit], None, None), [],
+                         'no address named, nothing to fetch')
+
 
 class Diff(unittest.TestCase):
     def test_greps(self):

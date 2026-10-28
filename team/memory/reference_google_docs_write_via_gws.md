@@ -23,3 +23,5 @@ A 403 "insufficient authentication scopes" means the sign-in lacks write access.
 Related: [[feedback_google_signin_calendar_write]], [[feedback_never_read_only]].
 
 `createParagraphBullets` deletes the leading tabs it reads as nesting, so every index after a nested run moves back one per tab. On 2026-10-28 three nested bullets in the OPTRA call section shifted the next two bullet runs by 3, and the "6. Close" heading and the Firebox H1 below them turned into bullets. Put nested bullet runs last in the batch (or bottom to top), or re-read between runs.
+
+Since 2026-10-28 the default path is `chewbacca google section <doc> --under "<heading>" --md file.md` (bin/lib/doc_section.py): one revision-pinned batch, bullets sent last to first, then a read-back that fails if any heading outside the section changed. Write call prep into a shared Doc with that, never an ad hoc batchUpdate script.

@@ -24,5 +24,14 @@ run(){ jq -n --arg c "$1" --arg d "$2" '{tool_input:{command:$c},cwd:$d}' | HOOK
 [ "$(run 'railway logs' "$T/gh")" = 0 ] && ok "railway logs is allowed" || no "railway logs is allowed"
 [ "$(run 'railway domain' "$T/gh")" = 0 ] && ok "railway domain is allowed" || no "railway domain is allowed"
 [ "$(run 'git push origin main' "$T/gh")" = 0 ] && ok "git push is allowed" || no "git push is allowed"
+# Incident 2026-10-28: an API redeploy during an outage skipped GitHub.
+[ "$(run "python3 - <<'EOF'
+q('mutation(\$s:String!){serviceInstanceDeployV2(serviceId:\$s,environmentId:\"e\")}') # https://backboard.railway.com/graphql/v2
+EOF" "$T/plain")" = 2 ] && ok "deploy mutation sent to the Railway API is refused" || no "deploy mutation sent to the Railway API is refused"
+[ "$(run 'curl -s https://backboard.railway.com/graphql/v2 -d "{\"query\":\"mutation{deploymentRedeploy(id:\\\"x\\\"){id}}\"}"' "$T/plain")" = 2 ] && ok "deploymentRedeploy over curl is refused" || no "deploymentRedeploy over curl is refused"
+[ "$(run 'railway redeploy -y' "$T/plain")" = 2 ] && ok "railway redeploy is refused" || no "railway redeploy is refused"
+[ "$(run 'curl -s https://backboard.railway.com/graphql/v2 -d "{\"query\":\"query{deployment(id:\\\"x\\\"){status}}\"}"' "$T/plain")" = 0 ] && ok "a read query to the Railway API is allowed" || no "a read query to the Railway API is allowed"
+[ "$(run 'python3 x.py  # serviceConnect via backboard.railway.com/graphql/v2' "$T/plain")" = 0 ] && ok "serviceConnect (attaching the repo) is allowed" || no "serviceConnect (attaching the repo) is allowed"
+[ "$(run 'railway deployment list' "$T/gh")" = 0 ] && ok "railway deployment list is allowed" || no "railway deployment list is allowed"
 python3 -m py_compile "$ROOT/bin/railway-connect" && ok "railway-connect compiles" || no "railway-connect compiles"
 echo "  $pass passed, $fail failed"; [ "$fail" -eq 0 ]

@@ -74,11 +74,16 @@ Founders who have never done outbound get shown one real message to one real
 prospect before any pilot ask. The close is one small pilot on the tool they
 already use, a two-week win number, and a follow-up date.
 
-Before handing a script over, run
-`python3 bin/lib/call_prep_check.py <script.md>` and fix every FAIL. It
-refuses texting shorthand, unexplained jargon, steps without a speaker, and a
-script missing any of the four, and it warns on every claim about our version
-of their site, which gets checked on the live page.
+Before handing a script over, run it on the live Google Doc, one tab per
+founder: `python3 bin/lib/call_prep_check.py --doc <doc-id> --tab <founder>`,
+plus `--absent Gavin` (or whoever) when someone can't make the call. A .md
+works too: `call_prep_check.py <script.md>`. Fix every FAIL. It refuses
+texting shorthand, unexplained jargon, steps without a speaker, a script
+missing any of the four, more than 450 words, more than one founder in a tab,
+and any mention of someone who isn't on the call. It warns on every claim
+about our version of their site, which gets checked on the live page. Rerun
+it after every edit to the doc: on 10/28 a one-line fix to the Firebox tab put
+Gavin back in and pushed it past 450.
 
 ## Afterwards
 

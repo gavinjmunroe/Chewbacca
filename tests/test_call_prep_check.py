@@ -84,6 +84,24 @@ def main() -> int:
     p, _ = call_prep_check.check(told)
     check("a never line may name jargon", p == [], p)
 
+    # 10/28 Firebox: a 1,000-word section was "wayyy too dense", three
+    # founders sat in one doc tab, and a solo call still named Gavin.
+    long_doc = PLAIN + ("Background line about the group and its history. " * 60)
+    p, _ = call_prep_check.check(long_doc)
+    check("over 450 words fails", any("words" in x for x in p), p)
+
+    two = PLAIN + "OPTRA Labs: Friday 10/30, 4:00 to 4:30\n"
+    p, _ = call_prep_check.check(two)
+    check("two founders in one tab fails", any("own doc tab" in x for x in p), p)
+
+    p, _ = call_prep_check.check(PLAIN, absent=["Gavin"])
+    check("absent Gavin still in the steps fails", any("isn't on this call" in x for x in p), p)
+    solo = PLAIN.replace("Gavin", "Caleb")
+    p, _ = call_prep_check.check(solo, absent=["Gavin"])
+    check("solo script w no Gavin passes", p == [], p)
+    p, _ = call_prep_check.check(solo + "Gav can't make this one.\n", absent=["Gavin"])
+    check("a leftover Gav line fails", any("isn't on this call" in x for x in p), p)
+
     print(f"{'FAIL' if failed else 'ok'}: {failed} failed")
     return 1 if failed else 0
 

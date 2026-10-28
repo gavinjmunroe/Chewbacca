@@ -40,6 +40,14 @@ probe "a named hard blocker" 0 \
 probe "full scope, no cut" 0 "All 238 creators are queued across every platform." "$ASK"
 probe "no totality word" 0 "Capped at 10 videos per channel." "grab a few of his videos"
 probe "injection alone isn't his ask" 0 "Capped at 10 videos per channel." "grab a few of his videos"
+# 2026-10-28: three replies refused that cut nothing.
+CALL="Give me the 3 names to read off the list, every number has to come from the files"
+probe "rows to read aloud" 0 "The top 3 names come from ur script, all 164 are in the CSV." "$CALL"
+probe "where a file lives" 0 "These to-dos only exist in the notes file for now." "$CALL"
+probe "a fenced prompt for another tab" 0 $'Paste this:\n\n```\nAsk me only the 1 to 3 questions that change the build.\n```' "$CALL"
+probe "his own words in quotes" 0 'Ur script says "Read the top 3" and that stays.' "$CALL"
+probe "a real for-now cut" 2 "Skipping the other 160 rows for now." "$CALL"
+probe "a real top-N cut" 2 "Enriching only the top 20 for the call." "$CALL"
 
 [ "$fail" = 0 ] && echo "scope-guard ok" || echo "$fail failed"
 exit "$fail"

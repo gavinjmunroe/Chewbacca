@@ -110,6 +110,10 @@ probe "the same shape about a launch still refuses" 2 \
   "Ivy A is done, and the launch only needs the footer." "$GTM_T"
 probe "a quoted claim in a report about the guard (2026-10-16)" 0 \
   "The guard was refusing \"A13 is done, and A14 only needs ur engagement-metrics cell\" because the session touched campaigns. A launch phrase still counts." "$GTM_T"
+probe "call prep good to go, no client named (Junto, 2026-10-28)" 0 \
+  "U're good to go for the call. Site's up, and the gift line is the campaign already running for him." "$GTM_T"
+probe "call prep that names a client's launch still refuses" 2 \
+  "Before the Zeutara call, the launch is good to go." "$GTM_T"
 # Once per turn: a second Stop in the same turn never loops.
 jq -cn --arg m "We're good to go on the launch." --arg t "$GTM_T" '{last_assistant_message:$m,transcript_path:$t,prompt_id:"probe1"}' \
   | bash "$HOOK" >/dev/null 2>&1 && echo "  ok    fires once per turn" || { echo "  FAIL  fired twice in one turn"; fail=$((fail+1)); }

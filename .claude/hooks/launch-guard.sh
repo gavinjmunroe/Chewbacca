@@ -607,6 +607,12 @@ if name == "git":
 
 if name == "chewie" and args[:2] == ["web", "goto"] and len(args) == 3 and re.fullmatch(r"https://\S+", args[2]):
     out("allow")
+# 2026-10-28: the Junto pilot task ("run our 164 owners as a separate Dripify
+# campaign") was refused twice because its title said campaign, and the to-dos
+# never reached the ledger. work-ledger writes one local JSON file and starts
+# no program (tools/work_ledger.py has no subprocess), so its words are data.
+if name == "work-ledger" and args[:1] and args[0] in ("add", "list", "update", "context", "board"):
+    out("allow")
 out("refuse", f"{name} is not a known Clay read (curl, wget, python -c, node -e, osascript and the like are never allowed near Clay)")
 PY
 

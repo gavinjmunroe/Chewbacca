@@ -64,4 +64,9 @@ reply=$(python3 -I -c 'import json,sys; print(json.dumps({"prompt_id": "p4", "la
 printf '%s' "$reply" | bash "$hook" >/dev/null 2>&1; [ $? -eq 2 ] && ok "voice-guard refuses a fenced draft that isn't him" || bad "voice-guard let a fenced draft through"
 reply=$(python3 -I -c 'import json,sys; print(json.dumps({"prompt_id": "p5", "last_assistant_message": "Send it with:\n\n```bash\ncd ~/code && people texts drafts send 3 --dry-run plus some more words here\n```"}))')
 printf '%s' "$reply" | bash "$hook" >/dev/null 2>&1; [ $? -eq 0 ] && ok "a bash fence is left alone" || bad "voice-guard fired on a bash fence"
+# 2026-10-28: prompts for other agent tabs were graded as texts and refused.
+reply=$(python3 -I -c 'import json,sys; print(json.dumps({"prompt_id": "p6", "last_assistant_message": "Paste this in the OPTRA tab:\n\n```\n" + sys.argv[1] + "\n```"}))' "$FORMAL")
+printf '%s' "$reply" | bash "$hook" >/dev/null 2>&1; [ $? -eq 0 ] && ok "a fence introduced as a tab prompt is left alone" || bad "voice-guard graded a tab prompt as a text"
+reply=$(python3 -I -c 'import json,sys; print(json.dumps({"prompt_id": "p7", "last_assistant_message": "Prompt for the GTM OS session:\n\n```\n" + sys.argv[1] + "\n```\n\nAnd the text for Jonah:\n\n```\n" + sys.argv[1] + "\n```"}))' "$FORMAL")
+printf '%s' "$reply" | bash "$hook" >/dev/null 2>&1; [ $? -eq 2 ] && ok "a text fence after a prompt fence is still read" || bad "the text fence after a prompt slipped through"
 exit $fail

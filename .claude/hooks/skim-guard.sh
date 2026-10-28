@@ -40,7 +40,12 @@ CLAIM = re.compile(
     r"|\bevery (line|page|slide|deck|file|doc)\b|\bfully (read|ingested)\b|\bingested (it|them|everything|all)\b"
     r"|\beverything got (pulled|read|ingested)\b",
     re.I)
-HONEST = re.compile(r"\bskim\w*|\bNOT READ\b|BLOCKED:|\bpartially\b|\bcut (it|them) off\b", re.I)
+# 2026-10-28: "I read TEARDOWN.md through its first 150 lines" and "I never
+# read the CSV row by row" were refused three times as claims of reading all
+# of it. Saying in plain words what wasn't read is the honest partial.
+HONEST = re.compile(r"\bskim\w*|\bNOT READ\b|BLOCKED:|\bpartially\b|\bcut (it|them) off\b"
+                    r"|\b(never|didn'?t|haven'?t|did not|have not) (actually )?read\b"
+                    r"|\bthrough (its|the) first \d+ lines\b|\bonly (read|added|appended)\b", re.I)
 if not CLAIM.search(msg) or HONEST.search(msg):
     print("ok"); raise SystemExit
 
@@ -131,6 +136,11 @@ with open(os.environ["SG_TRANSCRIPT"], encoding="utf-8", errors="replace") as fh
                     mark(k, "full")
             elif name == "Bash":
                 cmd = inp.get("command") or ""
+                # A file this command appends or writes to is the session's own
+                # output: on 10/28, `>> MEMORY.md && tail -1 MEMORY.md` checked an
+                # append and was counted as a skimmed source.
+                for w in re.findall(r">>?\s*[\x22\x27]?([^\s\x22\x27;|&]+)", cmd):
+                    written.add(os.path.basename(w))
                 cd = re.search(r"\bcd\s+(\S+)", cmd)
                 here = cd.group(1).strip("\x27\x22") if cd else cwd
                 # Only files handed to a reading command count: a file passed to

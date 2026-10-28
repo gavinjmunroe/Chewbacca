@@ -1,6 +1,6 @@
 ---
 name: pasted-call
-description: "Turn a pasted call or meeting transcript into an actionable list: every commitment, checked against the texts that followed, grouped by when. Use when a Granola or Otter transcript is pasted, or for 'add all that', 'what came out of that call'."
+description: "Turn a pasted call transcript into every commitment, checked against the texts after it and grouped by when. Use when a Granola or Otter transcript is pasted, or for 'add all that' or 'what came out of that call'."
 triggers: >-
   A meeting or call transcript pasted into chat (Granola "Meeting Title / Transcript / Them: / Me:" shape, Otter, Zoom), or "add all that to the todo", "what do I owe from that call", "what came out of the call with X".
 ---

@@ -48,5 +48,9 @@ probe "a later whole read" 0 "$CLAIM" "Bash:head -50 $D/short.md" "Bash:cat $D/s
 probe "Read chunks that reach the last line" 0 "$CLAIM" "Read:$D/W9S18 Visual Storytelling 2.txt:1:250" "Read:$D/W9S18 Visual Storytelling 2.txt:251:300"
 probe "an honest partial" 0 "13 decks read every line, the other 4 were skimmed." "Bash:head -100 $D/short.md"
 probe "no coverage claim" 0 "Here's the first page." "Bash:head -100 $D/short.md"
+# 2026-10-28: honest partials in plain words, refused three times.
+probe "says it never read one" 0 "Python went through all 164 rows. I never read the CSV row by row." "Bash:head -100 $D/short.md"
+probe "names the lines it read" 0 "I read every section, through its first 150 lines." "Bash:head -150 $D/short.md"
+probe "its own append, checked" 0 "Read all of it." "Bash:printf x >> $D/short.md && tail -1 $D/short.md"
 [ $fail -eq 0 ] && echo "ok: skim-guard"
 exit $fail

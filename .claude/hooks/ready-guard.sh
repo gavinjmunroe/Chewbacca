@@ -205,6 +205,13 @@ except Exception as exc:  # a broken import must not hide the claim
     print(f"refuse\t<client>\t{claim}\tgtme ready could not load ({exc.__class__.__name__})"); raise SystemExit
 
 named = mentioned(low)
+# 2026-10-28: "u're good to go" before the Junto sales call (prep checked, site
+# up, the gift line saying "the campaign already running") was refused for a
+# Zeutara launch, a client the reply never named. A reply that names no client
+# and is about getting ready for a call or meeting is not a launch claim.
+CALL_PREP = re.compile(r"\b(call|meeting|demo|pitch|walk in|cheat sheet|on the call)\b")
+if not named and CALL_PREP.search(low) and not re.search(r"\bcam_[a-z0-9]+|\bgo live\b|\blaunch(es|ed|ing)?\b", low):
+    print("ok"); raise SystemExit
 pool = named or mentioned(work)
 if not pool:
     d = gtme_ready.state_dir()

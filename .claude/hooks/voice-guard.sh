@@ -45,10 +45,19 @@ for blk in re.findall(r"((?:^[ \t]*> ?.*\n?)+)", msg, re.M):
 # language, or text/plain/txt, holding prose is a draft too. Code-shaped
 # fences (shell prompts, braces, assignments, a command first word) are not.
 CODEY = re.compile(r"^\s*(\$ |cd |git |npm |python|bash |#!|[A-Za-z_]+=|import |def |function |const |let |\{|\[|<)|[;{}]\s*$", re.M)
-for lang, blk in re.findall(r"^```[ \t]*([A-Za-z]*)[ \t]*\n(.*?)^```", msg, re.M | re.S):
+# 2026-10-28: three prompts meant for other agent tabs ("Paste this in the
+# OPTRA tab") were graded as texts, 300 to 480 words each, and refused twice.
+# A fence the reply introduces as a prompt or for a tab or session is for an
+# agent, not a person.
+FOR_AGENT = re.compile(r"\b(prompt|tab|session|agent|claude|codex)\b", re.I)
+for m in re.finditer(r"^```[ \t]*([A-Za-z]*)[ \t]*\n(.*?)^```", msg, re.M | re.S):
+    lang, blk = m.group(1), m.group(2)
     if lang.lower() not in ("", "text", "txt", "plain"):
         continue
     if CODEY.search(blk):
+        continue
+    lead = msg[max(0, m.start() - 160):m.start()].rsplit("```", 1)[-1]
+    if FOR_AGENT.search(lead):
         continue
     bodies.append(" ".join(l.strip() for l in blk.splitlines() if l.strip()))
 bad = []

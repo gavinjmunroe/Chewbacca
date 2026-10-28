@@ -40,7 +40,7 @@ b202ce1ca6e2ff983612c382e00e48259c16fb492162783decaa01acc3f9f75b  .claude/hooks/
 8b7342cf282c105548e2218fefae061995bb5eac42915fe99b19afd0ab618b6f  .claude/hooks/kit-autopush.sh
 5e2aa4a982e6617c9bdab3716c8e8f09e5ab5b32c3df4cd3899290e6f959d627  .claude/hooks/kit-debt.sh
 d0d36a808f98696682635f2f8065961a61476bb3b63689873ae320edc2cae8ab  .claude/hooks/kit-route.sh
-ecd1a2d3b7fdf5eec61949004374e4e3a7a83390af7776d7a6572dc21f7a36b9  .claude/hooks/launch-guard.sh
+d92b0b569dc1e148b542a8cd219d0c74ce8db93fa798e96ca38351ae07405a80  .claude/hooks/launch-guard.sh
 ef74b454902ac227ac8e076b34f6139ef1a72cd923503d3375d018e7f344e7ee  .claude/hooks/learn-on-land.sh
 76e2b14ae00a484447d3630ab9e67332ab6d1bccc6b7042bc71967a0b7d30485  .claude/hooks/lesson-guard.sh
 b3440da719850b24ed1036d0967244df4f4c039bae4e2e5a755ac0ffbc513439  .claude/hooks/lib.sh
@@ -60,16 +60,16 @@ c7594c3df7370c62ba76e046daf1e17843dbf24972438206496b28098c4128ee  .claude/hooks/
 baff09b097b67758927ae5ea8ed991dc855687ccd34face005381a4fb432ab42  .claude/hooks/prose-guard.sh
 50c4395b2af9aad5e34b94694b06cdd850a8ae42ef92421d60533becefaa9539  .claude/hooks/railway-domain-guard.sh
 abb8b6c9fb9ba187fce9b7a6b315b6dea96e7b3799dc146487eda3dbe8a411f4  .claude/hooks/railway-up-guard.sh
-6924831721b81b2ae518d397c83992ca925b9d8705858eb41d271bd4a90b5519  .claude/hooks/ready-guard.sh
+c36c31bf86c7169b65d840a62b682c234a994a4a5815246814649c58fb27a79a  .claude/hooks/ready-guard.sh
 a519c0d18f8b71ebbbe3bf93328a4d1d22bde56518ed72fe08aa61b6cebff125  .claude/hooks/reply-lessons.sh
 cc50c2a07f59b11f165690ad20f5103c45f3150f6faa47bec4663f3027666e71  .claude/hooks/repo-overlap-guard.sh
-08907294967c936a2663c3a86763bf534fa067ee13186cfc2f2ba4f4e3bab892  .claude/hooks/scope-guard.sh
+45c0d34b442905c5a522b52daf9829f09f299cb126ffcd331f3b968d2253df9b  .claude/hooks/scope-guard.sh
 2e87f09a3d730d5a4dd1af4709ffac34b26cd6c7866e0a7e176479ca74c352ba  .claude/hooks/session-context.sh
 381816d88f89126ee5e036780884b09689cf8a9dcdae9fe416ef4df20ba347e7  .claude/hooks/site-stack-gate.sh
 669edb92bf2514e7e8a2cabd962158ec6b12c0fe7cebfeeee1d03a7c736b78b9  .claude/hooks/skill-gate.sh
 a176571c1fc0376648f87d4e84c994142242275bf1fbbd53c0358609a3375137  .claude/hooks/skill-route-shadow.sh
 c4bfd00d39d2163966bc6f7d1a8272c4ef3ae6f74be20b76d119cfdd2ee5707e  .claude/hooks/skill-route.sh
-fdc284c1c5f57de296faed3009f272200c40067108b6f062e1ba11a4f291d00d  .claude/hooks/skim-guard.sh
+538874afac3e4de38219bf639d1f67a7af9b4baddce0575ef205c2853e40c857  .claude/hooks/skim-guard.sh
 84c734c22d4b9c898f1a9b9901c6e8e9fcc62f83758e8da798cfc4bebee8ad91  .claude/hooks/slop-guard.sh
 0aeb3e7c5d08db6e967001ddd1fc845791f500c5186c3616f9f99d49367c2695  .claude/hooks/stale-read-guard.sh
 6a02b63a1166d249ab763f5cfad1c996f96e0c9773a5ff39d290ffb1692d2c74  .claude/hooks/statusline.sh
@@ -85,7 +85,7 @@ acb87a59f6283ca018b65ff71267674edf91fc738c9dbecfef7fea8edf5eed0d  .claude/hooks/
 3369382daf04ba6aaa49e65680d51279f1ac826cfc04a82a5affe41d8443be4b  .claude/hooks/ux-guard.sh
 6687e42c3becfd7e4b67b6eadaeac3c62262366e2ae7d7d3cb9e0dbba4c40aec  .claude/hooks/vercel-guard.sh
 9b34e33178561029acc8e248a128abe6a19330d95f75b7630d97ecc828eb003e  .claude/hooks/vibe-guard.sh
-ab4be5eb90f5618c494abab5e5d8088d88a91e6ee178a337dabab026a48d7cfc  .claude/hooks/voice-guard.sh
+797bd836a1e4f5d90abd7c34bf5fafea815adcfb5fde578a02d751b339926d6e  .claude/hooks/voice-guard.sh
 3afe78e28a3262de7ebc2367f1f27e7c5790ac12da69c3034b961a04c108e76a  .claude/hooks/voice-remind.sh
 f408b11e44e0352fcb1b87bee6ec3c77024708a7a186a3ddb5ba324a2379feec  .claude/hooks/wait-loop-guard.sh
 82d711233a6cac8da6ed19b2c04565e3cec1c79edc00415eddcf40d6e139888a  .claude/hooks/work-ledger-context.sh

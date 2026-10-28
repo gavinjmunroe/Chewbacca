@@ -191,6 +191,11 @@ cases += [
     # Review of f5447e2c: the command text lost $lower's whitespace squeeze.
     U('chewie web click "add   leads"', 2),
     U('chewie web click "start\nsending"', 2),
+    # 2026-10-28: a ledger title saying campaign was refused, so the Junto to-dos never landed.
+    U('work-ledger add --scope /Users/x "Run our 164 owners as a separate Dripify campaign next to his"', 0),
+    U('work-ledger list --scope /Users/x', 0),
+    U('work-ledger add "campaign" && clay campaigns update cam_x --status active', 2),
+    U('work-ledger add "campaign" > /tmp/x', 2),
 ]
 
 bad = 0

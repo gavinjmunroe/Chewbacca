@@ -78,13 +78,39 @@ def ranking_param(m):
     return bool(RANKING.search(msg[start:min(ends) if ends else len(msg)]))
 
 
+# 2026-10-28, one session, three refusals of replies that cut nothing: "Read the
+# top 3" (rows of a 164 list to read aloud on a call, his own script), "only
+# exist in the notes file for now" (where a file lives), and "only the 1 to 3
+# questions" inside a prompt fenced for another tab. Quoted words and fenced
+# blocks are someone else's text, and "top N" or "for now" is a cut only in a
+# sentence that does the work on fewer things.
+def blank(s):
+    return " " * len(s.group(0))
+
+
+# \x60 is a backtick: a literal one inside this $( heredoc ) breaks bash 3.2.
+scan = re.sub(r"\x60{3}.*?\x60{3}", blank, msg, flags=re.S)
+scan = re.sub(r"\x60[^\x60\n]*\x60|\"[^\"\n]*\"|“[^”\n]*”", blank, scan)
+WORK = re.compile(r"\b(ingest\w*|scrap\w*|pull\w*|process\w*|enrich\w*|send\w*|sent|kept|keep\w*|"
+                  r"build\w*|load\w*|queu\w*|focus\w*|skip\w*|hold|park\w*|drop\w*|leav\w* out|later)\b", re.I)
+
+
+def sentence(m):
+    start = max(scan.rfind(".", 0, m.start()), scan.rfind("\n", 0, m.start())) + 1
+    ends = [i for i in (scan.find(".", m.end()), scan.find("\n", m.end())) if i != -1]
+    return scan[start:min(ends) if ends else len(scan)]
+
+
 cut = None
 for m in re.finditer(
         r"\btop \d+\b|\b\d+ of (the )?\d+\b.*\b(picked|chosen|closest|fit)|\bcapped\b|\bcap(ped)? at\b"
         r"|\btier[- ]?1\b|\bon hold\b|\bset aside\b|\bnot ingested\b|\bskipped\b|\bfor now\b"
         r"|\bonly the \d+\b|\bnarrow(ed)? (it|the scope)\b",
-        msg, re.I):
-    if m.group(0).lower().startswith("top ") and ranking_param(m):
+        scan, re.I):
+    word = m.group(0).lower()
+    if word.startswith("top ") and ranking_param(m):
+        continue
+    if (word.startswith("top ") or word == "for now") and not WORK.search(sentence(m)):
         continue
     cut = m
     break

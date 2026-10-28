@@ -61,7 +61,7 @@ mkdir -p "$T/p2/bin" "$T/p2/scripts"; cp "$T/chewbacca/bin/checker" "$T/p2/scrip
 /usr/bin/python3 -c 'import hashlib,json,sys;h=lambda p:hashlib.sha256(open(p,"rb").read()).hexdigest();json.dump({"bin/tool":{"sha256":h(sys.argv[1]+"/bin/tool")},"scripts/checker":{"sha256":h(sys.argv[1]+"/scripts/checker")}},open(sys.argv[1]+"/sync.lock.json","w"))' "$T/p2"
 g "$T/p2" add -A; g "$T/p2" commit -qm base; g "$T/p2" push -q origin main
 printf '{"products": [{"name": "demo", "repo": "x/demo", "test": "grep -q v4 bin/tool"}]}\n' > "$T/reg.json"
-export CHEWBACCA_PRODUCTS="$T/reg.json" CHEWBACCA_PRODUCT_REMOTE_DEMO="$T/prod-origin.git"
+export CHEWBACCA_HOME="$T/home" CHEWBACCA_PRODUCTS="$T/reg.json" CHEWBACCA_PRODUCT_REMOTE_DEMO="$T/prod-origin.git"
 P() { GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t /usr/bin/python3 "$ROOT/bin/chewbacca-products" "$@"; }
 P > "$T/st"; grep -q "demo: " "$T/st" && grep -q "changed" "$T/st" && ok "products status reads a product from its origin" || no "products status: $(cat "$T/st")"
 P pull > "$T/out"; git -C "$T/prod-origin.git" show main:bin/tool | grep -q v4 \
@@ -70,4 +70,23 @@ echo v5 > "$T/chewbacca/bin/tool"; push_chew seven
 P pull > "$T/out"; rc=$?
 [ "$rc" = 1 ] && grep -q "BLOCKED: demo tests failed" "$T/out" && git -C "$T/prod-origin.git" show main:bin/tool | grep -q v4 \
   && ok "a red product test pushes nothing" || no "pushed past red tests: $(cat "$T/out")"
+grep -q '"bin/checker"' "$T/home/products-shared.json" 2>/dev/null && grep -q '"bin/tool"' "$T/home/products-shared.json" \
+  && ok "products writes the Chewbacca-side shared paths land reads" || no "cache: $(cat "$T/home/products-shared.json" 2>&1)"
+
+# land queues a pull only for a landed diff that touches a shared path.
+mkdir -p "$T/bin"; printf '#!/bin/bash\necho "$@" >> "%s/queued"\n' "$T" > "$T/bin/chewbacca"; chmod +x "$T/bin/chewbacca"
+mkdir -p "$T/chewbacca/config"; echo '{"products": []}' > "$T/chewbacca/config/products.json"
+g "$T/chewbacca" add -A; g "$T/chewbacca" commit -qm reg; g "$T/chewbacca" push -q origin main
+Q() { (cd "$ROOT" && PATH="$T/bin:$PATH" CHEWBACCA_NO_RUNTIME= /usr/bin/python3 -c '
+import sys
+from importlib.machinery import SourceFileLoader
+m=SourceFileLoader("land",sys.argv[1]).load_module()
+m.queue_product_sync(sys.argv[2], sys.argv[3])' "$ROOT/bin/chewbacca-land" "$T/chewbacca" "$1"); }
+echo notes > "$T/chewbacca/README"; g "$T/chewbacca" add README; g "$T/chewbacca" commit -qm readme
+Q HEAD~1 > /dev/null; [ ! -s "$T/queued" ] && ok "a land touching no shared file queues nothing" || no "queued for an unshared file: $(cat "$T/queued")"
+echo v9 > "$T/chewbacca/bin/tool"; g "$T/chewbacca" commit -qam nine
+Q HEAD~1 > /dev/null; grep -q "jobs submit --net --once .* products pull" "$T/queued" 2>/dev/null \
+  && ok "a land touching a shared file queues products pull on the machine queue" || no "not queued: $(cat "$T/queued" 2>&1)"
+: > "$T/queued"; CHEWBACCA_NO_PRODUCT_SYNC=1 Q HEAD~1 > /dev/null 2>&1
+[ ! -s "$T/queued" ] && ok "CHEWBACCA_NO_PRODUCT_SYNC keeps a scratch land from queueing" || no "queued under the opt-out"
 exit "$fail"

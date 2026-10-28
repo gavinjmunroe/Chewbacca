@@ -37,4 +37,4 @@ Inside a product, `tools/product_sync.py` gives the same status, `pull`, `push` 
 
 - anchored: shares the engine, `slop-check` and `code-slop` (mapped from its `scripts/`).
 - usc-os: has its own `tools/sync` from before this engine, sharing 38 files. Moving it to `tools/product_sync.py` is the next step there, done from the USC OS work since that repo has its own owner tab.
-- Not built yet: running `chewbacca products pull` on its own after a land that touches a shared file.
+- `chewbacca land` queues `chewbacca products pull` on the machine queue after any land on main that touches a shared file (Caleb, 2026-10-28: "Yes, auto-push"). It reads ~/.chewbacca/products-shared.json, which every products run rewrites.

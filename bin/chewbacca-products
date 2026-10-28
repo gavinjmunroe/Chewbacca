@@ -54,6 +54,26 @@ def clone(p, dest):
     return r
 
 
+def remember(name, dest):
+    """Write which Chewbacca paths this product shares, for land to read.
+
+    land checks a landed diff against this cache to decide whether to queue a
+    pull, so it never has to clone every product on every land.
+    """
+    home = Path(os.path.expanduser(os.environ.get("CHEWBACCA_HOME", "~/.chewbacca")))
+    cache = home / "products-shared.json"
+    try:
+        data = json.loads(cache.read_text())
+    except (OSError, ValueError):
+        data = {}
+    paths = []
+    for f in json.loads((dest / "sync.json").read_text()).get("files", []):
+        paths.append(f if isinstance(f, str) else f.get("chewbacca", f["path"]))
+    data[name] = sorted(paths)
+    home.mkdir(parents=True, exist_ok=True)
+    cache.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+
+
 def status(names, as_json):
     out, behind = [], 0
     for p in products():
@@ -69,6 +89,7 @@ def status(names, as_json):
             if not (dest / "sync.json").exists():
                 out.append({"product": p["name"], "error": "no sync.json yet"})
                 continue
+            remember(p["name"], dest)
             r = engine(dest, "status", "--json")
             rep = json.loads(r.stdout) if r.stdout.strip().startswith("{") else {"product": p["name"], "error": r.stderr.strip()[:200]}
             out.append(rep)
@@ -103,6 +124,7 @@ def pull(names):
             if not (dest / "sync.json").exists():
                 print(f"{p['name']}: no sync.json yet, skipped")
                 continue
+            remember(p["name"], dest)
             r = engine(dest, "pull")
             print(r.stdout.rstrip())
             if r.returncode:

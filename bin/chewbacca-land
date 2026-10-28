@@ -212,6 +212,43 @@ def derived_from(disk, own, old):
     return not (added - have) and not (removed & have)
 
 
+def queue_product_sync(wt, pre):
+    """After a land on main, queue `chewbacca products pull` if it touched a shared file.
+
+    Caleb, 2026-10-28, on Anchored and USC OS: "they all stay up to date as
+    something changes". The pull clones each product, tests it and pushes only
+    on green, so it goes on the machine queue and the land returns right away.
+    Which files are shared comes from the cache the last products run wrote;
+    with no cache the pull is queued anyway, since an in-step product costs one
+    clone. Tests and scratch runs set CHEWBACCA_NO_RUNTIME or
+    CHEWBACCA_NO_PRODUCT_SYNC, and never queue a real job.
+    """
+    if os.environ.get("CHEWBACCA_NO_PRODUCT_SYNC") or os.environ.get("CHEWBACCA_NO_RUNTIME"):
+        return
+    if not os.path.exists(os.path.join(wt, "config", "products.json")):
+        return
+    changed = run(["git", "diff", "--name-only", pre, "HEAD"], wt, check=False).stdout.split()
+    cache = os.path.join(os.path.expanduser(os.environ.get("CHEWBACCA_HOME", "~/.chewbacca")), "products-shared.json")
+    try:
+        with open(cache) as f:
+            shared = {p for paths in json.load(f).values() for p in paths}
+    except (OSError, ValueError):
+        shared = None
+    hit = sorted(set(changed) & shared) if shared is not None else changed
+    if not hit:
+        return
+    chew = shutil.which("chewbacca")
+    if not chew:
+        print("land: touched files shared w products, but `chewbacca` isn't on PATH to queue the pull")
+        return
+    q = subprocess.run([chew, "jobs", "submit", "--net", "--once", "--title", "products pull after land",
+                        "--", chew, "products", "pull"], text=True, capture_output=True)
+    if q.returncode == 0:
+        print(f"land: queued a product pull for {len(hit)} shared file(s), `chewbacca jobs list` shows it")
+    else:
+        print(f"land: could not queue the product pull: {(q.stderr or q.stdout).strip()[:200]}")
+
+
 def main():
     ap = argparse.ArgumentParser(prog="chewbacca land", description=__doc__.split("\n\n")[0])
     ap.add_argument("commits", nargs="*", help="commits to land, oldest first")
@@ -348,11 +385,14 @@ def main():
                 print(f"land: dry run ok, would push {run(['git', 'rev-parse', '--short', 'HEAD'], wt).stdout.strip()}")
                 return 0
             for attempt in range(1, MAX_TRIES + 1):
+                pre = run(["git", "rev-parse", target], wt).stdout.strip()
                 p = run(["git", "push", "-q", a.remote, f"HEAD:{a.branch}"], wt, check=False)
                 if p.returncode == 0:
                     sha = run(["git", "rev-parse", "--short", "HEAD"], wt).stdout.strip()
                     subj = run(["git", "log", "-1", "--format=%s"], wt).stdout.strip()
                     print(f"land: {sha} {subj}")
+                    if a.branch == "main":
+                        queue_product_sync(wt, pre)
                     if a.paths:
                         record.update(verbatim)
                         for p in set(a.paths) - set(verbatim):

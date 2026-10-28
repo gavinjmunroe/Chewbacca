@@ -1217,6 +1217,12 @@ if group "installer"; then
   check  "site-stack-gate replays real pages to the recorded verdicts" \
     /usr/bin/python3 "$ROOT/tests/test_site_stack_gate_replay.py" "$ROOT"
 
+  # A Medrano lead scorer was hand-rolled past the Togari rubrics (2026-10-27).
+  check  "gtm-reuse-gate refuses a lead scorer that skips gtme_score" \
+    bash "$ROOT/tests/gtm_reuse_gate.sh" "$ROOT"
+  check  "gtm-reuse-gate replays real scorers to the recorded verdicts" \
+    /usr/bin/python3 "$ROOT/tests/test_gtm_reuse_gate_replay.py" "$ROOT"
+
   # closeout fans out by group; a regex that finds none falls back to a
   # 9 to 14 minute sequential run (BACKLOG 116).
   check  "closeout finds every suite group to fan out" \

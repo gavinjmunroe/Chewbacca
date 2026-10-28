@@ -228,6 +228,10 @@ Togari's capabilities and their Chewbacca equivalents, row by row, are in
 address" across every local source; `gtme-score` ports Togari's lead, affiliation,
 primary-contact, tier and contact-quality rubrics.
 
+## Every list, score and why-now starts from what BMA, Amber and Togari already proved
+
+Before writing any code or prompt that picks a buyer, scores an account or decides why now, import `tools/gtme_score.py` and use its rubrics: `resolve_primary` for the primary contact, `signal_strength` for why-now (sourced, dated, HOLD under 6), `assign_tier` for tier 1/2/3, `quality_score` and `calculate_affiliation` for contacts. The rules are in `references/bma/scoring.md`, the outbound rules in `references/bma/outbound-rules.md`, Sagar's process in `references/sagar.md`. Enrich through Togari (ZoomInfo search is free) before scraping. `gtm-reuse-gate` refuses a lead scorer that never names gtme_score. Caleb, 2026-10-27, after a hand-rolled Medrano scorer called a baseball trade a church's why-now: "Fix chewbs to NEVER not use the goated stuff we learned from bma/amber/togari".
+
 ## A lead list for someone else starts from their buyer, not ours
 
 Before pulling a single row for a partner or prospect, write down in three lines what they sell, the price, and the signals that say a buyer needs it now and can pay. Then pick sources that carry those signals. On 2026-10-27 a list for John Knox (Medrano Partners, $20K to $40K AI governance and data work for ministries and nonprofits) was started by rerunning Firm Foundation's church-site audit, our ICP, and Caleb said "Ur not being smart ur being monkey see monkey do". What fit him was money from public IRS 990 filings, need from AI or data job posts and leaders speaking on AI, and warm paths through his own network.

@@ -2227,6 +2227,7 @@ _register("PreToolUse", hooks_dir + "/interface-first.sh", matcher="Write", time
 # A Kyber landing page went out on 2026-10-27 as a Tailwind CDN index.html with
 # ux-pick never run. A site page waits for ux-pick plus the house stack.
 _register("PreToolUse", hooks_dir + "/site-stack-gate.sh", matcher="Write", timeout=5)
+_register("PreToolUse", hooks_dir + "/gtm-reuse-gate.sh", matcher="Write", timeout=5)
 
 # ux-engine holds 18 research files, six stances, a motion constant table, a
 # 24-entry effects catalog and 106 psychology principles, and a whole session

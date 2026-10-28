@@ -6,6 +6,11 @@
     ".claude/hooks/brain-recall.sh": "router"
   },
   "evals": {
+    ".claude/hooks/gtm-reuse-gate.sh": {
+      "type": "replay",
+      "test": "tests/test_gtm_reuse_gate_replay.py",
+      "corpus": "tests/fixtures/gtm_reuse/corpus.json"
+    },
     ".claude/hooks/draft-source-guard.sh": {
       "type": "replay",
       "test": "tests/test_draft_source_guard_replay.py",

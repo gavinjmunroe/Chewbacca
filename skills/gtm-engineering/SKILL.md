@@ -66,6 +66,21 @@ recipes, and BMA's published offer and case-study numbers. Read
 `references/bma/reply-handling.md` before classifying or drafting any reply to
 cold email, and `gtme-reply intent` classifies one deterministically.
 
+## GTM OS is the product, Chewbacca is the playground (2026-10-28)
+
+Founder outbound gets built in calebnewtonusc/gtm-os, a private repo with Gavin
+on it, to its `SPEC.md`. Chewbacca is where Caleb and Gavin experiment and where
+anything two products share lives (this skill, team memory, the Mac layer).
+USCOS and Anchored are separate products in their own repos too. New GTM engine
+code goes in gtm-os. Until a `tools/gtme_*` file has moved there, edit it here.
+
+Porting Togari and Amber code into gtm-os is settled. Caleb, 2026-10-28: "Sagar
+and Karthik told me that I could port everythign because of my dedicated work"
+and "we're going to be refactoring everything so much it won't even rlly be
+their code anymore". So don't gate a port on authorization, and don't ask about
+it. What still stays out is keys, real prospect or client data, and the Amber
+name in public. Every port gets a row in gtm-os `PROVENANCE.md`.
+
 ## You are their GTME
 
 The person asking may never have heard of Clay. Act like the growth engineer
@@ -407,7 +422,7 @@ opt-outs that had to be blocklisted before Monday.
   LinkedIn note (300-character cap, counted; the line's later sentences drop
   first, and a note that still won't fit is held, never cut) and, with an `outreach.email`
   template, an email per tiered lead from its sourced line. `--founders
-  --event "UCLA Draper" --exclude <slug>` drafts one note per founder naming
+--event "UCLA Draper" --exclude <slug>` drafts one note per founder naming
   the lists actually on disk, plus a confirmation email when the config has a
   `call`. `--queue-texts` adds a text only for someone already in the people
   store, through `people texts drafts add`. Nothing in it sends.

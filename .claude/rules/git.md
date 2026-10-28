@@ -111,3 +111,18 @@ impossible. Remove it when the branch lands: `git worktree remove ../wt-slug`.
   checkout by hand: ten tabs did on 2026-10-09/10 and broke it a new way each time.
 - Main stays green. A red check on main is fixed or quarantined the day it
   appears, because a main that is always a little red hides the next failure.
+
+## Merging one repo into another
+
+Check both repos' visibility first: `gh api repos/<owner>/<repo> --jq .private`.
+A private repo pushed into a public one stays in public history even after a
+revert. On 2026-10-28 Caleb asked to merge calebnewtonusc/anchored-os (private:
+call notes, other teams' members by name, strategy) into anchored (public). The
+mismatch only showed up because collaborators got checked. The merge waited on
+a local branch until he answered "Yes, go private".
+
+Bring the history with `git subtree add --prefix=<dir> <repo> main`, compare
+every file byte for byte (`git show HEAD:<f> | cmp - <dir>/<f>`), and archive
+the old repo only after that. Never rebase a branch that holds a subtree add:
+the same day a rebase started replaying the imported commits at the repo root.
+Merge main into it instead.

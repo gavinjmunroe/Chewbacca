@@ -114,6 +114,10 @@ probe "call prep good to go, no client named (Junto, 2026-10-28)" 0 \
   "U're good to go for the call. Site's up, and the gift line is the campaign already running for him." "$GTM_T"
 probe "call prep that names a client's launch still refuses" 2 \
   "Before the Zeutara call, the launch is good to go." "$GTM_T"
+probe "campaigns good to go, with a call mentioned elsewhere (review)" 2 \
+  "The campaigns are good to go. See you on the call." "$GTM_T"
+probe "campaigns good to go for the call, one sentence (review)" 2 \
+  "The campaigns are good to go for the call." "$GTM_T"
 # Once per turn: a second Stop in the same turn never loops.
 jq -cn --arg m "We're good to go on the launch." --arg t "$GTM_T" '{last_assistant_message:$m,transcript_path:$t,prompt_id:"probe1"}' \
   | bash "$HOOK" >/dev/null 2>&1 && echo "  ok    fires once per turn" || { echo "  FAIL  fired twice in one turn"; fail=$((fail+1)); }

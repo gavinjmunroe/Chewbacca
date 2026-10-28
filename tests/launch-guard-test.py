@@ -68,7 +68,9 @@ def run(tool, tool_input, receipt=None, files=None, last_url=None, chat=None):
     os.makedirs(fixtures)
     with open(os.path.join(fixtures, "cam_x.json"), "w") as fh:
         json.dump({"id": "cam_x", "sequence": []}, fh)
+    # The repo's bin first, so `work-ledger` resolves to this checkout's shim on any machine.
     env = dict(os.environ, HOME=home, GTME_GRADE_KEY_FILE=os.path.join(home, "k", "grade.key"),
+               PATH=os.path.join(ROOT, "bin") + os.pathsep + os.environ.get("PATH", ""),
                GTME_GRADE_CLAY_FIXTURE_DIR=fixtures, CHEWBACCA_ROOT=ROOT)
     subprocess.run([sys.executable, "-c", SIGN, os.path.join(ROOT, "tools"), gin,
                     os.path.join(fixtures, "cam_x.json")], env=env, check=True, timeout=30)
@@ -196,6 +198,9 @@ cases += [
     U('work-ledger list --scope /Users/x', 0),
     U('work-ledger add "campaign" && clay campaigns update cam_x --status active', 2),
     U('work-ledger add "campaign" > /tmp/x', 2),
+    # Review of 8364cb82: a planted work-ledger, or one naming Clay state, stays refused.
+    U('/tmp/evil/bin/work-ledger add "campaign"', 2),
+    U('work-ledger add "campaign" --title "see ~/.chewbacca/state/send-gate-receipts"', 2),
 ]
 
 bad = 0

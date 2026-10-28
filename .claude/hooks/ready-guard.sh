@@ -209,8 +209,13 @@ named = mentioned(low)
 # up, the gift line saying "the campaign already running") was refused for a
 # Zeutara launch, a client the reply never named. A reply that names no client
 # and is about getting ready for a call or meeting is not a launch claim.
-CALL_PREP = re.compile(r"\b(call|meeting|demo|pitch|walk in|cheat sheet|on the call)\b")
-if not named and CALL_PREP.search(low) and not re.search(r"\bcam_[a-z0-9]+|\bgo live\b|\blaunch(es|ed|ing)?\b", low):
+# Review of 8364cb82: an early exit on any call word let "the campaigns are good
+# to go, see you on the call" through. Only the claim sentence decides: it
+# passes when it is about the call and says nothing about anything going out.
+CALL_PREP = re.compile(r"\b(call|meeting|demo|pitch|walk in|cheat sheet)\b")
+GOES_OUT = re.compile(r"\b(campaigns?|cam_[a-z0-9]+|drafts?|sequences?|sends?|sending|sent|wave|launch\w*|"
+                      r"live|running|started|active|outbound|leads?|lists?|emails?|copy|footer|tier [ab]|clay)\b")
+if not named and CALL_PREP.search(claim) and not GOES_OUT.search(claim):
     print("ok"); raise SystemExit
 pool = named or mentioned(work)
 if not pool:

@@ -456,7 +456,21 @@ opt-outs that had to be blocklisted before Monday.
   turns into, w a real row from the list, and the question only tunes order.
 - **Say what we are before they ask.** "For you it's a service. You don't
   install anything, we do the work." Have the "why not just use Claude?"
-  answer written down. Never say GTM OS, MCP or desktop app to a founder.
+  answer written down. Then say what we're building, in Caleb's words
+  (10/28): "Right now we do it for you. The software we're building is what
+  lets us do it fast, and later you'll be able to run it yourself." That
+  software is Dough. Never say MCP or desktop app to a founder.
+- **A call doc a person reads live is short.** One line per thing he says,
+  about 6 steps, 450 words max per founder. On 10/28 the Firebox section ran
+  long and Caleb wrote "Bro its wayyy too dense speak english" 15 minutes
+  before the call. The detail goes in the sheet and the cheat sheet.
+- **One founder per doc tab.** Three calls in one tab had to be split mid
+  call day ("currently its all the same tab"). Use `addDocumentTab`, copy
+  paragraph styles, bullets and links, and check the text matches before
+  deleting the original.
+- **When a teammate can't make a call, take them off it completely.** Every
+  "(Gavin)" step becomes Caleb's and no line mentions the absent person. One
+  leftover "Gavin can't make this one" line drew "bro gav cant make it".
 - **Define the engagement before the call.** What we do every week, a price
   range or a [NEED: price range] at the top, and a written take on paid vs
   pilot vs favor (a free consumer app like Firebox gets a free 2 week pilot

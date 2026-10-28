@@ -109,7 +109,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - reference_dripify_open_api: Dripify Open API read 10/28, upload carries custom fields (1,000 a call), blacklist needs a lead id, starting a campaign and making fields are app-only; pinned in gtm-os
 - reference_gtm_service_price_benchmarks: BMA outbound retainers ran 2 to 4K a month for small clients (Joe, Roy) and 20K+ for Sagar's big ones; price founder pilots against it (10/28)
 
-- reference_anchored_accelerator_apps_2026_10: Anchored YC W27 + speedrun SR008 drafts Doc, vision-led rewrite 10/28, deadlines Nov 1/Nov 2, nothing submitted
+- reference_anchored_accelerator_apps_2026_10: Anchored YC W27 + speedrun SR008 drafts note, moved to calebnewtonusc/anchored docs/notes/ on 2026-10-28
 
 - reference_clay_background_reads: Clay with no tab, 10/16: jev-browse allowed on Clay pages, views + view-sort/filter/columns ops, whole reads past the 20k cap, Clay's afterrecordid skips rows (use row-ids + rows-by-id)
 - reference_who_pays_for_ai: Menlo 2026 says about 1 in 3 US adults pay for AI (the 2% was 2025 worldwide); Pew says non-users are uninterested, privacy-worried, distrustful, not cost-blocked
@@ -436,7 +436,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_wacli_webhook_fields: wacli 0.20 webhooks send SenderJID/Chat/Text/FromMe capitalized; lowercase pickers drop every message silently (Anchored bridge, 10/24)
 - feedback_reference_video_is_a_spec: a recording handed over for a site scene is the spec for an HTML replica, never embedded; scroll scenes pin (sticky stage) and get judged on the live deploy (Anchored, 10/24)
 - feedback_offboarding_backup_order: account being deleted = start its Google sign-in in the FIRST message, then the no-click exports; BMA Google died at minute 25 while the GTM tool export was mid-setup ("u went too slow", 10/26)
-- project_anchored_os_2026_10_24: Anchored OS, the hackathon build grown into a church ecosystem for FF (plan repo calebnewtonusc/anchored-os, 58 credited ideas, nothing decided)
+- project_anchored_os_2026_10_24: Anchored OS plan, moved to calebnewtonusc/anchored docs/notes/ on 2026-10-28; plan merged into docs/os, anchored-os archived
 - feedback_per_founder_lists_get_per_sender: one list per founder in a folder = a .per-sender marker, or list-guard calls every shared investor a dupe (10/26, a55b979b)
 - feedback_people_texts_lags_new_messages: people texts lagged a 14:54 doc link at 14:57; when he says it's in the text and the CLI shows nothing, one raw chat.db query of the last 20 min (10/26)
 - feedback_self_text_rich_message_unread: self-texted ChatGPT shares read as unsupported content; self thread is the icloud handle, decode attributedBody (10/26)

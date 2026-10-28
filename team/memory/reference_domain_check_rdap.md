@@ -1,10 +1,15 @@
 ---
 name: reference_domain_check_rdap
-description: Check if a .com name is taken with Verisign RDAP (200 = registered, 404 = free) in about a second, no whois; other registries' RDAP can answer 200 for everything
+description: Check if a domain is taken through the registry's RDAP (200 = registered, 404 = free) in about a second, no whois; run a made-up control name first
 metadata:
   type: reference
 ---
 
-For a fast name check, `curl -s -o /dev/null -w '%{http_code}' https://rdap.verisign.com/com/v1/domain/<name>.com` returns 200 when the domain is registered and 404 when it's free. On 2026-10-28 it checked 14 USC OS name candidates in seconds.
+For a fast name check, curl the registry's RDAP and read the status code: 200 means registered, 404 means free.
 
-Other TLDs are unreliable this way: rdap.nic.so and rdap.org answered 200 for every .so and .in name tried that day, including invented ones, so a 200 there proves nothing. .app goes through pubapi.registry.google/rdap/domain/<name>.app. Confirm any "free" result at a registrar before telling Caleb a domain is available, and run a control (a made-up name that has to be free) first.
+- .com: `https://rdap.verisign.com/com/v1/domain/<name>.com`
+- .app: `https://pubapi.registry.google/rdap/domain/<name>.app`
+- .so: `https://rdap.nic.so/domain/<name>.so`
+- anything else: `https://rdap.org/domain/<name>.<tld>` with `-L`
+
+On 2026-10-28 every USC OS name candidate came back 200 on .com, .app and .so. The tab first doubted the .so and .in answers as "200 for everything", then a made-up control (zqxv7kq2plm) answered 404 on all four endpoints, so the 200s were real. Run that control before calling any endpoint unreliable, and confirm a "free" result at a registrar before telling Caleb a domain is available.

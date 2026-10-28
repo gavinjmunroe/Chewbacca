@@ -45,6 +45,23 @@ PY
 printf '%s' "$out" | grep -qx "away None" && ok "a redirect to another host gets no session cookie" || no "cross-host redirect: $out"
 printf '%s' "$out" | grep -qx "stay d2lSessionVal=secret" && ok "a same-host redirect still carries the session" || no "same-host redirect: $out"
 
+# The redirect rule itself, for what local http servers can't show: a downgrade
+# to http, another port, and the real host staying on https.
+out="$($PY - "$ROOT/bin/brightspace-sync" <<'PY' 2>&1
+import importlib.machinery, importlib.util, sys, urllib.request
+l = importlib.machinery.SourceFileLoader("bss", sys.argv[1])
+m = importlib.util.module_from_spec(importlib.util.spec_from_loader("bss", l)); l.exec_module(m)
+h = m.SameHostCookies()
+for to in ("http://brightspace.usc.edu/x", "https://brightspace.usc.edu:8443/x", "https://brightspace.usc.edu/x"):
+    req = urllib.request.Request("https://brightspace.usc.edu/d2l/api/f", headers={"Cookie": "s=1"})
+    new = h.redirect_request(req, None, 302, "Found", {}, to)
+    print(to, "cookie" if new.has_header("Cookie") else "none")
+PY
+)"
+printf '%s\n' "$out" | grep -qx "http://brightspace.usc.edu/x none" && printf '%s\n' "$out" | grep -qx "https://brightspace.usc.edu:8443/x none" \
+  && printf '%s\n' "$out" | grep -qx "https://brightspace.usc.edu/x cookie" \
+  && ok "the cookie follows only the same scheme, host and port, never a downgrade to http" || no "redirect rule: $out"
+
 # Course text with an escape sequence that would clear the screen and retitle the window.
 $PY - "$T/fx.json" <<'PY'
 import datetime as d, json, sys

@@ -109,7 +109,10 @@ class SameHostCookies(urllib.request.HTTPRedirectHandler):
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         new = super().redirect_request(req, fp, code, msg, headers, newurl)
-        if new is not None and urllib.parse.urlparse(newurl).hostname != urllib.parse.urlparse(req.full_url).hostname:
+        old, to = urllib.parse.urlparse(req.full_url), urllib.parse.urlparse(newurl)
+        # Same scheme, host and port, or the cookie stays behind: an https page
+        # bouncing to http on the same host would otherwise send it in the clear.
+        if new is not None and (to.scheme, to.hostname, to.port) != (old.scheme, old.hostname, old.port):
             new.remove_header("Cookie")
         return new
 

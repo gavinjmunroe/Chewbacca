@@ -29,11 +29,11 @@ python3 - "$T/fixture.json" "$DUE" <<'PY'
 import json, sys
 path, due = sys.argv[1], sys.argv[2]
 empty = []
-fx = {f"/le/1.99/{ou}/dropbox/folders/": empty for ou in (298850, 302009, 302284, 302776)}
-fx["/le/1.99/302780/dropbox/folders/"] = [{"Id": 1, "Name": "Presentation Topics", "DueDate": due}]
-fx["/le/1.99/302780/dropbox/folders/1/submissions/"] = [{"Submissions": []}]
-fx["/le/1.99/299120/dropbox/folders/"] = [{"Id": 2, "Name": "P2_Chindogu", "DueDate": due}]
-fx["/le/1.99/299120/dropbox/folders/2/submissions/"] = [{"Submissions": [{"Id": 9}]}]
+fx = {f"/le/1.99/{ou}/dropbox/folders/": empty for ou in (900101, 900103, 900104, 900105)}
+fx["/le/1.99/900106/dropbox/folders/"] = [{"Id": 1, "Name": "Presentation Topics", "DueDate": due}]
+fx["/le/1.99/900106/dropbox/folders/1/submissions/"] = [{"Submissions": []}]
+fx["/le/1.99/900102/dropbox/folders/"] = [{"Id": 2, "Name": "P2_Chindogu", "DueDate": due}]
+fx["/le/1.99/900102/dropbox/folders/2/submissions/"] = [{"Submissions": [{"Id": 9}]}]
 json.dump(fx, open(path, "w"))
 PY
 
@@ -82,11 +82,11 @@ python3 - "$T/fixture3.json" "$DUE" <<'PY'
 import json, sys
 path, due = sys.argv[1], sys.argv[2]
 fx = json.load(open(path.replace("fixture3", "fixture")))
-fx["/le/1.75/302776/quizzes/"] = {"Objects": [
+fx["/le/1.75/900105/quizzes/"] = {"Objects": [
     {"QuizId": 5, "Name": "Quiz #5", "DueDate": due, "IsActive": True, "GradeItemId": 50},
     {"QuizId": 4, "Name": "Quiz# 4", "DueDate": due, "IsActive": True, "GradeItemId": 40},
     {"QuizId": 3, "Name": "Old draft", "DueDate": due, "IsActive": False, "GradeItemId": 30}], "Next": None}
-fx["/le/1.75/302776/grades/values/myGradeValues/"] = [{"GradeObjectIdentifier": "40", "DisplayedGrade": "100 %"}]
+fx["/le/1.75/900105/grades/values/myGradeValues/"] = [{"GradeObjectIdentifier": "40", "DisplayedGrade": "100 %"}]
 json.dump(fx, open(path, "w"))
 PY
 out=$(BRIGHTSPACE_FIXTURE="$T/fixture3.json" COURSEWORK_DIR="$T" python3 "$ROOT/bin/brightspace" due --days 3)
@@ -100,6 +100,7 @@ grep -n '"open"' "$ROOT/bin/brightspace" && fail "bin/brightspace opens somethin
 # The cookie key opens every Chrome cookie, so it never goes into argv, where
 # ps shows it to every process (security review, 2026-10-10: openssl -K <hex>).
 for f in bin/brightspace bin/chewbacca-api; do
+  [ -f "$ROOT/$f" ] || continue  # USC OS ships no api engine
   grep -q '"-K"' "$ROOT/$f" && fail "$f passes the cookie key on a command line"
 done
 echo "  ok"

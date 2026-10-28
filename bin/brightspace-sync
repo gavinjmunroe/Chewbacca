@@ -99,6 +99,24 @@ def cookie_header(host=HOST):
     )
 
 
+class SameHostCookies(urllib.request.HTTPRedirectHandler):
+    """Follow a redirect, but carry the session cookie only to the same host.
+    urllib copies every header onto a redirect, Cookie included, so a file URL
+    that bounced to another host (a CDN, the SSO login, or an open redirect
+    someone planted) was handed the student's whole Brightspace session
+    (security review, 2026-10-28). bin/brightspace refuses redirects outright;
+    file downloads here can legitimately redirect, so they're followed bare."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        new = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new is not None and urllib.parse.urlparse(newurl).hostname != urllib.parse.urlparse(req.full_url).hostname:
+            new.remove_header("Cookie")
+        return new
+
+
+OPENER = urllib.request.build_opener(SameHostCookies)
+
+
 class FixtureResponse:
     def __init__(self, body, url):
         self._body = body.encode() if isinstance(body, str) else json.dumps(body).encode()
@@ -136,7 +154,7 @@ class Client:
         self._wait()
         req = urllib.request.Request(url, headers={"Cookie": self.cookie, "User-Agent": "Mozilla/5.0"})
         try:
-            resp = urllib.request.urlopen(req, timeout=60)
+            resp = OPENER.open(req, timeout=60)
         except urllib.error.HTTPError as e:
             if e.code in (401, 403, 429):
                 raise Stop(f"HTTP {e.code} from {urllib.parse.urlparse(url).path}. Stopping. "

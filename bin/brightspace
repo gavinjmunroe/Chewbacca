@@ -9,7 +9,7 @@ assignments the coursework ledger never heard of.
                                      no ledger item matches it
   brightspace grades [--json]        every released grade, every current course
   brightspace news [--days 7]        announcements from every current course
-  brightspace get <api path>         raw JSON, e.g. /le/1.99/302780/news/
+  brightspace get <api path>         raw JSON, e.g. /le/1.99/900106/news/
   brightspace submit <ou> <folder> <file>... [--dry-run]
                                      upload to a dropbox, group or individual,
                                      then prove it from the submission list
@@ -27,7 +27,7 @@ assignments the coursework ledger never heard of.
 The ledger is built from syllabi, and some assignments only ever exist as a
 Brightspace dropbox. "Presentation Topics" in the BISC lab (due 2026-10-02,
 topics first come first served) was in neither the syllabus schedule nor the
-ledger, and was found the day after it was due only because Caleb remembered
+ledger, and was found the day after it was due only because a student remembered
 it. `due` exists to make that a listed line instead of a memory.
 
 Auth is the student's own d2l cookies from Chrome: CHEWIE_CHROME_PROFILE if
@@ -65,7 +65,7 @@ CHROME_DIR = Path(os.environ.get("CHEWBACCA_CHROME_DIR")
 def pick_profile():
     """The Chrome profile holding the Brightspace session.
 
-    Hardcoding "Profile 1" was right for exactly one Mac. Any other student's
+    Hardcoding one profile name was right for exactly one Mac. Any other student's
     USC login lives in whatever profile they use for school, so take the one
     whose brightspace.usc.edu cookies were used last.
     """
@@ -94,7 +94,7 @@ def school_profile():
     """The profile signed into a school account, from Chrome's own Local State.
 
     With every Brightspace cookie expired, the old fallback was Default, and on
-    2026-10-11 that opened the sign-in page in Caleb's personal Gmail profile:
+    2026-10-11 that opened the sign-in page in a student's personal Gmail profile:
     USC single sign-on failed there, while the "Work" profile signed in to
     Brightspace with no password the moment it was asked.
     """
@@ -113,16 +113,16 @@ PROFILE = pick_profile()
 COOKIE_DB = CHROME_DIR / PROFILE / "Cookies"
 LEDGER = Path(os.environ.get("COURSEWORK_DIR", Path.home() / "coursework")) / "courses"
 
-# Caleb's Fall 2026 org units, read 2026-09-21. Only the test fixture uses
-# these now; a live run reads the student's own enrollments (enrolled_courses).
+# Invented org units in the shape of a real Fall 2026 schedule. Only the test
+# fixture uses these; a live run reads the student's own enrollments (enrolled_courses).
 # The lab is its own org unit, which is where Presentation Topics lived, and
 # enrolled_courses keeps every unit of a code for the same reason.
 FIXTURE_COURSES = {
-    "ACAD 185": [298850],
-    "ACAD 324g": [299120],
-    "WRIT 150": [302009],
-    "MPGU 120a": [302284],
-    "BISC 101Lxg": [302776, 302780],
+    "ACAD 185": [900101],
+    "ACAD 324g": [900102],
+    "WRIT 150": [900103],
+    "MPGU 120a": [900104],
+    "BISC 101Lxg": [900105, 900106],
 }
 
 
@@ -512,7 +512,7 @@ def cmd_due(client, days, ledger_dir, as_json):
                 flags = {True: "submitted", False: "NOT SUBMITTED", None: "UNKNOWN (403)"}[r["submitted"]]
             if not r["in_ledger"]:
                 flags += "  NOT IN LEDGER"
-            print(f"{r['course']:<12} {r['name'][:42]:<42} {local:%a %b %d %H:%M}  {flags}")
+            print(f"{r['course']:<12} {clean_text(r['name'])[:42]:<42} {local:%a %b %d %H:%M}  {flags}")
     missing = [r for r in rows if not r["in_ledger"]]
     return 1 if missing else 0
 
@@ -590,9 +590,9 @@ def cmd_news(client, days, as_json):
         print(f"No announcements in the last {days} days.")
     for r in rows:
         local = dt.datetime.fromisoformat(r["when"].replace("Z", "+00:00")).astimezone()
-        print(f"{r['course']:<12} {local:%a %b %d}  {r['title']}")
+        print(f"{r['course']:<12} {local:%a %b %d}  {clean_text(r['title'])}")
         if r["text"]:
-            print(f"  {r['text'][:400]}")
+            print(f"  {clean_text(r['text'])[:400]}")
     return 0
 
 
@@ -884,7 +884,7 @@ def cmd_feedback(client, ou, folder, out_dir):
     print(f"{meta.get('Name')}: {score if score is not None else '-'} / {meta.get('Assessment', {}).get('ScoreDenominator') or meta.get('OutOf') or '?'}")
     text = (fb.get("Feedback") or {}).get("Text") or plain((fb.get("Feedback") or {}).get("Html") or "")
     if text:
-        print(text.strip())
+        print(clean_text(text).strip())
     out = Path(out_dir).expanduser()
     for f in fb.get("Files", []):
         out.mkdir(parents=True, exist_ok=True)
@@ -909,16 +909,16 @@ def cmd_classlist(client, ou, as_json):
         print(json.dumps(people, indent=1))
     else:
         for p in people:
-            print(f"{p['name']:<32} {p['role'] or '':<12} {p['email'] or ''}")
+            print(f"{clean_text(p['name']):<32} {clean_text(p['role']):<12} {clean_text(p['email'])}")
     return 0
 
 
 def cmd_discuss(client, ou, forum, topic, as_json):
     if forum is None:
         for f in client.get(f"/le/1.75/{ou}/discussions/forums/"):
-            print(f"forum {f['ForumId']}  {f['Name']}")
+            print(f"forum {f['ForumId']}  {clean_text(f['Name'])}")
             for t in client.get(f"/le/1.75/{ou}/discussions/forums/{f['ForumId']}/topics/"):
-                print(f"  topic {t['TopicId']}  {t['Name']}  due {t.get('EndDate') or '-'}")
+                print(f"  topic {t['TopicId']}  {clean_text(t['Name'])}  due {t.get('EndDate') or '-'}")
         return 0
     posts = client.get(f"/le/1.75/{ou}/discussions/forums/{forum}/topics/{topic}/posts/")
     rows = [{"id": p["PostId"], "parent": p.get("ParentPostId"), "by": p.get("PostingUserDisplayName"),
@@ -929,8 +929,8 @@ def cmd_discuss(client, ou, forum, topic, as_json):
         print(json.dumps(rows, indent=1))
     else:
         for r in rows:
-            print(f"[{r['id']}] {r['by']} {r['date']}{'  reply to ' + str(r['parent']) if r['parent'] else ''}")
-            print(f"  {r['subject']}\n  {r['text'].strip()[:600]}\n")
+            print(f"[{r['id']}] {clean_text(r['by'])} {r['date']}{'  reply to ' + str(r['parent']) if r['parent'] else ''}")
+            print(f"  {clean_text(r['subject'])}\n  {clean_text(r['text']).strip()[:600]}\n")
     return 0
 
 

@@ -446,3 +446,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_setup_repos_seamless: setup repos we hand people (chip-in-setup, USC Claude+Brightspace) run from ONE paste in the Code tab, no browser steps, docs tested against the target repo; Angie hit 5 walls 10/27
 - feedback_founder_calls_lead_with_what_they_cant_get: founder call prep leads w a warm intro from our people or the kit running for them, never a public list or site alone ("it needs to be smth they COULDNT hv done on their own", 10/28)
 - feedback_call_prep_plain_english_for_gav: call prep Gav reads live is plain English, full words, jargon explained; shorthand prep got "Send me call prep in English pls" (10/28)
+- feedback_founder_call_find_their_working_channel_first: find the channel a founder gets results from before building the pilot; Junto prep was a cold email bake-off and Reed had quit cold email for LinkedIn via Dripify (10/28)
+- feedback_founder_call_say_service_and_engagement: call prep says "service, we do the work" in one line, the engagement shapes, a price range, and why not Claude w a connector; Reed asked "are you guys a software? a service?" (10/28)
+- feedback_read_vendor_docs_before_saying_no_api: read the vendor integrations page + API root before saying no API; I said Dripify had none and api.dripify.com has writes (10/28)
+- project_junto_pilot_2026_10_28: Reed (Junto) said yes to a LinkedIn pilot in his Dripify w our 164 MSP owners; waiting on his access, no LinkedIn URLs yet, no price (10/28)

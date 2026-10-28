@@ -265,6 +265,16 @@ section, a row of color swatches and a grid of generic silhouette people.
   rgb tokens), and `scroll-behavior: smooth` on `html` makes the
   heading-paint check flaky (glide anchors in JS instead).
 
+- **Upgrade drafts are dimensional, and live on the house stack.** On
+  2026-10-28 Caleb, on the UCLA founder upgrades: "NEVER MAKE A PDF NEVER
+  MAKE SMTH 1 DIMENSIONAL VISUALLY". Firebox v3 held up as Next, motion, lenis
+  and three: the client's own hero type, the product as a tappable 3D device
+  with real side faces, and their story on a 3D terrain where a scroll-driven
+  camera visits one place per beat. Frame every camera beat at 1440 and 390
+  (on a phone, pull back and aim lower so pins clear the text), and check the
+  Railway service is connected to GitHub before the handoff. Firebox's was a
+  `railway up` service, so pushes didn't deploy.
+
 ## When they ask for an intro animation
 
 The Cowboy Cubans draft got a five second duel on first load (two silhouettes,

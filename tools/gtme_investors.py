@@ -34,7 +34,8 @@ The investors block (every field optional except thesis):
        "limit": 500,
        "out": "~/Downloads/Client/investors.csv",
        "suppress": ["~/path/already-emailed.csv"],       any CSV with an email column
-       "db": "~/path/prometheus.db"}}
+       "db": "~/path/prometheus.db",
+       "angels": true}}                                 or --angels: the angel pass, see build_angels
 
 The database path comes from --db, then the block's "db", then $PROMETHEUS_DB.
 
@@ -47,7 +48,9 @@ only a yes, after every thesis match; the old `include_unknown_sector: false`
 still means drop. A list is never padded to its limit with unjudged rows. Where a LinkedIn slug shares no
 token with the name, 89.7% were confirmed wrong, so those slugs are blanked.
 
-Writes nothing but the CSV. Never sends, never reads the network. After
+Writes nothing but the CSV. Never sends. The network is read only by the
+judge (firm sites, portfolio pages, Jev) and, in angel mode, one MX lookup
+per mail domain. After
 writing it runs `list-audit` on the file and prints the result; exit 1 when
 the audit finds a defect the tool should have removed.
 """
@@ -64,6 +67,7 @@ import subprocess
 import sys
 import urllib.parse
 from pathlib import Path
+from typing import Optional
 
 ROOT = Path(__file__).resolve().parent.parent
 # bin/gtme-investors runs this file through runpy, which puts bin/ on the
@@ -143,6 +147,10 @@ def check_block(block: dict) -> None:
     for key in ("max_check_musd", "min_check_musd", "limit"):
         if key in block and not isinstance(block[key], (int, float)):
             raise ConfigError(f"investors.{key} must be a number")
+    angels = block.get("angels", False)
+    if not isinstance(angels, (bool, dict)) or (isinstance(angels, dict) and not isinstance(
+            angels.get("question", ""), str)):
+        raise ConfigError("investors.angels must be true, false or {\"question\": \"...\"}")
 
 
 def word_re(words: list[str]) -> re.Pattern | None:
@@ -624,6 +632,200 @@ def judge_all(rows: list[dict], block: dict, ask, says, stats: dict, mode: str, 
     return fixed + kept
 
 
+# An angel has no portfolio page, so judge_all drops every one as "no
+# evidence" and a $5K-check round gets only funds: on 2026-10-26 a consumer
+# hardware pre-seed came back with 9 rows, all institutional. Judged alone on
+# title, company and sectors, 25 clear-fit angels scored 0.45 to 0.85 (21 of
+# 25 at 0.6+) and 25 pure software or fintech angels 0.08 to 0.18.
+ANGEL_YES = 0.6
+# Angels invest as themselves, so the company they get mail at is the one a
+# send can name (280 of 329 kept rows had a blank company on 10/26). A
+# government address was the one list-gate refused outright that day.
+NO_MAIL_COMPANY = (".gov", ".mil")
+
+
+def angel_question(block: dict) -> str:
+    angels = block.get("angels") if isinstance(block.get("angels"), dict) else {}
+    if angels.get("question"):
+        return angels["question"]
+    pitch = block.get("pitch") or ("a startup in " + ", ".join((block.get("thesis_text") or block.get("thesis") or [])[:8]))
+    return (f"This is an individual angel investor. From the sectors, title and company on file, would they plausibly "
+            f"write a small angel check into this startup: {pitch}. Yes only if what's on file points at the "
+            f"startup's own market. One broad word that overlaps (software, technology) is no when the rest of what's "
+            f"on file points somewhere else (enterprise software, fintech, biotech, real estate).")
+
+
+def has_mx(domain: str) -> Optional[bool]:
+    """True when the domain takes mail, False when it has no MX or a null MX
+    ("0 ."), None when the lookup itself could not run."""
+    try:
+        proc = subprocess.run(["dig", "+short", "+time=3", "+tries=1", "MX", domain],
+                              capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    lines = [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
+    if proc.returncode != 0 or any(ln.startswith(";;") for ln in lines):
+        return None
+    return any(ln.split()[-1] != "." for ln in lines)
+
+
+def build_angels(con: sqlite3.Connection, block: dict, ask=jev_judge, mx=has_mx) -> tuple[list[dict], dict]:
+    """The angel pass: individual angels judged on what's on file, with the
+    company taken from their mail domain. Run beside the fund list, not
+    instead of it.
+
+    Every row is judged ALONE, one Jev call each. In batches of 20, plain
+    "software" angels rose to the top (0.77) for a consumer startup; alone
+    they scored 0.08 to 0.18. 6,083 single calls took 122 s at 8 threads.
+    Seniority and org_types are not applied: the pool is the angels."""
+    countries = {c.lower() for c in block.get("countries", [])}
+    regions = {r.lower() for r in block.get("regions", [])}
+    excl = word_re(block.get("exclude_sectors", []))
+    excl_orgs = [o.lower() for o in block.get("exclude_orgs", [])]
+    thesis = word_re(block.get("thesis", []) + block.get("thesis_text", []))
+    max_check = block.get("max_check_musd")
+    min_check = block.get("min_check_musd")
+    gate = list_gate()
+    suppress = suppressed_emails(block.get("suppress", []))
+
+    cols = {r[1] for r in con.execute("PRAGMA table_info(contacts)")}
+    flags = [c for c in ("d_name_nan",) if c in cols]
+    sql = ("SELECT record_id, full_name, title, organization, org_type, email, website, linkedin,"
+           " city, state, country, region, sectors_norm, check_size, grade, grade_score"
+           + "".join(f", {c}" for c in flags) +
+           " FROM contacts WHERE entity_kind='Person' AND grade IN ('A','B')"
+           " AND email IS NOT NULL AND email != ''"
+           " AND (lower(org_type)='angel' OR check_size LIKE 'Angel (individual)%')")
+    stats = {"pool": 0, "dropped": {}}
+
+    def drop(reason):
+        stats["dropped"][reason] = stats["dropped"].get(reason, 0) + 1
+
+    rows = []
+    for r in con.execute(sql):
+        stats["pool"] += 1
+        rec = dict(zip(["record_id", "full_name", "title", "organization", "org_type", "email",
+                        "website", "linkedin", "city", "state", "country", "region", "sectors",
+                        "check_size", "grade", "grade_score"] + flags, r))
+        email = (rec["email"] or "").strip().lower()
+        sectors = (rec["sectors"] or "").strip()
+        org = (rec["organization"] or "").strip()
+        if countries or regions:
+            c = (rec["country"] or "").strip().lower()
+            g = (rec["region"] or "").strip().lower()
+            if not (c in countries or (c in ("", "unknown") and g in regions)):
+                drop("geography"); continue
+        if not EMAIL_RE.match(email):
+            drop("malformed email"); continue
+        if is_role(email):
+            drop("role inbox"); continue
+        if any(rec.get(f) for f in flags) or not first_name(rec["full_name"]):
+            drop("junk name"); continue
+        if any(gate.NAN_STRIP.search(str(v or "")) for v in rec.values()):
+            drop("NaN-strip corruption"); continue
+        if rec["title"] and gate.is_junior(rec["title"]):
+            drop("too junior to decide"); continue
+        if not sectors or sectors.lower() == "unknown":
+            drop("no sector on file to judge"); continue
+        if excl and excl.search(sectors.lower()):
+            drop("excluded sector"); continue
+        if any(o in org.lower() for o in excl_orgs):
+            drop("excluded firm"); continue
+        if email in suppress:
+            drop("suppressed"); continue
+        rng = check_range(rec["check_size"])
+        if rng and max_check is not None and rng[0] > max_check:
+            drop("check too large"); continue
+        if rng and min_check is not None and rng[1] < min_check:
+            drop("check too small"); continue
+        domain = email.rsplit("@", 1)[1]
+        if domain.endswith(NO_MAIL_COMPANY):
+            drop("government address"); continue
+        company = clean_company(org) if company_ok(org) else ""
+        if not company:
+            if domain in FREE_MAIL:
+                drop("free mailbox, no company"); continue
+            company = domain
+        hit = thesis.search(sectors.lower()) if thesis else None
+        slug = rec["linkedin"] or ""
+        rows.append({
+            "first_name": first_name(rec["full_name"]),
+            "full_name": (rec["full_name"] or "").strip(),
+            "title": (rec["title"] or "").strip(),
+            "organization": company,
+            "org_type": rec["org_type"] or "",
+            "email": email,
+            "website": rec["website"] or "",
+            "linkedin": slug if linkedin_matches(rec["full_name"], slug) else "",
+            "city": rec["city"] or "", "state": rec["state"] or "", "country": rec["country"] or "",
+            "sectors": sectors, "check_size": rec["check_size"] or "",
+            "grade": rec["grade"] or "",
+            "thesis_match": "yes" if hit else "no",
+            "stage_match": "yes",
+            "fit_score": (3 if hit else 0) + 2 + GRADE_RANK.get(rec["grade"], 0),
+            "why": f"angel; sectors on file: {sectors}",
+            "record_id": rec["record_id"],
+        })
+
+    q = angel_question(block)
+
+    def judge(r):
+        st = {"title": r["title"], "company": r["organization"], "sectors": r["sectors"],
+              "check_size": r["check_size"]}
+        got = ask([st], q)
+        return r, (got[0] if got else None)
+
+    stats.update(judged=0, unscored=0, mx_unchecked=0, keyword_only=False)
+    kept = []
+    with concurrent.futures.ThreadPoolExecutor(8) as ex:
+        for r, p in ex.map(judge, rows):
+            stats["judged"] += 1
+            if p is None:
+                stats["unscored"] += 1
+                continue
+            if p < ANGEL_YES:
+                drop("Jev: not a fit for the pitch"); continue
+            r["judge_p"] = f"{p:.2f}"
+            r["why"] = f"angel, Jev {p:.2f} on title, company and sectors; sectors on file: {r['sectors']}"
+            kept.append(r)
+    if stats["unscored"]:
+        stats["dropped"]["no Jev answer"] = stats["unscored"]
+    kept.sort(key=lambda r: (-float(r["judge_p"]), -r["fit_score"]))
+
+    # One angel per mail domain and per company, the best fit first: two
+    # angels at one family office read as a blast to whoever sorts its mail.
+    seen_email, seen_keys, out = set(), set(), []
+    for r in kept:
+        domain = r["email"].rsplit("@", 1)[1]
+        keys = {"name:" + gate.firm_key(r["organization"])}
+        if domain not in FREE_MAIL:
+            keys.add("domain:" + domain)
+        if r["email"] in seen_email or keys & seen_keys:
+            drop("another angel at the same domain"); continue
+        seen_email.add(r["email"]); seen_keys |= keys
+        out.append(r)
+
+    # A dead mail domain is a hard bounce, and bounces cost the sending
+    # domain. One lookup per domain, after the cut, so the judge's no's
+    # never cost a lookup.
+    verdicts: dict = {}
+    sendable = []
+    for r in out:
+        domain = r["email"].rsplit("@", 1)[1]
+        if domain not in verdicts:
+            verdicts[domain] = mx(domain)
+        if verdicts[domain] is False:
+            drop("mail domain has no MX"); continue
+        if verdicts[domain] is None:
+            stats["mx_unchecked"] += 1
+        sendable.append(r)
+
+    stats.update(thesis_rows=sum(1 for r in sendable if r["thesis_match"] == "yes"), unknown_pool=0,
+                 judged_in=len(kept), matched=len(sendable))
+    limit = int(block.get("limit") or 0)
+    return (sendable[:limit] if limit else sendable), stats
+
+
 def write_csv(rows: list[dict], path: Path) -> None:
     """Names, firms and titles come from strangers, and the file is opened in
     Sheets and Excel, so every string cell goes through the kit's one defuse
@@ -671,6 +873,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", help="CSV path (default: block's out)")
     ap.add_argument("--limit", type=int)
     ap.add_argument("--dry-run", action="store_true", help="count only, write nothing")
+    ap.add_argument("--angels", action="store_true",
+                    help="the angel pass: individual angels judged alone, company from the mail domain")
     ap.add_argument("--no-audit", action="store_true")
     ap.add_argument("--json", action="store_true", help="print the summary as JSON")
     ap.add_argument("--show", type=int, default=10, help="print the strongest N rows and why each fit (0: none)")
@@ -685,12 +889,14 @@ def main(argv: list[str] | None = None) -> int:
         block = load_block(cfg)
         if a.limit is not None:
             block["limit"] = a.limit
+        if a.angels and not block.get("angels"):
+            block["angels"] = True
         db = expand(a.db or block.get("db") or os.environ.get("PROMETHEUS_DB"))
         if not db or not Path(db).exists():
             print(f"no Prometheus db at {db!r}: pass --db or set PROMETHEUS_DB", file=sys.stderr)
             return 2
         con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
-        rows, stats = build(con, block)
+        rows, stats = (build_angels if block.get("angels") else build)(con, block)
     except ConfigError as exc:
         print(f"config error: {exc}", file=sys.stderr)
         return 2
@@ -721,10 +927,16 @@ def main(argv: list[str] | None = None) -> int:
     if a.json:
         print(json.dumps(summary, indent=1))
     else:
-        print(f"  pool {summary['pool']:,} people with an email and grade A or B")
-        print(f"  {summary['thesis_matched']:,} ON THESIS, plus {stats['judged_in']:,} generalists Jev judged a yes "
-              f"of {stats['judged']:,} judged ({stats['unscored']:,} unscored) from {stats['unknown_pool']:,} with "
-              f"no sector on file")
+        if block.get("angels"):
+            print(f"  pool {summary['pool']:,} angels with an email and grade A or B")
+            print(f"  {stats['judged_in']:,} Jev judged a yes of {stats['judged']:,} judged alone "
+                  f"({stats['unscored']:,} unscored), {stats['matched']:,} after one per domain and the MX "
+                  f"check ({stats['mx_unchecked']:,} kept on a domain the lookup could not reach)")
+        else:
+            print(f"  pool {summary['pool']:,} people with an email and grade A or B")
+            print(f"  {summary['thesis_matched']:,} ON THESIS, plus {stats['judged_in']:,} generalists Jev judged a yes "
+                  f"of {stats['judged']:,} judged ({stats['unscored']:,} unscored) from {stats['unknown_pool']:,} with "
+                  f"no sector on file")
         for k, v in sorted(stats["dropped"].items(), key=lambda kv: -kv[1]):
             print(f"    dropped {v:>7,}  {k}")
         if summary["top"]:

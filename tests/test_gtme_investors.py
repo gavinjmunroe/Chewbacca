@@ -6,7 +6,9 @@ the network or the real database.
 """
 from __future__ import annotations
 
+import contextlib
 import csv
+import io
 import json
 import os
 import sqlite3
@@ -430,6 +432,82 @@ class InvestorsTest(unittest.TestCase):
         proc = subprocess.run([sys.executable, str(ROOT / "bin" / "list-gate"), str(out)], capture_output=True,
                               text=True, timeout=60)
         self.assertEqual(proc.returncode, 0, proc.stdout)
+
+    def add_angels(self, *people):
+        con = sqlite3.connect(self.db)
+        for rid, name, org, email, sectors in people:
+            con.execute("INSERT INTO contacts VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        (rid, name, "Angel Investor", org, "Angel", "A", 70, "unknown", "Person", email, "",
+                         "", "City", "ST", "United States", "North America", "Angel (individual)", 0, 0, sectors))
+        con.commit(); con.close()
+
+    def test_angel_mode_judges_each_angel_alone_and_keeps_the_sendable_ones(self):
+        # 2026-10-26: the fund path dropped every angel (no portfolio page) and a
+        # $5K-check round came back all funds. Every row and email here is invented.
+        self.add_angels(("a1", "Ada Wren", "", "ada@wrenhome.example", "consumer, wearables"),
+                        ("a2", "Bo Finch", "", "bo@finchco.example", "fintech"),
+                        ("a3", "Cy Dove", "", "cy@dovestudio.example", "consumer, design"),
+                        ("a4", "Di Dove", "Dove Studio", "di@dovestudio.example", "consumer, apparel"),
+                        ("a5", "Ed Lark", "", "ed@deadmail.example", "consumer, jewelry"),
+                        ("a6", "Flo Gray", "", "flo@agency.gov", "consumer"),
+                        ("a7", "Gil Moor", "", "gil@gmail.com", "consumer"))
+        scores = {"wearables": 0.82, "fintech": 0.59, "design": 0.9, "apparel": 0.7, "jewelry": 0.88}
+        asked, looked_up = [], []
+
+        def ask(states, q):
+            asked.append(len(states))
+            s = states[0]["sectors"]
+            return [next((p for k, p in scores.items() if k in s), 0.1)]
+
+        def mx(domain):
+            looked_up.append(domain)
+            return domain != "deadmail.example"
+        con = self.con
+        funds, _ = gi.build(con, dict(BLOCK), ask=lambda st, q: [0.9] * len(st), says=lambda site: "",
+                            match=lambda firm, names: [], read_portfolio=lambda d, f: {"companies": []},
+                            lender_ask=lambda st, q: [0.0] * len(st))
+        self.assertNotIn("ada@wrenhome.example", self.emails(funds), "the fund path drops a portfolio-less angel")
+
+        rows, stats = gi.build_angels(con, dict(BLOCK, angels=True), ask=ask, mx=mx)
+        got = self.emails(rows)
+        self.assertTrue(asked and all(n == 1 for n in asked), "every angel judged alone, never in a batch")
+        self.assertIn("ada@wrenhome.example", got, "an angel with no portfolio page survives")
+        ada = next(r for r in rows if r["email"] == "ada@wrenhome.example")
+        self.assertEqual(ada["organization"], "wrenhome.example", "company is the mail domain")
+        self.assertEqual(ada["judge_p"], "0.82")
+        self.assertNotIn("bo@finchco.example", got, "0.59 is under the 0.6 cut")
+        dove = [r for r in rows if r["email"].endswith("@dovestudio.example")]
+        self.assertEqual([r["email"] for r in dove], ["cy@dovestudio.example"], "one angel per domain, best first")
+        self.assertEqual(stats["dropped"]["another angel at the same domain"], 1)
+        self.assertNotIn("ed@deadmail.example", got, "a domain with no MX is dropped")
+        self.assertEqual(stats["dropped"]["mail domain has no MX"], 1)
+        self.assertNotIn("flo@agency.gov", got)
+        self.assertNotIn("gil@gmail.com", got, "a free mailbox with no company names nobody")
+        self.assertNotIn("finchco.example", looked_up, "a judged no never costs a lookup")
+        self.assertEqual(len(looked_up), len(set(looked_up)), "one lookup per domain")
+        self.assertEqual(got, sorted(got, key=lambda e: -float(next(r["judge_p"] for r in rows if r["email"] == e))))
+        out = self.tmp / "angels.csv"
+        gi.write_csv(rows, out)
+        proc = subprocess.run([sys.executable, str(ROOT / "bin" / "list-gate"), str(out)], capture_output=True,
+                              text=True, timeout=60)
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+
+    def test_angels_flag_routes_the_cli_to_the_angel_pass(self):
+        cfg = self.tmp / "c.json"
+        cfg.write_text(json.dumps({"investors": dict(BLOCK, db=str(self.db))}))
+        seen = []
+        real = gi.build_angels
+        gi.build_angels = lambda con, block: seen.append(block.get("angels")) or ([], {
+            "pool": 0, "matched": 0, "thesis_rows": 0, "unknown_pool": 0, "judged": 0, "judged_in": 0,
+            "unscored": 0, "mx_unchecked": 0, "dropped": {}})
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(gi.main(["--config", str(cfg), "--angels", "--dry-run", "--json"]), 0)
+        finally:
+            gi.build_angels = real
+        self.assertEqual(seen, [True])
+        with self.assertRaises(gi.ConfigError):
+            gi.check_block(dict(BLOCK, angels="yes"))
 
     def test_the_tool_names_no_client(self):
         src = TOOL.read_text().lower()

@@ -58,6 +58,8 @@ grep -q 'chewbacca gtme ready --client "Zeutara"' "$TMP/err" \
 grep -qi "do not repeat it" "$TMP/err" \
   && echo "  ok    the refusal asks for an added line, never the reply again" \
   || { echo "  FAIL  refusal asks to repeat"; fail=$((fail+1)); }
+probe "2026-10-28 rent reply: client name + a sales lead + nothing else recurring" 0 \
+  "Firm Foundation has zero signed churches. The Durango deal is Gavin's lead. Nothing else recurring." "$GTM_T"
 probe "only waiting on X" 2 "All 14 drafts are set. Only waiting on Jonah's address." "$GTM_T"
 probe "just needs X" 2 "The launch just needs the footer, then we start." "$GTM_T"
 probe "ready to launch" 2 "Tier A is ready to launch Monday." "$GTM_T"

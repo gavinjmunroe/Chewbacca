@@ -134,8 +134,8 @@ REPLY_GTM = re.compile(r"\b(campaigns?|cam_[a-z0-9]+|sequencer|sequences?|gtme|o
 LAUNCH_WORD = re.compile(r"\blaunch(es|ed|ing)?\b")
 NOT_OUTBOUND = re.compile(r"\b(site|page|app|deploy\w*|render\w*|build|preview|vision pro)\b")
 CLIENT_CTX = re.compile(r"\b(copy|drafts?|footer|lists?|sends?|wave|emails?|leads?|mailbox(es)?|inbox(es)?)\b")
-about = (REPLY_GTM.search(low) or (LAUNCH_WORD.search(low) and not NOT_OUTBOUND.search(low))
-         or (mentioned(low) and CLIENT_CTX.search(low)))
+strong_about = REPLY_GTM.search(low) or (LAUNCH_WORD.search(low) and not NOT_OUTBOUND.search(low))
+about = strong_about or (mentioned(low) and CLIENT_CTX.search(low))
 if not about:
     print("ok"); raise SystemExit
 
@@ -143,6 +143,12 @@ claim = None
 for m in re.finditer(r"[^.!?\n]+[.!?]?", low):
     sent = m.group(0)
     if sent.rstrip().endswith("?"):
+        continue
+    # A client name plus "lead" is how a money or pipeline answer talks, so on
+    # that context alone the claim sentence itself has to be about a launch.
+    # 2026-10-28, a rent-odds reply: "Gavin's lead" put Firm Foundation in
+    # context and "- Nothing else recurring" (abt income) was refused.
+    if not strong_about and not LAUNCH.search(sent):
         continue
     pats = STRONG + (WEAK if LAUNCH.search(sent) else [])
     for p in pats:

@@ -152,6 +152,14 @@ Never-dos, in his words (2026-10-11, mid quiz):
   When they're silent on something he could have heard in lab or in person
   (a topic, a presenting week, a makeup slot), ask him in one line first.
   Never offer to email the instructor to find it out.
+- "lets make sure erik noakes isnt the one that sees it" then "bet email her"
+  (2026-10-28, missed BISC Quiz #7): a missed-deadline reopen request goes to
+  the lecture instructor only, from the USC inbox:
+  `GOOGLE_WORKSPACE_CLI_CONFIG_DIR=~/.chewbacca/email/calebnew@usc.edu gws gmail +send`.
+  Draft it, send on his yes, then put the Gmail id and the time in that item's
+  ledger notes. Keep the stated reason one staff can't disprove with a single
+  email to the lab: an "I was in lab" excuse failed that test the day after
+  the lab manager denied his makeup.
 - "I totally missed his email" (2026-10-27, BISC Lab 5 makeup): an
   instructor picked a slot on 10/22 ("Monday 7:30am"), nobody confirmed it,
   and Noakes sat in his office alone. When an instructor's reply sets a time,

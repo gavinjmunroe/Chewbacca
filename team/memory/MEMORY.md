@@ -450,3 +450,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_founder_call_say_service_and_engagement: call prep says "service, we do the work" in one line, the engagement shapes, a price range, and why not Claude w a connector; Reed asked "are you guys a software? a service?" (10/28)
 - feedback_read_vendor_docs_before_saying_no_api: read the vendor integrations page + API root before saying no API; I said Dripify had none and api.dripify.com has writes (10/28)
 - project_junto_pilot_2026_10_28: Reed (Junto) said yes to a LinkedIn pilot in his Dripify w our 164 MSP owners; waiting on his access, no LinkedIn URLs yet, no price (10/28)
+- feedback_bulk_linkedin_lookup_engines: bulk LinkedIn matching = fan out WebSearch agents; Exa unset, Perplexity out of quota, Brave 429s, DDG challenges, Bing JS-only, his LinkedIn session never bulk (OPTRA 338 rows, 10/28)

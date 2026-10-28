@@ -433,6 +433,11 @@ opt-outs that had to be blocklisted before Monday.
   what isn't?" with a branch per likely answer, and every list row carries a
   way to reach the person on each channel (email, LinkedIn URL, group inbox,
   public meeting). Count which rows have each and say the gaps on the call.
+  But know which founder you have. Caleb, 10/28: "Junto is def very diff bc
+  they alr had tried outbound w appollo. Firebox and many other clients dont
+  even know the power of outbound." A founder who has never run outbound
+  can't pick a channel, so the script shows what one note to the right group
+  turns into, w a real row from the list, and the question only tunes order.
 - **Say what we are before they ask.** "For you it's a service. You don't
   install anything, we do the work." Have the "why not just use Claude?"
   answer written down. Never say GTM OS, MCP or desktop app to a founder.

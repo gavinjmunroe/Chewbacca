@@ -17,3 +17,5 @@ Firm Foundation is Caleb and Gavin's 50/50 AI implementation agency for churches
 - Split of work: Gavin builds the site, Caleb plans Clay strategy with Karthik. Sagar said he supports it as side work. Sunday 10/11 sync settles the open decisions, including which entity to use: an existing LLC with a DBA, or a new Texas LLC with a one-page 50/50 operating agreement.
 
 Related: [[project_chewbacca_first_cohort]], [[project_amber_universe_2026_10]].
+
+Durango church network (Caleb, 2026-10-28): the Durango lead connects FF to a network of 600+ churches, the first of several networks Caleb expects, many through FaithTech. Size is his number; no intro or deal from the network confirmed yet.

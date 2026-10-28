@@ -1,6 +1,6 @@
 ---
 name: project_chewbacca_usc_stack_wedge
-description: Covering the whole USC stack (Brightspace, reg, classes, dining, fees, Handshake...) for any student is how Chewbacca gets USC students to pay
+description: Covering the whole USC stack is how USC students come to pay, through USC OS (calebnewtonusc/usc-os), never Chewbacca itself, which is not sold
 metadata:
   type: project
 ---
@@ -18,3 +18,5 @@ Caleb, 2026-10-10: "Making it cover the USC stack is a key way we're gonna get U
 **The whole stack, mapped (2026-10-13):** `library/api-sites/USC-STACK.md` lists every site a student opens, what they do there, and the op that answers it, or why it's blocked. That pass added usc-parking (permit, citations owed, balance; signs in through Entra by itself, headless), usc-rec (live gym counts) and usc-maps (building lookup). Still blocked: Experience USC and STARS (USC's own login.usc.edu wants a password and Duo headless), Gradescope (signed out in Chrome), the StarRez housing portal (its own password) and transnet.usc.edu (didn't answer). tests/usc_api_sites.sh fails if the table claims an op no spec has.
 
 **The week after lockin (2026-10-13, tests/usc_student_week.sh):** a made-up student's Sunday-to-Friday in a scratch HOME stuck in four places, all fixed: nothing on a fresh Mac read the slides and syllabi lockin pulled (now `chewbacca usc read`, PDFKit through JXA plus zipped XML plus old .ppt record scan, nothing to install), grades and announcements were one course at a time through the api engine (now `brightspace grades` and `brightspace news`), and the welcome offered no school goal to a detected student. Ten more are on the work ledger as usc-week-2026-10-13-1 to 10, the biggest being that the seeded ledger has no class times, office hours, attendance or grading until someone reads the syllabus into it.
+
+**Moved to USC OS (2026-10-28):** Caleb: "We're not gonna sell chewbacca that's the playground that operates our systems." The student product is calebnewtonusc/usc-os (private, Gavin has write), standalone with no Chewbacca on the student's Mac. Its SPEC.md is the source of truth. The USC files (bin/brightspace, brightspace-sync, chewbacca-usc, coursework, lib/syllabus_ledger.py, the USC api-site specs, two USC tests) stay at the same paths in both repos, and `tools/sync` in usc-os pulls Chewbacca's landed changes and pushes its own through `chewbacca land`. Fix a shared USC file in either repo, then sync, never hand-copy. Caleb: "every fire thing we build that should be on both let's make it super easily sync to both."

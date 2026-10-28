@@ -423,6 +423,39 @@ opt-outs that had to be blocklisted before Monday.
 - LinkedIn connection notes cap at 300 characters. Count each one before
   handing it over.
 
+## Founder call prep, 2026-10-28 (Junto, OPTRA, Firebox)
+
+- **The first question is the channel that works today.** Reed (Junto) had
+  quit cold email in January (10 domains, 50 mailboxes) and got his results
+  from LinkedIn through Dripify, so a whole cold email bake-off missed. Read
+  every note on the founder for how they get customers now. When nothing on
+  file says, step 2 of the script is "What's working for you right now, and
+  what isn't?" with a branch per likely answer, and every list row carries a
+  way to reach the person on each channel (email, LinkedIn URL, group inbox,
+  public meeting). Count which rows have each and say the gaps on the call.
+- **Say what we are before they ask.** "For you it's a service. You don't
+  install anything, we do the work." Have the "why not just use Claude?"
+  answer written down. Never say GTM OS, MCP or desktop app to a founder.
+- **Define the engagement before the call.** What we do every week, a price
+  range or a [NEED: price range] at the top, and a written take on paid vs
+  pilot vs favor (a free consumer app like Firebox gets a free 2 week pilot
+  first).
+- **Close small and concrete.** One pilot on their own channel, one 2 week
+  win number, and a follow-up date set on the call. That's what got Reed's yes.
+- **Lead with what they can't get themselves.** A list is the warm-up. Caleb,
+  10/28: "Bro it needs to be smth they COULDNT hv done on their own." Warm
+  people Caleb knows and things already built come before the close, said as
+  "let me ask him first," never "I'll get you a meeting," since most are
+  LinkedIn-level contacts.
+- **Every "we did X on your site" line is checked on the live page.** Junto's
+  script claimed something about our site that wasn't true, and Firebox's
+  said "one button to his real form" when the live page has two cards. Load
+  the live draft, read the text and the links, and fix the line before the doc
+  goes to Gavin. Recheck the founder's own bugs the same day too.
+- **The calls doc is shared by several tabs.** Edit only your founder's
+  section with a revision-pinned batchUpdate, and confirm the other sections'
+  headings survive, not their exact text (the other tabs rewrite theirs).
+
 ## Sabo takeover lessons, 2026-10-16
 
 - **Start from the client's buyer, then flip it.** Caleb: "be efficient and

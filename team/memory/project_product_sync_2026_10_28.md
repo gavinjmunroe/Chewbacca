@@ -9,4 +9,6 @@ Chewbacca is the playground and is never sold. The products built out of it ship
 
 **Why:** Caleb, 2026-10-28: "they all stay up to date as something changes it needs to be a fire system since USCOS and Anchored are going to be for other ppl." The same day, anchored's copies of slop-check and code-slop had drifted 70+ lines from Chewbacca's, partly bc someone hand-scrubbed names out of the anchored copy while Chewbacca's still quoted people.
 
+Since ea640211, every `chewbacca land` on main that touches a shared file queues `chewbacca products pull` on the machine queue (Caleb: "Yes, auto-push"), so products update on their own and only a red product test or the firewall stops one.
+
 **How to apply:** Fix a shared file in Chewbacca, or `push` it from the product, never only in the product. A shared file has to be clean at the source: no names, accounts, home paths or phone numbers, even in comments, or the firewall holds it out of every product. A new product gets a `config/products.json` entry w a real test command, since that command is the only gate on auto-pushes. usc-os still runs its older `tools/sync`. The engine reads its manifest as-is, and moving it over is the USC OS tab's call.

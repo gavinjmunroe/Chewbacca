@@ -266,6 +266,7 @@ fi
 
 # ── people ────────────────────────────────────────────────────────────────────
 if group "people"; then
+  check  "contact-photo pulls a card photo from a Sources db and refuses a card with none" bash "$ROOT/tests/contact_photo.sh"
   # `people distill --help` used to start a real distill (2026-10-16): --help on
   # a subcommand prints its usage and never opens the store.
   check  "people <cmd> --help prints usage and runs nothing" bash -c 'h=$(mktemp -d); HOME=$h node "$1/bin/people" distill --help | grep -q "people distill" && [ ! -e "$h/.chewbacca/people/people.db" ]' _ "$ROOT"

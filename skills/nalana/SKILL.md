@@ -232,6 +232,30 @@ Thirty-six corrections across two nights, most of them the same few mistakes.
   env var, the history log, CLAUDE.md plus AGENTS.md, and the skills. Never put
   a login in it, and test a render from a fresh unzip before calling it done.
 
+## Real brand marks in a render: from the Dough page (2026-10-29)
+
+- **Use the mark exactly as the company ships it.** Clay's mark is a 3D arch
+  seen at three-quarters. A front-on redraw of it got "use the actual clay
+  logo not it turned to face us lol". Pull the file from the company's own
+  site (logo img, inline svg, or the 512px favicon in its `<link rel=icon>`),
+  and when it only exists as a raster, use it as an image mask in Blender
+  rather than redrawing it as curves.
+- **Simple-icons first, then the site.** simple-icons on jsdelivr (pinned
+  version) covers the big SaaS marks; GTM tools (Apollo, HeyReach, Dripify,
+  Smartlead, Instantly, lemlist, Attio, Clay) come from their homepages.
+  `simple-icons/apollographql` is Apollo GraphQL, never Apollo.io.
+- **"Same vibe as X" means its feeling, never its props.** For "the white
+  construct in the Matrix" Caleb added: "It doesn't hv to be a white void",
+  "be creative and choose the best thing", "They cant be lik oh they copied
+  the matrix". Write down what the reference does to the viewer (endless
+  space, things arriving unexplained, almost no words), drop every prop
+  (white void, racks, chair, green code), and build that feeling from the
+  client's own world. Dough became a dark proofing room where dough rises.
+- **Registered layers from one camera** (plate, each logo as a flour stencil
+  on a held-out counter, the hero object over a shadow catcher) let the page
+  fade each one in on scroll with nothing drawn in CSS. Script:
+  `dough/site/nalana/render.py`.
+
 ## Making a web 3D scene read as real: from Maia's crate site (2026-10-26)
 
 Caleb on the CSS-3D record crate: "I like the 3d but it ws kinda tweak ngl".

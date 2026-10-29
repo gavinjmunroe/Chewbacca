@@ -646,23 +646,20 @@ def ledger_ok():
             return False
         if pinned.returncode != 0 or here != pinned.stdout:
             return False
-    find_spec = __import__("importlib.util").util.find_spec
+    # Review of 7f0df333: an allowlist, not shadow detection. bin/ may hold only
+    # what the pinned commit's tree holds there (plus __pycache__, which python
+    # reads only beside a matching source). tools/ is not on sys.path:
+    # runpy.run_path on a file never inserts its folder.
     try:
+        tree = sp.run(["git", "-C", kit, "ls-tree", "--name-only", f"{sha}:bin"],
+                      capture_output=True, text=True, timeout=5, env=GIT_ENV)
         entries = os.listdir(os.path.join(root, "bin"))
-    except OSError:
+    except (OSError, ValueError, sp.SubprocessError):
         return False
-    for entry in entries:
-        stem = re.sub(r"\.(py|pyc|so|pth)$", "", entry)
-        if stem == entry and not os.path.isdir(os.path.join(root, "bin", entry)):
-            continue
-        if "." in stem:
-            return False
-        try:
-            if find_spec(stem) is not None:
-                return False
-        except (ImportError, ValueError):
-            return False
-    return True
+    if tree.returncode != 0:
+        return False
+    allowed = set(tree.stdout.splitlines()) | {"__pycache__"}
+    return all(entry in allowed for entry in entries)
 
 
 if base == "work-ledger" and args[:1] and args[0] in ("add", "list", "update", "context", "board"):

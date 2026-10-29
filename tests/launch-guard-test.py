@@ -202,6 +202,12 @@ subprocess.run(["git", "-C", ROOT, "worktree", "add", "-q", "--detach", PLANTED,
                check=True, capture_output=True, env=GENV)
 with open(os.path.join(PLANTED, "bin", "json.py"), "w") as fh:
     fh.write("raise SystemExit('planted')\n")
+# Review of 7f0df333: any extra file in bin/, not just a module-shaped one.
+EXTRA = os.path.realpath(tempfile.mkdtemp()) + "/wt"
+subprocess.run(["git", "-C", ROOT, "worktree", "add", "-q", "--detach", EXTRA, "HEAD"],
+               check=True, capture_output=True, env=GENV)
+with open(os.path.join(EXTRA, "bin", "sitecustomize"), "w") as fh:
+    fh.write("x\n")
 U = lambda c, want, desc="": (c[:60], "Bash", {"command": c, "description": desc},  # noqa: E731
                               None, None, None, want, None)
 cases += [
@@ -228,6 +234,7 @@ cases += [
     # Review of 09fd9e1c: a repo of its own with a clean, committed ledger is still not the kit.
     U(f'{EVIL_REPO}/bin/work-ledger add "campaign"', 2),
     U(f'{PLANTED}/bin/work-ledger add "campaign"', 2),
+    U(f'{EXTRA}/bin/work-ledger add "campaign"', 2),
 ]
 
 bad = 0
@@ -239,6 +246,7 @@ for name, tool, ti, receipt, files, last_url, want, chat in cases:
 ran = os.path.exists(FSMON_MARK)
 print(f"{'FAIL' if ran else 'ok  '} the candidate repo's git config never runs")
 bad += ran
-subprocess.run(["git", "-C", ROOT, "worktree", "remove", "--force", PLANTED], capture_output=True, env=GENV)
+for wt in (PLANTED, EXTRA):
+    subprocess.run(["git", "-C", ROOT, "worktree", "remove", "--force", wt], capture_output=True, env=GENV)
 print(f"\n{len(cases) - bad}/{len(cases)} passed")
 raise SystemExit(1 if bad else 0)

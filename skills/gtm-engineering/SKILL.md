@@ -492,6 +492,32 @@ opt-outs that had to be blocklisted before Monday.
   section with a revision-pinned batchUpdate, and confirm the other sections'
   headings survive, not their exact text (the other tabs rewrite theirs).
 
+## Prepping a call with someone who knows GTM, 2026-10-29
+
+Caleb, before a call with Travis Johnson (AuraPath AI, Claude Ambassador):
+"We need this call genuinely blow his mind, work he couldn't hv done on his
+own", then "WE HV SO MUCH GTM KNOWLEDGE BRUH AND SKILLS AND WISDOM AND BEST
+PRACTICES AND PROCESSES", then "FIX CHEWBS TO ALWAYS USE THEM NOT J BLINDLY
+CHOOSE AN ICP AND MAKE SLOP DATA AND SLOP ENRICHMENTS THAT ARE UNINTENTIONAL".
+The first draft pitched Chewbacca, and the second started job-board searches
+toward a list for an ICP nobody had confirmed.
+
+- Run the process on THEIR business, don't pitch ours. Read their whole site,
+  their job posts and the founder's headline, then fill Sagar's six variables
+  from that material, each one with its source. Mark which ones only they can
+  answer (price, the real ICP).
+- Never pick their ICP. If their own pages name different verticals, that
+  contradiction becomes the opening question. A list waits until they choose.
+- Build every signal from one of their own case studies (arbitration work
+  points at mass arbitration defense, job costing points at federal
+  contractors), never from a generic job-board search.
+- Bring what only Caleb has: warm intros and a live demo of an engine that
+  already runs (the Medrano scorer), named for what it really covers.
+- Look at their live site in a real browser and report what a buyer would
+  see wrong, with "check on ur phone" when it might be a rendering issue.
+- Close on one dated deliverable once they pick the list ("25 scored
+  accounts by next Thursday").
+
 ## Sabo takeover lessons, 2026-10-16
 
 - **Start from the client's buyer, then flip it.** Caleb: "be efficient and

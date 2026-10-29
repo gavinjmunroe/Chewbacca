@@ -347,6 +347,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_ff_video_ship_web_copy_only: FF video pushes carry the web copy + sources, never the 51 MB master (push failed 10/29); mid-turn pics never save, ask for a resend
 - feedback_design_gate_ff_wordmark_false_collision: design-gate calls the FF Wordmark svg vs its own TECHNOLOGIES text a 78% collision (10/29); check the capture, the gate is wrong, not the page
 - feedback_jobs_heavy_render_pauses_itself: 3-4 Remotion workers push load past the jobs queue's 35 pause line and the render freezes and times out (ran 53 s in 47 min, 10/29); use --concurrency=2
+- project_ff_hero_video_state_2026_10_29: FF hero film v29 live at /watch (604eba3); 36 aura logos tied to /team, no USC/Zeutara/Amber, Epicentre+UPPERROOM hallway, Book a call end card; 2 Epicentre pics still owed
 - feedback_no_walls_of_text: No wall of text on any site; 45 words per block, 120 per section, site-gate check fails it (10/10)
 - feedback_no_hard_cutoffs: No bright-edged photo on a dark section (cut it out or use a dark-edged asset); site-gate check fails it (10/10)
 - feedback_no_unintentional_animation: Text never fades up beat after beat or replays an entrance on change; one rise per page; site-gate research fails it (10/10)

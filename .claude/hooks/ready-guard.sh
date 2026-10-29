@@ -183,7 +183,12 @@ for raw in lines:
             texts = [b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"]
         else:
             texts = []
-        seen += [t for t in texts if t.strip() and not t.lstrip().startswith("<")]
+        # A Stop hook's own refusal comes back as a user row, and this guard's
+        # refusal text names Zeutara and Jonah. 2026-10-29, a Firm Foundation
+        # tab was refused three times "for Zeutara" after the first refusal
+        # landed in its transcript, though Zeutara was never touched there.
+        seen += [t for t in texts if t.strip() and not t.lstrip().startswith("<")
+                 and not t.lstrip().startswith("Stop hook feedback")]
     elif row.get("type") == "assistant" and isinstance(content, list):
         for b in content:
             if not isinstance(b, dict):
@@ -226,6 +231,8 @@ if not pool:
 whys = {n: gtme_ready.check_result(n) for n in pool}
 bad = [n for n, w in whys.items() if w]
 # A client the reply names must each be READY; a session-level guess needs one.
+# Name the client the session touched last, never the first in clients.json.
+bad.sort(key=lambda n: max([work.rfind(x) for x in names_for({"name": n, **next((c for c in clients if c.get("name") == n), {})})] or [-1]), reverse=True)
 if (named and bad) or (not named and len(bad) == len(pool)):
     print(f"refuse\t{bad[0]}\t{claim}\t{whys[bad[0]]}")
 else:

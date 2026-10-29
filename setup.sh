@@ -1951,6 +1951,8 @@ _register("UserPromptSubmit", hooks_dir + "/tab-rescue.sh", timeout=5)
 # keeps agents at nice 10 so the person's apps win the CPU. Its PreToolUse
 # half is registered below the PreToolUse reset, which wiped it until 10/13.
 _register("UserPromptSubmit", hooks_dir + "/machine-budget.sh", timeout=5)
+# Archive or close asks get the learn-first closeout (2026-10-29, "I should never have to say this again").
+_register("UserPromptSubmit", hooks_dir + "/archive-learn.sh", timeout=5)
 _register("UserPromptSubmit", hooks_dir + "/client-rulings.sh", timeout=5)
 # Caleb's "do it yourself" in chat approves Clay writes for 12 hours, in place
 # of typing at a terminal agent shells don't have (2026-10-10).

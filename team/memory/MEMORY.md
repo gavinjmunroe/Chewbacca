@@ -475,3 +475,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - project_product_sync_2026_10_28: shared files between Chewbacca, anchored and usc-os sync via tools/product_sync.py + chewbacca products, personal-data firewall, test-gated pushes; fix shared files in Chewbacca
 - project_ff_team_page_2026_10_28: FF /team page PR #3, founders + board and Christian tech advisors, sourced bios, 2 real headshots, NEEDs + every advisor's yes before Gav merges (10/28)
 - feedback_gtm_agent_briefs_name_the_engine: GTM subagent briefs name the engine tool per kind of work (buyers, why-now, copy, cleaning) or dough-brief-gate refuses; the 10/29 Medrano brief sent buyers and emails to web search ("I SHOULD NEVER HAVE TO SAY THIS")
+- feedback_archive_means_learn_first: an archive/close-tab ask = every linked tab lands its lessons in Chewbacca code first; archive-learn hook injects it ("I should never have to say this again", 10/29)

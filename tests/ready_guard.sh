@@ -119,6 +119,15 @@ probe "campaigns good to go, with a call mentioned elsewhere (review)" 2 \
 probe "campaigns good to go for the call, one sentence (review)" 2 \
   "The campaigns are good to go for the call." "$GTM_T"
 # Once per turn: a second Stop in the same turn never loops.
+# 2026-10-29: the guard's own refusal, fed back as a Stop hook row, names Zeutara.
+# A Firm Foundation session must still be checked against Firm Foundation SoCal.
+FF_T="$TMP/ff.jsonl"
+jq -cn '{type:"user",message:{role:"user",content:"get outbound going for Firm Foundation SoCal"}}' > "$FF_T"
+jq -cn '{type:"assistant",message:{role:"assistant",content:[{type:"tool_use",name:"Bash",input:{command:"chewbacca gtme ready --client \"Firm Foundation SoCal\""}}]}}' >> "$FF_T"
+jq -cn '{type:"user",message:{role:"user",content:"Stop hook feedback: ready-guard: no READY for Zeutara. On 2026-10-12 a Zeutara launch was called good until Jonah responds."}}' >> "$FF_T"
+probe "its own refusal text never makes the session about another client" 2 "The outbound copy is done, the drafts are good to go." "$FF_T"
+if grep -q "Firm Foundation SoCal" "$TMP/err" && ! grep -q "for Zeutara" "$TMP/err"; then echo "  ok    refusal names the client the session worked on"; else echo "  FAIL  refusal named the wrong client"; cat "$TMP/err"; fail=$((fail+1)); fi
+
 jq -cn --arg m "We're good to go on the launch." --arg t "$GTM_T" '{last_assistant_message:$m,transcript_path:$t,prompt_id:"probe1"}' \
   | bash "$HOOK" >/dev/null 2>&1 && echo "  ok    fires once per turn" || { echo "  FAIL  fired twice in one turn"; fail=$((fail+1)); }
 

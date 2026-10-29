@@ -1166,6 +1166,8 @@ if group "installer"; then
     python3 "$ROOT/tests/test_skim_guard_replay.py"
   check  "ready-guard refuses a launch-ready claim without a fresh signed gtme ready" \
     bash "$ROOT/tests/ready_guard.sh"
+  check  "archive-learn puts the learn-first closeout in front of any archive ask" \
+    bash "$ROOT/tests/archive_learn.sh"
   check  "link-guard refuses a reply whose file links don't open from the session root" \
     bash "$ROOT/tests/link_guard.sh"
   check  "open-work-guard refuses ending a turn whose recap names its own leftover" \

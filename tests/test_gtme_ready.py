@@ -345,5 +345,94 @@ p = w.run()
 check("a suppression file pinned in clients.json outside the drafts folder is flagged",
       "suppress comes from clients.json" in p.stdout, p.stdout)
 
+# 2026-10-29: Firm Foundation sends from its own Gmail, and ready exited "names no
+# Clay workspace", so an own-inbox batch had no READY to earn. A {"batch": id}
+# entry is graded from the ledger; a clean one is READY with no workspace.
+import gtme_solo  # noqa: E402
+
+
+class Ledger:
+    """An own-inbox client: a ledger with one frozen batch, and a fake gws."""
+
+    def __init__(self, verdict="valid", signed_in=True):
+        self.dir = Path(os.path.realpath(tempfile.mkdtemp()))
+        self.home = self.dir / "home"
+        self.led = self.dir / "ledger"
+        (self.led / "batches").mkdir(parents=True)
+        self.data = self.dir / "drafts"
+        (self.data / "reviews").mkdir(parents=True)
+        sender = {"name": "Jane Doe", "email": "jane@northwind.example.test", "inbox": "jane@northwind.example.test",
+                  "address": "100 Main Street, Springfield"}
+        (self.led / "plan.json").write_text(json.dumps({
+            "client": "Solo", "answers": {"sender": "Jane"}, "sender": sender, "jev_checks": True, "min_grade": 85,
+            "copy": [{"step": 1, "day": 0, "subject": "your site", "body": "Hi {{first_name}}"}]}))
+        with open(self.led / "leads.csv", "w", newline="") as fh:
+            csv.writer(fh).writerows([["company", "name", "email", "email_verdict"],
+                                      ["Fund One", "Ann Lee", "ann@fundone.example.test", verdict]])
+        body = ("Hi Ann,\n\nFund One's homepage has no contact form. It's one of 3 fixes we'd suggest.\n\n"
+                "Want the full list? I'll send it over, free.\n\n" + gtme_solo.footer(sender))
+        mails = [{"to": "ann@fundone.example.test", "step": 1, "subject": "your site", "body": body,
+                  "line": "Fund One's homepage has no contact form.", "line_source": "https://fundone.example.test/",
+                  "lead": {"company": "Fund One"}}]
+        frozen = json.dumps([{k: m[k] for k in ("to", "step", "subject", "body")} for m in mails], sort_keys=True)
+        self.bid = hashlib.sha256(frozen.encode()).hexdigest()[:10]
+        now = gtme_solo.op.stamp()
+        (self.led / "batches" / f"{self.bid}.json").write_text(json.dumps(
+            {"id": self.bid, "made_at": now, "client": "Solo", "mails": mails, "held": [],
+             "inbox": sender["inbox"]}))
+        (self.led / "jev.jsonl").write_text(json.dumps(
+            {"to": "ann@fundone.example.test", "step": 1, "held": False, "why": [], "at": now}) + "\n")
+        (self.data / "reviews" / f"{self.bid}.json").write_text(json.dumps(
+            {"batch": self.bid, "read_as_recipient": True, "reviewer": "test reviewer"}))
+        (self.data / "drafts.json").write_text(json.dumps([{"company": "Solo", "batch": self.bid}]))
+        self.gws = self.dir / "gws"
+        who = "jane@northwind.example.test" if signed_in else ""
+        self.gws.write_text("#!/bin/sh\n" + (f"echo '{{\"emailAddress\": \"{who}\"}}'\n" if who
+                                            else "echo 'not signed in' >&2; exit 1\n"))
+        self.gws.chmod(0o755)
+        self.clients = self.dir / "clients.json"
+        self.clients.write_text(json.dumps({"clients": [{"name": "Solo", "sender_company": "Northwind",
+                                                         "state_dir": str(self.led),
+                                                         "no_client": "Northwind runs its own outbound"}]}))
+        (self.dir / "inbox.json").write_text("[]")
+        (self.dir / "slack.json").write_text(json.dumps({"D1": []}))
+
+    def run(self):
+        env = dict(os.environ, HOME=str(self.home), GTME_CLIENTS=str(self.clients),
+                   CHEWBACCA_GTM_CLIENTS=str(self.clients), GTM_CONFIG=str(self.clients),
+                   CHEWBACCA_GWS_BIN=str(self.gws),
+                   GTME_GRADE_KEY_FILE=str(self.home / "keys" / "gtme-grade.key"))
+        env.pop("CHEWBACCA_STATE_DIR", None)
+        return subprocess.run([sys.executable, str(TOOL), "--client", "Solo", "--drafts",
+                               str(self.data / "drafts.json"), "--inbox", str(self.dir / "inbox.json"),
+                               "--slack", str(self.dir / "slack.json")],
+                              capture_output=True, text=True, env=env, timeout=180)
+
+
+s = Ledger()
+p = s.run()
+check("a clean own-inbox batch is READY with no Clay workspace", p.returncode == 0 and "READY:" in p.stdout,
+      p.stdout + p.stderr)
+s = Ledger(verdict="")
+p = s.run()
+check("an address with no verifier verdict fails the list gate",
+      p.returncode == 1 and "no valid verifier verdict" in p.stdout, p.stdout + p.stderr)
+s = Ledger(signed_in=False)
+p = s.run()
+check("a sending inbox that isn't signed in fails the render gate",
+      p.returncode == 1 and "is not signed in" in p.stdout, p.stdout + p.stderr)
+s = Ledger()
+b = s.led / "batches" / f"{s.bid}.json"
+doc = json.loads(b.read_text())
+doc["mails"][0]["body"] = doc["mails"][0]["body"].replace("3 fixes", "4 fixes")
+b.write_text(json.dumps(doc))
+p = s.run()
+check("a batch edited after it was built fails the start gate",
+      p.returncode == 1 and "was edited after it was built" in p.stdout, p.stdout + p.stderr)
+(s.data / "reviews" / f"{s.bid}.json").unlink()
+p = s.run()
+check("a batch nobody read as the recipient is NOT READY", p.returncode == 1 and "recipient read" in p.stdout,
+      p.stdout + p.stderr)
+
 print(f"\n{'all passed' if not fails else str(fails) + ' failed'}")
 sys.exit(1 if fails else 0)

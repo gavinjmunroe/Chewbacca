@@ -30,9 +30,24 @@ ready-guard.sh refuses a readiness claim without a READY one under 2 hours old.
 
 Reads Clay through gtme-grade (`chewbacca clay campaign`, a read). Never sends,
 never starts, never edits a campaign.
+
+OWN-INBOX BATCHES. A drafts entry of {"batch": "<id>"} names a frozen
+`chewbacca gtme batch` in the client's own ledger instead of a Clay campaign.
+Until 2026-10-29 a client that sends from its own Gmail (Firm Foundation) could
+not be graded at all: ready exited "names no Clay workspace", so "ready" for
+that path meant whatever the agent said. A batch is graded on the same five
+gates from the ledger: list (every address on leads.csv, unsuppressed, never
+emailed, with a valid verifier verdict and a source link for its line), copy
+(no batch problem, and a Jev verdict at or over the plan's bar logged when the
+batch was built), read (reviews/<id>.json beside the drafts), render (name,
+mailing address, opt-out and a non-.edu sending address that is signed in) and
+start (the batch is unedited, under 2 hours old and inside today's cap). The
+pre-send receipt is a Clay-list gate, so a batch-only run skips it: the list
+gate carries the same verifier rule per address.
 """
 import argparse
 import concurrent.futures
+import csv
 import glob
 import hashlib
 import json
@@ -233,10 +248,12 @@ def run_campaigns(entries, ddir, ready, client, ws):
         pass  # each grade then reports its own key error as NOT CHECKED
     with concurrent.futures.ThreadPoolExecutor(max_workers=WORKERS) as pool:
         for e in entries:
+            if e.get("batch"):
+                continue
             extra, missing = resolve(e, ddir, ready, entries)
             if CID.fullmatch(str(e.get("campaign", ""))):
                 jobs[pool.submit(grade_one, e, extra, client, ws)] = (e, missing)
-        done = {id(e): ({}, resolve(e, ddir, ready, entries)[1]) for e in entries}
+        done = {id(e): ({}, [] if e.get("batch") else resolve(e, ddir, ready, entries)[1]) for e in entries}
         for fut in concurrent.futures.as_completed(jobs):
             done[id(jobs[fut][0])] = (fut.result(), jobs[fut][1])
     for e in entries:
@@ -244,7 +261,11 @@ def run_campaigns(entries, ddir, ready, client, ws):
         row = {"campaign": e.get("campaign", ""), "company": e.get("company", ""), "tier": str(e.get("tier", "")),
                "leads": e.get("leads") if isinstance(e.get("leads"), int) else None,
                "missing_inputs": missing, "gates": [], "receipt": None}
-        if not CID.fullmatch(row["campaign"]):
+        if e.get("batch"):
+            row["campaign"] = f"batch {e['batch']}"
+            row["company"] = row["company"] or client
+            row["gates"], row["leads"] = grade_batch(e, ddir, client)
+        elif not CID.fullmatch(row["campaign"]):
             row["gates"] = [{"gate": i + 1, "title": g, "status": "NOT CHECKED",
                              "first": "the drafts entry names no Clay campaign id"} for i, g in enumerate(GATES)]
         elif "error" in doc:
@@ -277,12 +298,135 @@ def run_campaigns(entries, ddir, ready, client, ws):
     return out
 
 
+# Twelve minutes covers a batch of 20 at Jev's slowest observed answer
+# (about 30 s an email on 2026-10-18), so a verdict this close before the
+# batch's made_at belongs to that build. Guessed from that one night.
+JEV_WINDOW_S = 12 * 60
+
+
+def _gate(n, status, first=""):
+    return {"gate": n, "title": GATES[n - 1], "status": status, "first": first}
+
+
+def grade_batch(entry, ddir, client):
+    """The five gates for one own-inbox batch, read from the client's ledger."""
+    import gtme_solo
+    import treg_client
+    bid = str(entry.get("batch", ""))
+    d = gtme_solo.cdir(client)
+    try:
+        batch = json.loads((d / "batches" / f"{bid}.json").read_text())
+        plan = gtme_solo.plan_of(client)
+    except (OSError, ValueError, gtme_solo.Refused) as exc:
+        why = f"no batch {bid} in {d / 'batches'} ({exc.__class__.__name__})"
+        return [_gate(i + 1, "NOT CHECKED", why) for i in range(len(GATES))], 0
+    mails = batch.get("mails") or []
+    gates = []
+
+    leads = {}
+    try:
+        with (d / "leads.csv").open() as fh:
+            leads = {(r.get("email") or "").lower(): r for r in csv.DictReader(fh)}
+    except OSError:
+        pass
+    off = gtme_solo.suppressed(client)
+    sent = {(r.get("email"), r.get("step")) for r in gtme_solo.jsonl(d / "sent.jsonl")}
+    fails = []
+    for m in mails:
+        to, step = m.get("to", ""), m.get("step")
+        row = leads.get(to.lower())
+        if row is None:
+            fails.append(f"{to} is not on leads.csv")
+        elif (row.get("email_verdict") or "").strip() != treg_client.SENDABLE:
+            fails.append(f"{to} has no valid verifier verdict ({row.get('email_verdict') or 'none'})")
+        if to.lower() in off:
+            fails.append(f"{to} is suppressed")
+        if (to, step) in sent:
+            fails.append(f"{to} already got email {step}")
+        if step == 1 and not re.match(r"https://", m.get("line_source") or ""):
+            fails.append(f"{to}'s first line has no https source")
+    if not mails:
+        fails.append("the batch has no emails")
+    gates.append(_gate(1, "FAIL" if fails else "PASS", fails[0] if fails else ""))
+
+    fails = [f"{m.get('to')}: {p}" for m in mails for p in gtme_solo.problems(m)]
+    bar = plan.get("min_grade")
+    if not plan.get("jev_checks") or not isinstance(bar, (int, float)) or bar < 85:
+        fails.append(f"the plan has no Jev grade bar of 85 or more (jev_checks {plan.get('jev_checks')}, "
+                     f"min_grade {bar})")
+    else:
+        made = gtme_solo.op.parse_time(batch.get("made_at", ""))
+        graded = {}
+        for r in gtme_solo.jsonl(d / "jev.jsonl"):
+            try:
+                age = (made - gtme_solo.op.parse_time(r["at"])).total_seconds()
+            except (KeyError, TypeError, ValueError):
+                continue
+            if 0 <= age <= JEV_WINDOW_S:
+                graded[(r.get("to"), r.get("step"))] = r
+        for m in mails:
+            v = graded.get((m.get("to"), m.get("step")))
+            if v is None:
+                fails.append(f"{m.get('to')} has no Jev verdict from this batch's build")
+            elif v.get("held"):
+                fails.append(f"{m.get('to')} was held by Jev: {'; '.join(v.get('why') or [])}")
+    gates.append(_gate(2, "FAIL" if fails else "PASS", fails[0] if fails else ""))
+
+    review = entry.get("review") or os.path.join(ddir, "reviews", f"{bid}.json")
+    review = review if os.path.isabs(review) else os.path.join(ddir, review)
+    try:
+        rv = json.loads(Path(review).read_text())
+        ok = isinstance(rv, dict) and rv.get("batch") == bid and rv.get("read_as_recipient") is True
+        gates.append(_gate(3, "PASS" if ok else "FAIL",
+                           "" if ok else f"{os.path.basename(review)} does not record a read of batch {bid}"))
+    except (OSError, ValueError):
+        gates.append(_gate(3, "NOT CHECKED", f"recipient read: no reviews/{bid}.json recording a read"))
+
+    sender = plan.get("sender") or {}
+    inbox = batch.get("inbox") or sender.get("inbox") or ""
+    fails = []
+    for key in ("name", "address", "email"):
+        if not (sender.get(key) or "").strip():
+            fails.append(f"the plan's sender has no {key}")
+    if inbox.lower().endswith(".edu") or (sender.get("email") or "").lower().endswith(".edu"):
+        fails.append("the sending address is a .edu")
+    if sender.get("email") and inbox and sender["email"].lower() != inbox.lower():
+        fails.append(f"the batch sends from {inbox}, not the plan's sender {sender['email']}")
+    if not fails:
+        foot = gtme_solo.footer(sender)
+        fails += [f"{m.get('to')}'s body does not end with the sender footer" for m in mails
+                  if not (m.get("body") or "").rstrip().endswith(foot)]
+        try:
+            who = gtme_solo.gws(["gmail", "users", "getProfile", "--params", '{"userId":"me"}'], inbox)
+            if (who.get("emailAddress") or "").lower() != inbox.lower():
+                fails.append(f"{inbox} is signed in as {who.get('emailAddress')}")
+        except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
+            fails.append(f"{inbox} is not signed in ({str(exc)[:80]}): chewbacca email add {inbox}")
+    gates.append(_gate(4, "FAIL" if fails else "PASS", fails[0] if fails else ""))
+
+    fails = []
+    frozen = json.dumps([{k: m[k] for k in ("to", "step", "subject", "body")} for m in mails], sort_keys=True)
+    if hashlib.sha256(frozen.encode()).hexdigest()[:10] != bid:
+        fails.append(f"batch {bid} was edited after it was built")
+    try:
+        age = (gtme_solo.op.utc_now() - gtme_solo.op.parse_time(batch.get("made_at", ""))).total_seconds()
+    except (TypeError, ValueError):
+        age = None
+    if age is None or not 0 <= age < gtme_solo.BATCH_TTL.total_seconds():
+        fails.append(f"batch {bid} is over {int(gtme_solo.BATCH_TTL.total_seconds() // 3600)} hours old; rebuild it")
+    room = gtme_solo.today_cap(client) - gtme_solo.sent_today(client)
+    if len(mails) > room:
+        fails.append(f"{len(mails)} emails, over today's room of {room}")
+    gates.append(_gate(5, "FAIL" if fails else "PASS", fails[0] if fails else ""))
+    return gates, len(mails)
+
+
 def check_presend(client):
     why = gtme_grade.presend_ok(client, allow_no_lines=True)
     return {"name": "pre-send gate receipt", "status": "FAIL" if why else "PASS", "first": why}
 
 
-def check_owed(client, inbox=None, slack=None):
+def check_owed(client, inbox=None, slack=None, no_client=""):
     argv = [sys.executable, str(HERE / "gtme_done.py"), "--client", client, "--json"]
     if inbox:
         argv += ["--inbox", inbox]
@@ -304,8 +448,12 @@ def check_owed(client, inbox=None, slack=None):
         return dict(row, status="FAIL", first=f"{len(owed) + len(unread)} open: {first}")
     if rep.get("not_run"):
         return dict(row, status="NOT CHECKED", first=rep["not_run"][0])
-    if rep.get("skipped"):
-        return dict(row, status="NOT CHECKED", first=rep["skipped"][0])
+    # A company running its own outbound (Firm Foundation) has no outside client
+    # to answer, so a missing client_slack is no gap when clients.json says why.
+    skipped = [s for s in rep.get("skipped") or []
+               if not (no_client and s.startswith("client messages:"))]
+    if skipped:
+        return dict(row, status="NOT CHECKED", first=skipped[0])
     return dict(row, status="PASS", first="")
 
 
@@ -360,8 +508,8 @@ def table(client, ident, rows, checks, n_block):
             lines.append(f"    {n:>3}  {why[:120]}")
         lines.append("")
     if n_block == 0 and rows:
-        lines.append(f"READY: all {len(rows)} campaigns pass all five gates, the pre-send gate is fresh "
-                     f"and nobody is owed a reply.")
+        gate = ", the pre-send gate is fresh" if any(c["name"].startswith("pre-send") for c in checks) else ""
+        lines.append(f"READY: all {len(rows)} campaigns pass all five gates{gate} and nobody is owed a reply.")
     else:
         lines.append(f"NOT READY: {n_block} blockers ({passing} of {len(rows)} campaigns pass every gate). "
                      f"Report this list as it stands; nothing here is ready to start.")
@@ -455,12 +603,14 @@ def main(argv=None):
     # The client's one workspace, never a built-in id: until 2026-10-13 a client
     # with none was graded in Zeutara's Clay workspace.
     import gtme_config
+    only_batches = bool(entries) and all(e.get("batch") for e in entries)
     ws, why = gtme_config.workspace_of(cfg)
-    if not ws:
+    if not ws and not only_batches:
         print(f"chewbacca gtme ready: {why}", file=sys.stderr)
         return 2
     rows = run_campaigns(entries, str(Path(drafts).resolve().parent), ready, cfg["name"], ws)
-    checks = [check_presend(cfg["name"]), check_owed(cfg["name"], a.inbox, a.slack)]
+    checks = ([] if only_batches else [check_presend(cfg["name"])]) + [check_owed(cfg["name"], a.inbox, a.slack,
+                                                                             str(cfg.get("no_client") or ""))]
     if not entries:
         checks.append({"name": "campaigns", "status": "FAIL", "first": "the drafts file lists no campaigns"})
     n_block = blockers(rows, checks)

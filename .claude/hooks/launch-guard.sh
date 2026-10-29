@@ -611,34 +611,58 @@ if name == "chewie" and args[:2] == ["web", "goto"] and len(args) == 3 and re.fu
 # campaign") was refused twice because its title said campaign, and the to-dos
 # never reached the ledger. work-ledger writes one local JSON file and starts
 # no program (tools/work_ledger.py has no subprocess), so its words are data.
-# Reviews of 8364cb82 and 09fd9e1c: the bare name could be any work-ledger on
-# PATH, and reading its source for dangerous calls is a denylist. So the code
-# is pinned instead. The work-ledger that runs must sit in a git checkout whose
-# HEAD commit is in the kit's own history (a worktree or an installed snapshot
-# of it), its shim and tools/work_ledger.py must be byte-identical to that
-# commit, and bin/ and tools/ must hold nothing untracked or modified (python
-# puts bin/ first on sys.path, so a planted json.py there would run).
+# Three review rounds (8364cb82, 09fd9e1c, 6d975eb3): the bare name could be
+# any work-ledger on PATH, scanning its source is a denylist, and running git
+# inside the candidate folder runs that folder's config (core.fsmonitor). So
+# git runs only in the kit. The work-ledger must sit in a worktree the kit
+# itself lists (the checkout, a tab's worktree, or an installed snapshot), its
+# shim and tools/work_ledger.py must match that worktree's HEAD from the kit's
+# own object store byte for byte, and nothing in bin/ may shadow a module
+# (python puts bin/ first on sys.path, so a planted json.py would run). The
+# file is checked here and then run by the shell, so a writer racing inside a
+# kit worktree could still swap it; that writer could already edit the guard.
 def ledger_ok():
     found = __import__("shutil").which("work-ledger") if os.sep not in name else resolve(name)
     real = os.path.realpath(found) if found else ""
     if not real.endswith(os.sep + os.path.join("bin", "work-ledger")):
         return False
     root = os.path.dirname(os.path.dirname(real))
-    sha = git_out("-C", root, "rev-parse", "HEAD")
+    heads, path = {}, None
+    for field in (git_out("-C", kit, "worktree", "list", "--porcelain", "-z") or "").split("\0"):
+        if field.startswith("worktree "):
+            path = os.path.realpath(field[9:])
+        elif field.startswith("HEAD ") and path:
+            heads[path] = field[5:]
+    sha = heads.get(root)
     if not sha or not re.fullmatch(r"[0-9a-f]{40}", sha):
         return False
-    if git_out("-C", kit, "cat-file", "-t", sha) != "commit":
-        return False
+    sp = __import__("subprocess")
     for rel in ("bin/work-ledger", "tools/work_ledger.py"):
-        pinned = git_out("-C", kit, "show", f"{sha}:{rel}")
         try:
-            here = open(os.path.join(root, rel), errors="replace").read().strip()
-        except OSError:
+            pinned = sp.run(["git", "-C", kit, "show", f"{sha}:{rel}"], capture_output=True, timeout=5, env=GIT_ENV)
+            with open(os.path.join(root, rel), "rb") as fh:
+                here = fh.read()
+        except (OSError, ValueError, sp.SubprocessError):
             return False
-        if pinned is None or here != pinned:
+        if pinned.returncode != 0 or here != pinned.stdout:
             return False
-    dirty = git_out("-C", root, "status", "--porcelain", "--untracked-files=all", "--", "bin", "tools")
-    return dirty == ""
+    find_spec = __import__("importlib.util").util.find_spec
+    try:
+        entries = os.listdir(os.path.join(root, "bin"))
+    except OSError:
+        return False
+    for entry in entries:
+        stem = re.sub(r"\.(py|pyc|so|pth)$", "", entry)
+        if stem == entry and not os.path.isdir(os.path.join(root, "bin", entry)):
+            continue
+        if "." in stem:
+            return False
+        try:
+            if find_spec(stem) is not None:
+                return False
+        except (ImportError, ValueError):
+            return False
+    return True
 
 
 if base == "work-ledger" and args[:1] and args[0] in ("add", "list", "update", "context", "board"):

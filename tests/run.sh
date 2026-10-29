@@ -1071,6 +1071,8 @@ if group "installer"; then
   # The Medrano enrichment went to a subagent as "web search is fine" on 10/29.
   check  "dough-brief-gate refuses a GTM agent brief without the engine" \
     bash "$ROOT/tests/dough_brief_gate.sh"
+  check  "dough-brief-gate replays real agent briefs to their recorded verdicts" \
+    /usr/bin/python3 "$ROOT/tests/test_dough_brief_gate_replay.py" "$ROOT"
   # A link blast on 2026-10-26 reached people he never saw listed and re-sent
   # to two of them after a restart.
   check  "text-blast lists before sending and never texts anyone twice" \

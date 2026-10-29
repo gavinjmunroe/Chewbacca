@@ -1979,6 +1979,11 @@ h["PreToolUse"] = [{"matcher": "Write", "hooks": [{
 _register("PreToolUse", hooks_dir + "/machine-budget.sh", timeout=5,
           matcher="Agent|Task|Workflow",
           status="Checking the Mac has room...")
+# A GTM subagent brief names the engine (gtme, Togari, Jev) or is refused with
+# the block to paste. The 10/29 Medrano enrichment went out as "web search is
+# fine" and Caleb: "I SHOULD NEVER HAVE TO SAY THIS ... IT SHOULD BE BUILT IN".
+_register("PreToolUse", hooks_dir + "/dough-brief-gate.sh", timeout=5,
+          matcher="Agent|Task|Workflow")
 
 # Layer 6. A browser hands you an addressable model of its own contents, and
 # reading it as an image throws that away. On 2026-09-21 a form the user had

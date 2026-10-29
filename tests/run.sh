@@ -1068,6 +1068,9 @@ if group "installer"; then
   # said it was running. The user caught it, not the kit.
   check  "agent-claim-guard refuses an unlaunched agent claim" \
     bash "$ROOT/tests/agent_claim_guard.sh" "$ROOT"
+  # The Medrano enrichment went to a subagent as "web search is fine" on 10/29.
+  check  "dough-brief-gate refuses a GTM agent brief without the engine" \
+    bash "$ROOT/tests/dough_brief_gate.sh"
   # A link blast on 2026-10-26 reached people he never saw listed and re-sent
   # to two of them after a restart.
   check  "text-blast lists before sending and never texts anyone twice" \

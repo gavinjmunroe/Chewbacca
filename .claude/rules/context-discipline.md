@@ -146,6 +146,14 @@ A document with six open markers is a good draft. One invented number is a
 failure, and it is the kind that surfaces in front of the one person who was
 actually there.
 
+Legal and filing info is the strictest case. A middle name, zip, SSN, or
+address going into an LLC, bank, or tax form comes from the person or an
+official record, never inferred. On 2026-10-29 a draft text to Caleb's dad
+for the Firm Foundation LLC filing gave Gavin the middle name "James", read
+off the GitHub handle `gavinjmunroe`, and a Census zip matched on the street
+name alone. Both were pulled before sending. Leave `[NEED: Gavin's middle name]`
+and say who to ask.
+
 ---
 
 ## ONE AUDIT, NOT FIVE

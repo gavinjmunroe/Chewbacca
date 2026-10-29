@@ -334,6 +334,32 @@ A phone mock of iMessage looks like real iOS, every part of it:
 - Compose bar with the + button, the rounded "iMessage" field and the mic glyph
 - Home indicator bar at the bottom
 
+## A startup page for investors: premium first, and built from everything said
+
+2026-10-28, Anchored's landing page for the YC and speedrun apps. v1 passed every
+gate (paper ground, a pinned phone scene, hairline tables) and Caleb wrote "Its ok
+but could be way better LOCK IN", then "MAKE IT LOOK AND FEEL LUXURIOUS AND REAL",
+"MAKE IT PROFESSIONAL", and "take into account all our crazy ideas and what Dad
+said ... search search think thinkkkkk dont be stupid be resourceful!" What landed:
+
+- Open on a lit dark stage (near-black green, one soft radial light behind the
+  device), never a flat paper page. One centered statement at 70px+ hands off to
+  the device as the first scroll, the Apple product-page move.
+- Devices look manufactured: a titanium rim (1.5px lit ring, dark gap, falloff
+  shadow), a glass sheen, real iOS and macOS chrome, typing dots before a reply.
+- Numbers are the visual: one giant numeral per claim (71% at 200px+), competitor
+  figures at 88px, never a table of small text.
+- Alternate grounds (dark scene, paper argument, dark scene, paper, dark ask) so
+  every edge carries something, and fade between them over 28vh.
+- Before writing a word, mine every idea source on disk: the repo's idea and
+  ecosystem docs, family and mentor call notes in memory/, hackathon transcripts in
+  raw/, and the event org's own repo and site (a subagent can read those). The
+  strongest scenes came from Dad's asks: a debrief after a meeting that confronts
+  and gives a verse for courage, "text this number" outreach, and "a Christian is
+  never an individual user".
+- Every vision scene is tagged planned, and every moment card names the context it
+  needed ("Calendar", "Your small group") so the OS claim is shown, not asserted.
+
 ## Landing pages: the verdicts already paid for
 
 Caleb on usctts.com, all on 2026-10-09. Each line is a build he rejected.

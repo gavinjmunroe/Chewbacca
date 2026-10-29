@@ -217,7 +217,7 @@ class Parts(unittest.TestCase):
             p = Path(d) / "dnc.csv"
             p.write_text("email\nsam@delta.example\n")
             entries, where = ga.dnc_entries({"dnc": {"csv": [str(p)]}})
-        row = {"buyer_email": "sam@delta.example"}
+        row = {"buyer": "Sam Cole", "buyer_email": "sam@delta.example"}
         ga.apply_dnc(row, entries, where)
         self.assertEqual(row["buyer_email"], "")
         self.assertTrue(row["dnc"].startswith("SUPPRESSED"))
@@ -225,7 +225,7 @@ class Parts(unittest.TestCase):
     def test_no_dnc_list_says_not_checked(self):
         entries, where = ga.dnc_entries({})
         self.assertIsNone(entries)
-        row = {"buyer_email": "a@b.example"}
+        row = {"buyer": "A B", "buyer_email": "a@b.example"}
         ga.apply_dnc(row, entries, where)
         self.assertTrue(row["dnc"].startswith("not checked"))
 
@@ -242,6 +242,53 @@ class Parts(unittest.TestCase):
             ga.write([{"org": "=HYPERLINK(\"http://x.example\")", "fit": 80}], out)
             with open(out) as fh:
                 self.assertFalse(next(csv.DictReader(fh))["org"].startswith("="))
+
+    def test_suppressed_buyer_gets_no_channel_and_no_treg(self):
+        row = {"buyer": "Pat Kim", "buyer_email": "", "website": "https://x.example/", "org": "X", "dupe_of": ""}
+        entries = ga.gtme_dnc.load_csv.__globals__["Entry"]("", "x.example", "asked out", None, "t")
+        ga.apply_dnc(row, [entries], "t.csv")
+        ga.relationship(row, None)
+        self.assertTrue(row["dnc"].startswith("SUPPRESSED"))
+        self.assertEqual(row["channel"], "none: on a DNC list")
+        self.assertEqual(ga.price_treg(dict(row, treg_find="")), 0.0)
+
+    def test_dupe_keeps_the_best_tier(self):
+        base = {"fit": 80, "why_now_score": 5, "buyer_title": "CEO", "dupe_of": ""}
+        rows = [dict(base, tier=3, org="Low Org", website="https://low.example/", buyer="Pat Kim", buyer_email="pat@x.example"),
+                dict(base, tier=1, org="Top Org", website="https://top.example/", buyer="Pat Kim", buyer_email="pat@x.example")]
+        out = {r["org"]: r for r in ga.dedupe(rows)}
+        self.assertEqual((out["Top Org"]["dupe_of"], out["Low Org"]["dupe_of"]), ("", "Top Org"))
+
+    def test_shared_host_is_not_one_org(self):
+        a = {"website": "https://www.facebook.com/alpha", "org": "Alpha"}
+        b = {"website": "https://www.facebook.com/beta", "org": "Beta"}
+        self.assertNotEqual(ga.org_key(a), ga.org_key(b))
+
+    def test_one_word_name_inside_a_longer_one_is_another_org(self):
+        self.assertFalse(ga.same_org("Hope", "Hope Mission Thrift Store Church"))
+        self.assertTrue(ga.same_org("Alpha Legal Aid", "Alpha Legal Aid Foundation"))
+        self.assertTrue(ga.same_org("Kcs Inc", "KCS Health Center - Lincoln"))
+
+    def test_acronym_and_small_words_match_their_headlines(self):
+        items = [{"title": "IEHP Foundation launches AI data program", "date": "2026-10-01", "url": "u"},
+                 {"title": "YMCA of Greater Los Angeles names CTO", "date": "2026-10-01", "url": "u"}]
+        self.assertEqual(len(ga.own_news("Iehp Foundation", items)), 1)
+        self.assertEqual(len(ga.own_news("Ymca Of Greater Los Angeles", items)), 1)
+
+    def test_failed_lookup_is_retried_not_cached(self):
+        with tempfile.TemporaryDirectory() as d:
+            work = Path(d)
+            (work / "enriched.jsonl").write_text(json.dumps({"key": "1", "name": "Alpha Legal Aid", "error": "maps: 429"}) + "\n")
+            recs = ga.enrich([{"key": "1", "name": "Alpha Legal Aid", "city": "", "state": "CA"}], work, fake_tools(),
+                             ga.re.compile("x"), ga.re.compile("x"), 1, False)
+            self.assertEqual(recs[0]["website"], "https://alpha.example/")
+            self.assertEqual(len((work / "enriched.jsonl").read_text().splitlines()), 1)
+
+    def test_jev_true_is_not_a_probability(self):
+        row = {"buyer": "Pat", "buyer_title": "CEO", "buyer_email": "", "org": "X", "website": "", "buyer_source": "",
+               "revenue": "", "fit": 80}
+        ga.jev_check(row, {"criteria": {}}, "t", lambda *a: {"buyer": {"noul": True}})
+        self.assertEqual(row["buyer_check"], "Jev not scored, held")
 
     def test_own_news_needs_the_whole_name(self):
         items = [{"title": "Bitcoin Well raises fund", "date": "2026-10-01", "url": "u"},

@@ -337,15 +337,23 @@ def enrich_one(a: dict, tools, words, growth) -> dict:
 
 def enrich(accounts: list[dict], work: Path, tools, words, growth, workers: int, refresh: bool) -> list[dict]:
     path = work / "enriched.jsonl"
-    done = {}
+    done, lines = {}, 0
     if path.exists() and not refresh:
         for line in path.read_text().splitlines():
             if line.strip():
+                lines += 1
                 r = json.loads(line)
-                done[r["key"]] = r
+                # a Maps or audit error is a lookup that didn't happen, so it's retried, never kept
+                if not r.get("error") and not str(r.get("site_status") or "").startswith("error"):
+                    done[r["key"]] = r
     todo = [a for a in accounts if a["key"] not in done]
     print(f"gtme accounts: {len(accounts)} accounts, {len(done)} cached, {len(todo)} to read", file=sys.stderr)
-    with cf.ThreadPoolExecutor(max_workers=workers) as ex, open(path, "w" if refresh else "a") as fh:
+    # rewrite when errors were dropped, so the file only ever holds lookups that happened
+    rewrite = refresh or lines != len(done)
+    with cf.ThreadPoolExecutor(max_workers=workers) as ex, open(path, "w" if rewrite else "a") as fh:
+        if rewrite:
+            for rec in done.values():
+                fh.write(json.dumps(rec) + "\n")
         for rec in ex.map(lambda a: enrich_one(a, tools, words, growth), todo):
             with lock:
                 fh.write(json.dumps(rec) + "\n")
@@ -361,18 +369,31 @@ def same_org(name: str, maps_name: str | None) -> bool:
     if not maps_name:
         return True  # the site came with the account, nothing to mismatch
     a, b = gtme_score.normalize_company_name(name), gtme_score.normalize_company_name(maps_name)
-    return bool(b) and (gtme_score.jaro_winkler(a, b) >= NAME_MATCH or a in b or b in a)
+    short = a if len(a) <= len(b) else b
+    # a one-word name inside a longer one is a different org: "Hope" in "Hope Mission Thrift Store"
+    # but an acronym the place spells in capitals is that org: IRS "KCS Inc" is "KCS Health Center"
+    acronym = len(short.split()) == 1 and re.search(r"\b" + re.escape(short.upper()) + r"\b", maps_name or "")
+    contained = (len(short.split()) >= 2 or bool(acronym)) and (a in b or b in a)
+    return bool(b) and (gtme_score.jaro_winkler(a, b) >= NAME_MATCH or contained)
 
 
 def own_news(name: str, items: list[dict]) -> list[dict]:
     """Headlines that name this org, every word of it as a capitalized phrase. A first-word
     match tied "The Well" to Bitcoin Well and "Urban Impact" to a Thai university on 10/28."""
     full = gtme_score.normalize_company_name(name).split()
-    core = [w for w in full if w not in ("the", "of", "inc", "ministries", "church")]
-    words = core if len(core) > 1 else full
+    while full and full[0] == "the":
+        full = full[1:]
+    while full and full[-1] in ("inc", "ministries", "church"):
+        full = full[:-1]
+    words = full if len(full) > 1 else gtme_score.normalize_company_name(name).split()
     if not words or len(" ".join(words)) <= 5:
         return []
-    pat = re.compile(r"\b" + r"\W+".join(re.escape(w.capitalize()) for w in words) + r"\b")
+    # A two-word-plus name is matched in any case, so IEHP and YMCA match; a one-word name has
+    # to be capitalized in the headline, so "positive urban impact" isn't the ministry. Small
+    # words stay in the phrase ("YMCA of Greater Los Angeles").
+    small = ("of", "and", "the", "for", "in")
+    body = r"\W+".join(re.escape(w) if (len(words) > 1 or w in small) else re.escape(w.capitalize()) for w in words)
+    pat = re.compile(r"\b" + body + r"\b", re.I if len(words) > 1 else 0)
     return [n for n in items or [] if pat.search(n["title"]) and not LISTICLE.search(n["title"])]
 
 
@@ -436,11 +457,13 @@ def jev_check(row: dict, acc: dict, slug: str, ask=jev_ask) -> None:
     except Exception:
         res = None
     p = ((res or {}).get("buyer") or {}).get("noul")
-    if isinstance(p, (int, float)) and p >= BUYER_OK:
+    p = p if isinstance(p, (int, float)) and not isinstance(p, bool) and 0 <= p <= 1 else None
+    row["_jev_called"] = True
+    if p is not None and p >= BUYER_OK:
         row["buyer_check"] = f"Jev {p:.2f}"
         return
     # a check that didn't run isn't a pass
-    row["buyer_check"] = "Jev not scored, held" if not isinstance(p, (int, float)) else f"Jev {p:.2f}, held"
+    row["buyer_check"] = "Jev not scored, held" if p is None else f"Jev {p:.2f}, held"
     row["buyer"] = row["buyer_title"] = row["buyer_email"] = ""
     company = {"estimated_revenue": int(row["revenue"] or 0) or None, "estimated_headcount": None}
     t = gtme_score.assign_tier(int(row["fit"]) - 20, False, company, acc.get("criteria") or {})
@@ -450,8 +473,16 @@ def jev_check(row: dict, acc: dict, slug: str, ask=jev_ask) -> None:
 # ── step 6: dedupe ───────────────────────────────────────────────────────
 
 
+# Hosts many orgs share: a Maps place whose site is one of these isn't one org's domain.
+SHARED_HOSTS = ("facebook.com", "instagram.com", "linktr.ee", "sites.google.com", "linkedin.com", "yelp.com",
+                "wixsite.com", "squarespace.com", "godaddysites.com", "weebly.com")
+
+
 def org_key(row: dict) -> str:
-    dom = urllib.parse.urlparse(row["website"] or "").netloc.lower().removeprefix("www.")
+    u = urllib.parse.urlparse(row["website"] or "")
+    dom = u.netloc.lower().removeprefix("www.")
+    if any(dom == h or dom.endswith("." + h) for h in SHARED_HOSTS):
+        return dom + u.path.rstrip("/").lower()
     return dom or gtme_score.normalize_company_name(row["org"] or "")
 
 
@@ -478,13 +509,13 @@ def dedupe(rows: list[dict]) -> list[dict]:
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             gtme_dedupe.main([str(src), "--out", str(Path(tmp) / "out"), "--no-splink", "--json"])
         with open(Path(tmp) / "out" / "clusters.csv", newline="") as fh:
-            seen: dict[str, dict] = {}
+            groups: dict[str, list[dict]] = {}
             for c in csv.DictReader(fh):
-                r = people[int(c["source_row"]) - 2]
-                if c["cluster_id"] in seen:
-                    r["dupe_of"] = seen[c["cluster_id"]]["org"]
-                else:
-                    seen[c["cluster_id"]] = r
+                groups.setdefault(c["cluster_id"], []).append(people[int(c["source_row"]) - 2])
+        for members in groups.values():
+            members.sort(key=lambda r: (r["tier"], -int(r["fit"]), -int(r["why_now_score"])))
+            for r in members[1:]:
+                r["dupe_of"] = members[0]["org"]
     return rows
 
 
@@ -509,16 +540,20 @@ def dnc_entries(acc: dict) -> tuple[list | None, str]:
 
 
 def apply_dnc(row: dict, entries: list | None, where: str) -> None:
-    if not row["buyer_email"]:
+    """A suppressed person or domain is terminal: no email, no channel, no treg find, so
+    nobody buys a fresh address for someone who asked not to hear from us."""
+    target = row["buyer_email"] or urllib.parse.urlparse(row.get("website") or "").netloc.removeprefix("www.")
+    if not row["buyer"] or not target:
         row["dnc"] = ""
         return
     if entries is None:
         row["dnc"] = where
         return
-    d = gtme_dnc.check(row["buyer_email"], entries)
+    d = gtme_dnc.check(target, entries, company_wide=not row["buyer_email"])
     row["dnc"] = f"SUPPRESSED: {d['reason']}" if d["suppressed"] else f"clear ({where})"
     if d["suppressed"]:
         row["buyer_email"] = ""
+        row["_suppressed"] = True
 
 
 def people_db() -> sqlite3.Connection | None:
@@ -531,8 +566,9 @@ def people_db() -> sqlite3.Connection | None:
 def relationship(row: dict, db: sqlite3.Connection | None) -> None:
     """Warm means a text, never a cold email (Sagar). A name alone matches only with the
     same company in the people store, since two Jaqueline Padillas are two people."""
-    if not row["buyer"]:
-        row["channel"] = ""
+    if not row["buyer"] or row.get("_suppressed") or row.get("dupe_of"):
+        row["channel"] = "none: on a DNC list" if row.get("_suppressed") else \
+            "none: same person as " + row["dupe_of"] if row.get("dupe_of") else ""
         return
     hit = None
     if db is not None:
@@ -578,6 +614,7 @@ def build(client: str, acc: dict, work: Path, *, limit: int | None = None, worke
     rows = [score(r, acc, words, today) for r in recs]
     for r in rows:
         jev_check(r, acc, client, ask)
+    jev_calls = sum(1 for r in rows if r.pop("_jev_called", False))
     rows = dedupe(rows)
     entries, where = dnc_entries(acc)
     db = people_db()
@@ -586,7 +623,8 @@ def build(client: str, acc: dict, work: Path, *, limit: int | None = None, worke
         apply_dnc(r, entries, where)
         relationship(r, db)
         treg_total += price_treg(r)
-        r.pop("_page_emails", None)
+        for k in ("_page_emails", "_suppressed"):
+            r.pop(k, None)
     rows.sort(key=lambda r: (r["tier"], -int(r["why_now_score"]), -int(r["fit"]), r["org"] or ""))
     fill = {c: sum(1 for r in rows if str(r.get(c) or "").strip()) for c in
             ("website", "buyer", "buyer_email", "why_now", "relationship")}
@@ -595,6 +633,7 @@ def build(client: str, acc: dict, work: Path, *, limit: int | None = None, worke
                "jev_confirmed": sum(1 for r in rows if r["buyer_check"].startswith("Jev") and "held" not in r["buyer_check"]),
                "jev_held": [r["org"] for r in rows if "held" in r["buyer_check"]],
                "tiers": {t: sum(1 for r in rows if r["tier"] == t) for t in (1, 2, 3)},
+               "jev_calls": jev_calls, "dropped_no_site": len(accounts) - len(recs),
                "dnc": where, "treg_priced_rows": sum(1 for r in rows if r["treg_find"]),
                "treg_priced_usd": round(treg_total, 2), "treg_budget_usd": acc.get("treg_budget_usd")}
     return rows, summary
@@ -641,6 +680,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  tiers 1/2/3: {summary['tiers'][1]}/{summary['tiers'][2]}/{summary['tiers'][3]}")
     print(f"  Jev-confirmed buyers: {summary['jev_confirmed']}; held: {', '.join(summary['jev_held']) or 'none'}")
     print("  fill: " + ", ".join(f"{k} {v}/{n}" for k, v in f.items()))
+    print(f"  Jev calls: {summary['jev_calls']}; sourced but no site found: {summary['dropped_no_site']}")
     print(f"  dnc: {summary['dnc']}")
     print(f"  treg find priced for {summary['treg_priced_rows']} rows, up to ${summary['treg_priced_usd']:.2f}, "
           f"not spent")

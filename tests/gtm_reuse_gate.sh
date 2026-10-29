@@ -29,6 +29,18 @@ else echo "FAIL hand-rolled scorer not refused ($rc): $out"; fail=1; fi
 out=$(call "$TMP/score.py" "$reuse")
 denied "$out" && { echo "FAIL a scorer importing gtme_score was refused"; fail=1; } || echo "ok   a scorer built on gtme_score passes"
 
+picker="import gtme_score
+prim = gtme_score.resolve_primary(cands, TITLES)
+$scorer"
+out=$(call "$TMP/build.py" "$picker")
+if denied "$out" && printf '%s' "$out" | grep -q 'jev.ask'; then
+  echo "ok   a buyer picker with no Jev check is refused, handing over the jev.ask call (2026-10-29, IEHP)"
+else echo "FAIL buyer picker without Jev not refused: $out"; fail=1; fi
+
+out=$(call "$TMP/build.py" "import jev
+$picker")
+denied "$out" && { echo "FAIL a buyer picker that checks with Jev was refused"; fail=1; } || echo "ok   a buyer picker that checks with Jev passes"
+
 out=$(call "$TMP/render.py" "$other")
 denied "$out" && { echo "FAIL unrelated code refused"; fail=1; } || echo "ok   unrelated code passes"
 

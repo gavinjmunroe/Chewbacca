@@ -34,7 +34,20 @@ CONTENT=$(printf '%s' "$INPUT" | jq -r '.tool_input.content // ""')
 # 30 lines: the Medrano score.py was 92; a one-off reshaping snippet stays under it.
 LINES=$(printf '%s\n' "$CONTENT" | wc -l | tr -d ' ')
 [ "${LINES:-0}" -ge 30 ] || exit 0
-printf '%s' "$CONTENT" | grep -qiE 'gtme[_-]score' && exit 0
+# 2026-10-29, an AuraPath list for Travis Johnson: resolve_primary picked "Chair Karen
+# Scott / First 5 San Bernardino Executive Director" as IEHP Foundation's buyer, a title
+# from another org on the same page. A Jev check per buyer scored it 0.06 and held it,
+# but only after Caleb wrote "Remember to use the DOPE GTM/BMA/TOGARI/CHEWBS/JEV
+# STUFFFFFFFFFF ... IT SHOULD BE BUILT IN". So a script that picks buyers with
+# resolve_primary also asks Jev about each one, and the refusal hands over the call.
+if printf '%s' "$CONTENT" | grep -qiE 'gtme[_-]score'; then
+  printf '%s' "$CONTENT" | grep -q 'resolve_primary' || exit 0
+  printf '%s' "$CONTENT" | grep -qiE '\bjev\b|gtme_jev' && exit 0
+  REASON="Not writing $(basename "$FILE"): it picks buyers with gtme_score.resolve_primary and never checks them with Jev. The title rubric matches words, so on 2026-10-29 it gave IEHP Foundation another org's director as its buyer (Jev scored it 0.06). Add one Jev call per buyer: sys.path.insert(0, os.path.expanduser('~/.chewbacca/kit/current/bin/lib')); import jev; jev.ask({'organization': org, 'person': name, 'title_on_their_site': title, 'page': url}, {'buyer': {'type': 'noul', 'instructions': 'Is this person a current leader of THIS organization in a role that could sign?'}}, decision='buyer-check'), keep it at noul 0.8 or higher, and hold anything Jev couldn't score (tools/gtme_jev.py uses the same bar)."
+  type hook_verdict >/dev/null 2>&1 && hook_verdict refuse "$REASON"
+  jq -n --arg r "$REASON" '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $r}}'
+  exit 0
+fi
 WHO=$(printf '%s' "$CONTENT" | grep -oiE '\b(leads?|contacts?|accounts?|prospects?|buyers?)\b' | wc -l | tr -d ' ')
 HOW=$(printf '%s' "$CONTENT" | grep -oiE '\b(score[sd]?|scoring|tiers?|rank(ed|ing)?|why[_ -]?now)\b' | wc -l | tr -d ' ')
 [ "${WHO:-0}" -ge 3 ] && [ "${HOW:-0}" -ge 3 ] || exit 0

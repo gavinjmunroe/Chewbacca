@@ -82,7 +82,9 @@ def check(text: str, absent=()):
         m = SHORTHAND.search(bare)
         if m:
             problems.append(f'line {n}: texting shorthand "{m.group(0)}"')
-        if not re.search(r"\b(never|don'?t)\b", line, re.I):
+        # The 10/28 OPTRA tab said "No jargon like MCP or desktop app.", an
+        # instruction to avoid the words, and was flagged for using them.
+        if not re.search(r"\b(never|don'?t|avoid|no jargon)\b", line, re.I):
             for term in JARGON:
                 if term.lower() in line.lower():
                     problems.append(f'line {n}: unexplained jargon "{term}"')

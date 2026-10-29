@@ -83,6 +83,8 @@ def main() -> int:
     told = PLAIN + "Never say MCP or desktop app on the call.\n"
     p, _ = call_prep_check.check(told)
     check("a never line may name jargon", p == [], p)
+    p, _ = call_prep_check.check(PLAIN + "No jargon like MCP or desktop app.\n")
+    check("a no-jargon line may name jargon", p == [], p)
 
     # 10/28 Firebox: a 1,000-word section was "wayyy too dense", three
     # founders sat in one doc tab, and a solo call still named Gavin.

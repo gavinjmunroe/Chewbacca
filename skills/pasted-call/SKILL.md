@@ -57,6 +57,14 @@ Both fail the same way, by reading the transcript alone and stopping there.
    drafted later has its source. Personal and family detail stays out of
    anything shared.
 
+7. "Tell the other tabs" after a call means `ListAgents`, then one
+   `SendMessage` per live session carrying only what touches its work (a
+   site tab gets the page change, a GTM tab gets the client facts), plus
+   a team/memory note they can all read. Business facts only: no health,
+   no unofficial role changes. A task he hands to a tab goes to that tab,
+   not done here (Roy call, 2026-10-29: "Add Roy to the FF site btw tell
+   the other tab that's doin it").
+
 ## Check before handing over
 
 Read each row as Caleb at 8am: does it say what to do, and is it still true

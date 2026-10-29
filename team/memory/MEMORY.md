@@ -463,3 +463,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - project_gtm_os_2026_10_28: GTM OS is the outbound product Caleb + Gav are building in its own repo (togari on drugs + chewb GTM tools, plugs into any tool); first milestone is the Junto pilot end to end (10/28)
 - feedback_guards_misfire_on_tab_prompts: voice, scope, launch, skim and ready guards misfired on tab prompts and call coaching on 10/28; each case needs an eval fixture before the guard changes
 - project_product_sync_2026_10_28: shared files between Chewbacca, anchored and usc-os sync via tools/product_sync.py + chewbacca products, personal-data firewall, test-gated pushes; fix shared files in Chewbacca
+- project_ff_team_page_2026_10_28: FF /team page PR #3, founders + board and Christian tech advisors, sourced bios, 2 real headshots, NEEDs + every advisor's yes before Gav merges (10/28)

@@ -31,14 +31,22 @@ except Exception:
     raise SystemExit
 ti = d.get("tool_input") or {}
 if isinstance(ti, dict) and d.get("tool_name") == "Bash":
-    print(str(ti.get("command") or "").replace("\n", " "))
+    # A newline ends a command, so it splits like ";". As a space it let a
+    # leading "# comment" line swallow the open on the next line (2026-10-28).
+    print(str(ti.get("command") or "").replace("\n", " ; "))
 ' 2>/dev/null)"
 [ -n "$CMD" ] || exit 0
 
 VERDICT="$(printf '%s' "$CMD" | python3 -I -c '
 import re, shlex, sys
 cmd = sys.stdin.read()
-if "foreground:" in cmd:
+# No override for a USC sign-in page: the brightspace CLI renews its own
+# session, and a sign-out is a BLOCKED line with nothing opened. On 2026-10-28
+# an agent put foreground: on a Brightspace sign-in after brightspace whoami
+# said BLOCKED, and Caleb wrote "Bro we literally built a brighstpace cli why
+# are you flashbanging me?"
+SIGNIN = re.compile(r"brightspace\.usc\.edu|login\.usc\.edu|shibboleth", re.I)
+if "foreground:" in cmd and not SIGNIN.search(cmd):
     raise SystemExit
 # The same open from inside a script: subprocess.run(["open","-na",...]) in a
 # python heredoc flashed Chrome at Caleb on 2026-10-11 10:15pm ("STOP FLASH

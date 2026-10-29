@@ -35,6 +35,10 @@ allows 'open -g https://app.clay.com/workspaces/1/home'
 allows 'open -g -a "Google Chrome" https://x.example'
 blocks 'open -gna "Google Chrome" --args --new-window https://x.example'
 blocks 'open -g -na "Google Chrome" --args --profile-directory="Profile 1" https://brightspace.usc.edu/d2l/home'
+blocks '# foreground: Caleb has to sign in
+open -na "Google Chrome" --args --profile-directory="Profile 1" "https://brightspace.usc.edu/d2l/home"'
+allows '# foreground: he asked to see it
+open -na "Google Chrome" https://x.example'
 allows 'open -g -n /Applications/Calculator.app'
 allows 'open -R ~/Downloads/report.pdf'
 allows 'open "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Calendars"'

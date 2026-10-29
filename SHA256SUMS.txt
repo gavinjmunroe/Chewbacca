@@ -2,6 +2,7 @@ bdcc9cb9e2c7374d15edcd51f53ade53c7985b6e9c7a9ed09e0350816aba3bae  .claude/hooks/
 b9b8f16866a8894bc088331065eb4cc6aa80fe0df2c86c915f10e95833e59f1a  .claude/hooks/api-grow.sh
 7a04ea9d057329ba1e009db591f70f22155551ac8f3b1fd6306af0fa2a760ba3  .claude/hooks/artifact-guard.sh
 665a17f7cfc8cf1d56802662126bf25cd03b75f4790addc73ca99d3edc7242fa  .claude/hooks/ask-capture.sh
+e4c2ec8bf4c43e9c1245650f68618caf7fc62ef45ce239d5f454cdd1cec19d22  .claude/hooks/ask-lookup-guard.sh
 755609b0d6cee26710056a8e13224d7d43ada0b687f7e7f3dc1f8e1bf2d4b477  .claude/hooks/assumption-guard.sh
 764b9c2bcb45d1f92124a209068fc51f52b77235d413cfae706d7590bf7f078c  .claude/hooks/attribution-guard.sh
 5befb13c6a377810d4fd502103207909db1b9eb16631f1ead0d576a9a6a5b85a  .claude/hooks/auto-push.sh

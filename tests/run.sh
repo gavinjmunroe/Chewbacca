@@ -1090,6 +1090,8 @@ if group "installer"; then
     bash "$ROOT/tests/call_prep_guard.sh"
   check  "railway-up-guard sends a GitHub repo's deploys through a push" \
     bash "$ROOT/tests/railway_up_guard.sh"
+  check  "ask-lookup-guard won't ask Caleb a fact a lookup finds" \
+    bash "$ROOT/tests/ask_lookup_guard.sh"
   check  "vercel-guard refuses Vercel deploys and allows teardown" \
     bash "$ROOT/tests/vercel_guard.sh"
   # Reengineer step 15: prose rules that became checks, and the share ratchet.

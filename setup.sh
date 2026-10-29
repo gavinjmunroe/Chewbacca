@@ -2074,6 +2074,10 @@ _register("PreToolUse", hooks_dir + "/pr-guard.sh", timeout=5,
 # A post that tags a client waits for a fresh, clean gtme done. See the hook.
 _register("PreToolUse", hooks_dir + "/client-ask-guard.sh", timeout=5,
           matcher="Bash", status="Checking the client has nothing unanswered first...")
+# 2026-10-28: the next-step box asked "What time Friday?" about a call on his
+# calendar. A question about a findable fact waits for a lookup this turn.
+_register("PreToolUse", hooks_dir + "/ask-lookup-guard.sh", timeout=5,
+          matcher="mcp__ccd_turn__wrap_up|AskUserQuestion")
 # 2026-10-12: 13 automated posts from Caleb's account in #zeutara-cold-replies.
 # "Everything should be togari": agents never post in client conversations.
 _register("PreToolUse", hooks_dir + "/client-post-guard.sh", timeout=5,

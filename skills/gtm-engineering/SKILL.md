@@ -39,6 +39,7 @@ opener as passing instead of failing it.
 - "DONT TELL ME UR READY IF THIS SHIT IS HAPPENING": the word ready, or "good
   until X", only follows a `chewbacca gtme ready` pass. ready-guard refuses it
   otherwise.
+- A lead list for a partner or client must be work they couldn't do themselves (Caleb, 2026-10-29: "will this genuinely blow his mind, work he couldn't hv done on his own"). Before calling one done, count the fill rate of every column and say it: the 10/29 Medrano list had why-now on 16 of 596 and email on 42, so it was a church directory. What moves it past that is a dated, linked why-now on every row shown, each row matched to one of THEIR services, a first email in their voice, and the weak tier removed from their copy.
 - "Never lie to me bro": report the blocker list as it stands, the same turn,
   even when it is long.
 - "Never tell anyone to press anything in clay themselves": the agent starts

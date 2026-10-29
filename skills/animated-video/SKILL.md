@@ -164,6 +164,20 @@ the cover), the last second (clean, and it loops if intended), and the loudness.
 path, the open issues, and anything synthetic or invented (voice, names, messages). Commit each
 version in the project's local git repo.
 
+Four things broke on the Firm Foundation hero film on 2026-10-29, each now a default:
+
+- **Render workers stay at the config's 2.** `remotion.config.ts` sets `Config.setConcurrency(2)`;
+  never pass a higher `--concurrency`. `chewbacca jobs` SIGSTOPs a heavy job past load 35, and
+  3 or 4 Chrome workers pushed the load over that line, froze the render and timed it out at
+  frames 61 to 64 three times (one job ran 53 s in 47 min). Set the delayRender timeout in the
+  config too (`Config.setDelayRenderTimeoutInMilliseconds(900000)`).
+- **Masters stay local.** A 51 MB master in the commit failed the push to GitHub. Gitignore the
+  renders folder and commit only the web copy and the sources.
+- **A picture the user sends while you're mid-task never reaches disk.** Only pictures in their
+  own message land as files. If one has to go in a render, ask them to resend it alone.
+- **A push is not live.** Check the deploy ran and curl the served file's content-length before
+  saying the new cut is up.
+
 When the user asks for a reflection, follow [the reflection protocol](references/reflection.md).
 
 ## Related kit skills

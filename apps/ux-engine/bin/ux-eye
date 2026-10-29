@@ -118,6 +118,12 @@ DOM_JS = """() => {
     // A text LEAF: has text of its own and no element children.
     const own = el.children.length === 0 && el.textContent.trim().length > 0;
     if (own) { box.text = el.textContent.trim().slice(0, 48); texts.push(box); }
+    /* A shape or <text> inside an <svg> is part of that svg's drawing, so it
+       "overlapped" its own parent: on 2026-10-29 the Firm Foundation footer
+       lockup's TECHNOLOGIES line was refused as a 78% collision with its own
+       svg, twice, on a page with nothing wrong. Marked so the pair check
+       skips it; the svg box stands for the whole drawing. */
+    if (el.ownerSVGElement) box.insvg = 1;
     // Painted: draws something of its own, so a bare layout wrapper is not
     // counted as occluding anything.
     const paints = (st.backgroundColor && st.backgroundColor !== "rgba(0, 0, 0, 0)")
@@ -194,6 +200,9 @@ def overlaps(painted):
                 continue
             # One of the pair is an overlay. Overlapping what scrolls under
             # it is the whole job of a fixed header or a sticky rail.
+            # Part of an svg's own drawing; the svg box already stands for it.
+            if a.get("insvg") or b.get("insvg"):
+                continue
             if a.get("over") or b.get("over"):
                 continue
             share = inter / min(aa, ab)

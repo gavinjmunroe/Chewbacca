@@ -611,28 +611,34 @@ if name == "chewie" and args[:2] == ["web", "goto"] and len(args) == 3 and re.fu
 # campaign") was refused twice because its title said campaign, and the to-dos
 # never reached the ledger. work-ledger writes one local JSON file and starts
 # no program (tools/work_ledger.py has no subprocess), so its words are data.
-# Review of 8364cb82: the bare name could be any work-ledger on PATH. It runs
-# only when it resolves to the kit's runpy shim, the tools/work_ledger.py that
-# shim loads holds no Clay route and starts no program, and no argument names
-# a Clay host, credential or guard state.
-LEDGER_RUNS = re.compile(r"\bsubprocess\b|\bos\.(system|popen|exec\w*|spawn\w*)\b|\bpty\b|\bsocket\b|urllib|http\.client")
-
-
+# Reviews of 8364cb82 and 09fd9e1c: the bare name could be any work-ledger on
+# PATH, and reading its source for dangerous calls is a denylist. So the code
+# is pinned instead. The work-ledger that runs must sit in a git checkout whose
+# HEAD commit is in the kit's own history (a worktree or an installed snapshot
+# of it), its shim and tools/work_ledger.py must be byte-identical to that
+# commit, and bin/ and tools/ must hold nothing untracked or modified (python
+# puts bin/ first on sys.path, so a planted json.py there would run).
 def ledger_ok():
     found = __import__("shutil").which("work-ledger") if os.sep not in name else resolve(name)
     real = os.path.realpath(found) if found else ""
     if not real.endswith(os.sep + os.path.join("bin", "work-ledger")):
         return False
-    impl = os.path.join(os.path.dirname(os.path.dirname(real)), "tools", "work_ledger.py")
-    try:
-        shim = open(real, errors="replace").read()
-        code = open(impl, errors="replace").read()
-    except OSError:
+    root = os.path.dirname(os.path.dirname(real))
+    sha = git_out("-C", root, "rev-parse", "HEAD")
+    if not sha or not re.fullmatch(r"[0-9a-f]{40}", sha):
         return False
-    if "runpy.run_path" not in shim or "work_ledger.py" not in shim or LEDGER_RUNS.search(shim):
+    if git_out("-C", kit, "cat-file", "-t", sha) != "commit":
         return False
-    # The ledger file itself, not its folder: tools/ also holds the Clay tools.
-    return not LEDGER_RUNS.search(code) and not code_reaches_clay(code)
+    for rel in ("bin/work-ledger", "tools/work_ledger.py"):
+        pinned = git_out("-C", kit, "show", f"{sha}:{rel}")
+        try:
+            here = open(os.path.join(root, rel), errors="replace").read().strip()
+        except OSError:
+            return False
+        if pinned is None or here != pinned:
+            return False
+    dirty = git_out("-C", root, "status", "--porcelain", "--untracked-files=all", "--", "bin", "tools")
+    return dirty == ""
 
 
 if base == "work-ledger" and args[:1] and args[0] in ("add", "list", "update", "context", "board"):

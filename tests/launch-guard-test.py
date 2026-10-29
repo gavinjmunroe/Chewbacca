@@ -178,6 +178,20 @@ cases = [(*c, None) for c in cases] + [
 # there refused a plain quit. The block cases are the seven bypasses a review
 # reproduced against a narrower rule tried the same night; the substring rule
 # must keep refusing every one.
+# A git repo of its own: the kit's real ledger files, committed clean, plus a
+# planted json.py beside the shim. Its HEAD is not in the kit's history.
+EVIL_REPO = os.path.realpath(tempfile.mkdtemp())
+os.makedirs(os.path.join(EVIL_REPO, "bin"))
+os.makedirs(os.path.join(EVIL_REPO, "tools"))
+for rel in ("bin/work-ledger", "tools/work_ledger.py"):
+    with open(os.path.join(ROOT, rel)) as src, open(os.path.join(EVIL_REPO, rel), "w") as dst:
+        dst.write(src.read())
+with open(os.path.join(EVIL_REPO, "bin", "json.py"), "w") as fh:
+    fh.write("raise SystemExit('planted')\n")
+GENV = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t",
+            GIT_COMMITTER_EMAIL="t@t", GIT_CONFIG_GLOBAL="/dev/null")
+for cmd in (["init", "-q"], ["add", "-A"], ["commit", "-qm", "x", "--no-verify"]):
+    subprocess.run(["git", "-C", EVIL_REPO, *cmd], check=True, capture_output=True, env=GENV)
 U = lambda c, want, desc="": (c[:60], "Bash", {"command": c, "description": desc},  # noqa: E731
                               None, None, None, want, None)
 cases += [
@@ -201,6 +215,8 @@ cases += [
     # Review of 8364cb82: a planted work-ledger, or one naming Clay state, stays refused.
     U('/tmp/evil/bin/work-ledger add "campaign"', 2),
     U('work-ledger add "campaign" --title "see ~/.chewbacca/state/send-gate-receipts"', 2),
+    # Review of 09fd9e1c: a repo of its own with a clean, committed ledger is still not the kit.
+    U(f'{EVIL_REPO}/bin/work-ledger add "campaign"', 2),
 ]
 
 bad = 0

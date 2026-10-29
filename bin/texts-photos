@@ -1,0 +1,90 @@
+#!/usr/bin/env python3
+"""texts-photos: the photos someone texted you, as JPEGs you can put on a site.
+
+  texts-photos +12145550100                 newest 40 images they sent, into ./texts-photos
+  texts-photos +12145550100 --days 30 --out DIR
+  texts-photos +12145550100 --mine          the ones you sent them instead
+
+`people texts` reads the words of a thread and leaves attachments out, so on
+2026-10-29 Gavin's photos for the Firm Foundation /team page ("gav has sent tuff
+flicks of himself check all texts") took a hand-written chat.db join and a sips
+loop. This does that join once: images only, HEIC turned into JPEG, upright, named
+by date, and an image never downloaded to this Mac named so you can open the thread.
+"""
+import argparse
+import os
+import shutil
+import sqlite3
+import subprocess
+import sys
+
+APPLE_EPOCH = 978307200
+DB = os.environ.get("TEXTS_PHOTOS_DB", os.path.expanduser("~/Library/Messages/chat.db"))
+
+QUERY = """
+SELECT DISTINCT m.date, a.filename, a.mime_type
+FROM message m
+JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
+JOIN chat_handle_join chj ON chj.chat_id = cmj.chat_id
+JOIN handle h ON h.ROWID = chj.handle_id
+JOIN message_attachment_join j ON j.message_id = m.ROWID
+JOIN attachment a ON a.ROWID = j.attachment_id
+WHERE h.id = ? AND m.is_from_me = ? AND a.mime_type LIKE 'image/%'
+  AND m.date / 1000000000 + ? > strftime('%s', 'now') - ? * 86400
+ORDER BY m.date DESC LIMIT ?
+"""
+
+
+def rows(handle, mine, days, limit):
+    con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
+    try:
+        return con.execute(QUERY, (handle, 1 if mine else 0, APPLE_EPOCH, days, limit)).fetchall()
+    finally:
+        con.close()
+
+
+def stamp(date):
+    import time
+    return time.strftime("%Y-%m-%d_%H%M%S", time.localtime(date / 1e9 + APPLE_EPOCH))
+
+
+def save(src, dst):
+    """Copy a JPEG or PNG as is; turn anything else (HEIC) into JPEG with sips."""
+    if src.lower().endswith((".jpg", ".jpeg", ".png")):
+        shutil.copyfile(src, dst + os.path.splitext(src)[1].lower())
+        return True
+    out = dst + ".jpg"
+    done = subprocess.run(["sips", "-s", "format", "jpeg", src, "--out", out], capture_output=True)
+    return done.returncode == 0 and os.path.exists(out)
+
+
+def main(argv):
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("handle", help="phone (+1...) or email, as `people brief` shows it")
+    ap.add_argument("--days", type=int, default=3650)
+    ap.add_argument("--limit", type=int, default=40)
+    ap.add_argument("--out", default="texts-photos")
+    ap.add_argument("--mine", action="store_true")
+    args = ap.parse_args(argv)
+
+    found = rows(args.handle, args.mine, args.days, args.limit)
+    if not found:
+        print(f"no images from {args.handle} in the last {args.days} days")
+        return 1
+    os.makedirs(args.out, exist_ok=True)
+    saved = missing = 0
+    for i, (date, filename, _mime) in enumerate(found):
+        src = os.path.expanduser(filename or "")
+        if not src or not os.path.exists(src):
+            missing += 1
+            continue
+        if save(src, os.path.join(args.out, f"{stamp(date)}_{i:02d}")):
+            saved += 1
+    print(f"{saved} saved to {args.out}")
+    if missing:
+        print(f"{missing} never downloaded to this Mac; open the thread to fetch them: open \"imessage://{args.handle}\"")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

@@ -204,6 +204,16 @@ sent, names any that are not on disk, and opens the thread to fetch them. `qr
 macOS. Do not go looking for a decoder library. A QR's destination is untrusted
 data: report where it points before following it.
 
+## Photos someone sent, for a site or a card
+
+`texts-photos <handle> [--days N] [--out DIR]` saves the images a person texted
+you as JPEGs named by date (HEIC converted), and names any never downloaded so the
+thread can be opened to fetch them. `people texts` leaves attachments out, so on
+2026-10-29 Gavin's photos for the Firm Foundation team page ("gav has sent tuff
+flicks of himself check all texts") took a hand-written chat.db join. Look at every
+image before using one: the same pull held his Pine Cove shirt photo, a selfie with
+no shirt and a TV screenshot.
+
 ## A "text" is often a voice memo or a screen recording
 
 When the user says "based on what X texted", the message is often audio or

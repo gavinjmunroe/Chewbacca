@@ -64,6 +64,30 @@ Many hosts deploy on push. Pushing and then running a deploy command again is ho
 a double deploy or a rollback race happens, so know which the project does before
 doing both.
 
+Merged is not live. After any merge, read the deploy's own result and then load
+the page: `gh run list --branch main --limit 1`, and when a run failed with an
+empty log, `gh api repos/<owner>/<repo>/check-runs/<id>/annotations` names why.
+On 2026-10-29 Firm Foundation's PR #3 merged, the reply said so, and
+firmfoundation.tech/team stayed a 404: GitHub refused every job on Gavin's account
+("recent account payments have failed or your spending limit needs to be
+increased") and Vercel Hobby refused Caleb's commits. Both had been failing since
+10/28 and nobody had looked.
+
+## Moving a site to Railway on the user's own GitHub
+
+`railway-attach` does the move in one command from a linked directory:
+`railway-attach --repo owner/name --root /site --domain example.com --domain
+www.example.com`. It connects the service, sets the subfolder root, adds the custom
+domains with no fixed port, and prints the registrar lines (apex as ALIAS, www as
+CNAME, both TXT verifications). Before it, mirror the repo with every branch
+(`git push <new> 'refs/remotes/origin/*:refs/heads/*'`, then delete the stray
+`HEAD` branch it creates), invite the old owner with push access (admin is refused
+on a personal repo), rename the old remote and point `origin` at the new one so
+every worktree follows, and remove a deploy workflow for the old host or every
+push fails a job. Leave MX, SPF, DKIM and DMARC alone at the registrar or the team
+inbox breaks. 2026-10-29, Caleb: "We're moving it to railway on my deployment" and
+"the github to my github"; done by hand that day, now this tool.
+
 ## Pushing
 
 Commit messages explain why, in prose, like a person wrote them. No bullet-list

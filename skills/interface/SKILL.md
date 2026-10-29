@@ -585,6 +585,31 @@ flash <url>` must pass. A bar that hides on scroll turns on travel (24px
   reads the word as a campaign. Screenshot it, or drive it from a
   standalone script.
 
+## A team or advisor page is faces first, and every line has a source
+
+Firm Foundation /team, 2026-10-29, Caleb's verdicts in order: "it looks like a
+funeral pdf and u didn't even try to add logos or descriptions and you didn't
+stress the christian leadership enough", "no black and white thats a funeral and
+you can have more things pop out when you hover over us", then "The team page
+isn't the best visually" at twelve uniform text cards on a navy band.
+
+- Faces lead. Each person is a big colour portrait (4:5) with the name on the
+  photo; never grayscale, never small circles beside a paragraph.
+- Say what matters to this reader about each person in one line under the photo.
+  For a church audience that is their walk with Jesus (pastor's kid, Praxis
+  Fellow, leads FaithTech OC), marked with a small cross, only where a source says it.
+- Where they've built is a row of real logos (`logo-fetch`, which refuses the 16px
+  placeholders), with one line on what each place is behind the hover.
+- The bio and the org lines rise over the photo on hover, and on tap on a phone;
+  the card itself stays short. The lead person gets a split card with everything
+  shown and one real quote of theirs.
+- No row holds one card. Size each group's grid to its count, and fill a gap with
+  real content (the partnership card), never a placeholder.
+- Every fact on the page names its source in a comment beside it: their LinkedIn as
+  pasted, their own site, a podcast or sermon they gave. Never infer a parent, a
+  school or a faith from a name, a handle or where a photo was taken; ask, and keep
+  asking until each card is filled. A portrait from their own published page counts.
+
 ## A page for one person is built from that person, then turned all the way up
 
 2026-10-26, a hype page for Caleb's roommate walking in from a late night of

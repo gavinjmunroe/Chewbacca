@@ -1102,6 +1102,8 @@ if group "installer"; then
     bash "$ROOT/tests/ask_lookup_guard.sh"
   check  "vercel-guard refuses Vercel deploys and allows teardown" \
     bash "$ROOT/tests/vercel_guard.sh"
+  check  "logo-fetch refuses placeholder marks, texts-photos saves only their images, railway-attach prints registrar DNS" \
+    bash "$ROOT/tests/ff_site_tools.sh"
   # Reengineer step 15: prose rules that became checks, and the share ratchet.
   check  "attribution, artifact and commit-msg checks refuse what git.md, CLAUDE.md and review-discipline.md ban" \
     python3 "$ROOT/tests/test_rule_checks.py"

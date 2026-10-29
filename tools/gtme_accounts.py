@@ -215,6 +215,7 @@ def formd_rows(src: dict, cache: Path) -> list[dict]:
     rows = rows.get("rows", rows) if isinstance(rows, dict) else rows
     return [{"key": r.get("cik") or r["issuer"], "name": r["issuer"], "city": (r.get("city") or "").title(),
              "state": r.get("state", ""), "revenue": None, "headcount": None, "ntee": "",
+             "raised": int(r.get("amount_sold") or r.get("offering_amount") or 0) or None,
              "size": f"raised ${int(r.get('amount_sold') or r.get('offering_amount') or 0):,} (Form D "
                      f"{r.get('file_date', '')})",
              "account_source": r.get("filing_url") or "SEC Form D"} for r in rows]
@@ -397,7 +398,7 @@ def own_news(name: str, items: list[dict]) -> list[dict]:
     return [n for n in items or [] if pat.search(n["title"]) and not LISTICLE.search(n["title"])]
 
 
-def score(rec: dict, acc: dict, words: re.Pattern, today: dt.date) -> dict:
+def score(rec: dict, acc: dict, words: re.Pattern, today: dt.date, about=None) -> dict:
     criteria = acc.get("criteria") or {}
     cands = [{"contact_id": c.get("email") or c.get("name"), "full_name": c.get("name"), "title": c.get("title", ""),
               "email": c.get("email") or "", "email_verified": False,  # published, never run through a validator
@@ -410,11 +411,22 @@ def score(rec: dict, acc: dict, words: re.Pattern, today: dt.date) -> dict:
     # a job post is the org's own but undated on most sites, so it scores as relevance only
     sigs += [{"what": "hiring: " + j["title"], "date": "", "scope": "company", "company_match": True,
               "source": j["url"]} for j in rec.get("jobs") or []]
-    sig = gtme_score.signal_strength(sigs, today)
-    need = bool(rec.get("jobs")) or any(words.search(n["title"]) for n in items)
+    # Jev asks whether each signal is about THIS org; under 0.8 it's dropped, no answer is HOLD
+    org = {"name": rec.get("maps_name") or rec["name"], "city": rec.get("city", ""), "state": rec.get("state", ""),
+           "website": rec.get("website", "")}
+    sig = gtme_score.signal_strength(sigs, today, org=org, about=about)
+    gone = {d.get("what") for d in sig.get("dropped") or []}
+    need = any(j for j in rec.get("jobs") or [] if "hiring: " + j["title"] not in gone) or \
+        any(words.search(n["title"]) for n in items if n["title"] not in gone)
     company = {"estimated_revenue": rec.get("revenue"), "estimated_headcount": rec.get("headcount")}
+    # a Form D company files no revenue, so what it just raised stands in when the client sets raise_range
     in_band = gtme_score._in_range(rec.get("revenue"), criteria.get("revenue_range")) or \
-        gtme_score._in_range(rec.get("headcount"), criteria.get("headcount_range"))
+        gtme_score._in_range(rec.get("headcount"), criteria.get("headcount_range")) or \
+        (bool(criteria.get("raise_range")) and gtme_score._in_range(rec.get("raised"), criteria["raise_range"]))
+    if rec.get("raised") and not rec.get("revenue"):
+        company["estimated_revenue"] = rec["raised"] if in_band and criteria.get("raise_range") else None
+        if company["estimated_revenue"] is not None:
+            criteria = dict(criteria, revenue_range=criteria["raise_range"])
     stack = bool(KNOWN_STACK.search(rec.get("chms") or ""))
     # Weights guessed from John Knox's 10/27 call, never measured: can they pay (40), a system
     # to connect (20), someone who signs (20), a reason to help now (20).
@@ -601,7 +613,7 @@ def price_treg(row: dict) -> float:
 
 
 def build(client: str, acc: dict, work: Path, *, limit: int | None = None, workers: int = 4,
-          refresh: bool = False, tools=None, ask=jev_ask, today: dt.date | None = None) -> tuple[list[dict], dict]:
+          refresh: bool = False, tools=None, ask=jev_ask, about=None, today: dt.date | None = None) -> tuple[list[dict], dict]:
     today = today or dt.date.today()
     work.mkdir(parents=True, exist_ok=True)
     accounts = SOURCES[acc["source"]["kind"]](acc["source"], work / "source")
@@ -611,7 +623,7 @@ def build(client: str, acc: dict, work: Path, *, limit: int | None = None, worke
     growth = re.compile(acc.get("growth_words") or GROWTH_WORDS, re.I)
     recs = enrich(accounts, work, tools or site_audit(), words, growth, workers, refresh)
     recs = [r for r in recs if r.get("website") and same_org(r["name"], r.get("maps_name"))]
-    rows = [score(r, acc, words, today) for r in recs]
+    rows = [score(r, acc, words, today, about) for r in recs]
     for r in rows:
         jev_check(r, acc, client, ask)
     jev_calls = sum(1 for r in rows if r.pop("_jev_called", False))

@@ -153,7 +153,8 @@ class Build(unittest.TestCase):
         (tmp / "dnc.csv").write_text("email,reason\nsam@delta.example,unsubscribed 10/01\n")
         cls.calls = []
         cls.rows, cls.summary = ga.build("acme", plan(tmp, dnc={"csv": [str(tmp / "dnc.csv")]}), tmp / "work",
-                                         tools=fake_tools(), ask=fake_ask(cls.calls), today=date(2026, 10, 29))
+                                         tools=fake_tools(), ask=fake_ask(cls.calls),
+                                         about=lambda org, sigs: (sigs, []), today=date(2026, 10, 29))
         cls.by = {r["org"]: r for r in cls.rows}
 
     @classmethod
@@ -289,6 +290,27 @@ class Parts(unittest.TestCase):
                "revenue": "", "fit": 80}
         ga.jev_check(row, {"criteria": {}}, "t", lambda *a: {"buyer": {"noul": True}})
         self.assertEqual(row["buyer_check"], "Jev not scored, held")
+
+    def test_why_now_signals_go_through_jev_about_this_org(self):
+        rec = {"key": "1", "name": "Delta Advocacy", "city": "Los Angeles", "state": "CA", "website": "https://delta.example/",
+               "revenue": 12_000_000, "leaders": [], "news": [], "jobs": [{"title": "Data Manager", "url": "u"}]}
+        acc = {"titles": ["CEO"], "criteria": {"revenue_range": {"min": 10_000_000}}}
+        seen = []
+        def about(org, sigs):
+            seen.append(org["name"])
+            return [], sigs  # Jev says none of it is about this org
+        row = ga.score(rec, acc, ga.re.compile("data"), date(2026, 10, 29), about)
+        self.assertEqual(seen, ["Delta Advocacy"])
+        self.assertEqual(row["fit"], 40)  # the dropped job post is no reason to talk
+        unscored = ga.score(rec, acc, ga.re.compile("data"), date(2026, 10, 29), lambda o, s: None)
+        self.assertEqual(unscored["hold"], "HOLD")
+
+    def test_form_d_raise_stands_in_for_revenue(self):
+        rec = {"key": "1", "name": "Acme Robotics", "city": "", "state": "CA", "website": "https://acme.example/",
+               "revenue": None, "raised": 5_000_000, "leaders": [], "news": [], "jobs": []}
+        acc = {"titles": ["CEO"], "criteria": {"raise_range": {"min": 1_000_000, "max": 20_000_000}}}
+        row = ga.score(rec, acc, ga.re.compile("x"), date(2026, 10, 29), lambda o, s: (s, []))
+        self.assertEqual(row["fit"], 40)
 
     def test_own_news_needs_the_whole_name(self):
         items = [{"title": "Bitcoin Well raises fund", "date": "2026-10-01", "url": "u"},

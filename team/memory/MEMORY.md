@@ -340,6 +340,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_land_workflow_traps: checksums.py hashes the index (add first), never chain cleanup with ;, DESTRUCTIVE_OK=1 must lead, zsh file lists need arrays, --paths kept the exec bit only after 10/17, a clash right after ur own land means a stale worktree (10/10)
 - feedback_site_research_pass: Every site starts with the kit pass (api-anything pulls every page, brand-grab, ux-pick, crafts, STEAL, COPY); site-gate research refuses without it (10/10)
 - feedback_never_vercel: Never deploy or set up anything on Vercel; Railway hosts everything and vercel-guard refuses vercel commands (10/10)
+- feedback_repo_move_check_branch_tracking: after a repo moves owners check %(push) per branch, not origin; FF main still pushed to Gavin's repo via branch.main.remote (10/29)
 - feedback_vercel_hobby_blocks_collaborator_commits: teammate's domain showing an old site = Vercel Hobby skipping Caleb's commits; a GitHub Action deploying main via the Vercel CLI fixed it, never pay or recommit (FF, 10/11)
 - feedback_ff_deploy_push_is_not_live: a push to FF main isn't live; the deploy Action failed on Gavin's GitHub billing 10/28-29 for 8 pushes unseen; check gh run list + curl an asset after every push
 - feedback_ff_video_ship_web_copy_only: FF video pushes carry the web copy + sources, never the 51 MB master (push failed 10/29); mid-turn pics never save, ask for a resend
@@ -350,7 +351,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_no_unintentional_animation: Text never fades up beat after beat or replays an entrance on change; one rise per page; site-gate research fails it (10/10)
 - feedback_phone_is_never_lesser: Phone version as rich as desktop, never flashes; site-gate parity + flash enforce it (FF site, 10/10)
 - project_firm_foundation_outbound: FF outbound 10/11 night, gtme ledger in the FF repo ops/, 261 DFW and 252 SoCal churches loaded, copy 86-95, nothing sent yet; next is Gavin's Gmail and Caleb's ok
-- project_firm_foundation_site: FF site after the 10/10 rebuild: one story, live on firm-foundation.up.railway.app, Vercel domain waits on Gavin
+- project_firm_foundation_site: FF site, one story; firmfoundation.tech on Caleb's Railway from repo calebnewtonusc/firm-foundation since 10/29, Gavin's repo and Vercel retired
 - project_medrano_partners_2026_10_27: FF x John Knox (Medrano) 10/27; FF takes 250-1,000 churches, he takes 1,000+; he wants our lead gen; his AI firm guild; follow-up Thu 10/29 3:30 PT
 - feedback_fix_the_default_path: every fix also makes the right move the easy default (a tool or first step), not only a refusal; chewbacca resolve is the example (10/11)
 - feedback_amber_stealth_in_public: Amber is stealth; public copy says "Stealth (PearX W27)", never the name, product or Amber Circles (10/11)

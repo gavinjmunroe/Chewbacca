@@ -54,6 +54,9 @@ SITES = {
 JEV = {"Dana Ruiz": 0.91, "Karen Scott": 0.06, "Lee Park": 0.88, "Sam Cole": None}
 
 
+AUDIT_TITLES = []
+
+
 def fake_tools():
     def resolve(q):
         for name, (site, _) in sorted(SITES.items(), key=lambda kv: -len(kv[0])):
@@ -61,7 +64,8 @@ def fake_tools():
                 return {"website": site, "name": name}
         return None
 
-    def audit(url, _):
+    def audit(url, _, titles="church"):
+        AUDIT_TITLES.append(titles)
         for site, contacts in SITES.values():
             if site == url:
                 return {"status": "ok", "contacts": contacts, "page_emails": [], "chms": "", "final_url": url}
@@ -284,6 +288,14 @@ class Parts(unittest.TestCase):
                              ga.re.compile("x"), ga.re.compile("x"), 1, False)
             self.assertEqual(recs[0]["website"], "https://alpha.example/")
             self.assertEqual(len((work / "enriched.jsonl").read_text().splitlines()), 1)
+
+    def test_audit_reads_org_titles_not_church_ones(self):
+        # The church default dropped every CEO and CTO: AuraPath got a buyer for 9 of 52 (10/29).
+        AUDIT_TITLES.clear()
+        with tempfile.TemporaryDirectory() as d:
+            ga.enrich([{"key": "1", "name": "Alpha Legal Aid", "city": "", "state": "CA"}], Path(d), fake_tools(),
+                      ga.re.compile("x"), ga.re.compile("x"), 1, False)
+        self.assertEqual(AUDIT_TITLES, ["org"])
 
     def test_jev_true_is_not_a_probability(self):
         row = {"buyer": "Pat", "buyer_title": "CEO", "buyer_email": "", "org": "X", "website": "", "buyer_source": "",

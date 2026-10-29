@@ -65,6 +65,7 @@ import contextlib
 import csv
 import datetime as dt
 import email.utils
+import inspect
 import io
 import json
 import os
@@ -277,6 +278,12 @@ def site_audit():
     sys.path.insert(0, str(d))
     import audit_site
     import lead_card
+    if "titles" not in inspect.signature(audit_site.audit).parameters:
+        # FF 93a65fb added titles="org". Without it the audit keeps church buyers only and
+        # the AuraPath list (10/29) got a buyer for 9 of 52 orgs, so say so instead of quietly.
+        print(f"gtme accounts: the site audit at {d} predates titles=\"org\" (FF 93a65fb), so it reads "
+              f"church titles only and most CEOs, presidents and CTOs will be missed. Pull firm-foundation.",
+              file=sys.stderr)
     return audit_site, lead_card
 
 
@@ -324,7 +331,11 @@ def enrich_one(a: dict, tools, words, growth) -> dict:
             rec.update({"website": place.get("website", ""), "maps_name": place.get("name", "")})
     if rec.get("website"):
         try:
-            au = audit_site.audit(rec["website"], None)
+            # titles="org": executive, tech, ops and finance chiefs, not the church buyer rules
+            if "titles" in inspect.signature(audit_site.audit).parameters:
+                au = audit_site.audit(rec["website"], None, titles="org")
+            else:
+                au = audit_site.audit(rec["website"], None)
             rec["site_status"] = au.get("status")
             rec["leaders"] = leaders(au.get("contacts"))
             rec["page_emails"] = [e.get("email") for e in au.get("page_emails") or []][:8]

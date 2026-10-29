@@ -14,6 +14,14 @@ On the first real run (batch b484372f04, 10/29) it failed two gates nobody had f
 **How to apply:**
 
 - Own-inbox send day: `gtme batch`, write the review file after reading every email as the recipient, then `gtme ready --drafts <file>`. Batches expire in 2 hours, so the review is per batch id.
-- `gtme sender --email` does not move `--inbox`; set both.
-- Bare `chewbacca gtme` with no subcommand runs the 8-question interview on defaults and saves a "My business" client. Always name a subcommand.
 - A client that is its own company sets `no_client` in clients.json so the client-messages skip doesn't block.
+
+Enforced in code since 070e79cb (each with a test in tests/test_gtme_solo.py or test_gtme_operator.py):
+
+- `gtme sender` refuses a .edu email or inbox, and an `--address` without `--address-kind` (business, po_box, virtual, registered_agent). `gtme batch` refuses a plan with no address kind, so a founder's home is never the footer by default.
+- `--email` alone now moves the inbox with it.
+- Copy that says this/last/next week or month, today, yesterday or tomorrow is held: "this month" written 10/11 was going out in November.
+- A personal line whose lines.json `checked` date is over 7 days old is held. 11-day-old SoCal lines had drifted on 2 of 15 sites.
+- Bare `chewbacca gtme` with nothing on stdin saves nothing and exits 2 (it used to save "My business").
+- `gtme ready` names a missing treg token in the verifier failure.
+- `chewbacca email add` opens the Google audience page in the background when sign-in is blocked by an app in Testing mode.

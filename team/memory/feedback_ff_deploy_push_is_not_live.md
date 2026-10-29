@@ -10,3 +10,5 @@ Firm Foundation's site deploys through `.github/workflows/deploy.yml` on gavinjm
 **Why:** a 2 s failure with no logs looks like nothing happened. Each session pushed and moved on.
 
 **How to apply:** after any push to firm-foundation main, run `gh run list --repo gavinjmunroe/firm-foundation --workflow=deploy.yml -L 1` and curl one changed asset or page before saying it's live. A billing annotation is Gavin's to fix (github.com/settings/billing on his account). Then `gh run rerun <id>`. Never try to get around it with a local `vercel` deploy.
+
+**Update 2026-10-29 afternoon:** the repo moved to calebnewtonusc/firm-foundation and the site now deploys from its main on Railway (root /site); the Vercel Action and gavinjmunroe repo are retired. The rule holds: after a push, curl the changed file on firm-foundation.up.railway.app (or firmfoundation.tech once DNS points at Railway) and compare its size. `video/tools/web.sh` prints the size to expect.

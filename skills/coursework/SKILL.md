@@ -152,6 +152,12 @@ Never-dos, in his words (2026-10-11, mid quiz):
   When they're silent on something he could have heard in lab or in person
   (a topic, a presenting week, a makeup slot), ask him in one line first.
   Never offer to email the instructor to find it out.
+- "No bio lab tmr?" then "No other school stuff?" (2026-10-29, a "what do I
+  knock out today" list): a today list covers tonight's prep for tomorrow's
+  first classes too. Run `coursework week` next to `coursework today`, list
+  tomorrow morning's meetings (lecture, lab, room), any pre-lab or PPE they
+  need tonight, and every school item due in the next 7 days. A lab whose
+  pre-lab isn't in the ledger still gets a line: check the manual tonight.
 - "lets make sure erik noakes isnt the one that sees it" then "bet email her"
   (2026-10-28, missed BISC Quiz #7): a missed-deadline reopen request goes to
   the lecture instructor only, from the USC inbox:

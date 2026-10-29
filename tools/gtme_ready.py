@@ -248,12 +248,12 @@ def run_campaigns(entries, ddir, ready, client, ws):
         pass  # each grade then reports its own key error as NOT CHECKED
     with concurrent.futures.ThreadPoolExecutor(max_workers=WORKERS) as pool:
         for e in entries:
-            if e.get("batch"):
+            if is_batch(e):
                 continue
             extra, missing = resolve(e, ddir, ready, entries)
             if CID.fullmatch(str(e.get("campaign", ""))):
                 jobs[pool.submit(grade_one, e, extra, client, ws)] = (e, missing)
-        done = {id(e): ({}, [] if e.get("batch") else resolve(e, ddir, ready, entries)[1]) for e in entries}
+        done = {id(e): ({}, [] if is_batch(e) else resolve(e, ddir, ready, entries)[1]) for e in entries}
         for fut in concurrent.futures.as_completed(jobs):
             done[id(jobs[fut][0])] = (fut.result(), jobs[fut][1])
     for e in entries:
@@ -261,7 +261,7 @@ def run_campaigns(entries, ddir, ready, client, ws):
         row = {"campaign": e.get("campaign", ""), "company": e.get("company", ""), "tier": str(e.get("tier", "")),
                "leads": e.get("leads") if isinstance(e.get("leads"), int) else None,
                "missing_inputs": missing, "gates": [], "receipt": None}
-        if e.get("batch"):
+        if is_batch(e):
             row["campaign"] = f"batch {e['batch']}"
             row["company"] = row["company"] or client
             row["gates"], row["leads"] = grade_batch(e, ddir, client)
@@ -302,6 +302,13 @@ def run_campaigns(entries, ddir, ready, client, ws):
 # (about 30 s an email on 2026-10-18), so a verdict this close before the
 # batch's made_at belongs to that build. Guessed from that one night.
 JEV_WINDOW_S = 12 * 60
+
+
+def is_batch(entry):
+    """An own-inbox batch entry. One that also names a campaign is graded as the
+    campaign, so adding "batch" to a Clay draft can never skip its gates or the
+    pre-send check (security review of b60597c2, 2026-10-29)."""
+    return bool(entry.get("batch")) and not entry.get("campaign")
 
 
 def _gate(n, status, first=""):
@@ -603,7 +610,7 @@ def main(argv=None):
     # The client's one workspace, never a built-in id: until 2026-10-13 a client
     # with none was graded in Zeutara's Clay workspace.
     import gtme_config
-    only_batches = bool(entries) and all(e.get("batch") for e in entries)
+    only_batches = bool(entries) and all(is_batch(e) for e in entries)
     ws, why = gtme_config.workspace_of(cfg)
     if not ws and not only_batches:
         print(f"chewbacca gtme ready: {why}", file=sys.stderr)

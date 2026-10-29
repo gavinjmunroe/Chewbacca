@@ -434,5 +434,11 @@ p = s.run()
 check("a batch nobody read as the recipient is NOT READY", p.returncode == 1 and "recipient read" in p.stdout,
       p.stdout + p.stderr)
 
+s = Ledger()
+(s.data / "drafts.json").write_text(json.dumps([{"company": "Solo", "batch": s.bid, "campaign": "cam_sneaky1"}]))
+p = s.run()
+check("an entry naming a batch and a campaign is graded as the campaign, never READY on the batch alone",
+      p.returncode != 0 and "READY:" not in p.stdout, p.stdout + p.stderr)
+
 print(f"\n{'all passed' if not fails else str(fails) + ' failed'}")
 sys.exit(1 if fails else 0)

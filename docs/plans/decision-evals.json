@@ -56,6 +56,12 @@
       "type": "replay",
       "test": "tests/test_site_stack_gate_replay.py",
       "corpus": "tests/fixtures/site-stack-gate/real_writes_2026_10_27.json"
+    },
+    ".claude/hooks/ask-lookup-guard.sh": {
+      "type": "sealed",
+      "script": "tools/ask_lookup_eval.py",
+      "set": "~/.chewbacca/evals/ask-lookup",
+      "floor": "every labeled fact refused, at most 1% of the rest refused (2026-10-28: 1/1, 0/195)"
     }
   },
   "grandfathered": [

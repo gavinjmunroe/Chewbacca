@@ -649,7 +649,9 @@ def ledger_ok():
     # Review of 7f0df333: an allowlist, not shadow detection. bin/ may hold only
     # what the pinned commit's tree holds there (plus __pycache__, which python
     # reads only beside a matching source). tools/ is not on sys.path:
-    # runpy.run_path on a file never inserts its folder.
+    # runpy.run_path on a file never inserts its folder. Review of 7d7957a8:
+    # the shim also drops bin/ from sys.path before any import, so bin/'s
+    # contents can't be imported at all; this list is the second wall.
     try:
         tree = sp.run(["git", "-C", kit, "ls-tree", "--name-only", f"{sha}:bin"],
                       capture_output=True, text=True, timeout=5, env=GIT_ENV)

@@ -146,7 +146,10 @@ add() {
   say "Google didn't let $addr in."
   say "If it said \"Access blocked\", add $addr as a test user here, signed in as the account that owns the project:"
   say "  https://console.cloud.google.com/auth/audience?project=${project}"
-  say "then run: chewbacca email add $addr"
+  say "(or press Publish app there, so any account can sign in), then run: chewbacca email add $addr"
+  # Take him there, behind his work: on 2026-10-29 a new Workspace inbox hit this
+  # block and the fix was a page he had to go find.
+  [ -n "$project" ] && open -g "https://console.cloud.google.com/auth/audience?project=${project}" 2>/dev/null
   return 1
 }
 

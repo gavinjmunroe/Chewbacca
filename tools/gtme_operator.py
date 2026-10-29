@@ -342,6 +342,7 @@ class Asker:
     def __init__(self, teacher: Teacher, assume_yes: bool = False):
         self.t = teacher
         self.assume_yes = assume_yes
+        self.answered = 0
 
     def ask(self, question: str, default: str = "") -> str:
         hint = f" [{default}]" if default else ""
@@ -351,6 +352,7 @@ class Asker:
             return default
         try:
             line = input("> ")
+            self.answered += 1
         except EOFError:
             line = ""
         return line.strip() or default
@@ -741,7 +743,14 @@ def cmd_start(a, t: Teacher) -> int:
         t.say(f"Picking up the plan for {plan['client']} from {plan['made_at']}.")
         show_plan(t, plan)
     else:
-        plan = build_plan(interview(ask, a.client))
+        answers = interview(ask, a.client)
+        # On 2026-10-29 an agent ran bare `chewbacca gtme` with no terminal, every
+        # question hit EOF, and a "My business" client was saved on defaults.
+        if not a.yes and ask.answered == 0:
+            t.say("No answers came in (nothing on stdin), so nothing was saved. Run it in a terminal, "
+                  "or name a subcommand like `chewbacca gtme batch --client NAME`.")
+            return 2
+        plan = build_plan(answers)
         for text in re.split(r"[;\n]", plan["answers"].get("rules") or ""):
             if text.strip():
                 add_ruling(plan["client"], text, "the client", "told during chewbacca gtme start")

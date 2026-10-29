@@ -345,7 +345,10 @@ def grade_batch(entry, ddir, client):
         if row is None:
             fails.append(f"{to} is not on leads.csv")
         elif (row.get("email_verdict") or "").strip() != treg_client.SENDABLE:
-            fails.append(f"{to} has no valid verifier verdict ({row.get('email_verdict') or 'none'})")
+            # 10/29: FF SoCal had no treg token, so verify never ran and every
+            # address read "none" with nothing saying why.
+            why = "" if treg_client.token() else "; no treg token on this Mac, so `chewbacca gtme verify` can't run"
+            fails.append(f"{to} has no valid verifier verdict ({row.get('email_verdict') or 'none'}){why}")
         if to.lower() in off:
             fails.append(f"{to} is suppressed")
         if (to, step) in sent:

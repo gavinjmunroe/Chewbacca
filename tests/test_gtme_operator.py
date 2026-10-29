@@ -722,6 +722,15 @@ class FridayNumbersRuling(unittest.TestCase):
         self.assertEqual(self.kinds("2026-10-14"), [])
 
 
+class NoAnswers(unittest.TestCase):
+    # 2026-10-29: bare `chewbacca gtme` with nothing on stdin saved "My business" on defaults.
+    def test_an_interview_with_no_answers_saves_nothing(self):
+        tmp = Path(tempfile.mkdtemp())
+        r = run(env_for(tmp), stdin="")
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertFalse((tmp / "gtm" / "clients" / "my-business").exists())
+
+
 class Generalization(unittest.TestCase):
     def test_new_files_name_no_real_client(self):
         banned = re.compile(r"caleb|jonah|zeutara|1372623|maggie|graham|bluemodern|joelnewton", re.IGNORECASE)

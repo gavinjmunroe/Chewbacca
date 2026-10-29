@@ -50,7 +50,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import zlib
-from datetime import timedelta
+from datetime import date, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -87,6 +87,17 @@ TITLE_RX = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
 META_RX = re.compile(r"<meta[^>]+(?:name|property)=[\"'](?:og:)?description[\"'][^>]*content=[\"']([^\"']{10,400})",
                      re.I)
 DASH = re.compile("[—–]")
+EDU = re.compile(r"\.edu$", re.I)
+# The footer address kinds a sender may choose. A home is not one: on 2026-10-29
+# a founder's family home sat in FF SoCal's plan as the footer of every email.
+ADDRESS_KINDS = ("business", "po_box", "virtual", "registered_agent")
+# Copy that names a time relative to when it was written. "We checked 688 sites
+# this month" was written 10/11 and was about to go out in November (10/29).
+RELATIVE_TIME = re.compile(r"\b(?:this|last|next) (?:week|month|year|weekend)\b|\b(?:today|yesterday|tomorrow)\b",
+                           re.I)
+# A personal line older than this gets held. FF SoCal's lines were checked 10/18;
+# on 10/29 two of 15 had changed (Pali Pres 7th screen to 3rd, St Bruno 5 to 8).
+LINE_MAX_AGE_DAYS = 7
 OPT_OUT = "If you'd rather not hear from me, reply stop and I won't email you again."
 
 
@@ -578,6 +589,9 @@ def problems(mail: dict) -> list[str]:
         out.append("it has a long dash")
     if OPT_OUT not in body:
         out.append("no opt-out line")
+    when = RELATIVE_TIME.search(body.split(OPT_OUT)[0] + " " + mail["subject"])
+    if when:
+        out.append(f"it says \"{when.group(0)}\", which goes stale; name the month or date")
     words = len(body.split(OPT_OUT)[0].split())
     if words > MAX_WORDS:
         out.append(f"{words} words, over {MAX_WORDS}")
@@ -676,6 +690,13 @@ def cmd_batch(a) -> int:
     if not (sender.get("name") and sender.get("address")):
         raise Refused("Every cold email has to carry your name and a mailing address (CAN-SPAM). Run "
                       f"`chewbacca gtme sender --client \"{a.client}\" --name \"...\" --address \"...\"` first.")
+    if sender.get("address_kind") not in ADDRESS_KINDS:
+        raise Refused("Nobody has said what the footer address is (business, PO box, virtual or registered "
+                      "agent), and a home address is never the default. Run `chewbacca gtme sender --client "
+                      f"\"{a.client}\" --address \"...\" --address-kind business` (or po_box, virtual, "
+                      "registered_agent).")
+    if EDU.search(sender.get("inbox") or sender.get("email") or ""):
+        raise Refused("This client sends from a .edu address. Cold email never goes out from a school inbox.")
     if op.utc_now().weekday() >= 5 and not a.weekend:
         raise Refused("It's the weekend. Cold email goes out Monday to Friday, in their business hours.")
     step1 = next((c for c in plan.get("copy") or [] if c.get("step") == 1), {})
@@ -732,6 +753,11 @@ def cmd_batch(a) -> int:
         verdict = (r.get("email_verdict") or "").strip()
         if verdict and verdict != treg_client.SENDABLE:
             bad.append(f"the email verified as {verdict}, not a live mailbox")
+        checked = re.match(r"\d{4}-\d{2}-\d{2}", str(extra.get("checked") or ""))
+        if lead["line"] and checked:
+            age = (op.utc_now().date() - date.fromisoformat(checked.group(0))).days
+            if age > LINE_MAX_AGE_DAYS:
+                bad.append(f"the personal line was last checked {age} days ago; re-check the site first")
         if plan.get("require_line") and not lead["line"]:
             bad.append("the first email needs its personal line and this lead has none yet")
         (held if bad else mails).append({**mail, "held_for": bad} if bad else mail)
@@ -1278,10 +1304,23 @@ def cmd_reply(a) -> int:
 def cmd_sender(a) -> int:
     plan = plan_of(a.client)
     s = plan.get("sender") or {}
+    for addr in (a.email, a.inbox):
+        if addr and EDU.search(addr.strip()):
+            raise Refused(f"{addr.strip()} is a school address. Cold email never goes out from a .edu: a "
+                          "complaint lands on the school's domain and the student's account.")
+    if a.address and a.address_kind not in ADDRESS_KINDS:
+        raise Refused("Say what the mailing address is with --address-kind (" + ", ".join(ADDRESS_KINDS)
+                      + "). It prints on every cold email, so a home address is never the default.")
     for k in ("name", "address", "email", "inbox", "company"):
         v = getattr(a, k)
         if v:
             s[k] = v.strip()
+    if a.address:
+        s["address_kind"] = a.address_kind
+    # Setting --email alone left the old Gmail as the inbox (FF SoCal, 10/29),
+    # so the batch would have sent from an address the footer never named.
+    if a.email and not a.inbox:
+        s["inbox"] = a.email.strip()
     plan["sender"] = s
     op.write_json(cdir(a.client) / "plan.json", plan)
     print(f"Saved. Every email signs as {s.get('name') or '[name missing]'}, "
@@ -1303,6 +1342,7 @@ def main(argv=None) -> int:
     p.add_argument("--client", required=True)
     for k in ("name", "address", "email", "inbox", "company"):
         p.add_argument(f"--{k}")
+    p.add_argument("--address-kind", choices=ADDRESS_KINDS, help="what the footer address is; never a home")
     p = sub.add_parser("find", help="each company's email and a fact, from its own website")
     p.add_argument("--client", required=True)
     p.add_argument("--limit", type=int, default=200)

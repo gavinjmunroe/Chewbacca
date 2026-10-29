@@ -106,7 +106,7 @@ class Solo(unittest.TestCase):
 
     def ready(self):
         self.run_cli("sender", "--client", "Dana Co", "--name", "Dana Ruiz", "--address", "12 Main St, Austin TX",
-                     "--email", "dana@me.test")
+                     "--address-kind", "business", "--email", "dana@me.test")
         self.run_cli("find", "--client", "Dana Co")
 
     def batch(self, *extra):
@@ -156,6 +156,42 @@ class Solo(unittest.TestCase):
     def test_no_mailing_address_means_no_batch(self):
         self.run_cli("find", "--client", "Dana Co")
         self.assertEqual(self.run_cli("batch", "--client", "Dana Co"), 2)
+
+    # 2026-10-29, Firm Foundation SoCal: a family home sat in the footer, a .edu
+    # was a candidate sender, "this month" was about to go out in November, and
+    # 11-day-old lines had drifted on 2 of 15 sites.
+    def test_an_address_with_no_kind_means_no_batch(self):
+        self.ready()
+        plan = json.loads((self.d / "plan.json").read_text())
+        plan["sender"].pop("address_kind")
+        (self.d / "plan.json").write_text(json.dumps(plan))
+        self.assertEqual(self.run_cli("batch", "--client", "Dana Co"), 2)
+
+    def test_sender_refuses_an_address_without_its_kind(self):
+        self.assertEqual(self.run_cli("sender", "--client", "Dana Co", "--address", "1 Home Rd"), 2)
+
+    def test_sender_refuses_a_school_address(self):
+        self.assertEqual(self.run_cli("sender", "--client", "Dana Co", "--email", "dana@school.edu"), 2)
+
+    def test_setting_the_email_moves_the_inbox(self):
+        self.ready()
+        self.run_cli("sender", "--client", "Dana Co", "--email", "dana@newco.test")
+        self.assertEqual(json.loads((self.d / "plan.json").read_text())["sender"]["inbox"], "dana@newco.test")
+
+    def test_copy_that_says_this_month_is_held(self):
+        mail = {"subject": "your site", "body": "We checked 50 sites this month.\n\n" + gtme_solo.OPT_OUT}
+        self.assertTrue(any("this month" in p for p in gtme_solo.problems(mail)))
+        mail["body"] = "We checked 50 sites in October.\n\n" + gtme_solo.OPT_OUT
+        self.assertFalse(any("goes stale" in p for p in gtme_solo.problems(mail)))
+
+    def test_a_line_checked_over_a_week_ago_is_held(self):
+        self.ready()
+        lines = {"maria@crumbcorner.test": {"line": "Crumb Corner's menu has no prices.",
+                                         "source": "https://crumbcorner.test/", "checked": "2026-10-01 audit"}}
+        (self.d / "lines.json").write_text(json.dumps(lines))
+        b = self.batch()
+        held = [h for h in (b or {}).get("held", []) if h["to"] == "maria@crumbcorner.test"]
+        self.assertTrue(held and any("days ago" in w for w in held[0]["held_for"]), b)
 
     def test_weekend_holds_the_batch(self):
         self.ready()

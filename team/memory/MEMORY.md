@@ -376,6 +376,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_gtme_done_misses_togari_followups: gtme done never reads Togari's follow-up queue; "nobody waiting" on 10/16 met a 26-investor digest on 10/17. Read findStuck and close settled threads first
 - feedback_ready_is_built_the_morning_of_launch: gtme ready passes only on the launch morning, on that launch's drafts; 12h reads and receipt, dated per-campaign warmup ruling, unverified rows (Zeutara, 10/16)
 - feedback_ready_means_gtme_ready_passed: a launch is ready only when `chewbacca gtme ready` prints READY; a Zeutara launch was called "good until Jonah responds" with 1 of 14 graded, ready-guard refuses it now (10/12)
+- feedback_gtme_ready_own_inbox_batches: gtme ready grades own-inbox batches (a batch entry + reviews/<id>.json); FF SoCal first run NOT READY on no verifier verdicts and the old Gmail inbox; bare `chewbacca gtme` makes a "My business" client (10/29)
 - feedback_never_do_what_sagar_wouldnt: check every GTM change against references/sagar.md first; a GEX rewrite to 90/100 made his founder-story copy contrived ("NEVER DO SMTH SAGAR WOULDNT DO", 10/12)
 - feedback_client_channels_are_togari: agents never post in client Slack conversations as Caleb; Togari is the voice ("Everything should be togari", 13 posts from his acc 10/11-12); client-post-guard refuses
 - feedback_client_channel_posts_one_line: client-channel status posts are ONE line (who, company, first sentence, Togari replied); full They wrote/We sent quotes were "wayyyy too big" (10/12)

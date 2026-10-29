@@ -2,7 +2,7 @@
 # hookd skips this guard for a Bash call without the flag it refuses.
 # Proven by tools/hookd_replay.py: 0.060 s of CPU on every Bash call before
 # (2026-10-12).
-# gate: print-to-pdf api.todoist.com
+# gate: print-to-pdf api.todoist.com text/html
 [ -z "${HOOKD_INNER:-}" ] && [ -x "$HOME/.local/bin/hookd" ] && exec "$HOME/.local/bin/hookd" gate "$0" "$@"
 # Timing, logging, a watchdog and an output cap. See lib.sh.
 # shellcheck source=/dev/null
@@ -31,6 +31,17 @@ refuse() {
 }
 printf '%s' "$cmd" | grep -qE -- '--print-to-pdf' &&
   refuse "making a PDF by hand. Run: chewbacca pdf <file.md>... [--out <folder>] (about 2 s a file, never waits on Chrome)."
+# 2026-10-29: a Meridian call doc uploaded as HTML with a <style> block came
+# into Google Docs as one cramped black block, because a Docs import drops
+# classes ("Cancer ahh formatting"). An HTML upload to Drive whose file still
+# carries a <style> block or class= is pointed at the tool that inlines it all.
+if printf '%s' "$cmd" | grep -q 'drive files' && printf '%s' "$cmd" | grep -q 'text/html'; then
+  up="$(printf '%s' "$cmd" | sed -nE "s/.*--upload[ =]+(\"([^\"]+)\"|'([^']+)'|([^ ]+)).*/\\2\\3\\4/p")"
+  up="${up/#\~/$HOME}"
+  if [ -f "$up" ] && grep -qiE '<style|class=' "$up"; then
+    refuse "that HTML uses a <style> block or classes, which Google Docs drops. For a call, pitch or meeting doc run: chewbacca call-doc <script.txt> (\"say\" lines, ! actions, ## steps, ### beats). Otherwise inline every style."
+  fi
+fi
 # 2026-10-13: "save to the todo" landed nine tasks in Todoist, a week after
 # Caleb said "For rn I don't use todoist, chewbacca is my digital life"
 # (2026-10-07). The memory said so; the agent read which apps were configured

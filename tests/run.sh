@@ -618,6 +618,8 @@ if group "gtme"; then
     bash "$ROOT/tests/client_post_guard.sh"
   check "chewbacca pdf makes PDFs in seconds and a hand-rolled print is pointed at it" \
     bash "$ROOT/tests/chewbacca_pdf.sh"
+  check "chewbacca call-doc makes a spaced, colored call Doc with 0.6in margins" \
+    bash "$ROOT/tests/chewbacca_call_doc.sh"
   check "gtme-jev holds an email Jev flags or couldn't check, in one call per email" \
     python3 "$ROOT/tests/test_gtme_jev.py"
   check "resolve answers an address and a person's own record before anyone asks" \

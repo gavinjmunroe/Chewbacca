@@ -359,6 +359,13 @@ said ... search search think thinkkkkk dont be stupid be resourceful!" What land
   never an individual user".
 - Every vision scene is tagged planned, and every moment card names the context it
   needed ("Calendar", "Your small group") so the OS claim is shown, not asserted.
+- Paint lighting on the one-screen sticky layer, never on the tall scroll section.
+  On 2026-10-28 Caleb opened the page on his phone and wrote "It crashed bruh". The
+  server was fine. The page had radial gradients across sections 420 to 470vh tall,
+  plus backdrop-filter on the nav, the notifications and the menubar. Fix: a solid
+  color on the tall section, the gradient on the sticky's ::before, and no
+  backdrop-filter at phone width. Headless WebKit never crashes, so it can't prove
+  this is fixed. Only a real iPhone can.
 
 ## Landing pages: the verdicts already paid for
 

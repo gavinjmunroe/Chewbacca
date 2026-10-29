@@ -22,6 +22,11 @@ Both fail the same way, by reading the transcript alone and stopping there.
   retreat that weekend, and logged "call Gavin" as done-ish when Gavin had
   texted "Can't call" and moved it to 2pm the next day. Caleb: "I hv a feeling
   you skimmed bro and didn't organize things well in an actionable way".
+- Never answer a pasted call without loading this skill. On 2026-10-29 a
+  Roy Scott call was ledgered with no texts read and a son's name wrong,
+  three skims in five days. `.claude/hooks/pasted-call-gate.sh` now hands
+  this method over at prompt time and refuses the Stop when the skill,
+  `people texts`, the ledger or the brain save is missing.
 - Never hand back a flat list. A dozen rows in call order is a pile, not a plan.
 
 ## Do

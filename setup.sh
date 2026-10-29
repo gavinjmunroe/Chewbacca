@@ -1951,6 +1951,12 @@ _register("UserPromptSubmit", hooks_dir + "/tab-rescue.sh", timeout=5)
 # keeps agents at nice 10 so the person's apps win the CPU. Its PreToolUse
 # half is registered below the PreToolUse reset, which wiped it until 10/13.
 _register("UserPromptSubmit", hooks_dir + "/machine-budget.sh", timeout=5)
+# A pasted call transcript gets the whole pasted-call method: the method as
+# context at prompt time, and a refused Stop if the turn skipped the skill,
+# the texts, the ledger or the brain. Roy call, 2026-10-29: "READ EVERY WORD
+# BRUH DONT SKIM", the third skim in five days with the skill sitting unread.
+_register("UserPromptSubmit", hooks_dir + "/pasted-call-gate.sh", timeout=5)
+_register("Stop", hooks_dir + "/pasted-call-gate.sh", timeout=5)
 # Archive or close asks get the learn-first closeout (2026-10-29, "I should never have to say this again").
 _register("UserPromptSubmit", hooks_dir + "/archive-learn.sh", timeout=5)
 _register("UserPromptSubmit", hooks_dir + "/client-rulings.sh", timeout=5)

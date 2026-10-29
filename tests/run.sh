@@ -1714,6 +1714,8 @@ if group "hooks"; then
   check "every repo path a hook names exists" python3 "$ROOT/tests/hook_paths_exist.py"
   check "voice-check, drafts and voice-guard refuse a text that is not his" bash "$ROOT/tests/voice_check.sh"
   check "prayer-guard checks every visible block this turn" bash "$ROOT/tests/prayer_guard.sh"
+  check "pasted-call-gate refuses a pasted call answered without the method" bash "$ROOT/tests/pasted_call_gate.sh"
+  check "pasted-call-gate detector matches its labeled corpus" python3 "$ROOT/tests/test_pasted_call_gate_replay.py"
   check "disk-guard prunes regenerable caches once when the disk runs low" bash "$ROOT/tests/disk_guard.sh"
   check "thinking-dash-guard queues em dashes in this turn's thinking and never refuses" bash "$ROOT/tests/thinking_dash_guard.sh"
   check "tab-rescue flags tabs dead on a usage limit once, sim-reap stops orphaned simulators" bash "$ROOT/tests/tab_rescue.sh"

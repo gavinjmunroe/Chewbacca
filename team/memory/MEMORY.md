@@ -474,5 +474,6 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_guards_misfire_on_tab_prompts: voice, scope, launch, skim and ready guards misfired on tab prompts and call coaching on 10/28; each case needs an eval fixture before the guard changes
 - project_product_sync_2026_10_28: shared files between Chewbacca, anchored and usc-os sync via tools/product_sync.py + chewbacca products, personal-data firewall, test-gated pushes; fix shared files in Chewbacca
 - project_ff_team_page_2026_10_28: FF /team page PR #3, founders + board and Christian tech advisors, sourced bios, 2 real headshots, NEEDs + every advisor's yes before Gav merges (10/28)
+- project_roy_scott_call_2026_10_29: Roy Scott (Healthy Hip Hop) is an FF/Anchored advisor (CV pending), weekly Mon 9:30 w Caleb+Gavin, wants Dough for his founder outreach, has Bay Area churches + Kingdomland
 - feedback_gtm_agent_briefs_name_the_engine: GTM subagent briefs name the engine tool per kind of work (buyers, why-now, copy, cleaning) or dough-brief-gate refuses; the 10/29 Medrano brief sent buyers and emails to web search ("I SHOULD NEVER HAVE TO SAY THIS")
 - feedback_archive_means_learn_first: an archive/close-tab ask = every linked tab lands its lessons in Chewbacca code first; archive-learn hook injects it ("I should never have to say this again", 10/29)

@@ -67,6 +67,11 @@
       "type": "replay",
       "test": "tests/test_dough_brief_gate_replay.py",
       "corpus": "tests/fixtures/dough_brief/corpus.json"
+    },
+    ".claude/hooks/pasted-call-gate.sh": {
+      "type": "replay",
+      "test": "tests/test_pasted_call_gate_replay.py",
+      "corpus": "tests/fixtures/pasted_call/corpus.json"
     }
   },
   "grandfathered": [

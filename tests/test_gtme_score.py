@@ -181,6 +181,34 @@ def test_signal():
     ok(s.signal_strength([], today)["score"] == 1)
 
 
+def test_signal_jev_about_org():
+    # 2026-10-27: a keyword check matched a baseball trade as a church's why-now.
+    # With the org named, Jev reads each signal against it by default.
+    from datetime import date
+    today = date(2026, 10, 11)
+    church = {"name": "Northwest Bible Church", "city": "Dallas", "state": "TX"}
+    real = {"what": "Northwest Bible Church hiring an IT director", "date": "2026-10-01", "scope": "company",
+            "source": "https://example.com/jobs"}
+    trade = {"what": "Northwest traded for a relief pitcher", "date": "2026-10-02", "scope": "company",
+             "source": "https://example.com/sports"}
+    judge = lambda org, sigs: ([dict(x, about=0.95) for x in sigs if "Bible" in x["what"]],
+                               [dict(x, about=0.1) for x in sigs if "Bible" not in x["what"]])
+    out = s.signal_strength([trade, real], today, org=church, about=judge)
+    ok(out["score"] == 9 and len(out["top"]) == 1 and out["dropped"][0]["what"] == trade["what"],
+       "Jev drops the signal that isn't about the org")
+    out = s.signal_strength([trade], today, org=church, about=judge)
+    ok(out["hold"] and out["top"] == [], "only an off-target signal holds")
+    out = s.signal_strength([real], today, org=church, about=lambda o, x: None)
+    ok(out["hold"] and "Jev couldn't" in out["next"], "no Jev answer is a hold, never a pass")
+    ok(s.signal_strength([trade], today)["score"] == 9, "without an org nothing changes for old callers")
+    import gtme_jev
+    fake_jev = type("J", (), {"probability": staticmethod(lambda v: v)})
+    asker = lambda state, qs: ({"sig:0": {"noul": 0.9}, "sig:1": {"noul": 0.2}}, fake_jev)
+    keep, drop = gtme_jev.signals_about(church, [real, trade], ask=asker)
+    ok([k["what"] for k in keep] == [real["what"]] and drop[0]["about"] == 0.2, "signals_about splits on 0.8")
+    ok(gtme_jev.signals_about(church, [real], ask=lambda st, q: (None, None)) is None, "no answers is None")
+
+
 def test_fit_share():
     # Qube on 2026-10-03: 10 fits, 28 weak, 443 no fit of 481. Copy work must refuse.
     qube = [{"fit": "fit"}] * 10 + [{"fit": "weak"}] * 28 + [{"fit": "no fit"}] * 443
@@ -206,7 +234,7 @@ def test_fit_share():
 
 def main():
     for fn in (test_lead_and_work_email, test_affiliation, test_contact_rubric, test_resolve_primary, test_tier,
-               test_quality, test_signal, test_cli, test_fit_share):
+               test_quality, test_signal, test_signal_jev_about_org, test_cli, test_fit_share):
         fn()
     print(f"gtme-score: {CHECKS} checks passed")
 

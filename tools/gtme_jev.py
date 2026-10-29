@@ -134,6 +134,51 @@ def review(mail: dict, rulings: list[dict], ask=_ask, min_grade=None) -> list[st
     return out
 
 
+# A why-now is about the account or it is nothing. On 2026-10-27 a keyword check
+# matched a baseball trade and another state's First Baptist as church signals;
+# Jev reads each one against the org's name, city and site. Same bar as the
+# opener (guessed, never measured): under 0.8 the signal doesn't count.
+ABOUT_OK = 0.8
+
+
+def _ask_about(state: dict, questions: dict):
+    sys.path.insert(0, str(ROOT / "bin" / "lib"))
+    try:
+        import jev  # noqa: E402
+    except ImportError:
+        return None, None
+    return jev.ask(state, questions, decision="gtme-signal-about"), jev
+
+
+def signals_about(org: dict, signals: list, ask=_ask_about) -> tuple[list, list] | None:
+    """Split signals into (about this org, not), or None when Jev couldn't answer.
+
+    `org` is {name, city, state, website}. One call for every signal."""
+    if not signals:
+        return [], []
+    qs = {f"sig:{i}": {"type": "noul", "instructions":
+                       f"Signal {i} below: is it about this exact organization ({org.get('name', '')}"
+                       f"{', ' + org['city'] if org.get('city') else ''}{', ' + org['state'] if org.get('state') else ''}"
+                       f"{', ' + org['website'] if org.get('website') else ''}) itself, not a different organization "
+                       "with a similar name, another city, or unrelated news?"}
+          for i in range(len(signals))}
+    state = {"organization": org, "signals": [{"i": i, "what": s.get("what") or s.get("text") or "",
+                                                "source": s.get("source") or "", "date": s.get("date") or ""}
+                                               for i, s in enumerate(signals)]}
+    answers, jev = ask(state, qs)
+    if not answers:
+        return None
+    prob = jev.probability if jev else (lambda v: v if isinstance(v, (int, float)) else None)
+    keep, drop = [], []
+    for i, s in enumerate(signals):
+        a = answers.get(f"sig:{i}")
+        p = prob(a.get("noul")) if isinstance(a, dict) else None
+        if p is None:
+            return None
+        (keep if p >= ABOUT_OK else drop).append({**s, "about": round(p, 2)})
+    return keep, drop
+
+
 def main(argv=None) -> int:
     import argparse
     ap = argparse.ArgumentParser(prog="gtme-jev", description=__doc__.splitlines()[0])

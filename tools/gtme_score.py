@@ -480,8 +480,21 @@ def score_signal(sig: dict, today) -> tuple[int, str]:
     return 1, "no real signal"
 
 
-def signal_strength(signals: list, today=None) -> dict:
+def signal_strength(signals: list, today=None, org=None, about=None) -> dict:
+    """Why-now strength. Pass `org` ({name, city, state, website}) and Jev checks
+    every signal is about that org before it counts, by default. A check that
+    didn't run isn't a pass, so no Jev answer means HOLD."""
     from datetime import date
+    dropped = []
+    if org and os.environ.get("GTME_JEV_SIGNALS", "1") != "0":
+        if about is None:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            from gtme_jev import signals_about as about
+        split = about(org, signals)
+        if split is None:
+            return {"score": 1, "hold": True, "top": [], "dropped": [],
+                    "next": "Hold: Jev couldn't check these signals are about this org, so none count yet"}
+        signals, dropped = split
     if today is None:
         pinned = os.environ.get("GTME_TODAY")
         today = date.fromisoformat(pinned) if pinned else date.today()
@@ -492,7 +505,7 @@ def signal_strength(signals: list, today=None) -> dict:
     # Two strong, sourced signals at once make the "why now" stronger than either.
     if sum(1 for s in top if s["score"] >= 8) >= 2:
         best = min(10, best + 1)
-    return {"score": best, "hold": best < SIGNAL_HOLD, "top": top,
+    return {"score": best, "hold": best < SIGNAL_HOLD, "top": top, "dropped": dropped,
             "next": "Hold: find a company-specific signal from the last 30 days (funding, an executive hire, a "
                     "launch, a filing) before writing" if best < SIGNAL_HOLD else "Write it, leading with the top signal"}
 
@@ -563,7 +576,8 @@ def main(argv=None):
     q.add_argument("file", help="CSV or JSON of contacts; - reads stdin")
     s = sub.add_parser("signal", help="why-now strength 1 to 10 for one account, HOLD under 6")
     s.add_argument("file", help="JSON list of signals: what, date, scope (company|industry|category|tangential), "
-                                "company_match, source; - reads stdin")
+                                "company_match, source; or {org: {name, city, state, website}, signals: [...]} "
+                                "and Jev checks each signal is about that org; - reads stdin")
     f = sub.add_parser("fit-share", help="fits over total before any copy work; exit 1 under half")
     f.add_argument("file", help="CSV or JSON of leads with a fit, sector_fit, fit_label or fit_score column; - reads stdin")
     f.add_argument("--column", help="the fit column, when it has another name")
@@ -582,7 +596,8 @@ def main(argv=None):
     if args.cmd == "signal":
         text = sys.stdin.read() if args.file == "-" else open(args.file).read()
         data = json.loads(text)
-        out = signal_strength(data if isinstance(data, list) else data.get("signals") or [])
+        org = data.get("org") if isinstance(data, dict) else None
+        out = signal_strength(data if isinstance(data, list) else data.get("signals") or [], org=org)
         line = (f"{out['score']}/10" + (" HOLD" if out["hold"] else "") + "\n" +
                 "\n".join(f"  {x['score']} {x.get('what', '')} ({x['why']}) {x.get('source')}" for x in out["top"]) +
                 f"\n{out['next']}")

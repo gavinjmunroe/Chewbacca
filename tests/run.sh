@@ -511,6 +511,8 @@ if group "gtme"; then
   check "gtme-investors dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-investors --help
   check "gtme-portfolio proves every invested_in edge on its page and caches fits per pitch" \
     python3 "$ROOT/tests/test_gtme_portfolio.py"
+  check "gtme accounts refuses an unconfirmed ICP and runs Jev, dedupe, DNC, people and treg pricing on every row" \
+    python3 "$ROOT/tests/test_gtme_accounts.py"
   check "gtme list runs the registry method from config, verifies a sample, drafts outreach without sending" \
     python3 "$ROOT/tests/test_gtme_pipeline.py"
   check "Clay exports match the frozen fixture by stable identity" python3 "$ROOT/tests/test_clay_fixture_check.py"

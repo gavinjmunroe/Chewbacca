@@ -6,6 +6,9 @@
     gtme list --client NAME  build the first list from public sources and dedupe it (free, read only);
                              with `sources` in the client json: the whole registry, confirmed on each
                              firm's own site, Jev-judged, tiered and spot-verified (tools/gtme_pipeline.py)
+    gtme accounts --client NAME   an org list for any client from its confirmed ICP: IRS, Form D, api or
+                             CSV accounts, site audit, gtme_score tiers, a Jev buyer check, dedupe, DNC,
+                             the people store and a priced treg find (tools/gtme_accounts.py)
     gtme list-verify --client NAME | --csv FILE   re-open a sample of sources, fail any fact not there
     gtme outreach --client NAME | --founders   LinkedIn notes, emails and texts as drafts, never sent
     gtme setup               connect Clay (if you have it), name each workspace, run the first sync
@@ -2451,6 +2454,9 @@ def main(argv=None) -> int:
         import creator_run
         creator_run.main(argv[1:])
         return 0
+    if argv and argv[0] == "accounts":
+        import gtme_accounts
+        return gtme_accounts.main(argv[1:])
     if argv and argv[0] == "recovery-preview":
         import gtme_recovery
         return gtme_recovery.main(argv[1:])

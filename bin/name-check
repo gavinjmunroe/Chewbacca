@@ -1,0 +1,118 @@
+#!/usr/bin/env python3
+"""name-check: is a product name usable, before it's pitched to anyone.
+
+    chewbacca name-check dough mortar putty
+    chewbacca name-check dough --json
+
+For each word it asks whois about the plain .com and .ai and the common prefix
+forms (try, get, use, run, join, and an hq suffix), then reads the plain .com's
+homepage to guess who holds it. A plain .com held by a squatter can be bought
+later; one held by an operating company usually can't.
+
+On 2026-10-28 naming GTM OS took about 20 rounds because names were pitched
+before any of this ran. Dough looked great until whois and USPTO showed tastylive
+owns both dough.com and the DOUGH mark. Trademarks still need a person to type the
+word into tmsearch.uspto.gov's own box: its URL queries return false "No results"
+(see second-brain memory feedback_uspto_url_query_lies), so this tool only
+reminds, never claims a mark is clear.
+"""
+
+import argparse
+import json
+import re
+import subprocess
+import sys
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor
+
+PREFIXES = ("try", "get", "use", "run", "join")
+SUFFIXES = ("hq",)
+FREE = re.compile(r"no match for|not found|no data found|domain not found|status:\s*free", re.I)
+TAKEN = re.compile(r"registrar:|registrant|creation date|domain status:\s*(?!free)", re.I)
+# Words that show up on parked or for-sale pages run by the big aftermarkets.
+PARKED = re.compile(r"for sale|buy this domain|make an offer|afternic|sedo|dan\.com|hugedomains|"
+                    r"atom\.com|spaceship|parked|this domain may be", re.I)
+# Registrars big companies use to hold brand domains. A plain .com here is rarely for sale.
+BRAND_REGISTRARS = re.compile(r"markmonitor|csc corporate|cscglobal|safenames|com laude|brandsight", re.I)
+
+
+def whois(domain, run=subprocess.run):
+    """free | taken | unknown, plus the registrar line when there is one."""
+    try:
+        out = run(["whois", domain], capture_output=True, text=True, timeout=25).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return "unknown", ""
+    reg = re.search(r"registrar:\s*(.+)", out, re.I)
+    if FREE.search(out) and not reg:
+        return "free", ""
+    if reg or TAKEN.search(out):
+        return "taken", reg.group(1).strip() if reg else ""
+    return "unknown", ""
+
+
+def homepage(domain, fetch=None):
+    """What a visitor sees: a real site, a parked page, or nothing."""
+    try:
+        if fetch:
+            body = fetch(domain)
+        else:
+            req = urllib.request.Request("https://" + domain, headers={"User-Agent": "Mozilla/5.0"})
+            body = urllib.request.urlopen(req, timeout=10).read(200000).decode("utf-8", "ignore")
+    except Exception:
+        return "no site"
+    if PARKED.search(body):
+        return "parked or for sale"
+    title = re.search(r"<title>([^<]{1,80})", body, re.I)
+    return f"live site: {title.group(1).strip()}" if title else "live site"
+
+
+def holder(status, registrar, page):
+    if status == "free":
+        return "FREE"
+    if BRAND_REGISTRARS.search(registrar):
+        return "held by a company (brand registrar), unlikely to sell"
+    if page == "parked or for sale":
+        return "parked, likely buyable"
+    if page == "no site":
+        return "no site, maybe a squatter"
+    return f"in use ({page})"
+
+
+def check(word, run=subprocess.run, fetch=None):
+    w = re.sub(r"[^a-z0-9-]", "", word.lower())
+    names = [f"{w}.com", f"{w}.ai"] + [f"{p}{w}.com" for p in PREFIXES] + [f"{w}{s}.com" for s in SUFFIXES]
+    with ThreadPoolExecutor(8) as pool:
+        results = dict(zip(names, pool.map(lambda d: whois(d, run), names)))
+    status, registrar = results[f"{w}.com"]
+    page = homepage(f"{w}.com", fetch) if status == "taken" else ""
+    return {
+        "word": w,
+        "com": holder(status, registrar, page),
+        "com_registrar": registrar,
+        "ai": results[f"{w}.ai"][0],
+        "free_prefix": [d for d in names[2:] if results[d][0] == "free"],
+        "unknown": [d for d, r in results.items() if r[0] == "unknown"],
+        "uspto": f"type '{w}' into tmsearch.uspto.gov and look for LIVE marks in classes 9, 35, 42",
+    }
+
+
+def main(argv=None):
+    p = argparse.ArgumentParser(prog="name-check", description=__doc__.split("\n\n")[0])
+    p.add_argument("words", nargs="+")
+    p.add_argument("--json", action="store_true")
+    a = p.parse_args(argv)
+    rows = [check(w) for w in a.words]
+    if a.json:
+        print(json.dumps(rows, indent=1))
+        return 0
+    for r in rows:
+        print(f"{r['word']}: .com {r['com']}" + (f" [{r['com_registrar']}]" if r["com_registrar"] else ""))
+        print(f"  .ai {r['ai']}; free prefix .coms: {', '.join(r['free_prefix']) or 'none'}")
+        if r["unknown"]:
+            print(f"  whois didn't answer for {', '.join(r['unknown'])}, so check those by hand")
+        print(f"  trademark: {r['uspto']}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

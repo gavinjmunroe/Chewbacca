@@ -29,4 +29,11 @@ student who has to open a site to wake Chewbacca's session is doing its job.
   `BLOCKED: <site> needs a sign-in in Chrome` and keep going.
 - A Brightspace quiz's questions 403 until the student opens an attempt;
   ask them to paste the questions, never start the attempt.
+- Repeat on 2026-10-28: `brightspace whoami` said BLOCKED for a dropbox submit he
+  asked for, and the agent put `foreground:` on an `open -na` of the sign-in page.
+  He signed in himself within a minute and wrote "Bro we literally built a
+  brighstpace cli why are you flashbanging me?". focus-guard now refuses that
+  override on USC sign-in URLs (42f3e934), and a newline splits commands so a
+  leading `# comment` line can't hide an open. A submit he asked for = BLOCKED
+  line plus a background loop on `brightspace whoami` that submits once it passes.
 - Related: [[feedback_nothing_takes_the_screen]], [[project_chewbacca_usc_stack_wedge]].

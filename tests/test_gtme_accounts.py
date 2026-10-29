@@ -236,6 +236,13 @@ class Parts(unittest.TestCase):
         out = ga.dedupe(rows)
         self.assertEqual(sum(1 for r in out if r["dupe_of"]), 1)
 
+    def test_csv_defuses_formulas_from_a_strangers_page(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d) / "x.csv"
+            ga.write([{"org": "=HYPERLINK(\"http://x.example\")", "fit": 80}], out)
+            with open(out) as fh:
+                self.assertFalse(next(csv.DictReader(fh))["org"].startswith("="))
+
     def test_own_news_needs_the_whole_name(self):
         items = [{"title": "Bitcoin Well raises fund", "date": "2026-10-01", "url": "u"},
                  {"title": "Urban Impact Center names new CEO", "date": "2026-10-01", "url": "u"}]

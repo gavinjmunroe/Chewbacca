@@ -85,6 +85,7 @@ sys.path.insert(0, str(ROOT / "bin" / "lib"))
 import gtme_dedupe  # noqa: E402
 import gtme_dnc  # noqa: E402
 import gtme_score  # noqa: E402
+import gtme_signals  # noqa: E402
 import treg_client  # noqa: E402
 
 # Same bar gtme_jev.py uses for an opener. On 10/29 it held IEHP (0.06) and Saint John's and
@@ -604,7 +605,8 @@ def write(rows: list[dict], out: Path) -> None:
     with open(out, "w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=COLUMNS, extrasaction="ignore")
         w.writeheader()
-        w.writerows(rows)
+        # buyer titles and headlines are read off strangers' pages, and the CSV opens in Sheets
+        w.writerows({k: gtme_signals.csv_cell(v) if isinstance(v, str) else v for k, v in r.items()} for r in rows)
 
 
 def main(argv: list[str] | None = None) -> int:

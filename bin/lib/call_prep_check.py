@@ -123,6 +123,9 @@ def main(argv) -> int:
     ap.add_argument("--doc")
     ap.add_argument("--tab")
     ap.add_argument("--absent", action="append", default=[])
+    # For call-prep-guard: a doc write anywhere else (a class paper, a team
+    # doc) has no founder heading and gets no output at all.
+    ap.add_argument("--only-call-tabs", action="store_true")
     a = ap.parse_args(argv[1:])
     if bool(a.path) == bool(a.doc):
         ap.print_usage()
@@ -132,6 +135,8 @@ def main(argv) -> int:
     rc = 0
     for title, text in doc_tabs(a.doc):
         if a.tab and title.lower() != a.tab.lower():
+            continue
+        if a.only_call_tabs and not any(FOUNDER_HEADING.match(l) for l in text.splitlines()):
             continue
         rc |= report(f"[{title}] ", text, a.absent)
     return rc

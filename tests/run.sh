@@ -1086,6 +1086,8 @@ if group "installer"; then
     bash "$ROOT/tests/wait_loop_guard.sh"
   check  "railway-domain-guard sends a generated Railway domain to railway-domain" \
     bash "$ROOT/tests/railway_domain_guard.sh"
+  check  "call-prep-guard checks a founder call doc after every Google Doc write" \
+    bash "$ROOT/tests/call_prep_guard.sh"
   check  "railway-up-guard sends a GitHub repo's deploys through a push" \
     bash "$ROOT/tests/railway_up_guard.sh"
   check  "vercel-guard refuses Vercel deploys and allows teardown" \

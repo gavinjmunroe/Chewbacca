@@ -2184,6 +2184,12 @@ _register("PreToolUse", hooks_dir + "/wait-loop-guard.sh", timeout=5,
 _register("PostToolUse", hooks_dir + "/railway-domain-guard.sh", timeout=5,
           matcher="Bash")
 
+# A founder call script is checked after every Google Doc write. On 2026-10-28
+# the Firebox script went out too dense, with Gavin in a solo call and three
+# founders in one tab, because the checker only ran when someone remembered.
+_register("PostToolUse", hooks_dir + "/call-prep-guard.sh", timeout=20,
+          matcher="Bash")
+
 # Deploys go through GitHub. On 2026-10-27 kyber-landing's service had no repo
 # because it was fed with railway up, and a pushed fix never deployed.
 _register("PreToolUse", hooks_dir + "/railway-up-guard.sh", timeout=5,

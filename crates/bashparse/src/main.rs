@@ -475,7 +475,30 @@ fn output_stays(n: Node, src: &[u8]) -> bool {
     }
     let mut child = n;
     let mut p = n.parent();
+    // tree-sitter-bash reads `a && b 2>&1 | c` as ((a && b) 2>&1) | c, where
+    // bash pipes and redirects only b. A commit -m before a `push 2>&1 | tail`
+    // was judged piped, its message stayed unmasked, and the word "checkout"
+    // in it refused the commit (2026-10-30). Once n sits before the last
+    // command of a bare list, the pipes and redirects the grammar hung on
+    // that list are not its own, until a braced group or subshell makes the
+    // list a real group again.
+    let mut detached = false;
     while let Some(a) = p {
+        if a.kind() == "list" {
+            let mut lc = a.walk();
+            if a.named_children(&mut lc).last().map(|l| l.id()) != Some(child.id()) {
+                detached = true;
+            }
+            child = a;
+            p = a.parent();
+            continue;
+        }
+        if detached && matches!(a.kind(), "pipeline" | "redirected_statement") {
+            child = a;
+            p = a.parent();
+            continue;
+        }
+        detached = false;
         match a.kind() {
             // Captured, or defined to be called later where anything can
             // happen to its output.

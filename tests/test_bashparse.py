@@ -137,6 +137,22 @@ class Mask(unittest.TestCase):
                     "git commit -m -m -e -m 'git reset --hard'"):
             self.assertTrue(kept(cmd, 'data'), cmd)
 
+    def test_list_before_a_pipe_is_not_piped(self):
+        # 2026-10-30: tree-sitter reads `a && b 2>&1 | c` as ((a && b) 2>&1) | c.
+        # Bash pipes only b, so a commit message ahead of `push | tail` stays
+        # on screen and is masked.
+        for cmd in ('git commit -m "not the stale checkout" -- a && git push -q 2>&1 | tail -2',
+                    'git add a && git commit -m "the reset --hard bug" -- a && git push 2>&1 | tail -1',
+                    'echo "git reset --hard" && ls | head'):
+            self.assertFalse(kept(cmd, 'data', 'checkout' if 'checkout' in cmd else 'reset'), cmd)
+        # The list's last command is still piped, and a braced group or a
+        # subshell is still piped whole.
+        for cmd in ('ls && echo "git reset --hard" | sh',
+                    '{ echo "git reset --hard" && ls; } | sh',
+                    '(echo "git reset --hard" && ls) | sh',
+                    'x=$(echo "git reset --hard" && ls | head)'):
+            self.assertTrue(kept(cmd, 'data'), cmd)
+
     def test_redirects_that_write(self):
         for cmd in ('echo "git reset --hard" 1<>run.sh', 'echo "git reset --hard" 1<&3',
                     'echo "git reset --hard" &>1', 'echo "git reset --hard" &>>2',

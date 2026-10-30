@@ -1,16 +1,24 @@
 ---
 name: project_travis_aurapath_call_2026_10_29
-description: Caleb and Gavin's 10/29 call with Travis Johnson (AuraPath AI, Claude Ambassador, FaithTech OC); goal was AuraPath moving its outreach from another agency to Dough, plus agency-to-agency help and FaithTech mentorship
+description: Caleb and Gavin's 10/29 call with Travis Johnson (AuraPath AI, Claude Ambassador, FaithTech OC); AuraPath runs outreach in-house (team of ~4, 3 ICPs incl PE and legal), Travis wants to talk Dough for AuraPath and Baptize The World
 metadata:
   type: project
 ---
 
-Travis Johnson co-founded AuraPath AI with Brandon Slicklein, an LA AI agency in the Anthropic Partner Network. He is a Claude Ambassador, which is a community program and not an Anthropic job (Caleb corrected Gavin on this in a text before the call). He leads Create Labs at FaithTech OC and judged the 10/24 hackathon where Anchored was built.
+Travis Johnson co-founded AuraPath AI with Brandon Slicklein, an LA AI agency in the Anthropic Partner Network. He is a Claude Ambassador, a community program, not an Anthropic employee (Caleb corrected Gavin on this in a text before the call). He leads Create Labs at FaithTech OC and judged the 10/24 hackathon where Anchored was built.
 
-The call ran Thu 10/29 at 5:35pm PT on Google Meet, with Caleb and Gavin, no screen share. Goals, from Caleb's texts to Gavin that afternoon: AuraPath does its outreach through a different agency, and Dough should win that work. Also on the list were help in both directions between the agencies (FF engineers taking AuraPath build overflow) and FaithTech mentorship like Holly's.
+The call was Thu 10/29, 5:35pm PT on Google Meet, with Caleb and Gavin and no screen share. Travis said he'd had about 30 meetings that day and ate during the call. He runs about 15 terminals at once, with an orchestrator for some of them, and Caleb offered to swap notes on running many agents.
 
-From the first minutes of the transcript (partial, pasted live): Travis runs about 15 terminals at once with an orchestrator for some of them. Caleb offered to swap notes on running many agents. Caleb mentioned a biology midterm next week.
+**What Travis said (transcript as pasted mid-call):**
 
-What was prepared: the call doc (Google Doc 1X6YV9LD330hk5JlqiLiTcr3GRklkGEOLpkP87OhudMY) and a shared sample sheet of 136 LA/OC nonprofits in AuraPath's lanes, built with `chewbacca gtme accounts`. It had 9 buyers confirmed by Jev, Alma Family Services' disclosed breach as the headline row, and IEHP and Saint John's buyers held by Jev. The close asks for a 50 vs 50 side-by-side against his current agency, with no price quoted.
+- AuraPath's go-to-market is in-house, not an agency. It's a team of about 4 doing outbound email and outbound LinkedIn plus a targeted-account sales cycle, across 3 ICPs. He named two: private equity and legal firms. The third wasn't in the pasted part.
+- "Dough is interesting actually. I wanna chat more about that," both for AuraPath and possibly for Baptize The World, which he framed as "more of a marketing exposure point of view".
+- He wasn't clear where Firm Foundation ends and Anchored begins. Caleb's answer: FF is the agency doing church tech, front ends first and then whatever back end they need, building trust. Anchored is the OS that weaves between church apps with context on the church's theology, sermons and congregation, rolled out later to the relationships FF built.
 
-**How to apply:** the full transcript gets pasted after the call. Update this note with what Travis actually said (who runs his outreach, the numbers, whether he picked an ideal-customer list) before any follow-up goes out. Related: [[project_dough_direction_2026_10_29]], [[feedback_dough_is_the_built_engine]].
+**What Caleb told him:** Gavin intro'd first (Dallas, Southlake Carroll, basketball, Austin, AI infrastructure and agentic systems for about 1.5 years, their dads connected through business). Caleb's own story went in this order: his parents, Praxis, his grandpa's victorious eschatology, the call to renew the tech industry, Meta as his giant, the GTM agency this summer, building Dough on top of Clay, Chewbacca, FF's first client closed by Gavin, and Anchored.
+
+Two claims Caleb made on the call aren't verified in our notes. First, "helped 7 different founders raise without needing to open Clay": the "7" line has an open contradiction in core/now.md and is his call. Second, the agency lead being "Clay's first go-to-market engineer": Sagar worked at Clay, but "first GTME" isn't recorded. Don't put either in writing to Travis until Caleb confirms.
+
+**Prepared for it:** the call doc (Google Doc 1X6YV9LD330hk5JlqiLiTcr3GRklkGEOLpkP87OhudMY) and a shared sample sheet (1zU2kA-yrSQLsxzNTwRoCMOXazgyxkZiTFgt7Xh2_pdQ). The sheet has 136 LA/OC nonprofits run through `chewbacca gtme accounts`, 9 Jev-confirmed buyers, and Alma Family Services' disclosed breach as the headline row. The nonprofit lane was a guess, and his real ICPs are PE and legal.
+
+**How to apply:** the follow-up runs 50 PE or legal accounts through `gtme accounts` for a side-by-side against his own team's next 50, and asks what Baptize The World needs. Update this note when the rest of the transcript lands. Related: [[project_dough_direction_2026_10_29]], [[feedback_dough_is_the_built_engine]].

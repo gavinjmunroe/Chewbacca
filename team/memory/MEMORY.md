@@ -486,3 +486,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_gmail_draft_rewraps_links: Gmail drafts can store a link as a google.com/url redirect even after a plain rewrite; read the draft back and fix before any send (Meridian, 10/29)
 - project_ff_site_call_2026_10_29: 10/29 founders call: nav What we do/Mission/Team, mission one scroll, team crowd on Home, Vineyard off, outbound starts, audit form never wired
 - feedback_host_move_carries_env_vars: a host move drops env vars; FF's audit form fell back to mailto after Vercel to Railway (10/29). List the new host's vars vs process.env, submit each form once
+- feedback_ff_site_taste_2026_10_30: FF site 10/30: neighbour sections differ in ground + shape, busy diagrams get a colour key, team crowd stays a line w family side by side, no student/USC on Caleb's card

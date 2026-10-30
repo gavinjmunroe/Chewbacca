@@ -481,3 +481,5 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_gtm_agent_briefs_name_the_engine: GTM subagent briefs name the engine tool per kind of work (buyers, why-now, copy, cleaning) or dough-brief-gate refuses; the 10/29 Medrano brief sent buyers and emails to web search ("I SHOULD NEVER HAVE TO SAY THIS")
 - feedback_archive_means_learn_first: an archive/close-tab ask = every linked tab lands its lessons in Chewbacca code first; archive-learn hook injects it ("I should never have to say this again", 10/29)
 - feedback_ff_team_photos_color_and_aura: FF /team headshots in colour only ("NO B&W BRO ITS NOT A FUNERAL"), founder leads w his suit shot, logos 56px w a halo; grayscale check is channel spread, clipboard holds his pasted pic (10/29)
+- feedback_pitch_leads_with_the_route: a pitch opens on the end state and the route, wedge third; Meridian beats opened on the text number and drew "WHY ARE WE PITCHING SOMETHING SO SMALL" (10/29)
+- feedback_gmail_draft_rewraps_links: Gmail drafts can store a link as a google.com/url redirect even after a plain rewrite; read the draft back and fix before any send (Meridian, 10/29)

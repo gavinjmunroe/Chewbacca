@@ -691,3 +691,12 @@ long???????" then "BRO?".
   end in a comma or apostrophe. At 0.92 the comma in "NOT LONG AGO," still
   touched "LITTLE" below ("overlap is blehhhhhh", 2026-10-29). Screenshot every
   .display element on its own at 1440, 1000 and 390 before pushing.
+- Sports sites borrow broadcast graphics, built from the subject's own photo.
+  Joshua Newton Baseball, 2026-10-29, after Caleb sent MLB and ESPN graphics:
+  the move that landed was cutting the player out with Apple Vision
+  (VNGenerateForegroundInstanceMaskRequest, macOS 14+, a 40-line swift tool,
+  no install), layering photo, giant name, cutout in one frame with one
+  object-position so they align, and putting the name on the head line at
+  every width. Then a sticky score bug that tracks sections as innings, a
+  broadcast stat bar, and a lineup of white tags. Erode the mask 2px or the
+  cap shows a halo on a darkened background.

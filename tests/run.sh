@@ -410,6 +410,7 @@ if group "coursework"; then
   check  "a BOM, a duplicate key, an impossible date or a negative grace never hides a deadline" bash "$ROOT/tests/coursework_ledger_errors.sh" "$ROOT"
   check  "a deliverable written as a multi-line flow map still shows in due" bash "$ROOT/tests/coursework_flow_maps.sh" "$ROOT"
   check  "never reads or gates on a course AI policy" bash "$ROOT/tests/no_ai_policy_gate.sh" "$ROOT"
+  check  "textbook cites pages in a PDF corpus and sections in a web one" python3 "$ROOT/tests/test_textbook.py"
 fi
 
 # ── doctor ────────────────────────────────────────────────────────────────────

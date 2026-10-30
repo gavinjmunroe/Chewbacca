@@ -14,7 +14,8 @@ page and character offset, and `show` prints one window around that offset.
 
 Every hit carries `p. N`, the page printed in the book. Cite that, not the
 PDF page: the course grades on chapters and a claim nobody can look up is a
-claim the user has to take on faith.
+claim the user has to take on faith. A web edition has no printed pages, so
+its hits carry the section instead, `§1.2`.
 """
 from __future__ import annotations
 
@@ -32,7 +33,11 @@ ROOT = Path(os.environ.get("COURSEWORK_DIR", Path.home() / "coursework")) / "tex
 # reply. Borrowed from `asa`, where 700 was measured against real transcripts.
 WINDOW = 700
 
-PAGE_MARK = re.compile(r"<!-- p\. (\d+) -->")
+# A PDF corpus marks printed pages, `<!-- p. 71 -->`. A web edition marks
+# sections, `<!-- s. 1.2 -->` or `<!-- s. 1 Key Terms -->` for end-of-chapter
+# material. Reading pages only, every hit in the OpenStax Introduction to
+# Sociology 3e corpus printed "p. ?" (2026-10-30).
+PLACE_MARK = re.compile(r"<!-- ([ps])\. ([^<>]+?) -->")
 
 
 def books() -> list[Path]:
@@ -69,12 +74,15 @@ def chapters(book: Path, only: str | None) -> list[Path]:
     return [p for p in paths if needle in p.stem.lower()]
 
 
-def page_at(text: str, offset: int) -> str:
-    """The last printed page number marked at or before this offset."""
+def place_at(text: str, offset: int) -> str:
+    """The last printed page or section marked at or before this offset."""
     last = None
-    for match in PAGE_MARK.finditer(text, 0, offset + 1):
-        last = match.group(1)
-    return f"p. {last}" if last else "p. ?"
+    for match in PLACE_MARK.finditer(text, 0, offset + 1):
+        last = match
+    if last is None:
+        return "p. ?"
+    kind, label = last.groups()
+    return f"p. {label}" if kind == "p" else f"§{label}"
 
 
 def title_of(text: str, fallback: str) -> str:
@@ -88,7 +96,8 @@ def cmd_books(args: argparse.Namespace) -> int:
         numbered = [c for c in info["chapters"] if c.get("number")]
         words = sum(c["words"] for c in info["chapters"])
         print(f"{path.name}\n  {info['title']}")
-        print(f"  {len(numbered)} chapters, {words:,} words, from {info['pages']}-page PDF")
+        source = f"{info['pages']}-page PDF" if info.get("pages") else info.get("source", "no source recorded")
+        print(f"  {len(numbered)} chapters, {words:,} words, from {source}")
     return 0
 
 
@@ -124,9 +133,9 @@ def cmd_search(args: argparse.Namespace) -> int:
                 return 0
             hits += 1
             start = max(0, match.start() - WINDOW // 2)
-            passage = PAGE_MARK.sub("", text[start:match.start() + WINDOW // 2])
+            passage = PLACE_MARK.sub("", text[start:match.start() + WINDOW // 2])
             passage = " ".join(passage.split())
-            print(f"\n{title}  ({page_at(text, match.start())})")
+            print(f"\n{title}  ({place_at(text, match.start())})")
             print(f"  {path.stem}  --at {match.start()}")
             print(f"  ...{passage}...")
     print("\nno matches" if not hits else f"\n{hits} hits")
@@ -141,7 +150,7 @@ def cmd_show(args: argparse.Namespace) -> int:
     path = paths[0]
     text = path.read_text()
     start = max(0, args.at - args.chars // 2)
-    print(f"{title_of(text, path.stem)}  ({page_at(text, start)})")
+    print(f"{title_of(text, path.stem)}  ({place_at(text, start)})")
     print(f"offset {start} to {min(len(text), start + args.chars)} of {len(text)}\n")
     print(text[start:start + args.chars])
     return 0

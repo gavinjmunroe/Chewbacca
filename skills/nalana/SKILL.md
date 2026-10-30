@@ -282,6 +282,15 @@ Thirty-six corrections across two nights, most of them the same few mistakes.
   fade each one in on scroll with nothing drawn in CSS. Script:
   `dough/site/nalana/render.py`.
 
+## When the mark changes, the rendered copies change too (2026-10-30)
+
+A new logo isn't shipped until every render of the OLD one is gone. On 10/16 the A15 helmet went into usctts.com's favicon, nav, footer and OG image, and the home page's bouncing sign-off video kept playing the v13 helmet for two weeks, because a grep for logo files finds PNGs by name and a baked video never says what's inside it. Caleb, 2026-10-30: "fix the TTS site to use the updated logo along with the personal website any anywhere else that logo is used".
+
+- Sweep by looking: list every image, poster and video a site serves (curl the live HTML for src, poster and og tags), open each one, and compare it to the new mark. A filename tells you nothing.
+- Sweep every repo that borrowed the mark: personal sites, client films, decks. `find ~/code -iname "*<brand>*"` outside node_modules, then open each hit.
+- A loop or turntable re-renders from the NEW .blend through the same timeline script, never a re-encode of the old frames. For a scene that lacks the old rig's empties and floor, wrap it: parent the visible meshes to the mark empty, add a shadow-catcher plane at the mesh's lowest z, and center the hop on the footprint, not the origin (TTS: `~/code/work/wt-tts-logo-render/a15_loop.py`).
+- Render the test frames (rest, mid-jump, landing) first, look at them on the page colour, then the full loop. The camera fit alone took 4 minutes on the dense A15 mesh, so send it through `chewbacca jobs submit --heavy`.
+
 ## Making a web 3D scene read as real: from Maia's crate site (2026-10-26)
 
 Caleb on the CSS-3D record crate: "I like the 3d but it ws kinda tweak ngl".

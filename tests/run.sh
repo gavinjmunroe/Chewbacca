@@ -622,6 +622,8 @@ if group "gtme"; then
     bash "$ROOT/tests/chewbacca_pdf.sh"
   check "chewbacca call-doc makes a spaced, colored call Doc with 0.6in margins" \
     bash "$ROOT/tests/chewbacca_call_doc.sh"
+  check "chewbacca photo flags a black-and-white people photo and passes a colour one" \
+    bash "$ROOT/tests/chewbacca_photo.sh"
   check "gtme-jev holds an email Jev flags or couldn't check, in one call per email" \
     python3 "$ROOT/tests/test_gtme_jev.py"
   check "resolve answers an address and a person's own record before anyone asks" \

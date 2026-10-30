@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+"""chewbacca photo: people photos for a site, in colour, from wherever Caleb has them.
+
+    chewbacca photo check <file or dir>...   flags black-and-white photos, exit 1 if any
+    chewbacca photo paste <out.jpg>          saves the image on the clipboard to a file
+
+2026-10-29, Firm Foundation /team: "NO B&W BRO ITS NOT A FUNERAL". Joel Newton's and
+Jim Munroe's headshots were grayscale at every public source (Praxis, CityLights,
+Killswitch), so a fresh download looked fine and wasn't. And a photo he pastes into
+chat never reaches the disk, but the copy he made to paste it is still on the
+clipboard, which is how Joel's, Jim's and Roy Scott's colour photos got in.
+"""
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+EXTS = {".jpg", ".jpeg", ".png", ".webp"}
+# Mean per-pixel channel spread (max minus min of R, G, B) on a 64x64 thumbnail.
+# Measured 10/29: Joel's Praxis file 0.0, Jim's Killswitch file 0.02, the colour
+# replacements 47 and 19, a skin-and-shirt headshot never under 10. 4 sits well
+# clear of both, so a toned or sepia photo still reads as colour.
+GRAY_SPREAD = 4.0
+
+
+def spread(path: Path) -> float:
+    from PIL import Image
+    raw = Image.open(path).convert("RGB").resize((64, 64)).tobytes()
+    px = [raw[i:i + 3] for i in range(0, len(raw), 3)]
+    return sum(max(p) - min(p) for p in px) / len(px)
+
+
+def files(args):
+    for a in args:
+        p = Path(a).expanduser()
+        if p.is_dir():
+            yield from sorted(f for f in p.rglob("*") if f.suffix.lower() in EXTS)
+        else:
+            yield p
+
+
+def check(args) -> int:
+    if not args:
+        print("usage: chewbacca photo check <file or dir>...", file=sys.stderr)
+        return 2
+    gray = 0
+    for f in files(args):
+        try:
+            s = spread(f)
+        except Exception as e:
+            print(f"skip  {f}: {e}")
+            continue
+        if s < GRAY_SPREAD:
+            gray += 1
+            print(f"GRAY  {f} (spread {s:.1f}): find a colour copy, or have him copy one and run `chewbacca photo paste`")
+        else:
+            print(f"ok    {f} (spread {s:.1f})")
+    return 1 if gray else 0
+
+
+def paste(args) -> int:
+    if len(args) != 1:
+        print("usage: chewbacca photo paste <out.jpg>", file=sys.stderr)
+        return 2
+    out = Path(args[0]).expanduser()
+    with tempfile.TemporaryDirectory() as d:
+        png = Path(d) / "clip.png"
+        r = subprocess.run(
+            ["osascript",
+             "-e", f'set f to open for access POSIX file "{png}" with write permission',
+             "-e", "set eof f to 0",
+             "-e", "write (the clipboard as «class PNGf») to f",
+             "-e", "close access f"],
+            capture_output=True, text=True)
+        if r.returncode != 0 or not png.exists() or png.stat().st_size == 0:
+            # 10/29: the clipboard held a text message, not Roy's photo
+            print("BLOCKED: the clipboard holds no image. Right click the photo, Copy Image, then rerun.",
+                  file=sys.stderr)
+            return 3
+        from PIL import Image
+        im = Image.open(png).convert("RGB")
+        out.parent.mkdir(parents=True, exist_ok=True)
+        im.save(out, quality=90)
+    print(f"{out} {im.size[0]}x{im.size[1]} spread {spread(out):.1f}")
+    return 0
+
+
+def main(argv) -> int:
+    if not argv or argv[0] in ("-h", "--help"):
+        print(__doc__.strip())
+        return 0
+    cmd, rest = argv[0], argv[1:]
+    if cmd == "check":
+        return check(rest)
+    if cmd == "paste":
+        return paste(rest)
+    print(f"chewbacca photo: unknown command {cmd!r} (check, paste)", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

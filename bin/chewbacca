@@ -103,6 +103,7 @@ COMMANDS=(
   "google|find and read Google Docs, Sheets and Slides as text"
   "docs|local Word, Excel and PowerPoint files through genoffice: read, preview an edit, apply it"
   "call-doc|a call or pitch script as a spaced Google Doc: say lines black, actions blue"
+  "photo|people photos for a site: flag black-and-white ones, paste a copied image to a file"
   "clay|any Clay read without opening Clay, by the fastest surface (clay ops)"
   "clay-fixture-check|compare a CSV export with an expected fixture"
   "oss-apps|open source apps that replace a Mac app, and which can be remixed"
@@ -290,6 +291,11 @@ call-doc)
   # A call script as a readable Google Doc. See bin/chewbacca-call-doc.
   shift
   exec python3 "$ROOT/bin/chewbacca-call-doc" "$@"
+  ;;
+photo)
+  # Colour checks and clipboard paste for people photos. See bin/chewbacca-photo.
+  shift
+  exec python3 "$ROOT/bin/chewbacca-photo" "$@"
   ;;
 docs)
   # Local .docx, .xlsx and .pptx through genoffice. See bin/chewbacca-docs.

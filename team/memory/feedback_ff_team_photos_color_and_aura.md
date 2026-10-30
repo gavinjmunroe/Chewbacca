@@ -7,7 +7,7 @@ metadata:
 
 On the Firm Foundation /team page (2026-10-29), Caleb on a single pass of the advisor grid:
 
-- "NO B&W BRO ITS NOT A FUNERAL". Every headshot is in colour. Joel Newton's and Jim Munroe's files were grayscale at the source (Praxis, CityLights and Killswitch all publish B&W), so a public copy is not enough: check the pixels (`max-min` channel spread near 0 means grayscale) and find a colour one, or ask him to copy one. A pasted chat image can't be read from disk, but his clipboard can (`osascript` `the clipboard as «class PNGf»`), and the clipboard's HTML names the source page.
+- "NO B&W BRO ITS NOT A FUNERAL". Every headshot is in colour. Joel Newton's and Jim Munroe's files were grayscale at the source (Praxis, CityLights and Killswitch all publish B&W), so a public copy is not enough: check the pixels (`max-min` channel spread near 0 means grayscale) and find a colour one, or ask him to copy one. `chewbacca photo check <dir>` does the pixel check and `chewbacca photo paste <out.jpg>` saves what he copied. A pasted chat image can't be read from disk, but his clipboard can (`osascript` `the clipboard as «class PNGf»`), and the clipboard's HTML names the source page.
 - "BRING BACK GAV IN A SUIT BRUH THAT WS PROFESSIONAL". A founder card leads with the suit headshot (`gavin-munroe.jpg`); casual shots go in the hover fan.
 - "BIGGER LOGOS MORE AURA". Org marks under each advisor are 56px with an ice halo, not 40px chips.
 

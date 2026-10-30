@@ -609,6 +609,35 @@ isn't the best visually" at twelve uniform text cards on a navy band.
   pasted, their own site, a podcast or sermon they gave. Never infer a parent, a
   school or a faith from a name, a handle or where a photo was taken; ask, and keep
   asking until each card is filled. A portrait from their own published page counts.
+- A person's photo stack never repeats a shot, even at another crop, and every
+  photo in it is checked to be them. FF 2026-10-30: Caleb's headshot sat in his own
+  stack twice and the "Caltech" photo was Taylan Kargin ("Bruh"). FF's
+  `lib/photos.test.ts` refuses a repeat by thumbnail difference.
+- Hover shows more, never less: the headshot stays full size and the other photos
+  pop out beside it. A 2x2 grid that shrank his face got "Bruh".
+- Family sits next to family in a crowd of faces (Jim Munroe beside Gavin, his son).
+  A crowd stays one line: the oval version was "buns" (2026-10-30).
+- Copy about a founder on a professional site never says student or school, and
+  never abbreviates.
+
+## Neighbouring sections differ in ground and in shape
+
+Firm Foundation Home, 2026-10-30: a night app window, then a night "Work we've
+done" window, then a night centred crowd read as one section three times ("the 2
+sections being pretty similar feels 1 dimensional"). A plain paper /team hero was
+"Boring monotone", and a one-colour /audit page was "so 1 dimensional and kinda
+overwhelming bc of how monotone it is".
+
+- Screenshot each section next to the one above and below at 1440 and 390. If two
+  in a row share a ground (night, paper, mesh) and a layout (centred, window,
+  split), change one.
+- Where a dark section meets a light one, fade between them. A hard line with the
+  heading jammed against it drew "Bruh".
+- A diagram with more than two kinds of thing gets a colour per kind, a mark per
+  kind left of the label at about half the item's height, and a key. The key sits
+  where it can never overlap the diagram at any viewport ("Overlap is doodoo if
+  unintentional"). Problems get their own colour, never the brand colour.
+
 
 ## A page for one person is built from that person, then turned all the way up
 

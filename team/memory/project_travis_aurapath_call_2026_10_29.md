@@ -11,7 +11,9 @@ The call was Thu 10/29, 5:35pm PT on Google Meet, with Caleb and Gavin and no sc
 
 **What Travis said (transcript as pasted mid-call):**
 
-- AuraPath's go-to-market is in-house, not an agency. It's a team of about 4 doing outbound email and outbound LinkedIn plus a targeted-account sales cycle, across 3 ICPs. He named two: private equity and legal firms. The third wasn't in the pasted part.
+- AuraPath's go-to-market has two parts. A team of about 4 does outbound email and outbound LinkedIn plus a targeted-account sales cycle, across 3 ICPs. He named two: private equity and legal firms. And "we have an agency that's doing our go-to-market work, so they use GoHighLevel, I think". They used Attio for a while before that.
+- Their best channel is in person. They post on LinkedIn and host Claude community events. Brandon is also a Claude Ambassador, covering legal, fintech and PE in New York, and their first NYC event had about 1,000 registrations, "everyone in our target markets". Travis: "It's hard to change that human connection."
+- Baptize The World: a movement started 5 years ago to unite the church in the act of baptism. It vets people, has gone from America to global, and built its platform last year with AI. What it needs now: meeting everyone in their language "agentically", and onboarding "as simple as just texting an agent" instead of "a 6-step SaaS form". That matches Anchored's text-a-number intake engine, built this week (anchored lib/intake.ts). His framing of Christians using technology: Luther and the printing press, then Billy Graham and the internet.
 - "Dough is interesting actually. I wanna chat more about that," both for AuraPath and possibly for Baptize The World, which he framed as "more of a marketing exposure point of view".
 - He wasn't clear where Firm Foundation ends and Anchored begins. Caleb's answer: FF is the agency doing church tech, front ends first and then whatever back end they need, building trust. Anchored is the OS that weaves between church apps with context on the church's theology, sermons and congregation, rolled out later to the relationships FF built.
 

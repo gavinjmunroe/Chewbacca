@@ -87,6 +87,12 @@ else. Every rule below points back to it.
   Write the prompt so the cause fixes the effect ("blade seen edge-on, coming
   straight down, the halves part left and right where it went"), and reject
   any clip where they disagree before it costs a page build.
+- **Never crossfade where the brief says one thing becomes another.** On the
+  Dough page the dough faded into a separate loaf photo behind an oven glow, and
+  Caleb: "you didn't even try to make the dough become the final bread". A
+  transformation is one continuous shot with both ends fixed (a first and last
+  frame video, or a morph), and a loop returns through the same object to its
+  own first frame ("one of the pieces go back into being dough").
 - **Never hand-sculpt an organic hero object when it has to look real.** A
   deformed UV sphere read as "a video game" and "a perfect sphere" (same night).
   Real food, skin or fabric comes from a photo-real source: a scan, Nalana's

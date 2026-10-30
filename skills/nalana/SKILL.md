@@ -243,6 +243,21 @@ Thirty-six corrections across two nights, most of them the same few mistakes.
   env var, the history log, CLAUDE.md plus AGENTS.md, and the skills. Never put
   a login in it, and test a render from a fresh unzip before calling it done.
 
+## Headless renders that never crash onto his screen (2026-10-29)
+
+- **Set `prefs.kernel_optimization_level = "OFF"` in every headless Cycles
+  script on Metal.** New shader features made Cycles compile specialized
+  kernels on a background thread, Nalana aborted (`free_tiny_botch` in
+  `ccl::path_cache_get`) and macOS put "Nalana quit unexpectedly" over Caleb's
+  work ("Bruh"). Generic kernels render the same image. `dough/site/nalana/render.py`
+  has the working setup.
+- **Never compare bpy wrappers with `is`.** `if n is not out` was always true,
+  so a holdout helper deleted the Material Output too and every flour layer
+  failed with `key "Surface" not found`. Compare by `.name`, or link into the
+  existing output without deleting nodes.
+- **A pipeline into `grep` hides a failed render.** `render.py ... | grep WROTE`
+  exits 0 when Blender errored; count the files written before building on them.
+
 ## Real brand marks in a render: from the Dough page (2026-10-29)
 
 - **Use the mark exactly as the company ships it.** Clay's mark is a 3D arch

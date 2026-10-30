@@ -158,6 +158,10 @@ Never-dos, in his words (2026-10-11, mid quiz):
   tomorrow morning's meetings (lecture, lab, room), any pre-lab or PPE they
   need tonight, and every school item due in the next 7 days. A lab whose
   pre-lab isn't in the ledger still gets a line: check the manual tonight.
+  Read his calendar with `GOOGLE_WORKSPACE_CLI_CONFIG_DIR=~/.chewbacca/email/calebnew@usc.edu
+  gws calendar events list` (calendarId primary, singleEvents, orderBy
+  startTime). On 2026-10-29 `gog calendar` had no token for calebnew@usc.edu
+  and failed twice before gws answered.
 - "lets make sure erik noakes isnt the one that sees it" then "bet email her"
   (2026-10-28, missed BISC Quiz #7): a missed-deadline reopen request goes to
   the lecture instructor only, from the USC inbox:

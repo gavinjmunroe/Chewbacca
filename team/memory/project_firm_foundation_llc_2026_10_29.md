@@ -1,11 +1,11 @@
 ---
 name: project_firm_foundation_llc_2026_10_29
-description: Firm Foundation's legal entity is Firm Foundation Technologies LLC, a new Wyoming LLC, 50/50 Caleb and Gavin, filed by Joel Newton via WyomingAgents; filing in progress 10/29
+description: Firm Foundation's legal entity is Firm Foundation Technologies LLC, a new Wyoming LLC, 50/50 Caleb and Gavin, filed by Joel Newton via WyomingAgents; set up per Caleb 10/30
 metadata:
   type: project
 ---
 
-Firm Foundation Technologies LLC is the entity Firm Foundation signs as. It's a new Wyoming LLC, member-managed, 50/50 between Caleb Newton and Gavin Munroe. Joel Newton (Caleb's dad) is filing it through WyomingAgents.com ($153 for a new LLC with a year of registered agent, vs $225 for a DBA under an existing LLC). Filing was in progress on 2026-10-29, not confirmed done.
+Firm Foundation Technologies LLC is the entity Firm Foundation signs as. It's a new Wyoming LLC, member-managed, 50/50 between Caleb Newton and Gavin Munroe. Joel Newton (Caleb's dad) is filing it through WyomingAgents.com ($153 for a new LLC with a year of registered agent, vs $225 for a DBA under an existing LLC). Filing was in progress on 2026-10-29. Caleb, 2026-10-30 1:13am: "my Dad setup the LLC". The site footer reads Firm Foundation Technologies LLC since that night.
 
 **Why:** Medrano Partners (John Knox) sent an NDA that needs a legal name, address, titles and signing emails, and the business needs a bank account. The 10/23 plan was a DBA under Dad's LLC; Dad moved it to a fresh WY LLC on 10/29.
 

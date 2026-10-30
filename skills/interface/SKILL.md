@@ -655,3 +655,23 @@ Kyber landing, 2026-10-27, mid-class: "Let's break it down into a bunch of mcqs 
 ## A rotating word never changes the line count
 
 Kyber hero, 2026-10-27: "Bro the cycling shouldnt change the number of rows since that moves the heigt and position of so much stuff". "dinner" fit on one line and "concert tickets" wrapped to two, so everything below jumped every 2.2s. Size the swapping word for the longest option (`text-[min(1em,11.4cqi)]` inside a `container-type:inline-size` headline), `whitespace-nowrap`, then measure the headline height for every word at 320, 390, 768 and 1440 and confirm it never changes.
+
+## A site that sells a kid to parents leads with trust, and never goes quiet
+
+Joshua Newton Baseball, 2026-10-29, a 15-year-old's lesson site sent to Little
+League parents. Mid-build Caleb wrote "Keep in mind that parents will be seeing
+this site, we need to impress them", then asked for the parents' blurb, the
+family Dodger selfie, his own senior day photo and a photo of Josh coaching his
+sister. Every one of those was a trust signal the first draft should have asked
+for. Later a 100s sleep plus a foreground deploy poll got "Bro what is taking so
+long???????" then "BRO?".
+
+- For a minor's business, ask on minute one for the family photo, what the
+  parents do and how they're involved, and any proof he's already coached
+  someone. Parents book the family as much as the kid.
+- Never put a made-up quote or a fake sender in a mock (a "Karen M." review
+  was cut before push); show the real share text instead.
+- Strip EXIF (GPS) from every family photo before it ships.
+- Push, then reply with the live URL right away. Deploy waits run in the
+  background and get one follow-up line, never a silent sleep in the
+  foreground.

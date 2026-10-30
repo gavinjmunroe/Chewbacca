@@ -133,6 +133,15 @@ reply`, which makes a Gmail draft and never sends. - A lead with a name but no e
      addresses are suppressed and anything not valid is held from batches.
      It's optional: with no token it says so and changes nothing. Their own
      Gmail takes every bounce, and Zeutara's unverified 9/28 send bounced 27%.
+   - Any treg loop run by hand (a `treg call` per row) prices ONE call off
+     the balance, never the printed charge: `treg balance` before and after,
+     budget from that difference, and stop the loop when the balance has
+     dropped by the approved amount. On 2026-10-29 harvestapi LinkedIn
+     searches printed "charged $0.002" while the ledger took a $0.004
+     reserve plus a $0.002 settle each, and 164 rows drained the whole $1
+     free credit. treg `topup` takes whole dollars, $10 minimum; a top-up over
+     the amount Caleb approved needs his new yes, and card entry on Stripe is
+     his click. `treg call` prints the charge on stderr and the JSON on stdout.
      Volume starts at 5 a day and tops out at 20, because it is their primary
      inbox. Say so if they ask for more. More volume means separate sending
      domains, which cost money and need their ok.

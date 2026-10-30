@@ -43,3 +43,5 @@ without an agreement (terms section 11, LICENSE). Self-hosting the code as a ser
 is not. Zeutara stays Clay-native (Sagar's backbone, Jonah's credits): treg is for users with no
 Clay seat. Related: [[reference_chewbacca_gtm_arsenal]], [[project_amber_roles_2026_10_11]],
 [[feedback_build_for_everyone]].
+
+Set up 2026-10-29 on Caleb's Mac with the Firm Foundation team token (team firmfoundation, account team@firmfoundation.tech, $1.00 starting balance): treg CLI 0.27 at ~/.local/bin/treg, the token in the Keychain as `treg-token` (what treg_client.py reads), and the treg MCP registered for Claude Code, Cursor and Codex. First real run: 56 Medrano buyer emails through `treg.people.email.verify` cost $0.03 total, 28 valid, 24 safe, 4 accept_all, mostly served free by contactout. It covers what ZoomInfo and Exa were doing for Dough (ZoomInfo and Exa both came back not configured that day): `treg.people.email.find` routes 29 providers, `treg.web.search.news` is free first and falls back to Exa at $0.007, and `treg.companies.news` is $0.01, so no separate Exa or ZoomInfo account is needed.

@@ -62,7 +62,10 @@ STYLE = {
 def inline(text: str) -> str:
     """Escape, then let **bold** through."""
     out = html.escape(text, quote=False)
-    return re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", out)
+    out = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", out)
+    # A pasted URL has to be one click mid-call. On 2026-10-29 the Travis sheet link
+    # sat in the doc as plain text and Caleb couldn't find it ("Wheres the sheet link?").
+    return re.sub(r"(https?://[^\s<]+)", r'<a href="\1">\1</a>', out)
 
 
 def parse(text: str) -> tuple[str, list[tuple[str, str]]]:

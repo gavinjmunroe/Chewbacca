@@ -528,6 +528,11 @@ toward a list for an ICP nobody had confirmed.
   already runs (the Medrano scorer), named for what it really covers.
 - Look at their live site in a real browser and report what a buyer would
   see wrong, with "check on ur phone" when it might be a rendering issue.
+  Scroll every animated element into view and screenshot it before calling
+  it a finding: on 2026-10-29 a text read of aurapathai.com showed "0+
+  people trained" and "14 extra people hired", which was a counter that
+  hadn't animated yet. The real values were 1,000+ and 0, and the claim
+  nearly went into the call.
 - Close on one dated deliverable once they pick the list ("25 scored
   accounts by next Thursday").
 

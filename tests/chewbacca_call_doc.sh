@@ -16,6 +16,7 @@ cat > "$T/pitch.txt" <<'S'
 ### 1. Who (5 sec)
 "I'm Caleb <b>."
 - plain line
+! Paste: https://docs.google.com/spreadsheets/d/X1/edit
 ~ Sources: Pew 2025
 S
 python3 "$ROOT/bin/chewbacca-call-doc" "$T/pitch.txt" --html-only >/dev/null 2>&1 && ok "html-only exits 0" || no "html-only failed"
@@ -29,6 +30,7 @@ grep -q 'color:#1a56db;font-weight:bold.*>Phone sideways.</p>' "$H" && ok "actio
 grep -q 'margin-bottom:10pt.*>&quot;I.m Caleb &lt;b&gt;.&quot;</p>\|margin-bottom:10pt.*>"I.m Caleb &lt;b&gt;."</p>' "$H" && ok "say line spaced and escaped" || no "say line wrong: $(grep Caleb "$H")"
 grep -q '<b>TONIGHT</b>' "$H" && ok "**bold** renders" || no "**bold** raw"
 grep -q '>plain line</p>' "$H" && ok "dash line is plain, no dash" || no "dash line wrong"
+grep -q '<a href="https://docs.google.com/spreadsheets/d/X1/edit">' "$H" && ok "a URL is a clickable link (Travis sheet, 2026-10-29)" || no "URL not linked"
 # Publish path, against a fake gws that logs calls and writes a 2-page PDF.
 cat > "$T/gws" <<'G'
 #!/bin/bash

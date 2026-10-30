@@ -415,6 +415,14 @@ attendance arithmetic, and the late-work schedule. Skip any AI policy text. Writ
 one `courses/<code>.yml`. Run `coursework check`. Report what the syllabus did
 not say, because that list is the set of questions to ask in class.
 
+A lab or section schedule is a syllabus too. Every row in its week-by-week
+table (each pre-lab, post-lab, quiz) gets its own ledger row, then count both
+sides and they must match. On 2026-10-29 the BISC ledger had Lab 2 to 6 pre and
+post-labs but no Lab 7, due the next morning at 10:00 with no late credit, and
+it only surfaced because Caleb asked "Is the bisc pre lab and slides the only
+things I should do tn". When he asks what's due tomorrow, read the schedule
+table for that week too, not just `coursework due`.
+
 ## The textbook
 
 A course textbook is half a million words and does not belong in a session.

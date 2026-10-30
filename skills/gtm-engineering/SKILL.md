@@ -744,3 +744,26 @@ Texts to teammates like Maggie go as short pieces sent one after another, each
 under ~60 words. If she asked numbered questions, answer with matching numbers,
 one short text per number (2026-10-09: a 126-word block got split, then Caleb:
 "She asked in numbered format").
+
+## Grant-winner lists: timing and email checks, 2026-10-30
+
+For a list built from SBIR/STTR winners (OPTRA, 10/30):
+
+- The SBIR.gov bulk file (`award_data.csv`, 207,731 rows) stops at Award Year
+  2024, with 23 rows in 2024. Joining 2025 and 2026 winners to it matched their
+  old awards and called every one "ended". Don't use it for timing.
+- `api.www.sbir.gov` answered `{"message":"Forbidden"}`. Use the agencies:
+  NSF award end dates from `https://api.nsf.gov/services/v1/awards/<id>.json?printFields=startDate,expDate`,
+  NIH from a POST to `https://api.reporter.nih.gov/v2/projects/search` with
+  `{"criteria":{"project_nums":[...]}}` (`project_end_date`). Those covered 137 of
+  265 rows. DoD, NASA and USDA stayed blank, so say so.
+- An end date isn't the day the money's gone (no-cost extensions, Phase II
+  applications go in before Phase I ends). Say "award period ending", never
+  "run out of money".
+- Check every email before a list goes to a client: treg
+  `millionverifier.people.email.verify` cost $0.00178 a call, 258 emails for
+  about 46 cents (140 ok, 106 catch-all, 11 invalid, 1 unknown). Send the
+  confirmed ones first and watch bounces before the catch-alls.
+- Before pricing outbound for a client, put their own price next to ours. The
+  benchmark funnel is 1 to 2 customers per 1,000 contacts, so a 2 to 4K a month
+  retainer can't pay back for a product sold at $39 to $129 a month.

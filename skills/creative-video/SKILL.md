@@ -77,6 +77,21 @@ else. Every rule below points back to it.
 - **Never repost footage they did not make**, and never export with another
   app's watermark. Instagram stops recommending both.
 - **Never open Blender's window.** Headless only; the user works on this Mac.
+- **Never wire a generated clip in before checking its physics frame by frame.**
+  Dough page, 2026-10-29: Seedance sliced a loaf with the blade's flat face to
+  camera (a front-to-back cut) and the halves fell apart left and right. Caleb:
+  "Bro why would it split the opposite direction of the knife lol fix chewbs
+  logic engine". Pull a contact strip (`ffmpeg -vf fps=1.4,tile=7x1`), and for
+  each action name the cause and the effect it forces: a cut parts the object
+  along the blade's plane, a push moves it away from the pusher, a pour falls.
+  Write the prompt so the cause fixes the effect ("blade seen edge-on, coming
+  straight down, the halves part left and right where it went"), and reject
+  any clip where they disagree before it costs a page build.
+- **Never hand-sculpt an organic hero object when it has to look real.** A
+  deformed UV sphere read as "a video game" and "a perfect sphere" (same night).
+  Real food, skin or fabric comes from a photo-real source: a scan, Nalana's
+  modeler, or an image model edited from the scene's own render so camera and
+  light match. Price the run first and check the balance can cover a redo.
 
 ## Worked example: the domino reveal, 2026-09-27
 

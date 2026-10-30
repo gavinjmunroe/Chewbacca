@@ -488,3 +488,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_host_move_carries_env_vars: a host move drops env vars; FF's audit form fell back to mailto after Vercel to Railway (10/29). List the new host's vars vs process.env, submit each form once
 - feedback_ff_site_taste_2026_10_30: FF site 10/30: neighbour sections differ in ground + shape, busy diagrams get a colour key, team crowd stays a line w family side by side, no student/USC on Caleb's card
 - feedback_break_our_logic: attack every pitch like the other side before calling it done (OPTRA 10/30: a 2-4K retainer vs their $39-129 plans); call-doc refuses <3 `x` break lines
+- feedback_linkedin_match_is_a_guess: an agent-matched LinkedIn URL is a guess; Junto had 9 'picked' + 4 headlines naming another firm (10/30), dough plan holds both for a person to check

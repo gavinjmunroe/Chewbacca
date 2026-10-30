@@ -484,3 +484,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_ff_team_photos_color_and_aura: FF /team headshots in colour only ("NO B&W BRO ITS NOT A FUNERAL"), founder leads w his suit shot, logos 56px w a halo; grayscale check is channel spread, clipboard holds his pasted pic (10/29)
 - feedback_pitch_leads_with_the_route: a pitch opens on the end state and the route, wedge third; Meridian beats opened on the text number and drew "WHY ARE WE PITCHING SOMETHING SO SMALL" (10/29)
 - feedback_gmail_draft_rewraps_links: Gmail drafts can store a link as a google.com/url redirect even after a plain rewrite; read the draft back and fix before any send (Meridian, 10/29)
+- project_ff_site_call_2026_10_29: 10/29 founders call: nav What we do/Mission/Team, mission one scroll, team crowd on Home, Vineyard off, outbound starts, audit form never wired

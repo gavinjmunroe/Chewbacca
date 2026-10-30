@@ -675,3 +675,8 @@ long???????" then "BRO?".
 - Push, then reply with the live URL right away. Deploy waits run in the
   background and get one follow-up line, never a silent sleep in the
   foreground.
+- Display type never sits on the person the page is about. Joshua Newton
+  Baseball, 2026-10-29: a 15vw name over a full-bleed portrait covered his
+  face and hit the nav at Caleb's short laptop window ("Bro its so slop and
+  unintentional"). Give the photo its own column or band, size hero type by
+  min(vw, svh), and screenshot at a short window (1000x560) before pushing.

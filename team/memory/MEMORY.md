@@ -109,6 +109,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_github_handle_from_commits: a teammate's GitHub login is the noreply author email in a repo they committed to (id must match); 3 "Maggie Chen" accounts on 10/20. A big file with dead Drive auth goes as a private release asset
 
 - feedback_count_the_pipeline_before_income_odds: FF income odds start from the pipeline (600+ church network, 30-church audit, resources), closed revenue is the floor; a $0-only answer drew pushback (10/28)
+- feedback_airdrop_keeps_photo_date: AirDropped photos keep their capture date as mtime; find new arrivals with mdfind kMDItemDateAdded, never ls -lt (7 of 13 missed, 10/29)
 
 ## References
 

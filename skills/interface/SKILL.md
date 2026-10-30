@@ -713,3 +713,10 @@ long???????" then "BRO?".
   trading card landing on top; the price became a ballpark ticket whose stub
   tears at the gate. Ask of every section: what object from this world could
   this content BE, and what does it do as you scroll.
+- A cutout of a person must be clean at the edge ("The cutout is so sloppy
+  bro", 2026-10-30). Cut from the full-res original, never the resized web
+  photo; threshold Vision's soft mask at 0.5, fill holes, open 2px, choke
+  ~3px, feather ~1px, then recolor only the rim from interior pixels
+  (scipy normalized blur) so no sky or grass rides along. Blurring the whole
+  matte or decontaminating where alpha<0.999 smears the face. Inspect a 2x
+  crop of cap, face and glove on navy before shipping.

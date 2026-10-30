@@ -700,3 +700,8 @@ long???????" then "BRO?".
   every width. Then a sticky score bug that tracks sections as innings, a
   broadcast stat bar, and a lineup of white tags. Erode the mask 2px or the
   cap shows a halo on a darkened background.
+- Hero parallax on a layered cutout: move the photo and the cutout as ONE
+  layer (one wrapper) so they never split, and sink only the name. On a 390
+  phone a name sinking 60% of the hero height slid under the copy block at
+  30% scroll (Joshua Newton Baseball, 2026-10-30); 30% travel with a fade to 0
+  by 35% scroll kept it clear. Screenshot 0, 0.3 and 0.6 of a screen down.

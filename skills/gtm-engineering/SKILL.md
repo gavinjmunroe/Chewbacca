@@ -533,6 +533,11 @@ toward a list for an ICP nobody had confirmed.
   people trained" and "14 extra people hired", which was a counter that
   hadn't animated yet. The real values were 1,000+ and 0, and the claim
   nearly went into the call.
+- Any sheet or doc the guest opens gets shared as viewable by anyone with
+  the link, then opened signed out before the call. On 2026-10-29 the
+  Travis sheet sat in Caleb's USC Drive, which an outside guest couldn't
+  open, and it had to be re-made under a shareable account minutes before
+  he joined.
 - Close on one dated deliverable once they pick the list ("25 scored
   accounts by next Thursday").
 

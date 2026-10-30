@@ -13,6 +13,14 @@ The script is plain text, one line per thing:
   ! Do this.              an action, bold blue
   - anything else         a plain line
   ~ source                tiny gray footer line
+  x attack -> result      a way we tried to break the pitch, and what we found
+
+Every script needs at least MIN_BREAKS `x` lines before it becomes a Doc,
+or `--no-breaks "<why>"`. They render last, under "What we tried to break",
+which doubles as Q&A prep. Angles worth trying: every number against its
+source, their money math against our price, lead times (warmup, approvals),
+what their product actually claims, who decides, and the objection they'd
+raise first.
 
 It writes <script>.html next to the script, uploads it as a Google Doc (or
 replaces --doc ID), sets 0.6in margins, exports the Doc to PDF and prints its
@@ -45,6 +53,12 @@ GRAY = "#666666"
 # 0.6in = 43.2pt. A markdown or HTML import keeps the 1in default, which is
 # what drew "fix the margins" on the 2026-10-27 Medrano doc.
 MARGIN_PT = 43.2
+# 2026-10-30, OPTRA call: the doc was "done" until Caleb said "try to break our
+# logic". One pass found 7 holes, the worst a 2 to 4K a month retainer pitched
+# to a company whose own plans are $39 to $129 a month. Caleb: "fix chewbs to
+# always find a way to break our logic". 3 is guessed, never measured: the money,
+# the timing, and one claim, at minimum.
+MIN_BREAKS = 3
 # Measured on the Meridian doc: 12 to 13pt body with 10pt after each line read
 # as one glance per line; 0pt after read as a wall.
 STYLE = {
@@ -56,6 +70,7 @@ STYLE = {
     "do": f"font-size:12pt;color:{BLUE};font-weight:bold;margin-bottom:10pt;{FONT}",
     "plain": f"font-size:12pt;margin-bottom:8pt;{FONT}",
     "source": f"font-size:10pt;color:#999999;margin-top:24pt;{FONT}",
+    "break": f"font-size:11pt;color:{GRAY};margin-bottom:8pt;{FONT}",
 }
 
 
@@ -88,6 +103,8 @@ def parse(text: str) -> tuple[str, list[tuple[str, str]]]:
             rows.append(("do", line[1:].strip()))
         elif line.startswith("~"):
             rows.append(("source", line[1:].strip()))
+        elif line.startswith("x "):
+            rows.append(("break", line[2:].strip()))
         elif line.startswith(('"', "“")):
             rows.append(("say", line))
         elif line.startswith("- "):
@@ -100,6 +117,12 @@ def parse(text: str) -> tuple[str, list[tuple[str, str]]]:
 def render(title: str, rows: list[tuple[str, str]]) -> str:
     tag = {"step": "h2", "beat": "h3"}
     body = [f'<h1 style="{STYLE["title"]}">{inline(title)}</h1>'] if title else []
+    breaks = [r for r in rows if r[0] == "break"]
+    rows = [r for r in rows if r[0] != "break"]
+    if breaks:
+        # Last on the page, above the sources: the caller reads it as Q&A prep.
+        at = next((i for i, r in enumerate(rows) if r[0] == "source"), len(rows))
+        rows = rows[:at] + [("step", "What we tried to break")] + breaks + rows[at:]
     for kind, text in rows:
         t = tag.get(kind, "p")
         body.append(f'<{t} style="{STYLE[kind]}">{inline(text)}</{t}>')
@@ -162,6 +185,7 @@ def main() -> int:
     ap.add_argument("--doc", help="replace this Google Doc id instead of making a new one")
     ap.add_argument("--share", action="store_true", help="anyone with the link can edit")
     ap.add_argument("--html-only", action="store_true")
+    ap.add_argument("--no-breaks", metavar="WHY", help="skip the break check, saying why")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args()
     src = Path(a.script).expanduser()
@@ -169,6 +193,16 @@ def main() -> int:
         print(f"no such script: {src}", file=sys.stderr)
         return 1
     title, rows = parse(src.read_text())
+    found = sum(1 for k, _ in rows if k == "break")
+    if found < MIN_BREAKS and not a.no_breaks:
+        print(f"call-doc: refusing. {src.name} has {found} `x` break lines, needs {MIN_BREAKS}.\n"
+              "Try to break the pitch before it becomes a Doc, then add one line per attack:\n"
+              "  x <what we tried> -> <what we found or fixed>\n"
+              "Angles: each number against its source; their money math against our price;\n"
+              "lead times (warmup, approvals, boards); what their product actually claims;\n"
+              "who decides; the first objection they'd raise.\n"
+              'Or pass --no-breaks "<why>".', file=sys.stderr)
+        return 2
     title = a.title or title or src.stem
     out = src.with_suffix(".html")
     out.write_text(render(title, rows))

@@ -17,6 +17,9 @@ cat > "$T/pitch.txt" <<'S'
 "I'm Caleb <b>."
 - plain line
 ! Paste: https://docs.google.com/spreadsheets/d/X1/edit
+x Checked 2.3B against Pew -> matches
+x Their price vs ours -> retainer too high, pitched a test
+x Warmup lead time -> 3 to 4 weeks, said so
 ~ Sources: Pew 2025
 S
 python3 "$ROOT/bin/chewbacca-call-doc" "$T/pitch.txt" --html-only >/dev/null 2>&1 && ok "html-only exits 0" || no "html-only failed"
@@ -56,6 +59,20 @@ echo "$out" | grep -q '"pages": 2' && ok "counts pages, not the Pages node" || n
 grep -q 'documents batchUpdate.*marginLeft.*43.2' "$T/log" && ok "sets 0.6in margins" || no "margins not set"
 grep -q 'permissions create.*"anyone".*"writer"' "$T/log" && ok "--share makes it editable by link" || no "share missing"
 grep -q 'text/html' "$T/log" && ok "uploads as HTML" || no "not uploaded as HTML"
+grep -q '<h2 style=.*>What we tried to break</h2>' "$H" && ok "breaks get their own section" || no "no break section"
+[ "$(grep -n 'What we tried to break' "$H" | cut -d: -f1)" -lt "$(grep -n 'Sources: Pew' "$H" | cut -d: -f1)" ] && ok "break section sits above the sources" || no "break section below sources"
+grep -q '>Their price vs ours -&gt; retainer too high, pitched a test</p>' "$H" && ok "a break line renders escaped" || no "break line wrong"
+# 2026-10-30 (OPTRA): a script nobody tried to break is refused.
+grep -v '^x ' "$T/pitch.txt" > "$T/unbroken.txt"
+python3 "$ROOT/bin/chewbacca-call-doc" "$T/unbroken.txt" --html-only >/dev/null 2>"$T/err"; rc=$?
+[ "$rc" = 2 ] && ok "no break lines exits 2" || no "unbroken script exited $rc"
+grep -q 'needs 3' "$T/err" && ok "refusal names the bar" || no "refusal unclear: $(cat "$T/err")"
+[ -f "$T/unbroken.html" ] && no "refused script still wrote html" || ok "refused script writes nothing"
+grep -v 'Warmup' "$T/pitch.txt" > "$T/two.txt"
+[ "$(grep -c '^x ' "$T/two.txt")" = 2 ] || no "fixture should hold 2 breaks"
+python3 "$ROOT/bin/chewbacca-call-doc" "$T/two.txt" --html-only >/dev/null 2>&1; rc=$?
+[ "$rc" = 2 ] && ok "2 breaks is not enough" || no "2 breaks exited $rc"
+python3 "$ROOT/bin/chewbacca-call-doc" "$T/unbroken.txt" --html-only --no-breaks "internal standup" >/dev/null 2>&1 && ok "--no-breaks with a reason passes" || no "--no-breaks refused"
 python3 "$ROOT/bin/chewbacca-call-doc" "$T/nope.txt" --html-only >/dev/null 2>&1 && no "a missing script exited 0" || ok "a missing script exits 1"
 # The kit guard points a classed HTML upload at call-doc and lets inline HTML through.
 G="$ROOT/.claude/hooks/use-the-kit-guard.sh"

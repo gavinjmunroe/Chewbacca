@@ -687,3 +687,7 @@ long???????" then "BRO?".
   bro". What held up: a box score of four big values with small labels under
   the photo, headings capped near 4.4rem with 0.92+ leading, and empty media
   slots hidden until the media exists.
+- Uppercase condensed display type needs line-height near 1.0 when a line can
+  end in a comma or apostrophe. At 0.92 the comma in "NOT LONG AGO," still
+  touched "LITTLE" below ("overlap is blehhhhhh", 2026-10-29). Screenshot every
+  .display element on its own at 1440, 1000 and 390 before pushing.

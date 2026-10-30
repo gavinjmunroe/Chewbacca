@@ -106,6 +106,22 @@ Done when the checklist passes, every factual claim has a source or a verify fla
 
 Done when every number on every screenshot is either recorded or listed as skipped, every cliff has its passage, and the findings file reflects the new video.
 
+## 4. Founder pitch video (demo day, YC, speedrun)
+
+Beats in this order, each said in the founder's own words, never read:
+1. Who, 5 sec.
+2. The end state and its size: what the company becomes, for how many people.
+3. Why the incumbents can't get there.
+4. The route from today's wedge to that end state.
+5. What's built, only what's real.
+6. The ask.
+
+Never do:
+- Open on the wedge. On 2026-10-29 the Meridian beats opened on "a text number that keeps churches from losing people" and Caleb wrote "WHY ARE WE PITCHING SOMETHING SO SMALL WE NEED TO PITCH THE ROUTE TO TRILLION DOLLAR IDEA". Read the venture's app spec first (Anchored: ANCHORED-APP-SPEC.md).
+- Put a size in without a source. 2.3B Christians (Pew) is in; "trillion" is out.
+- Hand it over as a hand-styled HTML Doc. Write the beats as a script and run `chewbacca call-doc` ("Cancer ahh formatting", 2026-10-29).
+- Claim a pilot, user or advisor before the person said yes.
+
 ## Related kit skills
 
 - [creative-video](../creative-video/SKILL.md) and `library/crafts/short-form-video.md`: the craft rules for the first frame and the hook; this skill adds the evidence loop from the creator's own numbers.

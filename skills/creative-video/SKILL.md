@@ -98,6 +98,13 @@ else. Every rule below points back to it.
   Real food, skin or fabric comes from a photo-real source: a scan, Nalana's
   modeler, or an image model edited from the scene's own render so camera and
   light match. Price the run first and check the balance can cover a redo.
+- **Never ask to spend credit before splitting the shots into free and paid.**
+  Dough page, 2026-10-30: the ask was "~$2.70 for 3 clips" and Caleb answered
+  "Bro can't you do it for free on nalana". Go shot by shot: a rigid action
+  (a blade coming down, halves sliding, a camera move) renders free in Nalana or
+  headless Cycles, so only the soft shape changes (dough rising into a loaf,
+  bread slumping back to dough) need a paid video model. Price only those, and
+  name which shots run free and why.
 
 ## Worked example: the domino reveal, 2026-09-27
 

@@ -90,7 +90,9 @@ import gtme_signals  # noqa: E402
 import treg_client  # noqa: E402
 
 # Same bar gtme_jev.py uses for an opener. On 10/29 it held IEHP (0.06) and Saint John's and
-# passed 9 buyers on the AuraPath list; never measured against a labeled set of buyers.
+# passed 9 buyers on the AuraPath list; never measured against a labeled set of buyers. The same
+# MLK Community Hospital COO scored 0.77, then 0.81 on two runs an hour apart, so a row within
+# about 0.05 of the bar can flip between runs: read those by hand before a client sees the list.
 BUYER_OK = 0.8
 JEV_QUESTION = ("Is this person a current leader of THIS organization (not another organization named in the "
                 "title, and not only a board chair or donor), in a role that owns operations, technology, "

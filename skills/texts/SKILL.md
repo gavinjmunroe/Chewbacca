@@ -454,6 +454,17 @@ in `mac messages history`, so a grep for the URL never finds it.
   sends nothing until `--go`, writes each name to run.log as it goes, and skips
   every logged name on a rerun. Never hand-roll a send loop.
 
+## A card or birthday note to a friend: angles, not a finished card
+
+When the user asks for help with a card or a birthday note to a close friend,
+give three or four short angles pulled from the real thread (a shared moment,
+something the friend is building, a plan they made, an open conversation),
+plus one line on tone, and ask what they're going for. Write a full card only
+if they ask for one. On 2026-10-29 a full birthday card was drafted from a
+friend's thread, every fact sourced, then cut into short texts to pass the
+voice check; the user replied "I did smth way diff" and wrote his own. A card
+is personal, so the user's own words beat a polished draft.
+
 ## Sending
 
 To send, use `people send`, and only when the user asked for a specific

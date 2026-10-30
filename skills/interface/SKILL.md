@@ -720,3 +720,15 @@ long???????" then "BRO?".
   (scipy normalized blur) so no sky or grass rides along. Blurring the whole
   matte or decontaminating where alpha<0.999 smears the face. Inspect a 2x
   crop of cap, face and glove on navy before shipping.
+- A flip card or any 3D-transformed face must be checked in WebKit, not only
+  Chromium. Joshua Newton Baseball, 2026-10-30: iPhone Safari ignored
+  backface-visibility inside nested transforms and showed the card back
+  mirrored over the front; a card laid out at 300px then squeezed to a 60%
+  slot reflowed its text into a mess. Fix: each face also hides itself at the
+  flip midpoint (opacity with a 0.3s step), and a fixed-size object scales as
+  a picture (FitScale) instead of reflowing. `npx playwright install webkit`.
+- Never end a turn on an ETA unless the work is already running. On
+  2026-10-29 at 1:33am the reply said "abt 30 to 45 min" and the turn ended
+  with nothing started; at 9am Caleb asked "How'd it go" and nothing had
+  happened on his brother's birthday. Either keep working in the turn, or
+  start a background job and say its id.

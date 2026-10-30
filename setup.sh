@@ -1264,6 +1264,13 @@ fi
 # agent printed the stub's help instead (found 2026-10-10 walking the USC
 # student path from a scratch HOME). ln -sfn replaces the stub file.
 link_tool chewbacca
+# Hooks and skills name these by bare command (lesson-guard says run
+# `closeout --fast`, method-guard says `method debug`), but none were in a link
+# list, so tests/test_doc_commands_linked.py now reads hooks too. On 2026-10-29
+# the night wrap-up tab got "command not found: closeout".
+for _tool in closeout backlog method evolve clay-inbox app-revive chewbacca-daemon gtme-portfolio text-blast; do
+  [ -f "$SCRIPT_DIR/bin/$_tool" ] && link_tool "$_tool"
+done
 if [ -f "$SCRIPT_DIR/bin/coursework" ]; then
   link_tool coursework
   COURSEWORK_HOME="${COURSEWORK_DIR:-$HOME/coursework}"

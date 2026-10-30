@@ -20,6 +20,9 @@ docs = [ROOT / 'CLAUDE.md', ROOT / 'AGENTS.md']
 docs += sorted((ROOT / 'config' / 'instructions').glob('*.md'))
 docs += sorted((ROOT / '.claude' / 'rules').glob('*.md'))
 docs += sorted((ROOT / 'skills').glob('*/SKILL.md'))
+# Hook messages are instructions too: lesson-guard told an agent to run
+# `closeout --fast`, and closeout was not on PATH (2026-10-29).
+docs += sorted((ROOT / '.claude' / 'hooks').glob('*.sh'))
 
 missing = {}
 for doc in docs:

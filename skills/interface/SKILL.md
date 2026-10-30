@@ -705,3 +705,11 @@ long???????" then "BRO?".
   phone a name sinking 60% of the hero height slid under the copy block at
   30% scroll (Joshua Newton Baseball, 2026-10-30); 30% travel with a fade to 0
   by 35% scroll kept it clear. Screenshot 0, 0.3 and 0.6 of a screen down.
+- "Reads SO slideshow pdf", "SOOOO 1 dimensional", "SCREAM baseball"
+  (Joshua Newton Baseball, 2026-10-30): heading, paragraph, photo grid and
+  separate photo bands read as a deck. The fix was turning content into
+  objects from the sport that do something on scroll: every print dealt onto
+  infield dirt (chalk foul line across it) one by one, ending with his own
+  trading card landing on top; the price became a ballpark ticket whose stub
+  tears at the gate. Ask of every section: what object from this world could
+  this content BE, and what does it do as you scroll.

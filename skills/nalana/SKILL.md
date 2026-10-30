@@ -98,6 +98,17 @@ friends'. They apply to any prop or mark modeled after a physical object.
   (2026-10-11). The reference he named is a single soft-lit rainbow arch with
   a sculpted texture and no cast shadow, set beside a flat wordmark.
 
+## Nalana's own AI needs his sign-in, so check it first
+
+`nalana-mcp` prints whether `~/.nalana/auth.json` exists. Without it, the
+bridge's `/chat/send` answers "Sign in to use Nalana" and its generators are
+off, while plain bpy through :9876 still works. On 2026-10-29 that was found
+only after promising Caleb a Nalana-made clip, and he said "fix chewbs to always
+sign in for me". Agents never type his password (it's his credential and the
+add-on only takes email and password). Check it before planning around Nalana's
+AI, and if he's signed out, say BLOCKED in one line at the start: he signs in
+once in Nalana's panel and the refresh token keeps it from then on.
+
 ## Nalana's own modeler comes first
 
 "WE HV NALANA" (Caleb, 2026-10-11), after 29 hand-coded bpy versions of the TTS

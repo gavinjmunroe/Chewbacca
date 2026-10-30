@@ -12,8 +12,22 @@ ADDONS="$HOME/Library/Application Support/Blender/5.1/scripts/addons"
 APP=/Applications/Nalana.app/Contents/MacOS/Nalana
 LOG="$HOME/Library/Logs/nalana-mcp.log"
 
+# Nalana's own AI (the bridge's /chat/send, its generators) refuses with
+# "Sign in to use Nalana" unless ~/.nalana/auth.json exists. On 2026-10-29 a
+# session found that out mid-build, after promising Caleb a knife clip. Say it
+# at launch, every time, so it's the first thing known and not the last.
+# Agents never type his password: he signs in once in Nalana's panel and its
+# refresh token keeps the session from then on.
+auth_line() {
+  if [ -s "$HOME/.nalana/auth.json" ]; then
+    echo "nalana-mcp: signed in, Nalana's own AI is available"
+  else
+    echo "nalana-mcp: BLOCKED for Nalana's own AI: not signed in. Caleb signs in once in Nalana's panel (email and password); it stays signed in after that. bpy work through :9876 still runs."
+  fi
+}
+
 if lsof -nP -iTCP:9876 -sTCP:LISTEN 2>/dev/null | grep -q '^Nalana'; then
-  echo "nalana-mcp: already listening on 9876"; exit 0
+  echo "nalana-mcp: already listening on 9876"; auth_line; exit 0
 fi
 if lsof -nP -iTCP:9876 -sTCP:LISTEN >/dev/null 2>&1; then
   echo "nalana-mcp: something other than Nalana holds 9876, refusing" >&2; exit 1
@@ -50,7 +64,7 @@ for _ in $(seq 1 30); do
   # Only Nalana counts: any other process on 9876 would receive the MCP's
   # execute_code calls.
   if lsof -nP -iTCP:9876 -sTCP:LISTEN 2>/dev/null | grep -q '^Nalana'; then
-    echo "nalana-mcp: listening on 9876 (log $LOG)"; exit 0
+    echo "nalana-mcp: listening on 9876 (log $LOG)"; auth_line; exit 0
   fi
 done
 echo "nalana-mcp: Nalana never opened 9876, see $LOG" >&2

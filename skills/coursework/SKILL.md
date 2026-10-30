@@ -313,6 +313,17 @@ When the user says that's what is happening:
   `slop-check --essay`. Never end on "want me to fix those?" (Caleb,
   2026-10-21, ACAD 324 Quiz 2 at 11:28pm: the offer drew "Lock in", which
   meant he'd already said yes).
+- Before calling a graded deliverable final, read the assignment's own
+  guidelines file and check the draft against every format rule in it,
+  references most of all. On 2026-10-29 the BISC lab deck had sat "done"
+  since 10/26 with "et al." on every reference, while Presentation
+  Guidelines.pdf p17 says to list all authors "in this exact format". That
+  was found the night before it was due. Pull full author lists from PubMed
+  esummary by PMID. Title search returned the wrong paper for 3 of 6.
+- "Lock in" or "what else do we have" means do the next item, never ask which
+  one (Caleb, 2026-10-29: "We gotta lock in tn" got a question back and the
+  turn was refused). Pick by points and due date, say the pick in one line,
+  start it.
 
 Before drafting any argument essay, read the assignment prompt PDF and the
 instructor's sample essays in full, and write down the prompt's actual job

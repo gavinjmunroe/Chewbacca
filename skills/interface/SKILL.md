@@ -680,3 +680,10 @@ long???????" then "BRO?".
   face and hit the nav at Caleb's short laptop window ("Bro its so slop and
   unintentional"). Give the photo its own column or band, size hero type by
   min(vw, svh), and screenshot at a short window (1000x560) before pushing.
+- No novelty widget where a plain fact block works. Same site, same night: a
+  split-flap scoreboard (one dark tile per letter, "E V E R Y  Y E A R"), an
+  empty "video coming soon" board half a screen tall, and a 6rem two-tone
+  headline at 0.86 leading whose comma hit the next line drew "Slop design
+  bro". What held up: a box score of four big values with small labels under
+  the photo, headings capped near 4.4rem with 0.92+ leading, and empty media
+  slots hidden until the media exists.

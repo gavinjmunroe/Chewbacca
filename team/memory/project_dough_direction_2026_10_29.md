@@ -7,6 +7,8 @@ metadata:
 
 Dough's destination is self-serve, usage-based software. Anyone can pay for it and run their go-to-market without learning anything about GTM and without ever seeing the Clay UI. Caleb, 2026-10-29: "we're building towards Dough being a software anyone can pay for usage based to run gtm without the headache of needing to learn anyhing abt gtm and God forbit the clay ux".
 
+It sits on top of and between the GTM tools a business already uses (Clay, Apollo, HubSpot, Dripify, Gmail, treg and the rest), and it carries what Caleb learned at BMA and Amber: Togari's scoring and reply rubrics, Sagar's six variables and copy rules, Maggie's process, the pre-send gates. Caleb, the same day: "it is built on top of and between all the gtm tools and takes everything I learned at bma/amber".
+
 Where it stands on 2026-10-29: the engine runs inside Chewbacca ([[feedback_dough_is_the_built_engine]]), `chewbacca gtme accounts` builds any client's scored list in one command, and clients are run done-for-you. Usage pricing has a start in the kit already: treg lookups are priced per call and capped per customer, and `gtme costs` reports each customer's real monthly cost.
 
 **Why:** it sets the bar for every Dough change. A feature that only works if the user knows Clay, ICP vocabulary or sequencing rules is off the path.

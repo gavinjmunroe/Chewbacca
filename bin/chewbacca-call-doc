@@ -121,11 +121,15 @@ def gws(*args: str, params: dict | None = None, body: dict | None = None, cwd: s
 
 
 def publish(html_path: Path, title: str, doc_id: str | None, share: bool) -> dict:
-    up = ["--upload", str(html_path), "--upload-content-type", "text/html"]
+    # gws refuses an --upload path that resolves outside its cwd: a script in
+    # the agent scratchpad (/private/tmp/claude-501/...) failed that way on
+    # 2026-10-29 (Roy call doc). Run the upload from the file's own folder.
+    html_path = html_path.resolve()
+    up = ["--upload", html_path.name, "--upload-content-type", "text/html"]
     if doc_id:
-        gws("drive", "files", "update", *up, params={"fileId": doc_id})
+        gws("drive", "files", "update", *up, params={"fileId": doc_id}, cwd=html_path.parent)
     else:
-        made = gws("drive", "files", "create", *up,
+        made = gws("drive", "files", "create", *up, cwd=html_path.parent,
                    body={"name": title, "mimeType": "application/vnd.google-apps.document"})
         doc_id = made.get("id")
         if not doc_id:

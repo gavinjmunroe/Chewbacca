@@ -33,6 +33,14 @@ grep -q '>plain line</p>' "$H" && ok "dash line is plain, no dash" || no "dash l
 cat > "$T/gws" <<'G'
 #!/bin/bash
 echo "$*" >> "$LOG"
+# Real gws refuses an --upload path that resolves outside its cwd, which broke
+# a scratchpad script on 2026-10-29. Mirror that: a bare name in cwd only.
+prev=""; for a in "$@"; do
+  if [ "$prev" = "--upload" ]; then
+    case "$a" in */*) echo "error[validation]: --upload '$a' resolves to outside cwd" >&2; exit 1 ;; esac
+    [ -f "$a" ] || { echo "error: no $a in $(pwd)" >&2; exit 1; }
+  fi; prev="$a"
+done
 case "$*" in
   *"files create"*) echo '{"id":"DOC123"}' ;;
   *"files export"*) printf '%%PDF-1.4 /Type /Pages /Type /Page x /Type /Page' > doc.pdf; echo '{}' ;;

@@ -1,6 +1,6 @@
 ---
 name: project_dough_page_2026_10_29
-description: The Dough brand page is a dark proofing room where dough rises, bakes into a sourdough boule and gets cut; branch feat/dough-page in calebnewtonusc/dough, not deployed, cut clip needs a redo
+description: The Dough brand page is a dark proofing room where dough rises, bakes into a sourdough boule and gets cut; live at dough-page.up.railway.app from branch feat/dough-page; the 3-clip story (dough becomes the loaf, knife cut, half returns to dough) waits on video credit
 metadata:
   type: project
 ---
@@ -12,3 +12,5 @@ The scene: pitch dark room, one warm downlight on a steel counter (rendered in N
 Open: the cut clip has the blade's flat face to camera while the halves part left and right, which Caleb caught ("why would it split the opposite direction of the knife"). The corrected prompt is in `site/gen/clip-cut.json`; it needs about $0.36 of treg credit (balance was $0.0025) or Higgsfield credits. Deploy plan: Railway from GitHub with service root `site/`, the Dockerfile serves only `public/`.
 
 Caleb's rulings this session: real logos exactly as shipped (the 3D Clay arch at its own angle, not a front-on redraw), photoreal over hand-built 3D ("IT HAS TO LOOK REALISTIC NOT LIKE A VIDEO GAME"), a sourdough loaf over plain bread. Lessons are in skills/nalana and skills/creative-video. Related: [[feedback_dough_is_the_built_engine]], [[project_dough_name_2026_10_28]].
+
+**Update, 2026-10-29 evening:** live at https://dough-page.up.railway.app (Railway project dough-page, deploys from GitHub `feat/dough-page`, root `/site`). The cut is held back (`CUT_READY = false` in `site/public/page.js`). Caleb's next version, in his words: the dough has to actually become the final bread, the knife "cut super satisfyinglly", then one piece goes back into being dough ("1 would look cleaner"). Plan: three locked-shot clips. 1) dough photo to loaf photo, Seedance 2.5 first+last frame. 2) knife straight down edge-on, halves part left and right where it went (`site/gen/clip-cut.json`). 3) left half slides off, right half slumps back into the dough photo, Seedance 2.5 first+last frame, so the loop matches frame 1. About $2.70. Blocked on credit: treg at $0.0025, Higgsfield 0, and Nalana's own generator (signed in as admin) failed with "scratch draft response fields are invalid" and builds bpy models anyway, not photoreal footage. The copy stays (Caleb: "the copy is decent").

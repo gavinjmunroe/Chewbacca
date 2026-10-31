@@ -2,10 +2,26 @@
 name: gtm-engineering
 description: "Chewbacca's growth engineer: outbound campaigns that book meetings. Cold email, lead lists, ICP, signals, Clay enrichment, sequences, deliverability, replies. For GTM, GTME, Zeutara or Jonah work."
 triggers: >-
-  Chewbacca's growth engineer: run outbound campaigns that turn an offer into booked meetings, the way top agencies do. Demand generation, cold email, lead lists, ICP and signals, Clay enrichment, sequences, deliverability, reply rates and reply handling. Use when asked to set up or fix an outbound campaign, book meetings, get money in the door, build a list, write cold email copy, run GTM for a client like Jonah or Zeutara, learn how agencies run demand gen, or make Chewbacca better at GTM. Also fires on: pipeline, prospecting, lead gen, outreach, Clay, ICP, growth engineering, GTME.
+  Chewbacca's growth engineer: run outbound campaigns that turn an offer into booked meetings, the way top agencies do. Demand generation, cold email, lead lists, ICP and signals, Clay enrichment, sequences, deliverability, reply rates and reply handling. Use when asked to set up or fix an outbound campaign, book meetings, get money in the door, build a list, write cold email copy, run GTM for a client like Jonah or Zeutara, learn how agencies run demand gen, or make Chewbacca better at GTM. Also fires on: client call, sales call, call prep, pitch, why us, Dough, pipeline, prospecting, lead gen, outreach, Clay, ICP, growth engineering, GTME.
 ---
 
 # GTM engineering
+
+## Client calls and pitches start from dough/PITCH.md
+
+Any client call, sales pitch, call doc or follow-up about our outbound work opens
+[calebnewtonusc/dough PITCH.md](https://github.com/calebnewtonusc/dough/blob/main/PITCH.md)
+first. It has the one-liner, five reasons with receipts from several markets, the
+"how are you different from Apollo, Clay, HeyReach, by hand, Claude, an agency"
+answers, the numbers we can and can't say, and the free 50 row ask. Copy those lines
+into the call script and add one receipt from the prospect's own market. Name the
+market, never the client. Add each new receipt to PITCH.md the day it lands.
+
+Caleb, 2026-10-30, after pitching OPTRA live: "I feel like I'm having to finesse
+words out my butt on the spot", then "remember how goated it is next time we ever
+talk anything gtm or client calls". On that call he said 5 calls a day off 200
+emails a month and 20 to 30% reply rates, none sourced. A version built around one
+client drew "Not j for Optra dumbass".
 
 ## This is Chewbacca's first product
 

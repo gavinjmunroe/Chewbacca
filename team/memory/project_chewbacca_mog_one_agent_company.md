@@ -136,3 +136,22 @@ setting per role. Still undecided.
 3. Spec the org chart file and how the daemon registers jobs from it.
 
 Borrow from Omarchy: the usage panel, account auto-switch, crash-to-agent and theme sync.
+
+## Recheck 2026-10-31 (first step 1)
+
+Rechecked against bin/, skills/ and ~/.chewbacca/daemon/services/ by name, tools
+not run. Still 8 HAVE, 16 PARTIAL, 13 MISSING: nothing has landed for a MISSING
+role. No tool or service matches testimonial, competitor, consult, Stripe or
+payment, contract or NDA, invoice, receipt or expense, KPI, commission, Sentry,
+backup, whereabouts, trip or packing. `quote-check` is a research-quote checker,
+not a quote builder. Finance is still only the startup-finance skill.
+
+What moved inside PARTIAL and HAVE roles since 10/25: the daemon runs 25
+services (app-revive every 60 s restarts an app whose page died, a Sysadmin
+watchdog piece); `chewbacca call-doc` writes a call or pitch script as a Doc
+(Chief of staff talk prep, Proposal writer); the pasted-call skill turns a pasted
+transcript into every action item (Note-taker); `text-blast` sends one text to a
+list one person at a time, manual and unscheduled (Sales development rep).
+
+Steps 2 and 3 still wait on Caleb: which department goes first, and send vs
+approve for other users.

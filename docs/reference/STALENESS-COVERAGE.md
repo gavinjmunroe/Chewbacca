@@ -37,7 +37,7 @@ Top 20 skills means most commits in the last 30 days. There is no log of skill u
 | skills/hud/SKILL.md | reviewed | reviewed: `~/.bob/spotify.json` is created when keys are added; `glance` is a HUD protocol word |
 | skills/interface/SKILL.md | reviewed | reviewed: no dead path, link or command |
 | skills/texts/SKILL.md | reviewed | reviewed: `owed`, `qr`, `send`, `drop` are `people texts` subcommands |
-| skills/coursework/SKILL.md | stale | stale, not fixed: line 294 `~/Chewbacca/apps/texts/ingest/ingest.py` is gone; the script is `apps/texts/ingest/ingest.py` in the chewbacca checkout. Left because another tab is editing this file |
+| skills/coursework/SKILL.md | fixed | fixed 2026-10-31: the `~/Chewbacca/apps/texts/ingest/ingest.py` line (now line 466) goes through `chewbacca where` |
 | skills/clay-navigation/SKILL.md | reviewed | reviewed: the old test name is quoted on purpose as an incident; its three bin helpers exist |
 | skills/spiderverse-style/SKILL.md | reviewed | reviewed: no dead path, link or command |
 | skills/kyber-surfaces/SKILL.md | fixed | fixed: `decision-inbox digest` now `bin/decision-inbox digest` |

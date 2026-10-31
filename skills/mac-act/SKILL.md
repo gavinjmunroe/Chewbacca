@@ -42,8 +42,8 @@ agent-desktop type @s8f3k2p9:e4 "hello"
 ```
 
 **If typing silently does nothing, it is Secure Input.** A password field somewhere has
-focus and macOS is discarding your keystrokes with no error. `chewie doctor
---secure-input` names the process holding it. Fix by moving focus off the field:
+focus and macOS is discarding your keystrokes with no error. `chewie doctor --secure-input`
+names the process holding it. Fix by moving focus off the field:
 `open -a Finder`, then retry.
 
 ## Keys, menus, windows

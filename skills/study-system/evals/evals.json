@@ -20,7 +20,7 @@
     {
       "prompt": "Make me flashcards",
       "expect_tools": [
-        "Anki"
+        "study-guide"
       ]
     },
     {

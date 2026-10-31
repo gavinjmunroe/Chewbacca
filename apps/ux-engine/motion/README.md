@@ -44,3 +44,11 @@ libraries. If a project's DENY.md says otherwise, the project wins.
 Under **300ms** for anything the user triggers and then waits on. **400 to
 500ms** for a large surface moving a long distance. Material's hard ceiling is
 400ms; Vaul's own drawer ships at 500ms, which is why the rule is two-part.
+
+## Editor-grade motion
+
+Text animators, shape morphs, whips, the triple wheel, camera hand-offs and
+parallax lag, from an editor's timeline and FilmCraft's source:
+[library/crafts/motion-film.md](../../../library/crafts/motion-film.md). The
+code is [primitives/motion.ts](primitives/motion.ts), dependency-free, tested
+by `node primitives/motion.test.ts`.

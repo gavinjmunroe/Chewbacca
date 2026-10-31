@@ -495,4 +495,5 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_granola_transcripts_page: Granola MCP pages transcripts (truncated/next_offset) inside {"meetings":[...]}; the Andrew call landed cut at 37k of 60k w no summary (10/30). granola-import reads every page, repair refetches; never page in readers
 - reference_ff_logo_files: current FF logo is the 10/18 back-to-back F mark in site Wordmark.tsx; exports in ~/Downloads/Firm Foundation logo/, the 10/9 AI Logo.png is stale
 - project_garland_call_2026_10_31: Garland Hunt Jr. FF advisor yes 10/31; coaches pro athletes, pro sports C-suites, Netflix/Google/Amazon; text him to weigh in; Ben (chief of staff) call re AI, HubSpot
+- feedback_motion_is_editor_craft: web motion follows library/crafts/motion-film.md + apps/ux-engine/motion/primitives/motion.ts (jayd3nfx reveal, triple wheel, whips, FilmCraft curves); a hero of fade-ups and a "1 2 3" sequence kept shipping as slop (10/31)
 - feedback_argv_reaches_string_flags: parseArgs makes any --word a flag, so internal send state goes on Symbol keys and approved files are snapshotted at check time (people send --file, 10/31)

@@ -113,6 +113,7 @@ an API summary without reading the source.
 
 ## 6. Animate the shots
 
+- Kinetic type, morphs, bounces and whips follow [library/crafts/motion-film.md](../../library/crafts/motion-film.md); its curves are in `apps/ux-engine/motion/primitives/motion.ts`.
 - Write the art bible (the look, the colour script, the cast, staging and safe zones) and per-act briefs naming
   the line, the picture and the action before animators start.
 - In the full production, run one animator per act in parallel, each owning its own files; the

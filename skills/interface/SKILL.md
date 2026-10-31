@@ -233,6 +233,7 @@ mistake.
   step 6.
 - [library/crafts/interface.md](../../library/crafts/interface.md): the researched rules, from
   Refactoring UI and Atomic Design. Read at step 4.
+- [library/crafts/motion-film.md](../../library/crafts/motion-film.md): editor-grade motion (text reveals, morphs, whips, parallax lag, slop tells), with copyable code in `apps/ux-engine/motion/primitives/motion.ts`. Read before animating anything.
 
 ## Ask what it is made of before drawing it
 

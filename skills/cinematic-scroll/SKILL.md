@@ -59,6 +59,8 @@ Check every section against these before showing it:
 
 ## Method that held up
 
+Motion rules and code for every transition, reveal, camera move and parallax layer: [library/crafts/motion-film.md](../../library/crafts/motion-film.md) and `apps/ux-engine/motion/primitives/motion.ts`.
+
 - **Render with the screen left empty, and export its quad.** For every screen,
   monitor, paper or sign, render the prop with that region blank and export
   the region's four corners as JSON. On the page, map the live content (a

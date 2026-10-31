@@ -20,6 +20,7 @@ check "an svg's own children never count as a collision" python3 "$ROOT/tests/te
 check "design gate passes good pages and still refuses bad ones" python3 "$ROOT/tests/test_gate_calibration.py"
 check "ux-crawl writes what ux-film reads" python3 "$ROOT/tests/test_film_contract.py"
 check "comparison rejects unmatched captures" python3 "$ROOT/tests/test_compare.py"
+check "motion primitives match FilmCraft and the jayd3n reveal" node "$ROOT/motion/primitives/motion.test.ts"
 
 # The index must regenerate deterministically from the vendored corpus.
 check "extractor runs"            python3 "$ROOT/tools/extract.py"

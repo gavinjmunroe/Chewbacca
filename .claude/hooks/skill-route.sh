@@ -518,6 +518,42 @@ else:
 SHADOW["method"] = "named" if NAMED else ("stem" if vec is None else "vector")
 SHADOW["threshold"] = None if vec is None else VEC_MIN
 
+def phrase_skills(text):
+    """Skills whose learned trigger phrase is in the prompt, as whole words.
+
+    Descriptions are documentation English and Caleb types in his own register, so on
+    2026-10-17 the held-out recall gap was prompts like "give me a text to send the gc".
+    config/skill-route-phrases.json holds phrases learned from the train split only
+    (tools/skill_route_phrases.py) and cut by hand of names. SKILL_ROUTE_PHRASES=off
+    turns it off, which is how the eval measures the arm against the control."""
+    if os.environ.get("SKILL_ROUTE_PHRASES", "on") == "off":
+        return []
+    here = os.path.dirname(os.path.abspath(os.environ.get("SKILL_ROUTE_SELF") or "."))
+    table = {}
+    for cand in (os.path.join(here, "..", "..", "config", "skill-route-phrases.json"),
+                 os.path.expanduser("~/.chewbacca/kit/current/config/skill-route-phrases.json")):
+        try:
+            with open(cand) as fh:
+                table = json.load(fh).get("phrases") or {}
+            break
+        except (OSError, ValueError, AttributeError):
+            continue
+    low = re.sub(r"<system-reminder>.*?</system-reminder>", " ", text, flags=re.S)
+    low = " " + " ".join(re.findall(r"[a-z0-9']+", re.sub(r"\S*/\S*", " ", low.lower()))) + " "
+    paths = {n: p for n, _d, p in skills}
+    found = []
+    for name, phrases in table.items():
+        if name not in paths or not isinstance(phrases, list):
+            continue
+        hit = next((ph for ph in phrases if isinstance(ph, str) and f" {ph} " in low), None)
+        if hit:
+            found.append((name, paths[name], hit))
+    return found[:2]
+
+PHRASED = [] if NAMED else phrase_skills(prompt)
+if PHRASED:
+    SHADOW["phrases"] = [{"name": n, "phrase": ph} for n, _p, ph in PHRASED]
+
 prompt_stems = stems(prompt)
 prompt_bigrams = bigrams(stem_seq(prompt))
 
@@ -531,6 +567,9 @@ for _n, desc, _p in skills:
 best = [(100.0, name, path, ["named in the prompt"]) for name, path in NAMED]
 if vec:
     best = [(c, name, path, [f"meaning {c:.2f}"]) for c, name, path in vec]
+# A learned phrase outranks a description overlap and a meaning score: stem scores are
+# weight*10 plus a bonus and grow with prompt length, so 1000 keeps the phrase first.
+best += [(1000.0, name, path, [f'phrase "{ph}"']) for name, path, ph in PHRASED]
 for name, desc, path in ([] if vec is not None or os.environ.get("SKILL_ROUTE_NO_STEM") else skills):
     d_stems = stems(desc)
     hits = prompt_stems & d_stems

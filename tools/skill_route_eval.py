@@ -21,6 +21,9 @@ route a prompt gets (the first skill shown) it reports:
   p50 / p95        wall time of one hook run
 
 The labels hold Caleb's prompts, so they live in the private second brain, never in this repo.
+
+This is also the sealed eval for tools/skill_route_phrases.py: it learns trigger phrases from the
+train split only, and this scores them on held-out (SKILL_ROUTE_PHRASES=off is the control arm).
 """
 import argparse
 import glob

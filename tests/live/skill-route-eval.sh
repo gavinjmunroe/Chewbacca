@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # Live: the skill router on held-out real prompts does not get worse.
 #
+# 2026-10-31, after learned trigger phrases (config/skill-route-phrases.json):
+# held-out precision 17.9% (7 of 39), recall 26.8%, typed no-skill 34.7%,
+# machine 0%. The same run with the phrases off had drifted to 13.2% and 19.7%
+# as the installed catalog changed, below the 10-17 recall floor. Floors below
+# are the 10-31 run.
+#
 # 2026-10-17, re-measured on 284 held-out prompts (126 random, 71 positives) after the
 # meaning nudge went opt-in: precision 12.8% (5 of 39), recall 23.9%, typed no-skill 34.7%,
 # machine traffic 0%. Today's floors are that run; the 10-16 history follows.
@@ -33,8 +39,8 @@ metric() { python3 -c "import json,sys; v=json.load(open(sys.argv[1]))[sys.argv[
 at_least() { python3 -c "import sys; sys.exit(0 if float(sys.argv[1]) >= float(sys.argv[2]) else 1)" "$(metric "$1")" "$2"; }
 at_most() { python3 -c "import sys; sys.exit(0 if 0 <= float(sys.argv[1]) <= float(sys.argv[2]) else 1)" "$(metric "$1")" "$2"; }
 
-ok "held-out precision at least 12.8% (measured 2026-10-17)"         at_least precision 12.8
-ok "held-out recall at least 23.9% (measured 2026-10-17)"            at_least recall 23.9
+ok "held-out precision at least 17.9% (measured 2026-10-31)"         at_least precision 17.9
+ok "held-out recall at least 26.8% (measured 2026-10-31)"            at_least recall 26.8
 ok "typed no-skill prompts get a skill at most 34.7% of the time"     at_most false_fire_none_typed 34.7
 ok "machine traffic never gets a nudge or gate"                       at_most false_fire_notification 0
 ok "p95 hook time at most 2500ms (the Mac runs at load 30 to 100)"    at_most p95_ms 2500

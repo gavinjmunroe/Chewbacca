@@ -57,6 +57,18 @@
       "test": "tests/test_site_stack_gate_replay.py",
       "corpus": "tests/fixtures/site-stack-gate/real_writes_2026_10_27.json"
     },
+    ".claude/hooks/skill-route.sh": {
+      "type": "sealed",
+      "script": "tools/skill_route_eval.py",
+      "set": "~/second-brain/systems/skill-route-eval.jsonl",
+      "floor": "held-out precision 17.9, recall 26.8, typed false fire 34.7, machine 0 (2026-10-31; tests/live/skill-route-eval.sh)"
+    },
+    "tools/skill_route_phrases.py": {
+      "type": "sealed",
+      "script": "tools/skill_route_eval.py",
+      "set": "~/second-brain/systems/skill-route-eval.jsonl",
+      "floor": "learns from the train split only; its phrases are scored on held-out by skill_route_eval.py (2026-10-31: precision 13.2 to 17.9, recall 19.7 to 26.8)"
+    },
     ".claude/hooks/ask-lookup-guard.sh": {
       "type": "sealed",
       "script": "tools/ask_lookup_eval.py",
@@ -103,7 +115,6 @@
     ".claude/hooks/repo-overlap-guard.sh",
     ".claude/hooks/scope-guard.sh",
     ".claude/hooks/skill-route-shadow.sh",
-    ".claude/hooks/skill-route.sh",
     ".claude/hooks/slop-guard.sh",
     ".claude/hooks/stale-read-guard.sh",
     ".claude/hooks/thinking-dash-guard.sh",

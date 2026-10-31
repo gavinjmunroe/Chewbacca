@@ -482,6 +482,8 @@ if group "decision-learning"; then
   # 2026-10-16: 8 of 35 held-out machine prompts got a skill or armed the graph
   # gate; cross-session messages sit behind a <system-reminder> block.
   check  "machine traffic (cross-session, side-session, stop-hook, tool prompts) never routes or gates" python3 "$ROOT/tests/test_skill_route_machine.py"
+  # Backlog 3, 2026-10-31: learned phrases took held-out recall from 19.7% to 26.8%.
+  check  "learned trigger phrases route texting-register prompts, whole words only" python3 "$ROOT/tests/test_skill_route_phrases.py"
   check  "outcomes join from transcripts and calibrate a floor per decision" python3 "$ROOT/tests/test_outcome_join.py"
   check "shared instruction export stays current" python3 "$ROOT/tools/agents_md.py" --check
 fi

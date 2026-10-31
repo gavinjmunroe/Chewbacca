@@ -38,7 +38,16 @@ Andrew Laffoon (Mixbook CEO) on 2026-10-30.
 4. Deploy a demo of the service with no secrets on it (public repos only),
    give it a clean domain, and read the domain back after renaming. A taken
    name returns `true` and changes nothing.
-5. Private repo, invite their GitHub login, then confirm the invite in the API.
-6. Every action item from the call goes into `work-ledger` with
+5. Private repo, invite every GitHub login they have (Andrew had `landrew`
+   and the more active `andrewlaffoon`), then confirm the invites in the API.
+   A personal repo only grants write, so `permission=pull` fails with a 422.
+   Use `push`.
+6. Share the other venture repos too. Caleb, 2026-10-31: "I want him advising
+   everything bro add him to chewbs dough and hall and anythign else". Before
+   inviting, name in one line what private material each repo holds, then
+   invite.
+7. Anything the kit posts to Slack or renders as HTML escapes GitHub fields
+   (PR titles, file names, URLs). A PR titled `<!channel>` pages a whole team.
+8. Every action item from the call goes into `work-ledger` with
    `--source-key <who>-call-<date>-<slug>`. A memory note goes in the brain.
-7. Read each doc once as the advisor before calling it done.
+9. Read each doc once as the advisor before calling it done.

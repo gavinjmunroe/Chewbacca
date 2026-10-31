@@ -30,6 +30,7 @@ Always on. Any file made for the user to use or pass on follows this.
 - **One glance per line.** Short bullets, with a blank line between them. A dense block reads as a wall of text in Google Docs.
 - **Evidence goes on the page when it's the point.** If the file has to win an argument, put the exact numbers and where they came from right next to the claim. Otherwise keep sourcing in the notes.
 - **Check it as the reader would.** Read every line as the person holding it, mid-call or mid-email. A line that contradicts another line, or a "don't say X" with X in the opener, gets fixed before it's handed over.
+- **A GTM sales call doc carries the "why us" lines from `dough/PITCH.md`.** Copy its one-liner, five reasons and "how are you different from" answers into the script so the speaker never improvises a claim, and only numbers with a receipt go in. On 2026-10-30 Caleb pitched OPTRA without them, said "I feel like I'm having to finesse words out my butt on the spot", and on the call claimed 5 calls a day off 200 emails a month.
 - **Lines go only to people confirmed on the call.** Before handing over a call doc, check the thread for who is actually joining. A teammate who has not confirmed gets no lines; give them to the speaker, or put theirs under an "if Gav joins" heading. On 2026-10-30 the OPTRA doc split the script between Caleb and Gavin, Gavin never joined, and Caleb wrote "GAV ISNT ON THE CALL" mid-call.
 
 ## A how-to guide people will pass around

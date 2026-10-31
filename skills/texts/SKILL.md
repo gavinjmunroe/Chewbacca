@@ -474,13 +474,19 @@ message to a specific person:
 people send maggie "running 10 late" --dry-run   # who, which app, which address
 people send maggie "running 10 late"             # the app of the last 1:1 message
 people send maggie "..." --via whatsapp          # or imessage, slack, email
+people send colin "rec attached" --file ~/Downloads/rec.pdf   # a real attachment, iMessage or WhatsApp
 ```
+
+A PDF, image or deck goes as a file with `--file`, never as a Drive link
+pasted into the text (10/31: Colin's rec went as a link because the old send
+took text only). iMessage sends the text first, then the file.
 
 It replies in the app the conversation is actually in, to the exact address on
 a message that person sent, and it refuses an ambiguous name instead of picking
 one (on 2026-10-08 the reader's pick-the-latest rule turned `dad` into "prestons
-dad"). Run `--dry-run` first whenever the name could mean two people. Read the
-thread back afterwards to confirm it landed: Messages accepts unregistered
-handles without an error.
+dad"). Run `--dry-run` first whenever the name could mean two people. An
+iMessage send reads its own rows back from chat.db before it returns and prints
+`in chat.db: N sent rows`; a row Messages marked with an error fails the send.
+Trust that line over `people texts`, which lags until its next sync.
 
 Never send a draft the user has not seen.

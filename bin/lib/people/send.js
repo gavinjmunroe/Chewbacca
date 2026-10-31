@@ -22,6 +22,12 @@ const { textsReader, resolvePerson, printable } = require("./texts");
 const { findPerson } = require("./lookup");
 const { quietFor } = require("./quiet-hours");
 const approval = require("../send-approval");
+const attach = require("./attach");
+// Internal flags live under Symbols so no argv can set them: parseArgs turns
+// any --word into a flag, and a string key "approved" would let
+// `people send x "hi" --approved` skip the press (caught in review, 10/31).
+const FILE = Symbol("file");
+const APPROVED = Symbol("approved");
 
 const { APPS, BRIDGED } = require("./apps");
 // Loaded up front and guarded, so a missing file can never throw after a
@@ -289,9 +295,27 @@ function dispatchUnlogged(via, to, text, flags) {
   // The apps sent from right here need this message's press now; email,
   // Slack and the bridged chats hand it to gmail.py, slack.py and matrix.py,
   // which take it themselves (tools/send_approval.py).
-  if (via === "imessage" || via === "whatsapp") {
-    const ok = approval.take(via, to, text);
+  const file = flags[FILE];
+  if ((via === "imessage" || via === "whatsapp") && !flags[APPROVED]) {
+    const ok = approval.take(via, to, attach.boundText(text, file));
     if (!ok.ok) return { code: 6, err: ok.err };
+  }
+  if (file && via === "whatsapp")
+    return run("wacli", attach.whatsappFileArgs(to, file, text));
+  if (file && via === "imessage") {
+    // The text goes first, as its own message, then the file: Messages has no
+    // caption, and one script that sent both would fail as a unit.
+    if (text) {
+      const t = dispatchUnlogged(via, to, text, { ...flags, [FILE]: null, [APPROVED]: true });
+      if (t.code !== 0) return t;
+    }
+    let staged;
+    try {
+      staged = attach.stage(file);
+    } catch (e) {
+      return { code: 7, err: `Couldn't copy ${file.name} where Messages can read it: ${e.message}` };
+    }
+    return run("osascript", attach.imessageFileArgs(to, staged, Boolean(flags.room)));
   }
   if (via === "imessage" && flags.room)
     return run("osascript", [
@@ -376,6 +400,7 @@ function sendRoom(d, name, text, via, flags, P) {
     die(
       `Group sends work on iMessage, WhatsApp, Slack and the bridged chats, not ${r.source}. Reply to that thread from Gmail.`,
     );
+  refuseFileApp(r.source, flags);
   const to =
     r.source === "imessage"
       ? chatGuid(r.handle)
@@ -389,7 +414,8 @@ function sendRoom(d, name, text, via, flags, P) {
   const where = `${c.b(P(r.room))} ${c.dim(`group via ${r.source}, ${P(to)}`)}`;
   if (flags["dry-run"]) {
     say(`  would send to ${where}`);
-    say(`  ${P(text)}`);
+    if (text) say(`  ${P(text)}`);
+    fileLine(flags);
     say(c.dim(`  to send: add --to ${P(to)}`));
     approvalLine(flags, r.source, to, text);
     return;
@@ -403,6 +429,7 @@ function sendRoom(d, name, text, via, flags, P) {
       `"${P(r.room)}" was found by name, so ${P(to)} is unconfirmed. Nothing was sent.\n` +
         `  If that is the right group, add --to ${P(to)}`,
     );
+  const started = Date.now();
   const res = dispatch(r.source, to, text, { ...flags, room: true });
   if (!succeeded(res))
     die(
@@ -415,12 +442,32 @@ function sendRoom(d, name, text, via, flags, P) {
       )}`,
     );
   say(`${c.grn("sent")} to ${where}`);
+  confirmLanded(r.source, to, text, flags, started, P);
+}
+
+// After an iMessage send, read its own rows back from chat.db: `mac` exits 0
+// for a text Messages later marks Not Delivered, and the people store only
+// catches up on its next sync (10/31: four "sent" texts missing for 10 min).
+// A row with an error code is a failed send; no row at all is only a warning,
+// since a slow network can take longer than the wait.
+function confirmLanded(app, to, text, flags, started, P) {
+  if (app !== "imessage" || process.env.CHEWBACCA_NO_VERIFY) return;
+  const expect = (text ? 1 : 0) + (flags[FILE] ? 1 : 0);
+  const v = attach.verifySent(to, started, { expect, wantFile: Boolean(flags[FILE]) });
+  if (v.state === "landed")
+    return say(c.dim(`  in chat.db: ${v.rows.length} sent row${v.rows.length === 1 ? "" : "s"}${flags[FILE] ? ", file attached" : ""}`));
+  if (v.state === "failed")
+    die(`Messages marked the send to ${P(to)} as failed (${v.error}). Check the thread before resending.`);
+  if (v.state === "missing")
+    return say(c.yel("  not in chat.db yet after 8s; check the thread before resending"));
+  say(c.dim(`  couldn't read chat.db to confirm (${P(v.error)})`));
 }
 
 // --approval-binding on a dry run: one JSON line naming the exact channel and
 // address the send would hand over, so a press handler (kit_confirm) can mint
 // the approval for what the person saw. It approves nothing by itself.
 function approvalLine(flags, channel, to, text) {
+  text = attach.boundText(text, flags[FILE]);
   const subject = channel === "email" ? emailSubject(flags, text) : "";
   if (flags["approval-binding"])
     process.stdout.write(
@@ -435,6 +482,17 @@ function emailSubject(flags, text) {
   return String(flags.subject || text.split("\n")[0].slice(0, 60));
 }
 
+function refuseFileApp(app, flags) {
+  if (flags[FILE] && !attach.FILE_APPS.includes(app))
+    die(`Files go over ${attach.FILE_APPS.join(" and ")} only, and this thread is ${app}. Nothing was sent.`);
+}
+
+// "attach rec.pdf (182 KB)" on every dry run that carries one.
+function fileLine(flags) {
+  const f = flags[FILE];
+  if (f) say(c.dim(`  attach ${f.name} (${Math.max(1, Math.round(f.size / 1024))} KB)`));
+}
+
 function cmdSend(argv) {
   const { flags, rest } = parseArgs(argv);
   // `--room "Den Group" "text"`: the parser hands the room name to the flag.
@@ -444,9 +502,16 @@ function cmdSend(argv) {
   }
   const who = rest.shift();
   const text = rest.join(" ").trim();
-  if (!who || !text)
+  if (flags.file === true) die("--file needs a path. Nothing was sent.");
+  flags[FILE] = null;
+  if (flags.file) {
+    const info = attach.fileInfo(flags.file);
+    if (info.err) die(info.err);
+    flags[FILE] = info;
+  }
+  if (!who || (!text && !flags[FILE]))
     die(
-      'Try: people send maggie "running 10 late" [--via whatsapp] [--dry-run]   or   people send --room "Group Name" "text"',
+      'Try: people send maggie "running 10 late" [--via whatsapp] [--file path] [--dry-run]   or   people send --room "Group Name" "text"',
     );
   const via = flags.via ? String(flags.via).toLowerCase() : null;
   if (via && !APPS.includes(via)) die(`--via is one of: ${APPS.join(", ")}`);
@@ -484,6 +549,7 @@ function cmdSend(argv) {
       `No ${via || "message"} history with ${P(name)} and no address on their card.\n` +
         `  Add one: people set "${P(who)}" phone <number>   or pick an app with --via`,
     );
+  refuseFileApp(app, flags);
   const to = target(app, handle);
   if (!to)
     die(
@@ -539,7 +605,8 @@ function cmdSend(argv) {
     : "";
   if (flags["dry-run"]) {
     say(`  would send to ${where}`);
-    say(`  ${P(text)}`);
+    if (text) say(`  ${P(text)}`);
+    fileLine(flags);
     if (!owned) say(c.dim(`  to send: add --to ${P(to)}`));
     if (quiet)
       say(
@@ -570,6 +637,7 @@ function cmdSend(argv) {
         `  If that address is right, add --to ${P(to)}   or save them: people add "${P(name)}"`,
     );
 
+  const started = Date.now();
   const r = dispatch(app, to, text, flags);
   if (!succeeded(r))
     die(
@@ -586,6 +654,7 @@ function cmdSend(argv) {
       "INSERT INTO interactions (id, person_id, channel, note, happened_at) VALUES (lower(hex(randomblob(16))),?,?,NULL,?)",
     ).run(person.id, app, nowISO());
   say(`${c.grn("sent")} to ${where}`);
+  confirmLanded(app, to, text, flags, started, P);
 }
 
 module.exports = {

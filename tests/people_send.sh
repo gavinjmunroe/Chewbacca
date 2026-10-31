@@ -144,4 +144,56 @@ out="$(node -e '
   ].join(""));
 ' "$(dirname "$P")/lib/people/quiet-hours.js")"
 [ "$out" = "-QQ-Q-Q" ] || fail "quiet hours computed wrong: $out"
+
+# --file: a real attachment, checked before anything resolves, and bound into
+# the approval by digest. 10/31 Colin's PDF went as a Drive link because send
+# took text only.
+DOC="$(mktemp -d)/rec.pdf"; printf 'pdf bytes' >"$DOC"
+out="$("$P" send "sendy solo" "x" --via imessage --file /nonexistent/rec.pdf --dry-run 2>&1)" && fail "a missing file was accepted"
+grep -q "No file at" <<<"$out"              || fail "a missing file was not named"
+out="$("$P" send "sendy solo" "here it is" --via imessage --file "$DOC" --dry-run --approval-binding 2>&1)" || fail "a file dry run failed"
+grep -q "attach rec.pdf" <<<"$out"          || fail "the dry run did not show the attachment"
+SHA="$(shasum -a 256 "$DOC" | cut -c1-16)"
+grep -q "sha256:$SHA" <<<"$out"             || fail "the approval binding did not carry the file digest"
+out="$("$P" send "sendy solo" --via imessage --file "$DOC" --dry-run 2>&1)" || fail "a file-only send was refused"
+grep -q "attach rec.pdf" <<<"$out"          || fail "a file-only dry run did not show the file"
+out="$("$P" send "mail sagar" "x" --via email --file "$DOC" --dry-run 2>&1)" && fail "a file over email was accepted"
+grep -q "Files go over" <<<"$out"           || fail "the email refusal did not say where files go"
+# Internal flags must be out of argv's reach: a string key "approved" let
+# `--approved` skip the press until review caught it (10/31).
+grep -nE 'flags(\.|\[")(approved|fileInfo)' "$(dirname "$P")/lib/people/send.js" &&
+  fail "send.js reads an internal flag argv can set"
+out="$("$P" send "sendy solo" "x" --file "$DOC" --to 15550102@s.whatsapp.net 2>&1)"
+grep -q "CHEWBACCA_NO_SEND" <<<"$out"       || fail "a file send did not reach the dispatch gate"
+
+# Readback: a send is checked against chat.db's own rows, not the people store.
+CDB="$(mktemp -d)/chat.db"
+sqlite3 "$CDB" "
+  CREATE TABLE message (ROWID INTEGER PRIMARY KEY, handle_id INTEGER, is_from_me INTEGER, date INTEGER,
+                        error INTEGER, cache_has_attachments INTEGER, is_sent INTEGER, text TEXT);
+  CREATE TABLE chat (ROWID INTEGER PRIMARY KEY, guid TEXT, chat_identifier TEXT);
+  CREATE TABLE chat_message_join (chat_id INTEGER, message_id INTEGER);
+  CREATE TABLE handle (ROWID INTEGER PRIMARY KEY, id TEXT);
+  INSERT INTO handle VALUES (1, '+15550102'), (2, '+15550109');
+  INSERT INTO chat VALUES (1, 'iMessage;-;+15550102', '+15550102'), (2, 'iMessage;-;+15550109', '+15550109');
+  INSERT INTO message VALUES (1, 1, 1, (strftime('%s','now') - 978307200) * 1000000000, 0, 0, 1, 'here it is'),
+                             (2, 1, 1, (strftime('%s','now') - 978307200) * 1000000000, 0, 1, 1, NULL),
+                             (3, 2, 1, (strftime('%s','now') - 978307200) * 1000000000, 22, 0, 0, 'x'),
+                             (4, 1, 1, (strftime('%s','now') - 978307200 - 3600) * 1000000000, 0, 0, 1, 'old');
+  INSERT INTO chat_message_join VALUES (1,1),(1,2),(2,3),(1,4);"
+out="$(CHEWBACCA_CHAT_DB="$CDB" node -e '
+  const { verifySent } = require(process.argv[1]);
+  const since = Date.now() - 60000, o = { waitMs: 0 };
+  console.log([
+    verifySent("+15550102", since, { ...o, expect: 2, wantFile: true }).state,
+    verifySent("+15550102", since, { ...o, expect: 3 }).state,
+    verifySent("+15550109", since, o).state,
+    verifySent("+15550199", since, o).state,
+  ].join(" "));
+' "$(dirname "$P")/lib/people/attach.js")"
+[ "$out" = "landed missing failed missing" ] || fail "chat.db readback judged wrong: $out"
+out="$(CHEWBACCA_CHAT_DB=/nonexistent/chat.db node -e '
+  console.log(require(process.argv[1]).verifySent("+1", 0, { waitMs: 0 }).state);
+' "$(dirname "$P")/lib/people/attach.js")"
+[ "$out" = "unreadable" ] || fail "an unreadable chat.db was not reported as unreadable: $out"
 exit 0

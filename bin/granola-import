@@ -386,7 +386,7 @@ def records(value, out: dict) -> dict:
 
 
 def participant(line: str) -> dict:
-    """'Caleb Newton (note creator) from Usc (calebnew@usc.edu)' -> name, email."""
+    """'Jane Doe (note creator) from Acme (jane@example.com)' -> name, email."""
     line = html.unescape(line.strip())
     email = (re.findall(r"\(([^()\s]+@[^()\s]+)\)", line) or [""])[-1]
     name = re.split(r" \(| from ", line, maxsplit=1)[0].strip()

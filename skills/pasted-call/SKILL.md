@@ -29,6 +29,14 @@ Both fail the same way, by reading the transcript alone and stopping there.
   `people texts`, the ledger or the brain save is missing.
 - Never hand back a flat list. A dozen rows in call order is a pile, not a plan.
 
+- Never treat a transcript that stops mid-sentence as the whole call. On
+  2026-10-30 the first OPTRA paste ended at "So then all you have to do is
+  just take the meeting." The ledger said the ask never happened, then the
+  full paste showed a free 50 row test offer, a price counter and 40 more
+  minutes. If the last line is mid-thought or the meeting ran longer than the
+  text covers, say "this looks partial" first and write nothing that depends
+  on the ending.
+
 ## Do
 
 1. Read the whole transcript once for who's who. "Them" is often several

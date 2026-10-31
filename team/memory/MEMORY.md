@@ -182,7 +182,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 
 ## Lessons
 
-- feedback_sign_means_read_the_contract_terms: "sign the X" = read it whole, say if it is a draft still waiting on info, check signer email/entity against its own clauses (Medrano NDA bans school accounts, 10/31)
+- feedback_sign_means_read_the_contract_terms: "sign the X" = sign the attached doc (/s/ block, PDF, reply on thread) the same turn; told him to wait for a "final" that was already attached ("he alr sent it", 10/31); check signer email vs its clauses
 - feedback_pipefail_grep_q_false_fail: under set -o pipefail, `cmd | grep -q X` fails when cmd exits non-zero on purpose (status, BLOCKED); capture to a file, then grep (usc-os sync test, 10/28)
 
 - feedback_campaign_recovery_graph_2026_10_16: a paused-campaign recovery runs as a task graph in one sitting: fan out reads, one writer, blocklist held enrollments, window before resume, native second replies, Vantage wins

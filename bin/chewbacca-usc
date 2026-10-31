@@ -42,6 +42,10 @@ import time
 from pathlib import Path
 
 ROOT = Path(os.environ.get("CHEWBACCA_ROOT") or Path(__file__).resolve().parent.parent)
+# What the student types to run this. Hall installs it as plain `usc`, and
+# its --help and every "then run" hint said `chewbacca usc`, a command a Hall
+# student doesn't have (SPEC piece 2, left for later on 2026-10-28).
+PROG = os.environ.get("CHEWBACCA_USC_PROG") or "chewbacca usc"
 API = ["bash", str(ROOT / "bin" / "chewbacca-api")]
 CONFIG = Path(os.environ.get("CHEWBACCA_USC_CONFIG", Path.home() / ".chewbacca" / "usc.json"))
 HALLS = ("parkside", "evk", "university-village")
@@ -62,7 +66,7 @@ def call(site, op, **args):
 
 def why(res, site):
     if res.get("class") == "auth":
-        return f"not signed in: open {SIGNIN.get(site, site)} in Chrome once, then `chewbacca usc setup`"
+        return f"not signed in: open {SIGNIN.get(site, site)} in Chrome once, then `{PROG} setup`"
     return res.get("reason") or res.get("class") or "failed"
 
 
@@ -94,7 +98,7 @@ def signed_out(why):
         return stale
     if re.search(r"no Brightspace session|HTTP 40[13]|session expired|sign-in", why):
         return ("Brightspace says you're signed out. Open brightspace.usc.edu in Chrome and sign in once, "
-                "then rerun `chewbacca usc`.")
+                f"then rerun `{PROG}`.")
     if "HTTP 429" in why:
         return "Brightspace asked us to slow down. Try again in a few minutes."
     return f"Brightspace didn't answer: {why[:120]}"
@@ -179,7 +183,7 @@ def render(report):
     f = report["food"]
     out.append("")
     out.append(f"{f['meal']} at {f['hall']}" + ("" if f.get("picked", True) else
-               f" (pick yours: chewbacca usc --hall {'|'.join(HALLS)})"))
+               f" (pick yours: {PROG} --hall {'|'.join(HALLS)})"))
     if "error" in f:
         out.append(f"  {f['error']}")
     for s in f.get("stations", []):
@@ -251,7 +255,7 @@ def clean(text):
 
 def course_yaml(code, title, term, ids, items, today):
     lines = [
-        f"# Seeded by `chewbacca usc lockin` on {today} from your own Brightspace enrollment.",
+        f"# Seeded by `{PROG} lockin` on {today} from your own Brightspace enrollment.",
         "# Brightspace knows the course and its calendar. It doesn't know the",
         "# meetings or grading: those come from the syllabus, usually in",
         f"# ~/coursework/slides/{code.replace(' ', '-')}/.",
@@ -650,7 +654,7 @@ def read(target, find, slides):
     if files is None:
         have = ", ".join(d.name for d in sorted(slides.glob("*")) if d.is_dir()) or "none yet"
         print(f"No course folder matches {target!r} in {slides} (have: {have}). "
-              "`chewbacca usc lockin --apply` pulls them.")
+              f"`{PROG} lockin --apply` pulls them.")
         return 1
     words = [w.lower() for w in find.split()] if find else []
     skipped, hits = [], 0
@@ -722,7 +726,7 @@ def syllabus(apply, slides, ledger, compare=None, quiet=False):
     today = dt.date.today().isoformat()
     groups = syllabus_files(slides)
     if not groups:
-        print(f"No syllabus in {slides} yet. `chewbacca usc lockin --apply` pulls them.")
+        print(f"No syllabus in {slides} yet. `{PROG} lockin --apply` pulls them.")
         return 1
     report = {}
     for folder, files in groups.items():
@@ -867,8 +871,11 @@ def short(v):
 def main():
     if sys.argv[1:2] == ["food"]:
         food_cli = str(ROOT / "bin" / "usc-food")
+        if not os.path.exists(food_cli):
+            print(f"`{PROG} food` isn't in this install yet: it needs bin/usc-food.", file=sys.stderr)
+            return 2
         os.execv(sys.executable, [sys.executable, food_cli] + sys.argv[2:])
-    ap = argparse.ArgumentParser(prog="chewbacca usc", add_help=True)
+    ap = argparse.ArgumentParser(prog=PROG, add_help=True)
     ap.add_argument("cmd", nargs="?", default="today", choices=["today", "setup", "lockin", "read", "syllabus", "grades"])
     ap.add_argument("target", nargs="?", help="read: a course code, a folder or a file")
     ap.add_argument("--find", help="read: only lines with all these words, each with its file and page")

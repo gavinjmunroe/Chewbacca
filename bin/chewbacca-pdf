@@ -16,6 +16,7 @@ any file failed.
 """
 import argparse
 import os
+import re
 import subprocess
 import sys
 import time
@@ -31,6 +32,16 @@ def pages(pdf: Path) -> str:
         return next((l.split()[-1] for l in out.splitlines() if l.startswith("Pages:")), "?")
     except (OSError, subprocess.SubprocessError):
         return "?"
+
+
+# Chat shorthand that has no place in a page someone reads on paper. On
+# 2026-10-30 a lab walkthrough for a student who "knows NOTHING" went out
+# written like a text (u, ur, w) and came back as "MAKE IT ENGLISH".
+TEXT_SPEAK = re.compile(r"\b(u|ur|w|rn|abt|bc|tmr|ppl|plz)\b")
+
+
+def text_speak(text: str) -> list:
+    return sorted({m.group(0) for m in TEXT_SPEAK.finditer(text)})
 
 
 def main(argv=None) -> int:
@@ -50,7 +61,11 @@ def main(argv=None) -> int:
             continue
         dest = (out_dir or src.parent) / (src.stem + ".pdf")
         t0 = time.time()
-        route = op.to_pdf(src.read_text(errors="replace"), src.stem, dest)
+        text = src.read_text(errors="replace")
+        slang = text_speak(text)
+        if slang:
+            print(f"note: {src.name} uses chat shorthand ({', '.join(slang)}); a PDF is read like a document, so write the full words")
+        route = op.to_pdf(text, src.stem, dest)
         if route and dest.exists():
             print(f"{dest}  ({pages(dest)} pages, {time.time() - t0:.1f}s, {route})")
         else:

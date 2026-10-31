@@ -2128,15 +2128,21 @@ def md_to_html(md: str, title: str) -> str:
         if in_table:
             body.append("</table>")
             in_table = False
-        if re.match(r"^(- |\d+\. )", line):
+        m = re.match(r"^(- |\d+\. )", line)
+        if m:
+            # Numbered steps keep their numbers: a 2026-10-30 lab walkthrough
+            # printed "1. 2. 3." as bullets and the order was lost.
+            tag = "ol" if m.group(1)[0].isdigit() else "ul"
+            if in_list and in_list != tag:
+                body.append(f"</{in_list}>")
+                in_list = False
             if not in_list:
-                body.append("<ul>")
-                in_list = True
-            item = re.sub(r"^(- |\d+\. )", "", line)
-            body.append(f"<li>{inline(item)}</li>")
+                body.append(f"<{tag}>")
+                in_list = tag
+            body.append(f"<li>{inline(line[m.end():])}</li>")
             continue
         if in_list:
-            body.append("</ul>")
+            body.append(f"</{in_list}>")
             in_list = False
         if line.startswith("# "):
             body.append(f"<h1>{esc[2:]}</h1>")
@@ -2147,7 +2153,7 @@ def md_to_html(md: str, title: str) -> str:
     if in_table:
         body.append("</table>")
     if in_list:
-        body.append("</ul>")
+        body.append(f"</{in_list}>")
     css = ("body{font-family:-apple-system,Helvetica,Arial,sans-serif;color:#1d1d1f;margin:40px;font-size:12px;"
            "background:#fff}h1{font-size:20px}h2{font-size:15px;margin-top:22px;border-bottom:1px solid #ddd}"
            "table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #eee;padding:5px;text-align:left}"

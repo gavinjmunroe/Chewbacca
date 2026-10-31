@@ -29,6 +29,17 @@ h = op.md_to_html("# T\n\n- run `recur` **now** <x>\n\nSee `scars` here", "T")
 assert "<code>recur</code>" in h and "<b>now</b>" in h and "<code>scars</code>" in h, h
 assert "`" not in h and "**" not in h and "&lt;x&gt;" in h, h
 PY
+python3 - "$ROOT" <<'PY2' && echo "ok    numbered steps render as an ordered list" || { echo "FAIL  numbered steps lost their numbers"; fail=1; }
+import sys; sys.path.insert(0, sys.argv[1] + "/tools")
+import gtme_operator as op
+h = op.md_to_html("1. grab\n2. build\n\n- a\n- b\n3. after", "T")
+assert "<ol><li>grab</li><li>build</li></ol>" in h, h
+assert "<ul><li>a</li><li>b</li></ul><ol><li>after</li></ol>" in h, h
+PY2
+printf 'Grab what u need w ur partner.\n' > "$T/slang.md"
+printf 'Grab what you need with your partner. Use it.\n' > "$T/clean.md"
+python3 "$ROOT/bin/chewbacca-pdf" "$T/slang.md" --out "$T/out" | grep -q "chat shorthand (u, ur, w)" && echo "ok    chat shorthand in a PDF source is named" || { echo "FAIL  chat shorthand not flagged"; fail=1; }
+python3 "$ROOT/bin/chewbacca-pdf" "$T/clean.md" --out "$T/out" | grep -q "chat shorthand" && { echo "FAIL  full English flagged"; fail=1; } || echo "ok    full English is not flagged"
 G="$ROOT/.claude/hooks/use-the-kit-guard.sh"
 g() { jq -n --arg c "$1" '{tool_input:{command:$c}}' | bash "$G" >/dev/null 2>&1; echo $?; }
 [ "$(g 'chrome --headless=new --print-to-pdf=out.pdf file.html')" = 2 ] && echo "ok    a hand-rolled Chrome print is pointed at chewbacca pdf" || { echo "FAIL  hand-rolled print not refused"; fail=1; }

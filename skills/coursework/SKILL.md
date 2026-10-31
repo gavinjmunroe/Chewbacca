@@ -240,6 +240,25 @@ reopen Chrome. A real sign-out opens nothing: say `BLOCKED: Brightspace needs
 a sign-in in Chrome` and they do it when they choose. Never open a tab to
 "renew" anything.
 
+## Did it get submitted: the receipt email answers when the API can't
+
+When `brightspace` 403s and the session won't renew, search the student's USC
+Gmail for `from:brightspace@usc.edu "Submission receipt"`. Every dropbox upload
+sends one naming the folder, the file and the time. No receipt for a folder
+means it wasn't submitted through Brightspace, so say that plainly and name the
+deadline. On 2026-10-30 that one search answered "did we submit our slides?"
+in seconds while the API stayed blocked.
+
+## A lab or study sheet for someone who knows nothing
+
+Open with the big picture in plain words (what the lab is for, the 2 or 3 ideas
+every step uses), then give each part one line on what they're doing and why
+before its steps. Write it in full English, never chat shorthand: a sheet
+written with u, ur and w came back on 2026-10-30 as "MAKE IT ENGLISH", and
+`chewbacca pdf` now names any shorthand it finds. Post-lab answers copy the
+worksheet's layout: every question word for word with its points, the answer
+under it.
+
 ## A homework list for a performance class carries the material
 
 A list of what to practice or record (guitar videos, a recital set) is used

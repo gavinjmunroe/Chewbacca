@@ -501,20 +501,45 @@ JXA_PDF = '''function run(argv) {
 }'''
 
 
+# 35 real course decks and docs, 555 slide and document parts, measured
+# 2026-10-31: the biggest was 228 KB uncompressed. 5 MB is 20 times that, so a
+# part over it is a damaged file or a zip bomb, not a lecture.
+OOXML_PART_MAX = 5_000_000
+OOXML_OPEN = re.compile(r"<(?:a|w):p[ >]")
+OOXML_CLOSE = re.compile(r"</(?:a|w):p>")
+
+
+def ooxml_paragraphs(xml):
+    """Each <a:p>...</a:p> (or w:p) in order, in one pass. A lazy regex over
+    the whole part rescanned to the end from every unclosed paragraph tag, so
+    a hostile file could hang `usc read` (security review, 2026-10-28)."""
+    i = 0
+    while True:
+        start = OOXML_OPEN.search(xml, i)
+        if not start:
+            return
+        end = OOXML_CLOSE.search(xml, start.end())
+        if not end:
+            return
+        yield xml[start.start():end.end()]
+        i = end.end()
+
+
 def ooxml_parts(path, prefix, tag):
     import zipfile
+    # [^<>] not [^>]: attributes never hold a raw "<", and stopping there keeps
+    # a run of unclosed <a:t tags from rescanning the paragraph each time.
+    run = re.compile(rf"<{tag}(?: [^<>]*)?>([^<]*)</{tag}>")
     with zipfile.ZipFile(path) as z:
         names = [n for n in z.namelist() if re.fullmatch(prefix + r"\d*\.xml", n)]
         names.sort(key=lambda n: int(re.search(r"(\d+)\.xml$", n).group(1)) if re.search(r"\d+\.xml$", n) else 0)
         for n in names:
-            # Guessed, never measured: the biggest real slide XML seen was well
-            # under 1 MB, so a 20 MB part is a damaged file or a zip bomb.
-            if z.getinfo(n).file_size > 20_000_000:
-                raise ValueError(f"{n} is over 20 MB uncompressed")
+            if z.getinfo(n).file_size > OOXML_PART_MAX:
+                raise ValueError(f"{n} is over {OOXML_PART_MAX // 1_000_000} MB uncompressed")
             xml = z.read(n).decode("utf8", "replace")
             paras = []
-            for p in re.findall(r"<(?:a|w):p[ >].*?</(?:a|w):p>", xml, re.S):
-                text = "".join(re.findall(rf"<{tag}(?: [^>]*)?>([^<]*)</{tag}>", p))
+            for p in ooxml_paragraphs(xml):
+                text = "".join(run.findall(p))
                 if text.strip():
                     paras.append(unescape(text))
             yield paras

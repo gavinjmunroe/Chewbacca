@@ -894,8 +894,10 @@ function cmdShow(args) {
   if (args.includes("--json")) return say(JSON.stringify(out, null, 2));
   for (const c of out) {
     say(String(c.code));
+    // `days: Tue`, one bare word, is a string with no join(), and `show` died
+    // with a TypeError on a meeting `today` and `week` read fine (2026-10-31).
     for (const m of normalizeMeets(c.meets))
-      say(`  meets   ${(m.days || []).join("/")} ${m.start || "?"}-${m.end || "?"} ${m.room || ""}`.trimEnd());
+      say(`  meets   ${[].concat(m.days || []).join("/")} ${m.start || "?"}-${m.end || "?"} ${m.room || ""}`.trimEnd());
     const inst = c.instructor && typeof c.instructor === "object" ? c.instructor : null;
     if (inst && inst.office_hours) say(`  office hours  ${inst.office_hours}`);
     if (c.absences) say(`  absences allowed  ${c.absences.allowed == null ? "unrecorded" : c.absences.allowed}`);

@@ -492,3 +492,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_linkedin_match_is_a_guess: an agent-matched LinkedIn URL is a guess; Junto had 9 'picked' + 4 headlines naming another firm (10/30), dough plan holds both for a person to check
 - project_hall_career_tools: Tyler Larsen's 4 recruiting tools are in calebnewtonusc/hall career/ (subtree, history kept, 10/30); their Actions crons only run in his repos
 - feedback_granola_transcripts_page: Granola MCP pages transcripts (truncated/next_offset) inside {"meetings":[...]}; the Andrew call landed cut at 37k of 60k w no summary (10/30). granola-import reads every page, repair refetches; never page in readers
+- reference_ff_logo_files: current FF logo is the 10/18 back-to-back F mark in site Wordmark.tsx; exports in ~/Downloads/Firm Foundation logo/, the 10/9 AI Logo.png is stale

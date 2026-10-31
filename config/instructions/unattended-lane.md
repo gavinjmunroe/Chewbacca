@@ -32,3 +32,16 @@ decision inbox never shows it, and the jobs runner lists it at the end of your
 job's log. A BLOCKED click carries its how-to in brackets instead. Before you
 end, run `bin/decision-inbox check <your report>` from the Chewbacca checkout
 (it isn't on PATH) and fix every line it prints.
+
+## "Build everything you can without me"
+
+That ask means his ventures, not only school: dough, anchored, Chewbacca, kyber
+and hall, plus whatever is open in the work ledger. On 2026-10-31 a first pass
+spent twenty minutes on coursework and he wrote "Bro I meant lik in general
+dough/anchored/chewbs/kyber/hall". Start one background worker per repo, each
+in its own fresh clone or worktree (never a shared checkout), with the same
+brief: build only what needs no call from him (names, pricing, direction stay
+his), land on main, verify live, and report skipped items as "Ur call" lines
+with a take. The desktop host runs 4 workers at once, so queue the fifth and
+start it when one finishes. A "don't send texts tonight" from him holds for
+that night only.

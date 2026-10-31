@@ -5,6 +5,8 @@
                                                print one link (--open opens it in the browser);
                                                after it is approved, import
     granola-import run                         import (needs a saved connection)
+    granola-import repair [--offline]          rebuild meetings imported truncated
+                                               or empty, fetching cut transcripts again
     granola-import status [--json]             connected, imported, last run
 
 Granola keeps its local copy encrypted (granola.db and cache-v6.json.enc,
@@ -62,6 +64,16 @@ PAGE = 50
 # call keeps one answer small. Guessed, never measured against Granola.
 BATCH = 10
 HTTP_TIMEOUT_S = 60
+# get_meeting_transcript answers 40,000 characters a page by default and caps
+# max_chars at 80,000 (its own schema, tools.json 2026-10-30). Asking for the
+# cap halves the pages; the Andrew Laffoon call (60,064 chars) came in cut at
+# 37,474 because only the first page was ever read.
+TRANSCRIPT_MAX_CHARS = 80000
+# A two-hour call is about 120k characters, so 2 pages at the cap; 40 is the
+# stop for a next_offset that never ends, not a length anyone has seen.
+TRANSCRIPT_MAX_PAGES = 40
+# Granola's transcript_unavailable reasons that retrying will never change.
+FINAL_GAPS = {"no_transcript", "transcript_deleted"}
 LIST_TOOLS = ["list_meetings"]
 DETAIL_TOOLS = ["get_meetings", "get_meeting_transcript"]
 UA = "chewbacca-granola-import/1"
@@ -352,13 +364,33 @@ def records(value, out: dict) -> dict:
     elif isinstance(value, str):
         # Granola may answer in tagged text rather than JSON:
         # <meeting id="..." title="..." date="...">. Read those too.
-        for m in re.finditer(r"<meeting\b([^>]*)>", value):
+        tags = list(re.finditer(r"<meeting\b([^>]*)>", value))
+        for n, m in enumerate(tags):
             # Attribute values arrive XML-escaped: "Caleb&apos;s" was drawn
             # on the glass as typed on 2026-10-11.
             attrs = {k: html.unescape(v) for k, v in re.findall(r'(\w+)="([^"]*)"', m.group(1))}
-            if attrs.get("id") and attrs.get("title"):
-                out.setdefault(attrs["id"], attrs)
+            if not (attrs.get("id") and attrs.get("title")):
+                continue
+            # get_meetings puts the notes inside the tag (raw/meeting-*.json,
+            # 2026-10-30): <summary>markdown</summary> and a
+            # <known_participants> line per person. Reading only the
+            # attributes left every imported meeting with summary None.
+            stop = tags[n + 1].start() if n + 1 < len(tags) else len(value)
+            body = value[m.end():stop].split("</meeting>", 1)[0]
+            if (s := re.search(r"<summary>(.*?)</summary>", body, re.S)) and s.group(1).strip():
+                attrs["summary"] = s.group(1).strip()
+            if (k := re.search(r"<known_participants>(.*?)</known_participants>", body, re.S)):
+                attrs["attendees"] = [participant(line) for line in k.group(1).splitlines() if line.strip()]
+            out.setdefault(attrs["id"], attrs)
     return out
+
+
+def participant(line: str) -> dict:
+    """'Caleb Newton (note creator) from Usc (calebnew@usc.edu)' -> name, email."""
+    line = html.unescape(line.strip())
+    email = (re.findall(r"\(([^()\s]+@[^()\s]+)\)", line) or [""])[-1]
+    name = re.split(r" \(| from ", line, maxsplit=1)[0].strip()
+    return {"name": name, "email": email}
 
 
 def next_cursor(payloads: list):
@@ -419,6 +451,13 @@ def find(value, keys: list[str]):
             hit = find(v, keys)
             if hit is not None:
                 return hit
+    # Granola wraps a transcript answer as {"meetings": [{... "transcript"}]};
+    # stopping at lists found nothing in it, so 44 of 119 imports had no lines.
+    elif isinstance(value, list):
+        for v in value:
+            hit = find(v, keys)
+            if hit is not None:
+                return hit
     return None
 
 
@@ -432,11 +471,22 @@ def as_text(value) -> str:
     return ""
 
 
+# One block of Granola's transcript text: "System audio: ..." or
+# "Microphone: ...", "Speaker A: ..." for imports, and "[m:ss] " in front when
+# include_timestamps was asked for (get_meeting_transcript's schema).
+BLOCK = re.compile(r"(?:\[(?:(\d+):)?(\d+):(\d{2})\]\s*)?(?:([^:\n\[\]]{1,40}):\s+)?(.*)", re.S)
+
+
 def transcript_lines(value, start: datetime | None) -> list[dict]:
     lines = []
     if isinstance(value, str):
-        chunks = [c for c in re.split(r"\n+", value) if c.strip()]
-        items = [{"text": c} for c in chunks]
+        items = []
+        for chunk in (c.strip() for c in re.split(r"\n+", value)):
+            if not chunk:
+                continue
+            h, mi, s, who, text = BLOCK.fullmatch(chunk).groups()
+            offset = (int(h or 0) * 3600 + int(mi) * 60 + int(s)) if s else None
+            items.append({"speaker": who or "", "text": text, "offset_s": offset})
     else:
         items = value if isinstance(value, list) else []
     for item in items:
@@ -447,13 +497,83 @@ def transcript_lines(value, start: datetime | None) -> list[dict]:
             continue
         who = MC.clean(item.get("speaker") or item.get("source") or "", 40)
         at = MC.parse_iso(item.get("start_timestamp") or item.get("start_time") or item.get("timestamp"))
-        at = at or start
+        seconds = item.get("offset_s") or 0
+        if at is None and start is not None:
+            at = start + timedelta(seconds=seconds)
         lines.append({"at": MC.iso(at) if at else "", "clock": at.astimezone().strftime("%-I:%M:%S %p") if at else "",
-                      "seconds": 0, "text": (f"{who}: " if who else "") + text, "source": "granola"})
+                      "seconds": seconds, "text": (f"{who}: " if who else "") + text, "source": "granola"})
     return lines
 
 
-def to_meeting(gid: str, record: dict, detail: list, transcript: list, used: set[str]) -> dict:
+def transcript_holder(payloads):
+    """The dict whose "transcript" is Granola's text, wherever it is nested."""
+    if isinstance(payloads, list):
+        return next((h for h in map(transcript_holder, payloads) if h is not None), None)
+    if isinstance(payloads, dict):
+        if "transcript" in payloads and (isinstance(payloads["transcript"], str) or "truncated" in payloads
+                                         or "transcript_unavailable" in payloads):
+            return payloads
+        return transcript_holder(list(payloads.values()))
+    return None
+
+
+def transcript_state(payloads: list) -> str:
+    """complete, truncated, final (Granola says it will never have one) or missing."""
+    holder = transcript_holder(payloads)
+    if holder is None:
+        # A shape without a text transcript (segment lists) is whatever it is.
+        return "complete" if find(payloads, ["transcript", "segments", "utterances", "sentences"]) else "missing"
+    if holder.get("truncated"):
+        return "truncated"
+    if isinstance(holder.get("transcript"), str) and holder["transcript"].strip():
+        return "complete"
+    gap = holder.get("transcript_unavailable")
+    reason = gap.get("reason") if isinstance(gap, dict) else gap
+    return "final" if reason in FINAL_GAPS else "missing"
+
+
+def fetch_transcript(mcp, tool: dict, gid: str) -> list:
+    """Every page of one meeting's transcript, joined into the first answer.
+
+    Granola cuts at an utterance boundary and reports truncated, total_chars
+    and next_offset; offset is a character position in the whole transcript,
+    so each page lands at text[:offset]. A page that fails leaves truncated
+    true, which repair reads as fetch-again."""
+    base = id_arguments(tool, [gid])
+    if not base:
+        return []
+    first = dict(base[0])
+    if "max_chars" in props(tool):
+        first["max_chars"] = TRANSCRIPT_MAX_CHARS
+    payloads = mcp.call(tool, first)
+    holder = transcript_holder(payloads)
+    if holder is None or "offset" not in props(tool):
+        return payloads
+    text, pages, last = holder.get("transcript") or "", 1, int(holder.get("offset") or 0)
+    while holder.get("truncated") and pages < TRANSCRIPT_MAX_PAGES:
+        nxt = holder.get("next_offset")
+        if not isinstance(nxt, int) or nxt <= last:
+            break
+        try:
+            page = transcript_holder(mcp.call(tool, {**first, "offset": nxt}))
+        except RuntimeError as err:
+            log(f"{tool['name']} {gid} at offset {nxt}: {err}")
+            break
+        if page is None or not isinstance(page.get("transcript"), str):
+            break
+        text, last, pages = text[:nxt] + page["transcript"], nxt, pages + 1
+        holder.update({"transcript": text, "truncated": bool(page.get("truncated")),
+                       "next_offset": page.get("next_offset")})
+    holder["pages_read"] = pages
+    if not holder.get("truncated"):
+        holder.pop("truncation_notice", None)
+        holder["next_offset"] = None
+    return payloads
+
+
+def to_meeting(gid: str, record: dict, detail: list, transcript: list, used: set[str],
+               rid: str | None = None) -> dict:
+    """rid given: rebuild that file's meeting in place (repair)."""
     merged = dict(record)
     for p in detail:
         hit = records(p, {}).get(gid)
@@ -463,10 +583,11 @@ def to_meeting(gid: str, record: dict, detail: list, transcript: list, used: set
     end = parse_when(find(merged, ["end", "end_time", "ended_at"]))
     start = start or datetime.now(timezone.utc)
     stamp = start.astimezone()
-    rid = f"rc-{stamp.strftime('%Y%m%d-%H%M%S')}"
-    while rid in used or ((MC.meetings_dir(home()) / f"{rid}.json").exists() and rid not in used):
-        stamp += timedelta(seconds=1)
+    if rid is None:
         rid = f"rc-{stamp.strftime('%Y%m%d-%H%M%S')}"
+        while rid in used or ((MC.meetings_dir(home()) / f"{rid}.json").exists() and rid not in used):
+            stamp += timedelta(seconds=1)
+            rid = f"rc-{stamp.strftime('%Y%m%d-%H%M%S')}"
     used.add(rid)
     notes = html.unescape(as_text(find(merged, ["summary", "enhanced_notes", "enhancedNotes", "notes", "ai_notes",
                                   "notes_markdown", "content"])))
@@ -527,13 +648,71 @@ def repair(seen: dict, imported: dict) -> int:
     return fixed
 
 
+def raw_meeting(gid: str) -> Path:
+    return gdir() / "raw" / f"meeting-{re.sub(r'[^A-Za-z0-9_-]', '_', gid)[:80]}.json"
+
+
+def fetch_meeting(mcp, tools: list[dict], gid: str) -> tuple[list, list]:
+    getter, transcriber = tool_named(tools, ["get_meetings"]), tool_named(tools, ["get_meeting_transcript"])
+    detail: list = []
+    for arguments in (id_arguments(getter, [gid]) if getter else []):
+        try:
+            detail.extend(mcp.call(getter, arguments))
+        except RuntimeError as err:
+            log(f"{getter['name']} {gid}: {err}")
+    transcript: list = []
+    if transcriber:
+        try:
+            transcript = fetch_transcript(mcp, transcriber, gid)
+        except RuntimeError as err:
+            log(f"{transcriber['name']} {gid}: {err}")
+    return detail, transcript
+
+
+def heal(imported: dict, mcp=None, tools: list[dict] | None = None, refetch: tuple[str, ...] = ("truncated",)) -> int:
+    """Rebuild meetings imported truncated or empty, keeping their ids.
+
+    Every meeting is reparsed from its saved raw answer (the first parser left
+    44 of 119 with no lines and all 119 with no summary). With an MCP, a
+    meeting whose saved transcript is in a state named in refetch is asked
+    for again, every page, before reparsing. Only lines, summary and
+    participants change, and only when the rebuild has them."""
+    fixed = 0
+    for gid, rid in imported.items():
+        path, rawf = MC.meetings_dir(home()) / f"{rid}.json", raw_meeting(gid)
+        raw, body = MC.load(rawf) or {}, MC.load(path)
+        if not raw or body is None:
+            continue
+        if mcp is not None and transcript_state(raw.get("transcript") or []) in refetch:
+            detail, transcript = fetch_meeting(mcp, tools or [], gid)
+            raw = {**raw, "detail": detail or raw.get("detail") or [], "transcript": transcript or raw.get("transcript")
+                   or []}
+            MC.write_private(rawf, raw)
+        rebuilt = to_meeting(gid, raw.get("list") or {}, raw.get("detail") or [], raw.get("transcript") or [],
+                             set(), rid=rid)
+        want = {k: rebuilt[k] for k in ("lines", "summary", "participants") if rebuilt[k]}
+        if any(body.get(k) != v for k, v in want.items()):
+            body.update(want, updated_at=MC.iso(datetime.now(timezone.utc)))
+            MC.write_private(path, body)
+            fixed += 1
+    return fixed
+
+
 def repair_saved(args) -> int:
-    """Repair from the saved raw list, without asking Granola again."""
+    """Repair from the saved raw answers. --offline never asks Granola;
+    otherwise truncated transcripts, and ones Granola had not answered for,
+    are fetched again in full."""
     seen: dict = {}
     for f in sorted((gdir() / "raw").glob("list-*.json")):
         records((MC.load(f) or {}).get("payloads") or [], seen)
-    fixed = repair(seen, load("imported.json") or {})
-    log(f"repaired {fixed} imported meetings from {len(seen)} listed")
+    imported = load("imported.json") or {}
+    fixed = repair(seen, imported)
+    mcp, tools = None, None
+    if not getattr(args, "offline", False):
+        mcp = Mcp()
+        tools = mcp.open()
+    healed = heal(imported, mcp, tools, refetch=("truncated", "missing"))
+    log(f"repaired {fixed} dates or titles and rebuilt {healed} transcripts or summaries of {len(imported)} imported")
     return 0
 
 
@@ -561,22 +740,16 @@ def run(args) -> int:
     imported = load("imported.json") or {}
     if (fixed := repair(seen, imported)):
         log(f"repaired the date or title of {fixed} meetings imported before")
+    if (healed := heal(imported, mcp, tools)):
+        log(f"rebuilt {healed} meetings imported truncated or empty")
     todo = [gid for gid in seen if gid not in imported]
     log(f"Granola lists {len(seen)} meetings; {len(todo)} are new")
-    getter, transcriber = tool_named(tools, ["get_meetings"]), tool_named(tools, ["get_meeting_transcript"])
     used: set[str] = set(imported.values())
     MC.private_dir(MC.meetings_dir(home()))
     done = 0
     for gid in todo:
-        detail, transcript = [], []
-        for tool, bucket in ((getter, detail), (transcriber, transcript)):
-            for arguments in (id_arguments(tool, [gid]) if tool else []):
-                try:
-                    bucket.extend(mcp.call(tool, arguments))
-                except RuntimeError as err:
-                    log(f"{tool['name']} {gid}: {err}")
-        MC.write_private(raw / f"meeting-{re.sub(r'[^A-Za-z0-9_-]', '_', gid)[:80]}.json",
-                         {"list": seen[gid], "detail": detail, "transcript": transcript})
+        detail, transcript = fetch_meeting(mcp, tools, gid)
+        MC.write_private(raw_meeting(gid), {"list": seen[gid], "detail": detail, "transcript": transcript})
         meeting = to_meeting(gid, seen[gid], detail, transcript, used)
         MC.write_private(MC.meetings_dir(home()) / f"{meeting['id']}.json", meeting)
         imported[gid] = meeting["id"]
@@ -608,7 +781,8 @@ def main(argv=None) -> int:
     c.add_argument("--wait-hours", type=float, default=24.0)
     c.add_argument("--open", action="store_true", help="open the link in the browser")
     sub.add_parser("run")
-    sub.add_parser("repair")
+    r = sub.add_parser("repair")
+    r.add_argument("--offline", action="store_true", help="reparse saved answers only, never ask Granola")
     s = sub.add_parser("status")
     s.add_argument("--json", action="store_true")
     a = p.parse_args(argv)

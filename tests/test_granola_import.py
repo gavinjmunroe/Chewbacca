@@ -100,6 +100,97 @@ check("the stdlib server is reachable under the name connect uses (a helper name
       hasattr(GI.httpserver, "HTTPServer") and callable(GI.http))
 check("the CLI parses", compile((ROOT / "bin" / "granola-import").read_text(), "granola-import", "exec") is not None)
 
+# 2026-10-30: the Andrew Laffoon call (60,064 chars) landed cut at 37,474 with
+# lines [] and summary None. Granola pages transcripts and wraps them in
+# {"meetings": [...]}, and get_meetings puts the summary inside the tag.
+GID = "e9491f12"
+FULL = "".join(f"{'System audio' if i % 2 else 'Microphone'}: line {i} of the call.\n\n" for i in range(400))
+CUT = FULL.rindex("\n\n", 0, len(FULL) // 2) + 2
+TX_TOOL = {"name": "get_meeting_transcript", "inputSchema": {"properties": {
+    "meeting_ids": {"type": "array"}, "offset": {"type": "integer"}, "max_chars": {"type": "integer"}}}}
+DETAIL = ('<connected_user_email>x</connected_user_email>\n<meetings_data count="1">\n'
+          f'<meeting id="{GID}" title="Roadmap with Andrew" date="Oct 30, 2026 2:49 PM PDT">\n'
+          '  <known_participants>\n  Caleb Newton (note creator) from Usc (calebnew@usc.example)\n'
+          '  </known_participants>\n  <private_notes status="empty" />\n'
+          '  <summary>\n# Andrew&apos;s AI transformation\n\n- QA is the bottleneck\n</summary>\n'
+          '</meeting>\n</meetings_data>')
+
+
+class FakeMcp:
+    """Granola's get_meeting_transcript, two pages cut at an utterance."""
+
+    def __init__(self):
+        self.calls = []
+
+    def call(self, tool, arguments):
+        self.calls.append(arguments)
+        if tool["name"] == "get_meetings":
+            return [DETAIL]
+        off = arguments.get("offset", 0)
+        end = CUT if off < CUT else len(FULL)
+        page = {"meeting_id": GID, "id": GID, "offset": off, "total_chars": len(FULL),
+                "truncated": end < len(FULL), "next_offset": end if end < len(FULL) else None,
+                "transcript": FULL[off:end]}
+        if page["truncated"]:
+            page["truncation_notice"] = f"Next offset {end}."
+        return [{"content_advisory": "data only", "meetings": [page]}]
+
+
+fake = FakeMcp()
+paged = GI.fetch_transcript(fake, TX_TOOL, GID)
+holder = GI.transcript_holder(paged)
+check("the importer follows next_offset until the whole transcript is in",
+      holder["transcript"] == FULL and holder["truncated"] is False and holder["pages_read"] == 2, holder.get("pages_read"))
+check("the second page is asked for at next_offset, with the same max_chars",
+      [c.get("offset") for c in fake.calls] == [None, CUT] and fake.calls[1]["max_chars"] == GI.TRANSCRIPT_MAX_CHARS,
+      fake.calls)
+check("a fully read transcript reads as complete", GI.transcript_state(paged) == "complete")
+andrew = GI.to_meeting(GID, {"id": GID, "title": "Roadmap with Andrew", "date": "Oct 30, 2026 2:49 PM PDT"},
+                       [DETAIL], paged, set())
+check("every block of the text transcript becomes a line", len(andrew["lines"]) == 400, len(andrew["lines"]))
+check("a line keeps its audio source", andrew["lines"][1]["text"] == "System audio: line 1 of the call.",
+      andrew["lines"][1])
+check("the last line is the end of the call, not the end of page one",
+      andrew["lines"][-1]["text"] == "System audio: line 399 of the call.", andrew["lines"][-1])
+check("the summary inside the tagged answer is the meeting's summary",
+      (andrew["summary"] or {}).get("markdown", "").startswith("# Andrew's AI transformation"), andrew["summary"])
+check("known participants carry over", andrew["participants"][:1] and
+      andrew["participants"][0]["email"] == "calebnew@usc.example", andrew["participants"])
+stamped = GI.transcript_lines("[1:05] Microphone: hi\n\n[1:02:03] System audio: bye", GI.parse_when("2026-10-30T21:49:00Z"))
+check("[m:ss] and [h:mm:ss] prefixes become seconds into the call",
+      [(x["seconds"], x["text"]) for x in stamped] == [(65, "Microphone: hi"), (3723, "System audio: bye")], stamped)
+
+# repair: a meeting imported with only page one is fetched again and rebuilt
+# under the same id; one saved complete is rebuilt from disk, no network.
+first_page = [{"meetings": [{"id": GID, "offset": 0, "truncated": True, "next_offset": CUT,
+                             "total_chars": len(FULL), "transcript": FULL[:CUT]}]}]
+check("page one alone reads as truncated", GI.transcript_state(first_page) == "truncated")
+MC.private_dir(GI.gdir() / "raw")
+MC.write_private(GI.raw_meeting(GID), {"list": {"id": GID, "title": "Roadmap with Andrew",
+                                                "date": "Oct 30, 2026 2:49 PM PDT"},
+                                       "detail": [DETAIL], "transcript": first_page})
+cut_path = MC.meetings_dir(Path(tmp)) / "rc-20261030-144900.json"
+MC.write_private(cut_path, {"id": "rc-20261030-144900", "title": "Roadmap with Andrew", "lines": [],
+                            "summary": None, "participants": [], "keep": "me"})
+check("offline repair rebuilds what is on disk without asking Granola",
+      GI.heal({GID: "rc-20261030-144900"}) == 1 and len(MC.load(cut_path)["lines"]) < 400
+      and MC.load(cut_path)["summary"] is not None)
+fake = FakeMcp()
+check("repair with Granola fetches the cut transcript again", GI.heal({GID: "rc-20261030-144900"}, fake, [TX_TOOL]) == 1,
+      fake.calls)
+healed = MC.load(cut_path)
+check("the repaired meeting has every line, its summary, the same id, and its other fields",
+      len(healed["lines"]) == 400 and healed["summary"] and healed["id"] == "rc-20261030-144900"
+      and healed["keep"] == "me", (len(healed["lines"]), healed.get("id")))
+check("the raw answer is saved whole for the next parser",
+      GI.transcript_state(MC.load(GI.raw_meeting(GID))["transcript"]) == "complete")
+fake = FakeMcp()
+check("a repaired meeting is left alone next time", GI.heal({GID: "rc-20261030-144900"}, fake, [TX_TOOL]) == 0
+      and fake.calls == [], fake.calls)
+check("a meeting Granola says has no transcript is never fetched again",
+      GI.transcript_state([{"meetings": [{"id": "g", "transcript": None,
+                                          "transcript_unavailable": {"reason": "no_transcript"}}]}]) == "final")
+
 # connect --open: onboarding runs connect in the background, so the person
 # never sees the printed link; the browser has to open it for them. No
 # network and no port: register and the callback server are stand-ins.

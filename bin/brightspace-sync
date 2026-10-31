@@ -122,7 +122,15 @@ OPENER = urllib.request.build_opener(SameHostCookies)
 
 class FixtureResponse:
     def __init__(self, body, url):
-        self._body = body.encode() if isinstance(body, str) else json.dumps(body).encode()
+        # {"base64": ...} is a file's exact bytes. A plain string went through
+        # .encode(), so a test could never serve a real pptx or PDF: any byte
+        # over 0x7f came back re-encoded and the download was corrupt (USC
+        # week walk, 2026-10-13, item 10).
+        if isinstance(body, dict) and set(body) == {"base64"}:
+            import base64
+            self._body = base64.b64decode(body["base64"])
+        else:
+            self._body = body.encode() if isinstance(body, str) else json.dumps(body).encode()
         self._url = url
 
     def read(self):

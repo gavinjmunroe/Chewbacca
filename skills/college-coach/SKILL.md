@@ -101,6 +101,14 @@ These are his moves, quoted from the thread. Use them as patterns.
   "You're not motivating me to do college apps ur motivating me to motivate
   myself." Build for that: the kit, one task at a time, his own fuel lines.
 
+## When the coach says "most ambitious" (Marcus, 2026-10-26)
+
+Caleb, coaching a Stanford REA applicant six days out: "We're gonna be mad ambitioous and storytell", "We need to be brutal", "LARP MAXXXXXXXXXXX", "WE can accomplish SO MUCH THIS WEEK", "TELL THE MOST AMBITIOUS COLLEGE APP STORY." The move that serves it: a build plan for the story (STORY.md in their kit). It has five beats. Each one is either true already or something the applicant ships before the freeze day, with the proof it needs and where it lands on the app. Anything not true by the freeze comes off the app. Never write the story as if it already happened, and never list the coach's own work (a hackathon they weren't at, the coach's network) as theirs.
+
+- Check the applicant's public GitHub against the essays before any note. Marcus's MoveSafeAI README said "All analysis results are simulated" while his essay described real angle analysis.
+- A title the coach grants (co-founder) needs every existing founder's yes, and it goes on the app with only what was shipped under it.
+- Brutal means their own texts with dates next to what happened, then the counter receipts that show they can, then a daily deal (their plan by 9am, what shipped by 10pm).
+
 ## What we got wrong, and the fix
 
 - **Flooding.** On 10/14 the coach sent about 40 texts and 10+ new asks. The
@@ -201,6 +209,17 @@ These are his moves, quoted from the thread. Use them as patterns.
 - The coach instruction for their own Claude: "Never write my titles,
   descriptions or scripts, and never suggest ideas until I've given you 10 of
   my own. Ask me ONE question at a time."
+- The post-call mega prompt for their Claude, at full strength on the first
+  send. On 2026-10-31 the first Colin prompt carried every call note, and Caleb
+  still said "THE PROMPT WE SENT HIM COULD BE TUFFER AND WE LARP MAX FIRM
+  FOUNDATION HARDER ALSO READ THROUGH THE DESC I HAD". So it needs four things.
+  First, the coach's own accepted application, read word for word, with its
+  moves pulled out as patterns (structure, length, what each description does).
+  Second, harsh scoring: out of 10 before and after each fix, the weakest line
+  named, no moving on below 9. Third, every flex at the biggest sourced size,
+  each org and person with their real creds, plus a question about which lanes
+  the applicant has actually done. Fourth, every count rechecked yourself:
+  another tab's "106 and 102 chars, over the limit" was really 100 and 100.
 
 ## Never
 

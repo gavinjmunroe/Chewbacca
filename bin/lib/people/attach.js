@@ -33,11 +33,26 @@ function fileInfo(raw) {
     return { err: `No file at ${p}. Nothing was sent.` };
   }
   if (!st.isFile()) return { err: `${p} is not a file. Nothing was sent.` };
-  const sha = crypto
-    .createHash("sha256")
-    .update(fs.readFileSync(p))
-    .digest("hex");
-  return { path: p, name: path.basename(p), size: st.size, sha };
+  // The bytes are read once, hashed, and frozen in a private 0700 folder. Every
+  // later step sends that snapshot, so a file swapped at the original path
+  // between the press and the send can't go out (security review, 10/31).
+  const bytes = fs.readFileSync(p);
+  const sha = sha256(bytes);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "people-send-"));
+  fs.chmodSync(dir, 0o700);
+  const snap = path.join(dir, path.basename(p));
+  fs.writeFileSync(snap, bytes, { mode: 0o600, flag: "wx" });
+  return {
+    path: snap,
+    original: p,
+    name: path.basename(p),
+    size: bytes.length,
+    sha,
+  };
+}
+
+function sha256(buf) {
+  return crypto.createHash("sha256").update(buf).digest("hex");
 }
 
 // What the approval and the dry run are bound to: the text plus one line
@@ -55,7 +70,11 @@ function stage(file) {
   const dir = path.join(os.homedir(), "Pictures", "Chewbacca Sends");
   fs.mkdirSync(dir, { recursive: true });
   const dest = path.join(dir, `${Date.now()}-${file.name}`);
-  fs.copyFileSync(file.path, dest);
+  fs.copyFileSync(file.path, dest, fs.constants.COPYFILE_EXCL);
+  if (sha256(fs.readFileSync(dest)) !== file.sha) {
+    fs.rmSync(dest, { force: true });
+    throw new Error("the staged copy doesn't match the approved file");
+  }
   return dest;
 }
 

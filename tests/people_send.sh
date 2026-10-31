@@ -155,6 +155,19 @@ out="$("$P" send "sendy solo" "here it is" --via imessage --file "$DOC" --dry-ru
 grep -q "attach rec.pdf" <<<"$out"          || fail "the dry run did not show the attachment"
 SHA="$(shasum -a 256 "$DOC" | cut -c1-16)"
 grep -q "sha256:$SHA" <<<"$out"             || fail "the approval binding did not carry the file digest"
+# The approved bytes are frozen at check time: a file swapped at the original
+# path afterwards must not be what stages (security review, 10/31).
+out="$(node -e '
+  const fs = require("fs"), a = require(process.argv[1]);
+  const f = a.fileInfo(process.argv[2]);
+  fs.writeFileSync(process.argv[2], "swapped");
+  const snap = fs.readFileSync(f.path, "utf8");
+  fs.writeFileSync(f.path, "tampered");
+  let staged; try { a.stage(f); staged = "staged-tampered"; } catch { staged = "refused"; }
+  fs.writeFileSync(process.argv[2], "pdf bytes");
+  console.log(snap === "pdf bytes" && f.path !== process.argv[2] ? "frozen" : "live", staged);
+' "$(dirname "$P")/lib/people/attach.js" "$DOC")"
+[ "$out" = "frozen refused" ] || fail "the attachment was not frozen at approval time: $out"
 out="$("$P" send "sendy solo" --via imessage --file "$DOC" --dry-run 2>&1)" || fail "a file-only send was refused"
 grep -q "attach rec.pdf" <<<"$out"          || fail "a file-only dry run did not show the file"
 out="$("$P" send "mail sagar" "x" --via email --file "$DOC" --dry-run 2>&1)" && fail "a file over email was accepted"

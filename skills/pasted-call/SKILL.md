@@ -29,6 +29,13 @@ Both fail the same way, by reading the transcript alone and stopping there.
   `people texts`, the ledger or the brain save is missing.
 - Never hand back a flat list. A dozen rows in call order is a pile, not a plan.
 
+- Never work a transcript another tab already has. When he says he pasted
+  it in a different tab too, or `tabs context` shows another tab whose
+  latest ask is the same transcript, write nothing (no Downloads file, no
+  ledger row, no share) and reply that the other tab owns it. On 2026-10-31
+  a Colin call went into two tabs, both started on the same "mega prompt"
+  file in Downloads, one overwrote the other, and Caleb wrote "move all colin
+  stuff to the other tab no reason to ahve 2".
 - Never treat a transcript that stops mid-sentence as the whole call. On
   2026-10-30 the first OPTRA paste ended at "So then all you have to do is
   just take the meeting." The ledger said the ask never happened, then the

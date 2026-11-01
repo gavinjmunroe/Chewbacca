@@ -187,6 +187,8 @@ sqlite3 "$CDB" "
   CREATE TABLE chat (ROWID INTEGER PRIMARY KEY, guid TEXT, chat_identifier TEXT);
   CREATE TABLE chat_message_join (chat_id INTEGER, message_id INTEGER);
   CREATE TABLE handle (ROWID INTEGER PRIMARY KEY, id TEXT);
+  CREATE TABLE message_attachment_join (message_id INTEGER, attachment_id INTEGER);
+  INSERT INTO message_attachment_join VALUES (2, 1);
   INSERT INTO handle VALUES (1, '+15550102'), (2, '+15550109');
   INSERT INTO chat VALUES (1, 'iMessage;-;+15550102', '+15550102'), (2, 'iMessage;-;+15550109', '+15550109');
   INSERT INTO message VALUES (1, 1, 1, (strftime('%s','now') - 978307200) * 1000000000, 0, 0, 1, 'here it is'),
@@ -199,12 +201,20 @@ out="$(CHEWBACCA_CHAT_DB="$CDB" node -e '
   const since = Date.now() - 60000, o = { waitMs: 0 };
   console.log([
     verifySent("+15550102", since, { ...o, expect: 2, wantFile: true }).state,
-    verifySent("+15550102", since, { ...o, expect: 3 }).state,
+    verifySent("+15550102", since, { ...o, expect: 3, wantFile: true }).state,
     verifySent("+15550109", since, o).state,
     verifySent("+15550199", since, o).state,
   ].join(" "));
 ' "$(dirname "$P")/lib/people/attach.js")"
-[ "$out" = "landed missing failed missing" ] || fail "chat.db readback judged wrong: $out"
+[ "$out" = "landed nofile failed missing" ] || fail "chat.db readback judged wrong: $out"
+# A file bubble with no attachment record is not a sent file (10/31, Gavin's PDF): the
+# flag column says nothing, only the join table does.
+out="$(CHEWBACCA_CHAT_DB="$CDB" node -e '
+  const { verifySent } = require(process.argv[1]);
+  const since = Date.now() - 60000;
+  console.log(verifySent("+15550102", since, { waitMs: 0, expect: 1, wantFile: true }).state);
+' "$(dirname "$P")/lib/people/attach.js")"
+[ "$out" = "landed" ] || fail "a row with an attachment record was not read as a sent file: $out"
 out="$(CHEWBACCA_CHAT_DB=/nonexistent/chat.db node -e '
   console.log(require(process.argv[1]).verifySent("+1", 0, { waitMs: 0 }).state);
 ' "$(dirname "$P")/lib/people/attach.js")"

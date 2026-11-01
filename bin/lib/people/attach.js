@@ -132,7 +132,12 @@ function sentRows(to, sinceMs) {
   try {
     return cdb
       .prepare(
-        `SELECT m.ROWID AS id, m.error AS error, m.cache_has_attachments AS has_file,
+        // has_file is a real attachment record, never cache_has_attachments: on
+        // 2026-10-31 a PDF sent by AppleScript left a file-transfer bubble with that
+        // flag at 0 and no attachment row at all, so the file never reached anyone.
+        `SELECT m.ROWID AS id, m.error AS error,
+                EXISTS (SELECT 1 FROM message_attachment_join maj
+                         WHERE maj.message_id = m.ROWID) AS has_file,
                 m.is_sent AS is_sent, m.text AS text
            FROM message m
            LEFT JOIN chat_message_join j ON j.message_id = m.ROWID
@@ -157,6 +162,7 @@ function sleep(ms) {
 // Did the send land in chat.db? Polls for up to `waitMs`.
 //   { state: "landed", rows }       every expected row is there, none errored
 //   { state: "failed", error }      Messages wrote the row with an error code
+//   { state: "nofile", rows }       the text rows landed but no attachment did
 //   { state: "missing" }            nothing showed up in time
 //   { state: "unreadable", error }  chat.db can't be opened (Full Disk Access)
 // 8 s is a guess: rows showed up within 2 s on this Mac's own sends, never
@@ -181,7 +187,10 @@ function verifySent(
       rows.length >= expect &&
       (!wantFile || rows.some((r) => Number(r.has_file) === 1));
     if (enough) return { state: "landed", rows };
-    if (Date.now() >= deadline) return { state: "missing", rows };
+    if (Date.now() >= deadline)
+      return wantFile && rows.length
+        ? { state: "nofile", rows }
+        : { state: "missing", rows };
     sleep(stepMs);
   }
 }

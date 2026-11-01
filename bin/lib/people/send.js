@@ -458,6 +458,13 @@ function confirmLanded(app, to, text, flags, started, P) {
     return say(c.dim(`  in chat.db: ${v.rows.length} sent row${v.rows.length === 1 ? "" : "s"}${flags[FILE] ? ", file attached" : ""}`));
   if (v.state === "failed")
     die(`Messages marked the send to ${P(to)} as failed (${v.error}). Check the thread before resending.`);
+  // The text went and the file did not: that is a failed send, said plainly, never
+  // "sent" (10/31: Gavin got the text and a blank file bubble, and the reply said sent).
+  if (v.state === "nofile")
+    die(
+      `The text reached ${P(to)}, but Messages made no attachment for ${P(flags[FILE].name)}, so the file did NOT send.\n` +
+        "  Share it as a link instead (a Google Doc or Drive file), and tell them the attachment failed.",
+    );
   if (v.state === "missing")
     return say(c.yel("  not in chat.db yet after 8s; check the thread before resending"));
   say(c.dim(`  couldn't read chat.db to confirm (${P(v.error)})`));

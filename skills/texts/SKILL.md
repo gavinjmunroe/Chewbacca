@@ -479,7 +479,10 @@ people send colin "rec attached" --file ~/Downloads/rec.pdf   # a real attachmen
 
 A PDF, image or deck goes as a file with `--file`, never as a Drive link
 pasted into the text (10/31: Colin's rec went as a link because the old send
-took text only). iMessage sends the text first, then the file.
+took text only). iMessage sends the text first, then the file. The send only counts
+when chat.db holds an attachment record for it: on 10/31 a PDF to Gavin left a blank
+file bubble with no attachment, and `people send` now fails that as "the file did NOT
+send". When it does, share the file as a Google Doc or Drive link and say so.
 
 It replies in the app the conversation is actually in, to the exact address on
 a message that person sent, and it refuses an ambiguous name instead of picking

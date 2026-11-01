@@ -496,4 +496,8 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - reference_ff_logo_files: current FF logo is the 10/18 back-to-back F mark in site Wordmark.tsx; exports in ~/Downloads/Firm Foundation logo/, the 10/9 AI Logo.png is stale
 - project_garland_call_2026_10_31: Garland Hunt Jr. FF advisor yes 10/31; coaches pro athletes, pro sports C-suites, Netflix/Google/Amazon; text him to weigh in; Ben (chief of staff) call re AI, HubSpot
 - feedback_motion_is_editor_craft: web motion follows library/crafts/motion-film.md + apps/ux-engine/motion/primitives/motion.ts (jayd3nfx reveal, triple wheel, whips, FilmCraft curves); a hero of fade-ups and a "1 2 3" sequence kept shipping as slop (10/31)
+- feedback_ff_hero_not_lemma: FF hero was Lemma's choreography line for line; pills instead of bricks still got "ur still copying the animation" (10/31); start from FF's story (house on sand vs rock), never swap shapes on a borrowed sequence
+- feedback_ff_home_every_object_has_a_job: FF Home objects each stand for an offering and link to it; the parable runs storm dark, sand section, rock forms, white (Colin call 10/31)
+- feedback_hidden_pane_stale_scroll_frames: scroll-scene screenshots in a hidden pane lag a frame or show a blank canvas (rAF throttled); wait 3s + read the scene state in JS before calling it a bug (FF hero 10/31)
+- feedback_ff_call_notes_are_direction: a design call is direction, not a checklist; SPEC every line, watch every ref video, name the camera move and morph per beat, keep the meat (FF home 10/31)
 - feedback_argv_reaches_string_flags: parseArgs makes any --word a flag, so internal send state goes on Symbol keys and approved files are snapshotted at check time (people send --file, 10/31)

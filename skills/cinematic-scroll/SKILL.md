@@ -57,6 +57,18 @@ Check every section against these before showing it:
    they will become, so the reviewer sees the plan, not a gap.
 4. Build each scene with the method below, then run the checks.
 
+When the brief is a call (a friend's or a client's notes on a design), the
+SPEC holds every line of it, and each beat gets three things named before any
+code: the camera move, the transition, and which object already on screen
+morphs into what comes next. Watch every reference link sent in the thread
+after the call before building. Keep what already worked; a rebuild that
+drops the demo or adds a second copy of a section is a step back. On the FF
+home (2026-10-31) a literal read of Colin's call shipped a "1 2 3" word
+section, a rock that faded in over 1% of the sand, sine streams for a wave
+and no camera pan. Caleb: "you literally made an ai slop 1 2 3 animation",
+"you removed all the meat". The version that held up came from
+`site/HOME-SPEC.md` in the firm-foundation repo.
+
 ## Method that held up
 
 Motion rules and code for every transition, reveal, camera move and parallax layer: [library/crafts/motion-film.md](../../library/crafts/motion-film.md) and `apps/ux-engine/motion/primitives/motion.ts`.
@@ -146,6 +158,11 @@ crew lead, an SCA professor and a friend on a phone), the way Caleb asked:
 The first script fails if a pinned layer doesn't fill the window. The second shoots a
 frame just before and after each listed scroll point at 1000x506 (Caleb's
 window) and writes one sheet. Look at the sheet. A diff can't prove a seam.
+
+A screenshot of a scroll scene in a hidden browser pane can show the frame
+before the scroll, or a blank canvas, because the pane throttles
+requestAnimationFrame. Wait 3s after the scroll and read the scene's own state
+in JS (a progress variable like `--hs-n`) before calling a frame a bug.
 
 When a Playwright run times out, kill its browsers (`pkill -f ms-playwright`).
 Leftovers ran at 80% CPU each and made the site feel laggy.

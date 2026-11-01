@@ -561,6 +561,7 @@ Lessons from 2026-10-28, when "DID WE MISS THE EARLY REGISTRATION DATE" took 15 
 
 - A USC registration appointment is when the window OPENS. It stays open through the add deadline (Jan 29 for Spring 2027). Lead with that line, then the exact time.
 - Exact time: `chewbacca api call usc-reg registrationAppointment term=<YYYYT>`. If it returns `HTTP 302` for every term (Fall too), the WebReg Entra/Duo login lapsed and `api renew` won't fix it. Open webreg.usc.edu in his Chrome and say BLOCKED: Duo Touch ID, in the first reply, not after three retries.
+- Registering, or a checkout that failed: read `references/webreg-registration.md` first (no partial checkout, D clearance, GE codes, RMP picks).
 - RNR88 on the appointment page is the priority-registration flag (OSAS), never a hold.
 - Advisor emails (Adrian Coson, coson@usc.edu) are searchable through the Gmail connector: `from:coson@usc.edu`. "Advising Recap - <date>" threads are his written record of each meeting. Before repeating anything "Adrian said" (a promise, a contact, a waiver), read the recap and quote it. On 10/28 Caleb remembered intros for a GE waiver; the 9/22 recap promised none and said a waiver would be a first.
 - "Read Adrian's email" means the newest coson@ thread plus the audit it replies to, then the class sections: `usc-classes getSections` for each required course, and the GE double-count list (dornsife.usc.edu/ge/courses/double-count/) filtered against his fixed classes. Do the section search unasked; don't offer it.

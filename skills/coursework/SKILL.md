@@ -570,3 +570,12 @@ Lessons from 2026-10-28, when "DID WE MISS THE EARLY REGISTRATION DATE" took 15 
 - WebReg course lists (/Courses?Program=XXX) are collapsed accordions. Clicking an Add button inside a collapsed row does nothing and reports no error. Expand the course header first, click Add, confirm the button reads "Added to Course Bin", then read /CourseBin.
 - Read each section's PRE-REQUISITES line before picking it. PSYC 367 needs PSYC 100 and nearly went into his schedule.
 - IYA requirement swaps need the dean's approval (Adrian, 10/28). A waiver doesn't reduce the 128 units, so pitch swaps (ACAD 176 to ACAD 490, 2nd ACAD 174 to ACAD 406), not skips.
+
+### Rearranging a schedule (Caleb, 2026-10-31)
+
+"we gotta close the gaps... ending class way too late bruh", then "Break it down simply what are my options?"
+
+- Pull the whole term from classes.usc.edu (`/api/Programs/TermCode`, then `/api/Courses/CoursesByTermSchoolProgram` per program; `geCode` 31 = B, 32 = C) and check every candidate's sections for discussions. A lecture that fits TTh can still add a Friday discussion, and that breaks "keep MWF free". On 10/31 every TTh 12:30 GE-C had one.
+- A course counts as B+G only if its geCode is 31 AND it's listed with a "gw" suffix on Dornsife's double-count page. A "gw" with code 30 or 32 is A+G or C+G.
+- Give the options as numbered day timelines, at most 3: the times, when he's done, what it costs (extra day, prof RMP), then one pick. Never a wall of section ids and discussion numbers on the first pass. He asked for the simple version right after the detailed one.
+- Swapping a registered class: add the new section first, then drop the old one, so a failed add never loses the seat.

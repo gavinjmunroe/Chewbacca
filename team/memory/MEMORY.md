@@ -501,3 +501,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_hidden_pane_stale_scroll_frames: scroll-scene screenshots in a hidden pane lag a frame or show a blank canvas (rAF throttled); wait 3s + read the scene state in JS before calling it a bug (FF hero 10/31)
 - feedback_ff_call_notes_are_direction: a design call is direction, not a checklist; SPEC every line, watch every ref video, name the camera move and morph per beat, keep the meat (FF home 10/31)
 - feedback_argv_reaches_string_flags: parseArgs makes any --word a flag, so internal send state goes on Symbol keys and approved files are snapshotted at check time (people send --file, 10/31)
+- feedback_ff_hero_world_continuity: FF hero: nothing ends on screen, every change is a physical process, and capture at fine steps with the console open

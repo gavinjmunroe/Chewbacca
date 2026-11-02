@@ -144,6 +144,32 @@ To change the catalog, edit `KIT_MCP` in [tools/inventory.py](../../tools/invent
 `python3 tools/inventory.py`. It rewrites the README table, this installer block, and
 `config/settings/toolkit.json` together. Hand-editing any of the three loses the edit on the next run.
 
+## Any other MCP server: `chewbacca mcp`
+
+The installer adds only what is listed above. Everything else sits in a
+catalog of 58 servers, [config/mcp/catalog.json](../../config/mcp/catalog.json),
+and goes on one at a time, because every server costs context in every
+session and most need a person to sign in.
+
+```bash
+chewbacca mcp                    # the catalog, grouped, marked where it's already added
+chewbacca mcp add figma notion   # registers with Claude Code and Codex, opens each sign-in
+chewbacca mcp add --group dev    # design, work, dev, money, search, browser, mac, media, kit
+chewbacca mcp status             # what is connected, what still needs a sign-in
+chewbacca mcp login figma        # redo one sign-in
+chewbacca mcp verify             # probe every URL and package in the catalog
+```
+
+Most entries are the services' own hosted servers, so they start no process on
+the Mac and sign in through the browser. A keyed one reads its variable from
+the environment or asks for it once, hidden. GitHub's server takes no
+self-registered sign-in, so it reuses the `gh auth login` token. Every URL and
+package was checked live on 2026-11-02; `verify` reruns that.
+
+Left out on purpose: Slack, Box and HubSpot, whose servers accept no
+self-registered client, so a one-command add fails at sign-in. Their claude.ai
+connectors work.
+
 ## MCP servers you host yourself
 
 **[linshenkx/prompt-optimizer](https://github.com/linshenkx/prompt-optimizer)** (AGPL-3.0) rewrites

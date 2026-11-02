@@ -80,6 +80,7 @@ COMMANDS=(
   "gtme-grade|run the five pre-send gates on one campaign; launch-guard needs its pass"
   "gtme-reply|classify a cold-email reply, clean its text, and gate auto-send, offline"
   "rea|how another app does one thing: REA status, a scoped Electron trace, a native overview (optional)"
+  "mcp|add Figma, Notion, GitHub and 50 more MCP servers, sign in, check what's connected"
   "resolve|answer a fact question (an address, a phone, a site) from every source before asking a person"
   "name-check|before pitching a product name: who holds the .com, free prefix .coms, the USPTO step"
   "gtme-rules|which client rulings run as code, and check text a client will read"
@@ -167,6 +168,11 @@ gtme-dedupe)
 agent)
   shift
   exec python3 "$ROOT/tools/agent_runtime.py" "$@"
+  ;;
+mcp)
+  # The MCP catalog (config/mcp/catalog.json), added through each agent's own CLI.
+  shift
+  exec python3 "$ROOT/tools/mcp_setup.py" "$@"
   ;;
 agents)
   # Realm's agents page in a normal browser tab. On a Mac with Kyber the same

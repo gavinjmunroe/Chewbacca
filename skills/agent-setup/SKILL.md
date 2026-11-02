@@ -123,6 +123,23 @@ A consent screen granting access to someone's own account is theirs to approve.
 Get it to the point of one click, hand them the URL, say
 `BLOCKED: approve the consent screen`, and verify after they do.
 
+## 3b. An MCP server that needs a sign-in
+
+`chewbacca mcp add <name>` registers it with Claude Code and Codex and opens
+the browser sign-in itself, so the person's whole job is the one consent
+click. Without a terminal attached the sign-in can't wait for the redirect,
+so it prints `chewbacca mcp login <name>` instead: run that when they're at
+the keyboard. `chewbacca mcp status` says which servers still need it. A
+server that already comes from a plugin (figma, railway, context7) is signed
+in through the plugin's copy, never added twice.
+
+Never answer "set up the X MCP" with "run /mcp" or a list of steps. On
+2026-11-02 a Figma ask got exactly that, and Caleb's answer was "just wire it
+into chewbs to be super easily setupable for anyone". The only line the
+person gets is the consent click `chewbacca mcp add` opens for them. A server
+missing from config/mcp/catalog.json gets added to the catalog (probe its URL
+or look its package up first, then `chewbacca mcp verify`), not hand-wired.
+
 ## 4. Verify and report
 
 ```bash

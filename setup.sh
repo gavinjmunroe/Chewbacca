@@ -3195,6 +3195,12 @@ KEYED_MCP
 fi
 # END GENERATED: extensions
 fi
+if should_run plugins; then
+  # The full catalog (config/mcp/catalog.json) is opt-in: every server costs
+  # context in every session, and a sign-in needs a person at a browser.
+  log "More MCP servers (Figma, Notion, Linear, GitHub, Stripe and 50 more):"
+  log "  chewbacca mcp            then  chewbacca mcp add <name>"
+fi
 
 # ── macOS tools ───────────────────────────────────────────────────────────────
 if should_run tools; then

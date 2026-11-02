@@ -1949,6 +1949,8 @@ fi
 
 # ── the display ───────────────────────────────────────────────────────────────
 if group "mcp"; then
+  check "chewbacca mcp adds each server through the agent CLIs and never prints a key" \
+    python3 "$ROOT/tests/test_mcp_setup.py" "$ROOT"
   if command -v node >/dev/null 2>&1; then
     check "the MCP server speaks the protocol and refuses a shell" \
       bash "$ROOT/tests/mcp_server.sh" "$ROOT"

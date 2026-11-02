@@ -503,3 +503,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_ff_call_notes_are_direction: a design call is direction, not a checklist; SPEC every line, watch every ref video, name the camera move and morph per beat, keep the meat (FF home 10/31)
 - feedback_argv_reaches_string_flags: parseArgs makes any --word a flag, so internal send state goes on Symbol keys and approved files are snapshotted at check time (people send --file, 10/31)
 - feedback_ff_hero_world_continuity: FF hero: nothing ends on screen, every change is a physical process, and capture at fine steps with the console open
+- feedback_gogcli_test_users_for_new_accounts: new accounts must be test users on the gogcli OAuth app (project 1067120400776) before chewbacca email add, or Google says Access blocked (FF Workspace inboxes, 11/2)

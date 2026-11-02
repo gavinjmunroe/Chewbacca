@@ -87,6 +87,28 @@ The three worth reading even if you never install them:
 - [anthropics/claude-quickstarts](https://github.com/anthropics/claude-quickstarts)
   `computer-use-demo`. The canonical see-act-see loop in under a thousand lines.
 
+realm became MIT on its own later, so ideas taken from it after that can carry
+code. From [31Carlton7/realm](https://github.com/31Carlton7/realm) and
+[31Carlton7/mcp-manager](https://github.com/31Carlton7/mcp-manager), both MIT,
+by Carlton Aikins, 2026-11-02:
+
+- `bin/mcp-hub`, which runs each local MCP server once for every tab. The
+  design is realm's `McpHub` (one client per server across sessions, a
+  three-failure circuit breaker, idle sleep, `credentialValues` redaction with
+  its four-character floor) and mcp-manager's gateway (a path per server on
+  loopback, a Host check against DNS rebinding, secrets in the Keychain).
+  Rewritten without dependencies, since the kit ships no node_modules.
+- `chewbacca mcp add` reading a pasted URL, command, `claude mcp add` line or
+  JSON (mcp-manager's `SmartPasteParser`), `chewbacca mcp search` over the
+  official registry, `chewbacca mcp test`, and the Cursor and Claude Desktop
+  targets with a backup before every write.
+- `memory` and `filesystem` in `config/mcp/catalog.json`, from mcp-manager's
+  curated catalog.
+- `skills/lecture-notes`, adapted from realm's skill of the same name.
+- Six skills from [31Carlton7/skills](https://github.com/31Carlton7/skills)
+  (MIT): app-growth, app-review, ghostwrite, heavy-work, ship-feature and
+  swiftui, installed the way `deslop` already was.
+
 The import design came from one repo:
 [31Carlton7/realm](https://github.com/31Carlton7/realm), by Carlton Aikins.
 Its Settings > Import reads Claude Code, Codex and Cursor history with a strict

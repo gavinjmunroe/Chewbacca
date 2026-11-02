@@ -166,6 +166,39 @@ the environment or asks for it once, hidden. GitHub's server takes no
 self-registered sign-in, so it reuses the `gh auth login` token. Every URL and
 package was checked live on 2026-11-02; `verify` reruns that.
 
+Paste anything a README hands you and it works out the server: a URL, an
+`npx` or `uvx` line, a `claude mcp add` line, or a `{"mcpServers": ...}` block.
+`chewbacca mcp search <words>` also looks in the official MCP registry, and
+`chewbacca mcp test <name>` starts a server, lists its tools and says what
+broke. Cursor and Claude Desktop get each server too, when their config file
+already exists.
+
+### One copy per server: the hub
+
+Every tab used to start its own copy of every local server. On 2026-10-09 a
+12-tab restart put 252 MCP processes on the Mac at load 106.
+
+```bash
+chewbacca mcp hub start             # runs under Chewbacca's one background item
+chewbacca mcp hub move git fetch    # those two now run once, for every tab
+chewbacca mcp hub status
+chewbacca mcp hub undo git          # back to a copy per tab, exactly as it was
+```
+
+A moved server keeps its name, so the tools agents see and every hook or allow
+rule that matches `mcp__git__*` stay the same. Any token in its env or its
+arguments moves to the Keychain on the way in, so neither `~/.claude.json` nor
+the hub's own config holds it. A server that sits idle for ten minutes stops
+and starts again on the next call, and one that crashes three times in a row
+gets 30 seconds off. Servers that keep one tab's state (a browser, a REPL, a
+chain of thoughts) are refused.
+
+The hub, paste-to-add, registry search, test, and the Cursor and Claude
+Desktop targets are Carlton Aikins's designs, from
+[realm](https://github.com/31Carlton7/realm) and
+[mcp-manager](https://github.com/31Carlton7/mcp-manager), both MIT. His
+mcp-manager app is the GUI version of this for anyone on macOS 26.
+
 Left out on purpose: Slack, Box and HubSpot, whose servers accept no
 self-registered client, so a one-command add fails at sign-in. Their claude.ai
 connectors work.

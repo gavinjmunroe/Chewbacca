@@ -3064,12 +3064,18 @@ while IFS='|' read -r SK_NAME SK_URL SK_PATH SK_LICENSE SK_AUTHOR; do
   fi
   rm -rf "$TMP_SK"
 done <<'UPSTREAM_SKILLS'
+app-growth|https://github.com/31Carlton7/skills|app-growth|MIT|31Carlton7
+app-review|https://github.com/31Carlton7/skills|app-review|MIT|31Carlton7
 avoid-ai-writing|https://github.com/conorbronsdon/avoid-ai-writing||MIT|conorbronsdon
 cap|https://github.com/CapSoftware/Cap|installed by `cap agents install --target claude`|see upstream|CapSoftware
 cap-demo|https://github.com/CapSoftware/Cap|installed by `cap agents install --target claude`|see upstream|CapSoftware
 deslop|https://github.com/31Carlton7/skills|deslop|see upstream|31Carlton7
 first-reader|https://github.com/Shubhamsaboo/awesome-llm-apps|agent_skills/first-reader|Apache-2.0|Shubhamsaboo
+ghostwrite|https://github.com/31Carlton7/skills|ghostwrite|MIT|31Carlton7
+heavy-work|https://github.com/31Carlton7/skills|heavy-work|MIT|31Carlton7
 no-ai-slop|https://github.com/petergyang/no-ai-slop|skills/no-ai-slop|MIT|petergyang
+ship-feature|https://github.com/31Carlton7/skills|ship-feature|MIT|31Carlton7
+swiftui|https://github.com/31Carlton7/skills|swiftui|MIT|31Carlton7
 thinking-out-loud|https://github.com/Shubhamsaboo/awesome-llm-apps|agent_skills/thinking-out-loud|Apache-2.0|Shubhamsaboo
 youtube-transcripts|https://github.com/calebnewtonusc/claude-youtube-transcripts|skills/youtube-transcripts|MIT|calebnewtonusc
 UPSTREAM_SKILLS

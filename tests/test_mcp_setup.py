@@ -129,5 +129,25 @@ parsed = mcp_setup.parse_status(
 if parsed != {"plugin:figma:figma": "needs sign-in", "git": "connected", "medha": "failing"}:
     no(f"parse_status read {parsed}")
 
+# Paste-to-add, the shapes mcp-manager's SmartPasteParser reads.
+cases = {
+    "https://mcp.notion.com/mcp": ("notion", "http"),
+    "https://mcp.asana.com/sse": ("asana", "sse"),
+    "npx -y @upstash/context7-mcp": ("context7", "stdio"),
+    "uvx mcp-server-git": ("git", "stdio"),
+    "npx -y mcp-remote https://mcp.linear.app/sse": ("linear", "sse"),
+    "claude mcp add --transport http sentry https://mcp.sentry.dev/mcp": ("sentry", "http"),
+    '{"mcpServers":{"fs":{"command":"npx","args":["-y","x"]}}}': ("fs", "stdio"),
+}
+for text, (want_name, want_transport) in cases.items():
+    got = mcp_setup.parse_paste(text)
+    if list(got) != [want_name] or got[want_name]["transport"] != want_transport:
+        no(f"paste {text!r} read as {got}")
+if mcp_setup.parse_paste("notion-ish"):
+    no("a single misspelled word should not read as a server command")
+env_paste = mcp_setup.parse_paste("claude mcp add brave -e BRAVE_API_KEY=x -- npx -y @brave/brave-search-mcp-server")
+if env_paste.get("brave", {}).get("env_values") != {"BRAVE_API_KEY": "x"}:
+    no(f"a pasted -e value was dropped: {env_paste}")
+
 print("ok" if not fails else f"{len(fails)} failed")
 sys.exit(1 if fails else 0)

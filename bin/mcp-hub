@@ -1,0 +1,375 @@
+#!/usr/bin/env node
+// mcp-hub: one copy of each local MCP server, shared by every agent tab.
+//
+//   mcp-hub serve                 run the hub (chewbacca-daemon keeps it alive)
+//   mcp-hub status                what is running, from the hub itself
+//
+// Every Claude tab used to start its own copy of every stdio server. On
+// 2026-10-09 a 12-tab restart put 252 MCP processes on the Mac at load 106,
+// and the fix then was deleting servers. Here each server runs once, as a
+// child of the hub, and every tab reaches it at
+// http://127.0.0.1:<port>/s/<name>/mcp. The tool names agents see do not
+// change (the Claude entry keeps its name), so hooks and allow rules that
+// match mcp__<name>__* keep working.
+//
+// The design is Carlton Aikins's, from two of his MIT repos: realm's McpHub
+// (one client per server across sessions, a circuit breaker, idle sleep,
+// credential redaction) and mcp-manager's gateway (one path per server on
+// loopback, a Host check against DNS rebinding, secrets in the Keychain and
+// never in a client's config). Written here without dependencies, since the
+// kit ships no node_modules.
+//
+// Config is ~/.chewbacca/mcp-hub.json, written by `chewbacca mcp hub move`:
+//   { "port": 7338, "servers": { "git": { "command": "uvx", "args": [...],
+//     "env": { "TOKEN": "keychain:git.TOKEN" } } } }
+"use strict";
+const fs = require("fs");
+const http = require("http");
+const os = require("os");
+const path = require("path");
+const crypto = require("crypto");
+const { spawn, execFileSync } = require("child_process");
+
+const HOME = os.homedir();
+const DIR = process.env.CHEWBACCA_MCP_HUB_DIR || path.join(HOME, ".chewbacca");
+const CONFIG = path.join(DIR, "mcp-hub.json");
+const TOKEN_FILE = path.join(DIR, "mcp-hub.token");
+const LOG = path.join(DIR, "logs", "mcp-hub.log");
+const KEYCHAIN_SERVICE = "chewbacca-mcp";
+
+// realm's own numbers. 60s is the MCP SDK's default call timeout, which realm
+// kept. Three thrown failures in a row trip the breaker; a tool answering
+// isError is a normal reply and never counts.
+const CALL_TIMEOUT_MS = Number(process.env.MCP_HUB_CALL_TIMEOUT_MS || 60_000);
+const CIRCUIT_THRESHOLD = 3;
+// Guessed, never measured: long enough that a breaker doesn't flap, short
+// enough that a fixed server comes back before anyone notices.
+const CIRCUIT_COOLDOWN_MS = 30_000;
+// Guessed, never measured. realm makes idle stop a per-server choice with no
+// default window; ten minutes keeps a server warm through a working session.
+const IDLE_MS = Number(process.env.MCP_HUB_IDLE_MS || 10 * 60_000);
+// realm's REDACT_MIN_LENGTH: a shorter "secret" shows up inside ordinary words.
+const REDACT_MIN_LENGTH = 4;
+
+function readJSON(file, fallback) {
+  try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
+}
+
+function log(line) {
+  // Method, server, outcome and time only. Bodies are never logged, the same
+  // rule as both of Carlton's gateways: a tool call carries the user's data.
+  try {
+    fs.mkdirSync(path.dirname(LOG), { recursive: true });
+    fs.appendFileSync(LOG, `${new Date().toISOString()} ${line}\n`);
+  } catch { /* a full disk must not take the hub down */ }
+}
+
+function token() {
+  try { return fs.readFileSync(TOKEN_FILE, "utf8").trim(); } catch { /* first run */ }
+  const t = crypto.randomBytes(24).toString("hex");
+  fs.mkdirSync(DIR, { recursive: true });
+  fs.writeFileSync(TOKEN_FILE, t + "\n", { mode: 0o600 });
+  return t;
+}
+
+function keychain(account) {
+  if (process.env.MCP_HUB_FAKE_KEYCHAIN) {
+    return readJSON(process.env.MCP_HUB_FAKE_KEYCHAIN, {})[account] || "";
+  }
+  try {
+    return execFileSync("security", ["find-generic-password", "-s", KEYCHAIN_SERVICE, "-a", account, "-w"],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  } catch { return ""; }
+}
+
+// realm's credentialValues: a "Bearer x" value is quoted back either whole or
+// bare, so both forms are scrubbed.
+function credentialValues(values) {
+  const out = [];
+  for (const v of values) {
+    if (!v) continue;
+    out.push(v);
+    const sp = v.indexOf(" ");
+    if (sp > 0 && v.slice(sp + 1)) out.push(v.slice(sp + 1));
+  }
+  return out;
+}
+
+function redact(text, secrets) {
+  let out = String(text);
+  for (const v of secrets) if (v.length >= REDACT_MIN_LENGTH) out = out.split(v).join("[redacted]");
+  return out;
+}
+
+class Upstream {
+  constructor(name, spec) {
+    this.name = name;
+    this.spec = spec;
+    this.child = null;
+    this.ready = null;
+    this.init = null;
+    this.pending = new Map();
+    this.nextId = 1;
+    this.buffer = "";
+    this.failures = 0;
+    this.openUntil = 0;
+    this.usedAt = Date.now();
+    this.calls = 0;
+    this.secrets = [];
+    this.raw = [];
+  }
+
+  // "keychain:<account>" anywhere in env or args is read from the Keychain at
+  // start, so the token that used to sit in ~/.claude.json (supabase's
+  // --access-token, on 2026-11-02) lives in neither config file.
+  resolve(value) {
+    if (typeof value !== "string" || !value.startsWith("keychain:")) return String(value);
+    const secret = keychain(value.slice(9));
+    this.raw.push(secret);
+    this.secrets = credentialValues(this.raw);
+    return secret;
+  }
+
+  env() {
+    this.raw = [];
+    const env = { ...process.env };
+    for (const [k, v] of Object.entries(this.spec.env || {})) env[k] = this.resolve(v);
+    return env;
+  }
+
+  start(protocolVersion) {
+    if (this.ready) return this.ready;
+    this.ready = new Promise((resolve, reject) => {
+      let child;
+      try {
+        // Its own process group, so stopping it also stops what a launcher
+        // like uvx or npx started under it.
+        const env = this.env();
+        const args = (this.spec.args || []).map((a) => this.resolve(a));
+        child = spawn(this.spec.command, args, { env, stdio: ["pipe", "pipe", "pipe"], detached: true });
+      } catch (err) { this.ready = null; return reject(err); }
+      this.child = child;
+      child.stdout.on("data", (chunk) => this.onData(chunk));
+      child.stderr.on("data", () => {});
+      child.on("error", (err) => this.onExit(err));
+      child.on("exit", (code) => this.onExit(new Error(`${this.name} exited (${code})`)));
+      this.request("initialize", {
+        protocolVersion: protocolVersion || "2025-06-18",
+        capabilities: { roots: { listChanged: false } },
+        clientInfo: { name: "chewbacca-mcp-hub", version: "1" },
+      }).then((result) => {
+        this.init = result;
+        this.send({ jsonrpc: "2.0", method: "notifications/initialized" });
+        log(`start ${this.name} pid=${child.pid}`);
+        resolve(result);
+      }, (err) => { this.stop(); reject(err); });
+    });
+    return this.ready;
+  }
+
+  send(msg) {
+    if (this.child && this.child.stdin.writable) this.child.stdin.write(JSON.stringify(msg) + "\n");
+  }
+
+  request(method, params) {
+    const id = this.nextId++;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`${this.name} took over ${CALL_TIMEOUT_MS / 1000}s on ${method}`));
+      }, CALL_TIMEOUT_MS);
+      this.pending.set(id, { resolve, reject, timer });
+      this.send({ jsonrpc: "2.0", id, method, params });
+    });
+  }
+
+  onData(chunk) {
+    this.buffer += chunk.toString("utf8");
+    let nl;
+    while ((nl = this.buffer.indexOf("\n")) >= 0) {
+      const line = this.buffer.slice(0, nl).trim();
+      this.buffer = this.buffer.slice(nl + 1);
+      if (!line) continue;
+      let msg;
+      try { msg = JSON.parse(line); } catch { continue; }
+      if (msg.method && msg.id !== undefined) { this.answerServer(msg); continue; }
+      if (msg.id === undefined) continue; // a notification: nobody to push it to over plain JSON
+      const p = this.pending.get(msg.id);
+      if (!p) continue;
+      this.pending.delete(msg.id);
+      clearTimeout(p.timer);
+      if (msg.error) p.resolve({ __error: msg.error });
+      else p.resolve(msg.result);
+    }
+  }
+
+  // A server asking its client something. With many tabs behind one process
+  // there is no single client to ask, so the hub answers: no roots (the tools
+  // here take paths as arguments), a pong, and a refusal for sampling or
+  // elicitation rather than a guess on someone's behalf.
+  answerServer(msg) {
+    if (msg.method === "roots/list") return this.send({ jsonrpc: "2.0", id: msg.id, result: { roots: [] } });
+    if (msg.method === "ping") return this.send({ jsonrpc: "2.0", id: msg.id, result: {} });
+    this.send({ jsonrpc: "2.0", id: msg.id, error: { code: -32601, message: `the hub does not answer ${msg.method}` } });
+  }
+
+  onExit(err) {
+    for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(err); }
+    this.pending.clear();
+    this.child = null;
+    this.ready = null;
+    this.init = null;
+  }
+
+  stop() {
+    if (this.child) {
+      try { process.kill(-this.child.pid, "SIGTERM"); } catch { try { this.child.kill(); } catch { /* gone */ } }
+    }
+    this.onExit(new Error(`${this.name} stopped`));
+  }
+
+  async call(method, params, protocolVersion) {
+    if (Date.now() < this.openUntil) {
+      throw new Error(`${this.name} failed ${CIRCUIT_THRESHOLD} times in a row; retrying in ${Math.ceil((this.openUntil - Date.now()) / 1000)}s`);
+    }
+    this.usedAt = Date.now();
+    this.calls++;
+    try {
+      await this.start(protocolVersion);
+      const result = await this.request(method, params);
+      this.failures = 0;
+      this.usedAt = Date.now();
+      return result;
+    } catch (err) {
+      if (++this.failures >= CIRCUIT_THRESHOLD) {
+        this.openUntil = Date.now() + CIRCUIT_COOLDOWN_MS;
+        this.failures = 0;
+        this.stop();
+      }
+      throw new Error(redact(err.message, this.secrets));
+    }
+  }
+}
+
+function serve() {
+  const cfg = readJSON(CONFIG, { servers: {} });
+  const port = Number(process.env.MCP_HUB_PORT || cfg.port || 7338);
+  const secret = token();
+  const upstreams = new Map();
+  const upstream = (name) => {
+    const current = readJSON(CONFIG, cfg).servers || {};
+    if (!current[name]) return null;
+    let u = upstreams.get(name);
+    if (!u || JSON.stringify(u.spec) !== JSON.stringify(current[name])) {
+      if (u) u.stop();
+      u = new Upstream(name, current[name]);
+      upstreams.set(name, u);
+    }
+    return u;
+  };
+
+  setInterval(() => {
+    for (const u of upstreams.values()) {
+      if (u.child && Date.now() - u.usedAt > IDLE_MS && u.pending.size === 0) {
+        log(`sleep ${u.name} idle`);
+        u.stop();
+      }
+    }
+  }, Math.min(IDLE_MS, 60_000)).unref();
+
+  const reply = (res, status, body, headers = {}) => {
+    res.writeHead(status, { "Content-Type": "application/json", ...headers });
+    res.end(body === undefined ? "" : JSON.stringify(body));
+  };
+
+  const handleOne = async (u, msg) => {
+    const pv = msg.params && msg.params.protocolVersion;
+    if (msg.method === "initialize") {
+      try {
+        await u.start(pv);
+      } catch (err) {
+        return { jsonrpc: "2.0", id: msg.id, error: { code: -32603, message: redact(err.message, u.secrets) } };
+      }
+      u.usedAt = Date.now();
+      return { jsonrpc: "2.0", id: msg.id, result: u.init };
+    }
+    if (msg.id === undefined) return null; // initialized, cancelled: nothing to answer
+    const started = Date.now();
+    try {
+      const result = await u.call(msg.method, msg.params, pv);
+      log(`${u.name} ${msg.method} ${Date.now() - started}ms ${result && result.__error ? "error" : "ok"}`);
+      if (result && result.__error) return { jsonrpc: "2.0", id: msg.id, error: result.__error };
+      return { jsonrpc: "2.0", id: msg.id, result };
+    } catch (err) {
+      log(`${u.name} ${msg.method} ${Date.now() - started}ms failed`);
+      return { jsonrpc: "2.0", id: msg.id, error: { code: -32603, message: err.message } };
+    }
+  };
+
+  const server = http.createServer((req, res) => {
+    // mcp-manager's DNS-rebinding guard: a web page on this Mac can aim a
+    // request at 127.0.0.1, but it can't make the Host header say localhost.
+    const host = String(req.headers.host || "").replace(/:\d+$/, "");
+    if (!["127.0.0.1", "localhost", "[::1]"].includes(host)) return reply(res, 403, { error: "bad host" });
+    const url = new URL(req.url, "http://127.0.0.1");
+    if (url.pathname === "/health") return reply(res, 200, { ok: true });
+    if (req.headers.authorization !== `Bearer ${secret}`) return reply(res, 401, { error: "missing hub token" });
+    if (url.pathname === "/status") {
+      const servers = Object.keys(readJSON(CONFIG, cfg).servers || {}).map((name) => {
+        const u = upstreams.get(name);
+        return { name, running: Boolean(u && u.child), pid: u && u.child ? u.child.pid : null,
+          calls: u ? u.calls : 0, breaker: u && Date.now() < u.openUntil ? "open" : "closed" };
+      });
+      return reply(res, 200, { port, servers });
+    }
+    const m = url.pathname.match(/^\/s\/([A-Za-z0-9._-]+)\/mcp$/);
+    if (!m) return reply(res, 404, { error: "no such path" });
+    const u = upstream(m[1]);
+    if (!u) return reply(res, 404, { error: `${m[1]} is not in the hub` });
+    if (req.method === "GET") return reply(res, 405, undefined, { Allow: "POST" });
+    if (req.method === "DELETE") return reply(res, 200, {});
+    if (req.method !== "POST") return reply(res, 405, undefined, { Allow: "POST" });
+    let body = "";
+    req.on("data", (c) => { body += c; });
+    req.on("end", async () => {
+      let msg;
+      try { msg = JSON.parse(body); } catch { return reply(res, 400, { jsonrpc: "2.0", id: null, error: { code: -32700, message: "parse error" } }); }
+      const batch = Array.isArray(msg);
+      const answers = (await Promise.all((batch ? msg : [msg]).map((one) => handleOne(u, one)))).filter(Boolean);
+      if (!answers.length) return reply(res, 202);
+      // Streamable HTTP lets a server answer with plain JSON; the session id
+      // is fixed because every tab shares the one upstream session anyway.
+      reply(res, 200, batch ? answers : answers[0], { "Mcp-Session-Id": "hub" });
+    });
+  });
+
+  const shutdown = () => { for (const u of upstreams.values()) u.stop(); process.exit(0); };
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
+  // Under chewbacca-daemon --listen the port is already bound and handed over
+  // as a file descriptor, so a restart never drops a tab's connection.
+  const fd = process.env.CHEWBACCA_LISTEN_FD;
+  if (fd) server.listen({ fd: Number(fd) }, () => log(`listening on fd ${fd} (port ${port})`));
+  else server.listen(port, "127.0.0.1", () => log(`listening 127.0.0.1:${port}`));
+}
+
+async function status() {
+  const cfg = readJSON(CONFIG, {});
+  const port = Number(process.env.MCP_HUB_PORT || cfg.port || 7338);
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/status`, { headers: { Authorization: `Bearer ${token()}` } });
+    const data = await res.json();
+    for (const s of data.servers) {
+      console.log(`  ${s.name.padEnd(20)} ${s.running ? `running pid ${s.pid}` : "asleep"}  ${s.calls} calls${s.breaker === "open" ? "  BREAKER OPEN" : ""}`);
+    }
+    if (!data.servers.length) console.log("  no servers in the hub yet: chewbacca mcp hub move <name>");
+  } catch {
+    console.log(`the hub is not running on port ${port}: chewbacca mcp hub start`);
+    process.exitCode = 1;
+  }
+}
+
+const cmd = process.argv[2];
+if (cmd === "serve") serve();
+else if (cmd === "status") status();
+else { console.error("usage: mcp-hub serve | status"); process.exit(2); }

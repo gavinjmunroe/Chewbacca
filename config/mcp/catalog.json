@@ -7,7 +7,8 @@
     "key (a key you paste once), gh (reuses the GitHub CLI's sign-in), kit (ships with Chewbacca).",
     "Not here on purpose: Slack, Box and HubSpot's servers accept no self-registered client,",
     "so a one-command add fails at sign-in; use their claude.ai connectors. Vercel is off on",
-    "Caleb's Mac (vercel-guard). Togari and Medha are Amber-internal and carry private tokens."
+    "Caleb's Mac (vercel-guard). Togari and Medha are Amber-internal and carry private tokens.",
+    "memory and filesystem came from mcp-manager's curated catalog (Carlton Aikins, MIT), 2026-11-02."
   ],
   "servers": {
     "figma": {
@@ -576,6 +577,30 @@
       ],
       "auth": "kit",
       "requires": "watch-skill"
+    },
+    "memory": {
+      "group": "dev",
+      "what": "A knowledge graph the agent writes to and reads back later",
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-memory"
+      ],
+      "auth": "none"
+    },
+    "filesystem": {
+      "group": "dev",
+      "what": "Read and write files in folders you name",
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "{home}"
+      ],
+      "auth": "none",
+      "note": "Starts with your home folder; edit the path in Claude's config to narrow it."
     }
   }
 }

@@ -49,3 +49,21 @@ Caleb's ask: "move them around and make the story more succinct".
   version from the start: one .md w every link and who does what at the top,
   then each doc in full, inside a Downloads folder w the repo zip and assets,
   ready to AirDrop.
+
+## Helping someone else's deadline from the outside (2026-11-01, 9pm)
+
+- Ship the drop-in first, research second. Caleb asked for something to stop
+  Colin's Nalana shots reading as slop. Ten minutes of grepping fridge,
+  Parker and TTS notes went by before any file existed, and he wrote "WHAT
+  IS TAKING SO LONG", then "Don't waste time tho". The fix that landed was
+  one script (the-machine `build/unslop.py`: bevel + weighted normals,
+  roughness noise, micro bump, AgX) plus a one-page rules file, pushed and
+  texted. Write that first, then mine old notes only to tune it.
+- A test frame from a saved .blend may not move with the frame number when
+  the animation is applied by script at render time. Aim a temporary camera
+  at a named object (`Miso`, `Robot`) for the before/after instead.
+- Never nudge the person on the clock. Suggesting an 11pm cutoff text drew
+  "he's gonna finish when he finishes we don't hv to tell him bruh". Hand
+  over tools and settings; the schedule is theirs.
+- Running a repo's `fix_paths.py` on a cloned copy rewrites the tracked
+  .blend to this Mac's paths. Never commit it; discard it before leaving.

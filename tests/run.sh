@@ -1137,6 +1137,9 @@ if group "installer"; then
   check  "chatdb-guard refuses raw thread reads and permits the people CLI" \
     bash "$ROOT/tests/chatdb_guard.sh"
 
+  check  "send-file stages in ~/Pictures and never dispatches under no-send" \
+    bash "$ROOT/tests/send_file.sh"
+
   check  "mail-app-guard refuses Mail.app and permits Gmail through the kit" \
     bash "$ROOT/tests/mail_app_guard.sh"
 

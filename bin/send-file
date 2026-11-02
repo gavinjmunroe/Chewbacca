@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# send-file: send a file over iMessage and confirm it actually went.
+#
+#   send-file +16265551234 "~/Downloads/Stanford connects.csv"
+#   send-file +16265551234 deck.pdf --text "here's the deck"   # text first, then file
+#   send-file +16265551234 deck.pdf --dry-run
+#
+# Messages is sandboxed. Handed a path in ~/Downloads (or most of $HOME) by
+# AppleScript, it creates the bubble, never reads the file, and the transfer
+# sits at state 6 with is_sent 0: the recipient sees a blank file icon that
+# never loads. On 2026-11-02 that happened to a CSV for Chibo, and the day
+# before to files for Colin. The same file sent from ~/Pictures was copied
+# into ~/Library/Messages/Attachments and reached state 5 in under 2 seconds,
+# so this stages every file there first.
+#
+# Exits 0 only when chat.db shows the transfer finished (state 5, is_sent 1).
+# CHEWBACCA_NO_SEND=1 refuses to dispatch, like every other send path.
+set -euo pipefail
+
+usage() { sed -n '2,6p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+
+handle="" file="" text="" dry=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --text) text="${2:?--text needs a value}"; shift 2 ;;
+    --dry-run) dry=1; shift ;;
+    -h|--help) usage 0 ;;
+    *) if [ -z "$handle" ]; then handle="$1"; elif [ -z "$file" ]; then file="$1"; else usage 2; fi; shift ;;
+  esac
+done
+[ -n "$handle" ] && [ -n "$file" ] || usage 2
+file="${file/#\~/$HOME}"
+[ -f "$file" ] || { echo "send-file: no such file: $file" >&2; exit 2; }
+
+stage_dir="$HOME/Pictures/chewbacca-send/$(date +%Y%m%d-%H%M%S)-$$"
+name="$(basename "$file")"
+
+if [ "$dry" = 1 ] || [ "${CHEWBACCA_NO_SEND:-}" = 1 ]; then
+  echo "send-file: would send $name to $handle (staged via $stage_dir)${text:+, text first: $text}"
+  exit 0
+fi
+
+mkdir -p "$stage_dir"
+cp "$file" "$stage_dir/$name"
+
+if [ -n "$text" ]; then
+  mac messages send "$handle" "$text" --quiet
+fi
+
+osascript - "$handle" "$stage_dir/$name" <<'OSA'
+on run argv
+  -- Resolve the file outside the tell block. Inside it, POSIX file on a
+  -- variable goes to Messages, and the send silently created nothing (11/2).
+  set f to (POSIX file (item 2 of argv)) as alias
+  tell application "Messages"
+    set s to 1st account whose service type = iMessage
+    send f to participant (item 1 of argv) of s
+  end tell
+end run
+OSA
+
+# Poll chat.db for this transfer. Small files finish in about 2s; 30s covers a
+# few MB on a slow connection. Guessed, measured only on 3 KB files.
+db="$HOME/Library/Messages/chat.db"
+staged="$stage_dir/$name"
+for _ in $(seq 1 15); do
+  sleep 2
+  row=$(sqlite3 "$db" "select a.transfer_state||'|'||m.is_sent||'|'||m.error from attachment a
+    join message_attachment_join j on j.attachment_id=a.ROWID join message m on m.ROWID=j.message_id
+    where a.transfer_name='$(printf %s "$name" | sed "s/'/''/g")' and m.is_from_me=1
+    order by a.ROWID desc limit 1" 2>/dev/null || true)
+  case "$row" in
+    5\|1\|*) echo "send-file: sent $name to $handle"; rm -rf "$stage_dir"; exit 0 ;;
+  esac
+done
+echo "send-file: $name did not finish sending to $handle (state|sent|error: ${row:-none}). Staged copy kept at $staged" >&2
+exit 1

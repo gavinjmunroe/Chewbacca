@@ -97,6 +97,12 @@ one call, and a lapsed session renews itself from Chrome:
   from the submission list (name and byte size). `--dry-run` says where it
   would go. Only on the user's word about THAT assignment, and the submit gate
   still applies
+  A second submit to a GROUP dropbox that already holds a file timed out on
+  its Submit button twice (2026-11-02, ACAD 185 A20 script PDF, deck already
+  in), and a two-file call raised the same timeout after the first file
+  landed. Submit every file for a group dropbox in the first call, then read
+  `brightspace files <ou> <folderId>` to see which actually went in; the
+  exception alone doesn't say.
 - Pull files down: `brightspace files <ou> <folderId>` (the brief's attachments
   plus everything submitted), `brightspace content <ou>` (every Content file in
   module folders, links in links.tsv), `brightspace feedback <ou> <folderId>`

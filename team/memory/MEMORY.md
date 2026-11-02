@@ -505,3 +505,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_ff_hero_world_continuity: FF hero: nothing ends on screen, every change is a physical process, and capture at fine steps with the console open
 - feedback_gogcli_test_users_for_new_accounts: new accounts must be test users on the gogcli OAuth app (project 1067120400776) before chewbacca email add, or Google says Access blocked (FF Workspace inboxes, 11/2)
 - project_ff_wave1_trust_and_pool_2026_11_02: FF wave 1: cold email reads as spam ~0.78 in Jev, trust is the lever; evangelical named-buyer pool is 22 SoCal / 29 DFW; plan in FF ops/WAVE-1.md
+- reference_ff_socal_ledger_checkout: FF SoCal gtme ledger is ~/code/ff-ledger (own worktree on main), bc the shared FF working copy couldn't pull; never point a state_dir at a hand-edited one

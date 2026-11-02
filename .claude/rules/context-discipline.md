@@ -75,6 +75,11 @@ grep -c "the new text" path/to/file    # expect the number you intended
 Reporting a change that never applied is worse than not making it, because it
 stops both of you from ever looking at that spot again.
 
+A local checkout is a cache too. Before saying a repo is stale, broken or
+pointing at the wrong place, run `git fetch` and read origin. On 2026-11-02 a
+session told Caleb chip-in-setup still cloned an archived repo and pitched a
+fix, from a checkout 2 commits behind; origin had been repointed on 10/30.
+
 ---
 
 ## RESEARCH THE EXTERNAL THING FIRST, NOT LAST

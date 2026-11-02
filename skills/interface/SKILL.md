@@ -777,3 +777,12 @@ never applied: every phone rendered 753px tall and covered the headlines,
 and Caleb called the page "slop". Put component defaults in `@layer base`,
 then check the computed value in the browser
 (`getComputedStyle(el).getPropertyValue('--pw')`). Don't trust the class name.
+
+## Check the in-between width, not just phone and big desktop
+
+A laptop browser window that isn't full screen often runs 850 to 1000 CSS px,
+which is below Tailwind's `lg` (1024). On 2026-11-02 every Kyber section went
+two-column only at `lg:`, so in Caleb's window the text stacked over a big
+empty right side and the phones slid under the headlines ("Bruh u lazy ahh").
+Split columns at `md:` (768) unless the content truly needs more width, and
+screenshot at 375, about 940, and 1440 before calling it done.

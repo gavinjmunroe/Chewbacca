@@ -192,6 +192,21 @@ an empty cream pane, and Slack looked fine in a screenshot while it was dead too
 - The daemon already runs `app-revive --fix` every minute and skips an app that's recording. If
   one stays blank, check `chewbacca-daemon status | grep app-revive` before anything else.
 
+## The Mac is loud
+
+Caleb, 2026-11-02: "WHY MY COMPUTER SO LOUD". Run
+`ps -Ao pid,pcpu,etime,args -r | head` and read each top process's args before
+touching it. That day it was three things: Ollama's `llama-server` holding three
+embedding models for brain retrieval (`keep_alive` 2h, so they stay loaded),
+`meeting_capture.py` transcribing live since 11:15, and a Zoom open four days.
+
+- Ollama is yours to quiet: `ollama ps`, then `ollama stop <model>` for each.
+  The next brain query reloads what it needs.
+- Never kill `meeting_capture.py`. It may be recording a call he's on.
+- Never quit Zoom or another app he opened. Name it and its CPU, and let him.
+- `mds_stores` is Spotlight indexing and settles by itself.
+- Low disk (under 20 GB) makes it worse. Say the number.
+
 ## Inspecting an element by hand
 
 When `chewie click "Save"` cannot find something, the element is probably not called

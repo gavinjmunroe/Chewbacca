@@ -110,6 +110,9 @@ add() {
   mkdir -p "$cfg" && chmod 700 "$cfg"
   [ "$secret" -ef "$cfg/client_secret.json" ] || cp "$secret" "$cfg/client_secret.json"
   say "A browser window is opening. Pick $addr and click Allow."
+  # One log per address: three adds started together (2026-11-02) truncated
+  # and read one shared log, so each could open another inbox's consent URL.
+  local LOG="$HOME/Library/Logs/chewbacca-email-add-$addr.log"
   : >"$LOG"
   GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$cfg" gws auth login --scopes "$SCOPES" >>"$LOG" 2>&1 &
   local pid=$! url="" waited=0

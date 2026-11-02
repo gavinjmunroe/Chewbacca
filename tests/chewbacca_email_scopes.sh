@@ -20,6 +20,7 @@ printf '%s' "$scopes" | grep -q 'readonly' && { echo "FAIL: a read-only scope cr
 # drive.file sees only files this app opened, so Drive search by name breaks.
 printf '%s' "$scopes" | grep -q 'drive.file' && { echo "FAIL: drive.file would blind chewbacca google find"; fail=1; }
 grep -q 'rm -f "$cfg/token_cache.json"' "$f" || { echo "FAIL: login no longer clears the stale token cache"; fail=1; }
+grep -q 'chewbacca-email-add-$addr.log' "$f" || { echo "FAIL: email add shares one log across inboxes, so parallel adds open each other's consent URL"; fail=1; }
 grep -q 'login_hint' "$f" || { echo "FAIL: login no longer pins the account with login_hint"; fail=1; }
 grep -q 'cfg="$DEFAULT_CFG"' "$f" || { echo "FAIL: re-consent of the main account no longer targets ~/.config/gws"; fail=1; }
 # The readers call plain gws, so they read ~/.config/gws. Pointing one at a

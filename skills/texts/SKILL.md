@@ -190,6 +190,16 @@ Slack, and other tabs close things. Before calling anything from a thread still
 open, search Slack and `git log` too. On 2026-10-10 three "open" items from
 Maggie's thread were already done, and Caleb wrote "Retard we did those".
 
+## Sending a file
+
+Text a file with `send-file <handle> <path> [--text "..."]`, never a hand-written
+`send (POSIX file ...)`. Messages can't read `~/Downloads`, so a script send from
+there makes a blank bubble that never uploads. `send-file` stages the copy in
+`~/Pictures`, then exits 0 only when chat.db shows the transfer done. Exit 1
+means it did not go: say so. On 2026-11-02 a CSV for Chibo stuck that way while
+his own drag went at once, and he wrote "when you sent it its tweaking. This
+happened yesterday with sending files to colin".
+
 ## Images and QR codes someone sent
 
 An image in chat.db with `transfer_state` 0 was never downloaded to this Mac. Its

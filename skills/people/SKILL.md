@@ -570,6 +570,28 @@ Three things this does not do, which you should say plainly rather than fake:
   import is macOS Contacts, vCard, or CSV, and everything else is written by
   them or by you.
 
+## Who knows whom: record the edge, not just the person
+
+A CRM with no person to person edges is a contact list. Checked 2026-11-02:
+Caleb's store held 3,346 people and ZERO rows in `relationships`, so "who
+could introduce me to X" could only match company strings and catch-all
+circles. That day, while building his dad's CRM, Caleb wrote "Graph
+engineer!!!!!!" after a build that had skipped the edges entirely, even though
+his dad's own texts were already edges ("Erik Fish and Jim Munroe both know
+Andrew from our college days", "Garland and Erik know each other too").
+
+- When a thread says two people know each other, are family, or one
+  introduced the other, write it: `people rel <a> <kind> <b>` (friend, spouse,
+  parent, mentor, coworker, introduced). A note on one card is not an edge.
+- A circle is an edge only when it's small. Tested the same day: a 94-person
+  "Inner Circle" turned Andrew Laffoon's one real edge (friend of Erik Fish)
+  into row 1 of 19, the rest "both in Inner Circle". joel-os skips circles
+  over 15 members for that reason.
+- Building a CRM for someone else: write the ontology first (person, org,
+  project, event, plus verb-named edges with a source), then extract. The
+  graph-engineering skill has the pipeline. calebnewtonusc/joel-os is the
+  worked example, with `connections`, `intro_path` and `relate` over MCP.
+
 ## Never
 
 - Never invent a fact about a person, or infer one confidently from a name

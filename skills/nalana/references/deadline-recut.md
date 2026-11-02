@@ -29,3 +29,7 @@ Caleb's ask: "move them around and make the story more succinct".
   plan that cut the childhood and Miso building got "we hv to include the
   building stuff from a young age... that ws tuff". Cut weak lines, never the
   origin story.
+- Count a voiceover's words with `wc -w` before stating a runtime, and use
+  the speaker's own measured pace (Colin's v1: 735 words over about 222s,
+  3.3 words a second). A script called "about 450 words, 2:35" was 633 words
+  and 3:10 when counted, after Caleb had already read the wrong number.

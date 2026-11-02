@@ -38,6 +38,7 @@ interpreter, which has nothing else installed, so it cannot import osgraph.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import re
@@ -45,6 +46,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 import time
 import unicodedata
 from datetime import datetime, timedelta, timezone
@@ -67,6 +69,13 @@ IDLE_SPLIT_S = 600
 # A chunk whose transcription failed this many times is dropped, so one bad
 # file cannot stall every chunk behind it. Guessed, never measured.
 MAX_TRIES = 3
+# One chunk gets this long in whisper, then it's dropped without a retry.
+# On 2026-11-02 a watcher stopped at the chunk after 11:28 and sat in
+# mlx_whisper.transcribe for 2.5 hours at ~40% CPU, never returning, with 96
+# chunks queued behind it, while Caleb asked why the Mac was so loud. A 15 s
+# chunk normally takes a few seconds (small.en ran faster than real time on
+# 2026-09-29); two minutes leaves room for a Mac at load 50.
+CHUNK_TIMEOUT_S = 120
 # The summary runs once, at the end of a meeting. claude -p took 20 to 40 s on
 # an hour of transcript in call-listen's runs (2026-10-02); three minutes is
 # the ceiling before the meeting is saved without one.
@@ -488,13 +497,38 @@ def whisper(path: Path) -> str:
     return str(result.get("text", ""))
 
 
+class ChunkTimeout(Exception):
+    pass
+
+
+@contextlib.contextmanager
+def time_limit(seconds: float):
+    """Raise ChunkTimeout in the main thread after `seconds`. Elsewhere, or
+    with no limit, it does nothing, so tests on other threads still run."""
+    if not seconds or threading.current_thread() is not threading.main_thread():
+        yield
+        return
+
+    def expire(*_):
+        raise ChunkTimeout(f"no words after {seconds:.0f}s")
+
+    old = signal.signal(signal.SIGALRM, expire)
+    signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, old)
+
+
 class Watcher:
     """Turns chunks into meetings. Every outside call is injectable, so the
     tests run it on fixture chunks with no model, no calendar and no claude."""
 
     def __init__(self, home: Path, transcribe=whisper, run=None, now=None, env: dict | None = None,
-                 helper_alive=None):
+                 helper_alive=None, chunk_timeout_s: float = CHUNK_TIMEOUT_S):
         self.home = Path(home)
+        self.chunk_timeout_s = chunk_timeout_s
         self.transcribe = transcribe
         self.run = run or _run
         self.now = now or (lambda: datetime.now(timezone.utc))
@@ -526,7 +560,13 @@ class Watcher:
         for _, start, wav in self.pending():
             levels = load(wav.with_suffix(".json")) or {}
             try:
-                text = clean_transcript(self.transcribe(wav))
+                with time_limit(self.chunk_timeout_s):
+                    text = clean_transcript(self.transcribe(wav))
+            except ChunkTimeout as err:
+                # A hang repeats on the same audio, so it gets no retry.
+                print(f"meeting_capture: dropped {wav.name}: {err}", file=sys.stderr)
+                self.stats["failed"] += 1
+                text = ""
             except Exception as err:  # noqa: BLE001  any model failure is the chunk's, not the watcher's
                 self.tries[wav.name] = self.tries.get(wav.name, 0) + 1
                 print(f"meeting_capture: transcription failed for {wav.name}: {clean(str(err), 160)}",

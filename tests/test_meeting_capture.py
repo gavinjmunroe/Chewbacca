@@ -28,6 +28,7 @@ import os
 import stat
 import sys
 import tempfile
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -280,6 +281,26 @@ def retrying(tmp: Path) -> None:
           (len(tries), w.stats))
 
 
+def hung(tmp: Path) -> None:
+    home = tmp / "hung"
+    name = chunk(home, 1, T0)
+    tries = []
+
+    def stuck(path):
+        tries.append(path.name)
+        time.sleep(5)
+        return "never"
+
+    w = MC.Watcher(home, transcribe=stuck, run=FakeRun(), now=lambda: fx.NOW, env={}, chunk_timeout_s=0.2)
+    began = time.monotonic()
+    w.step()
+    check("a chunk stuck in whisper is cut off at the time limit",
+          time.monotonic() - began < 2, time.monotonic() - began)
+    check("the hung chunk is dropped on the first try, never retried",
+          not (MC.chunks_dir(home) / name).exists() and w.stats["failed"] == 1 and len(tries) == 1,
+          (len(tries), w.stats))
+
+
 def stale(tmp: Path) -> None:
     home = tmp / "stale"
     MC.write_private(MC.meetings_dir(home) / "rc-20261004-090000.json", {
@@ -482,6 +503,7 @@ def main() -> int:
         tmp = Path(d)
         watching(tmp)
         retrying(tmp)
+        hung(tmp)
         stale(tmp)
         shapes(tmp)
         ingesting(tmp)

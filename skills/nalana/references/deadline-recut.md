@@ -15,3 +15,17 @@ Caleb's ask: "move them around and make the story more succinct".
   first render.
 - A handoff prompt that has Claude write the person's voiceover is the
   ghostwriting their kit bans. New lines come from them on the mic.
+
+## Same night, after the first board
+
+- A .blend saved on someone else's Mac renders every image texture pink: the
+  paths point at their folders. Relink by basename against the repo's assets
+  and run `make_paths_relative` before the first render (the-machine
+  `build/fix_paths.py`). Scripts run through `exec(compile(...))` get no
+  `__file__`, so pass it in the globals dict or the repo-relative ROOT breaks.
+- A planning doc for two people on a call is the video itself, one row per
+  moment: SAY, SEE, FROM (v1 timestamp or NEW shot). A four-part board w
+  DECIDE columns got "how tf are Tyler and I supposed to use this???", and a
+  plan that cut the childhood and Miso building got "we hv to include the
+  building stuff from a young age... that ws tuff". Cut weak lines, never the
+  origin story.

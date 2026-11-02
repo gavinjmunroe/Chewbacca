@@ -766,3 +766,14 @@ long???????" then "BRO?".
   with nothing started; at 9am Caleb asked "How'd it go" and nothing had
   happened on his brother's birthday. Either keep working in the turn, or
   start a background job and say its id.
+
+## Tailwind v4: a default in plain CSS beats every utility
+
+Tailwind v4 puts utilities in `@layer utilities`, and any unlayered rule
+wins over every layer. So a default like `.iphone { --pw: 360px }` in
+globals.css silently cancels `[--pw:...]` or `md:[--pw:...]` on the same
+element. On 2026-11-02 the Kyber landing page's fit-to-screen phone sizing
+never applied: every phone rendered 753px tall and covered the headlines,
+and Caleb called the page "slop". Put component defaults in `@layer base`,
+then check the computed value in the browser
+(`getComputedStyle(el).getPropertyValue('--pw')`). Don't trust the class name.

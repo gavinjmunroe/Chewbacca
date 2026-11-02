@@ -73,3 +73,34 @@ Caleb's ask: "move them around and make the story more succinct".
   with `afinfo` (Colin's VO was a 190.6s m4a, matching the 3:10 script), and
   copy them into the project folder under a plain name. "VO + music incoming"
   delivered one audio file; say which one is missing instead of assuming.
+
+## The 11pm rebuild: 4 parallel builders, then Caleb's notes (2026-11-01)
+
+What worked: 4 background builders, one per shot group, each with its own frame
+range (20000/30000/40000/50000) and out/ folder, a hard cutoff 50 min before
+the deadline, and an auto-assemble (the-machine `build/edit_v2.py`) that drops
+v1 footage into any missing shot, never a black frame. What Caleb still caught:
+
+- "the audio does not at all line up with the video". The new shots were timed
+  off whisper on Colin's VO, but v1 clips were picked off a 5s contact sheet.
+  Pick v1 clips off whisper run on v1's OWN audio, then map line to line.
+- "so silos entire mission repeated twice". Whisper silently drops a repeated
+  take. A gap of more than 1s between words with no silence in an RMS energy
+  trace is a hidden retake. Cut the first take at the energy dip, then
+  re-transcribe the cut. The first try clipped "mission" into "issue".
+- Builders invent on-screen numbers: a $14,200 earnings counter and a waitlist
+  that counted to 635, both made up. Brief every builder: no number or text on
+  screen that isn't in the script, and read every rendered frame for text.
+- Reused v1 footage carried an Amber logo (firm names were locked out) and a
+  selfie with Caleb in it ("DONT HV CALEB"). Scan every reused second for
+  names, logos and faces before it ships.
+- "the screw goes into the ground". Check hero-prop contact with the surface
+  in a close frame. Raise by the head radius so nothing intersects.
+- "u used the old slop silo WE LITERALLY MADE A BUNCH OF NEW ONES". Put the
+  newest planned assets in (the Silo screens folder and its placement doc),
+  never old footage of the same app.
+- "slop 3d overlaps": a rising camera exposed where the set ends and houses
+  intersected. Cut any shot where geometry visibly interpenetrates.
+- "IT DOESNT HV TO BE 4k" and "11:30 is way too late". Finals at 720p and 8
+  samples. Set the builder cutoff by the person's deadline, not the render
+  estimate.

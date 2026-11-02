@@ -77,6 +77,10 @@ where the data comes from. All four of those are written down here, once.
 7. **For a website, run `site-gate check <every page url>` and get exit 0.**
    It refuses console errors, horizontal scroll at 390, dead links, controls
    with no hover or focus state, and loops that run under reduced motion.
+   For a pinned scroll scene, `site-gate scrub <url> --run <selector>` after
+   every round of changes, then read both contact sheets it writes. It fails a
+   console error or text inside the 16px gutter at 1440 or 390, and found a
+   label cut off on a phone the day a round skipped the phone (FF hero, 11/1).
    Then `site-gate slideshow <url>` (nothing that could have been a
    slideshow), and `site-gate idle <url>` and confirm the ambient layer you planned is
    moving. The four layers a site needs (layout, choreography, ambience,

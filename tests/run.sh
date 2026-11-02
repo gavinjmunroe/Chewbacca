@@ -2044,6 +2044,7 @@ if group "hud"; then
   check  "site-fast types a field value or nothing" python3 "$ROOT/tests/test_site_fast.py"
   check  "site-gate calls a flash a flash, a thin phone thin, a deck a deck and a flat screen flat" python3 "$ROOT/tests/test_site_gate_flash_parity.py"
   check  "site-gate fails a page iPhone Safari scrolls sideways or draws media 0px tall" python3 "$ROOT/tests/test_site_gate_phone.py"
+  check  "site-gate scrub fails a scroll scene with a console error or text in the 16px gutter" python3 "$ROOT/tests/test_site_gate_scrub.py"
   check  "site-gate refuses a wall of text and passes beats and articles" python3 "$ROOT/tests/site_gate_walls.py"
   check  "untrusted-screen flags text aimed at the agent, and only that" python3 "$ROOT/tests/test_screen.py"
   check  "api-grow points taught hosts at their ops and nudges untaught ones once" python3 "$ROOT/tests/test_api_grow.py"

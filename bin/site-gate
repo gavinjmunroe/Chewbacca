@@ -24,6 +24,10 @@ library/crafts/website.md. Prose does not fire, so this is the half that does.
                                        eye: the biggest text under 1.6x the
                                        usual size, over 40 lines at one size,
                                        or one control with more than 4 choices
+    site-gate scrub <url> --run <sel>  step a pinned scroll run at 1440 and 390,
+                                       write a fresh contact sheet per width, and
+                                       exit 1 on a console error or visible text
+                                       inside the 16px side gutter
     site-gate deck <url>...            exit 1 if the page reads like a pitch
                                        deck: three or more sections in a row
                                        with the same shape, or every section
@@ -1302,6 +1306,82 @@ def slideshow(pw, url, size=(1440, 900)):
     return scenes, slideshow_fails(scenes)
 
 
+# scrub: the check for a scroll-driven scene. Learned on the Firm Foundation hero,
+# 2026-11-01: a crash from a shadowed variable passed tsc and showed only in the
+# console, a sheet built from a reused folder mixed in shots from older runs, a hot
+# reload remounted the run mid-capture, and course names the camera carried to 10px
+# from a phone's edge went out because the phone wasn't re-shot after a round.
+GUTTER_PX = 16
+SCRUB_PROBE = r"""(g) => {
+  const out = [], W = innerWidth, H = innerHeight;
+  const alpha = (el) => { let a = 1; for (let e = el; e && e.nodeType === 1; e = e.parentElement || e.parentNode) {
+      const cs = getComputedStyle(e); if (cs.display === 'none' || cs.visibility === 'hidden') return 0;
+      a *= parseFloat(cs.opacity); } return a; };
+  const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let n = w.nextNode(); n; n = w.nextNode()) {
+    const t = n.textContent.trim(); if (t.length < 2) continue;
+    const el = n.parentElement; if (!el || el.closest('[aria-hidden="true"] .sr-only, .sr-only')) continue;
+    const r = document.createRange(); r.selectNodeContents(n);
+    for (const b of r.getClientRects()) {
+      if (b.width < 1 || b.bottom < 0 || b.top > H || b.right < 0 || b.left > W) continue;
+      const a = alpha(el); if (a < 0.3) break;
+      if (b.left < g || b.right > W - g) { out.push({text: t.slice(0, 40), left: Math.round(b.left), right: Math.round(W - b.right)}); break; }
+    }
+  }
+  return out;
+}"""
+
+
+def scrub_fails(frames):
+    """frames: [{width, step, errors: [...], edge: [{text, left, right}]}] -> failure lines."""
+    fails = []
+    for f in frames:
+        for e in f["errors"]:
+            fails.append(f"{f['width']}px step {f['step']:.3f}: console error: {e[:160]}")
+        for t in f["edge"]:
+            side = f"{t['left']}px from the left" if t["left"] < GUTTER_PX else f"{t['right']}px from the right"
+            fails.append(f"{f['width']}px step {f['step']:.3f}: \"{t['text']}\" sits {side}, inside the {GUTTER_PX}px gutter")
+    return fails
+
+
+def scrub(pw, url, run, steps, out_dir):
+    import time
+    from PIL import Image
+    out_dir = Path(out_dir) / time.strftime("%Y%m%d-%H%M%S")
+    out_dir.mkdir(parents=True, exist_ok=False)
+    frames = []
+    for w, h in ((1440, 900), (390, 844)):
+        b = pw.chromium.launch()
+        pg = b.new_page(viewport={"width": w, "height": h})
+        errors = []
+        pg.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
+        pg.on("pageerror", lambda e: errors.append(str(e)))
+        pg.goto(url, wait_until="networkidle")
+        shots = []
+        for k in range(steps + 1):
+            n = k / steps
+            pg.wait_for_selector(run, timeout=90000)
+            pg.evaluate("""([sel, n]) => { const r = document.querySelector(sel);
+              const top = r.getBoundingClientRect().top + scrollY;
+              scrollTo(0, top + n * Math.max(0, r.offsetHeight - innerHeight)); }""", [run, n])
+            pg.wait_for_timeout(900)
+            shot = out_dir / f"{w}-{k:03d}.png"
+            pg.screenshot(path=str(shot))
+            shots.append(shot)
+            frames.append({"width": w, "step": n, "errors": list(errors), "edge": pg.evaluate(SCRUB_PROBE, GUTTER_PX)})
+            errors.clear()
+        b.close()
+        ims = [Image.open(s) for s in shots]
+        scale = 0.25 if w > 1000 else 0.5
+        tw, th = int(ims[0].width * scale), int(ims[0].height * scale)
+        cols = 6 if w > 1000 else 10
+        sheet = Image.new("RGB", (tw * min(cols, len(ims)), th * ((len(ims) + cols - 1) // cols)), "white")
+        for k, im in enumerate(ims):
+            sheet.paste(im.resize((tw, th)), ((k % cols) * tw, (k // cols) * th))
+        sheet.save(out_dir / f"sheet-{w}.png")
+    return out_dir, frames
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -1321,6 +1401,9 @@ def main():
     sl = sub.add_parser("slideshow"); sl.add_argument("urls", nargs="+")
     fo = sub.add_parser("focus"); fo.add_argument("urls", nargs="+")
     rp = sub.add_parser("repeat"); rp.add_argument("urls", nargs="+")
+    sc = sub.add_parser("scrub"); sc.add_argument("url"); sc.add_argument("--run", required=True,
+        help="selector of the pinned run element"); sc.add_argument("--steps", type=int, default=24)
+    sc.add_argument("--out", default="/tmp/site-gate-scrub")
     i = sub.add_parser("idle"); i.add_argument("url"); i.add_argument("--ref")
     i.add_argument("--ys", help="comma separated scroll positions; default every 900px")
     r = sub.add_parser("research", help="exit 1 unless the repo holds the research receipt")
@@ -1349,6 +1432,14 @@ def main():
                         print(f"        {f}")
                 print(f"site-gate: {bad} problem(s) across {len(out)} page(s)")
             sys.exit(1 if bad else 0)
+        if a.cmd == "scrub":
+            out_dir, frames = scrub(pw, a.url, a.run, a.steps, a.out)
+            fails = scrub_fails(frames)
+            for x in fails:
+                print(f"FAIL  {x}")
+            print(f"sheets {out_dir}/sheet-1440.png and sheet-390.png: read every frame before calling it done")
+            print(f"site-gate scrub: {len(fails)} problem(s) over {len(frames)} frames")
+            sys.exit(1 if fails else 0)
         if a.cmd == "flash":
             bad = 0
             for u in a.urls:

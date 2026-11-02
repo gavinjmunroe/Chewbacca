@@ -76,10 +76,10 @@ def phone(slide, el, x, y, w):
     for b, h in zip(bubbles, hs):
         cls = b.get("class", []); t = clean(b)
         fill, col = (BLUE, "ffffff") if "me" in cls else (INK, "ffffff") if "bot" in cls else (GRAY, INK)
-        tw = min(bw, max(len(t) * 22 * 0.56 + 48, 80)) if est_lines(t, 22, bw - 36) == 1 else bw
+        tw = min(bw, max(len(t) * 22 * 0.62 + 64, 130)) if est_lines(t, 22, bw - 36) == 1 else bw
         bx = x + 26 + inner - tw if "me" in cls else x + 26
         s = box(slide, bx, cy, tw, h, fill=fill, radius=0.5 if h < 60 else 0.3)
-        tf = s.text_frame; tf.word_wrap = True
+        tf = s.text_frame; tf.word_wrap = est_lines(t, 22, bw - 36) > 1
         tf.margin_left = tf.margin_right = px(18); tf.margin_top = tf.margin_bottom = px(6)
         tf.vertical_anchor = MSO_ANCHOR.MIDDLE
         p = tf.paragraphs[0]; p.alignment = PP_ALIGN.LEFT
@@ -119,11 +119,11 @@ for sec in soup.select("section.slide"):
             elif "beat" in cls:
                 cx = L
                 for sp in el.find_all("span"):
-                    t = clean(sp); wd = len(t) * 18 * 0.55 + 30
+                    t = clean(sp); wd = len(t) * 18 * 0.6 + 44
                     if not dry:
                         hj = "hj" in sp.get("class", [])
                         b = box(s, cx, y, wd, 36, fill=BLUE if hj else None, line=None if hj else LINE, radius=0.5)
-                        tf = b.text_frame; tf.margin_left = tf.margin_right = px(12); tf.margin_top = tf.margin_bottom = 0
+                        tf = b.text_frame; tf.margin_left = tf.margin_right = px(12); tf.margin_top = tf.margin_bottom = 0; tf.word_wrap = False
                         tf.vertical_anchor = MSO_ANCHOR.MIDDLE
                         p = tf.paragraphs[0]; p.alignment = PP_ALIGN.CENTER
                         r = p.add_run(); r.text = t; r.font.size = fp(18); r.font.bold = True; r.font.name = FONT

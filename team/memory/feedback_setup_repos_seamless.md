@@ -21,3 +21,12 @@ A setup repo we make for other people (team setups like `calebnewtonusc/chip-in-
 - A smoke test fails when the docs describe a layout the target repo no longer has (chip-in-setup a6eb2e7 greps for server.js, data-copy, phone.css).
 - The first person through gets their Claude to write a PDF of every snag, and each snag gets fixed in the repo before the next person starts.
 - When Caleb is helping someone live, give him one paste prompt for their Claude. See [[reference_sharing_a_claude_setup]].
+
+Moving or archiving a repo a setup repo points at sends every teammate a NEW
+invite, and an archived repo goes read only, so they can still preview but
+every push fails. On 2026-11-02 the Kyber landing page had moved to
+calebnewtonusc/kyber on 10/30 with nobody told; Angie and Luke sat on pending
+invites for three days and Caleb asked "it ws on her this whole time?" When a
+repo moves, text each teammate the new invites link
+(github.com/<owner>/<repo>/invitations) the same day, and check
+`gh api repos/<owner>/<repo>/invitations` until it's empty.

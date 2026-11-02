@@ -33,6 +33,13 @@ Always on. Any file made for the user to use or pass on follows this.
 - **A GTM sales call doc carries the "why us" lines from `dough/PITCH.md`.** Copy its one-liner, five reasons and "how are you different from" answers into the script so the speaker never improvises a claim, and only numbers with a receipt go in. On 2026-10-30 Caleb pitched OPTRA without them, said "I feel like I'm having to finesse words out my butt on the spot", and on the call claimed 5 calls a day off 200 emails a month.
 - **Lines go only to people confirmed on the call.** Before handing over a call doc, check the thread for who is actually joining. A teammate who has not confirmed gets no lines; give them to the speaker, or put theirs under an "if Gav joins" heading. On 2026-10-30 the OPTRA doc split the script between Caleb and Gavin, Gavin never joined, and Caleb wrote "GAV ISNT ON THE CALL" mid-call.
 
+## A group asks for "the slides"
+
+- **Name the deck before building.** Several group decks can be live the same morning. "The slides" from Caleb means the group he's talking about right then, so read the latest gc (`people texts "<group>"`) or ask in one line. Don't pick the newest PDF in Downloads. On 2026-11-02 "my group needs an editable version of the slides" got the Kyber deck rebuilt and uploaded, and he wrote "NO BRO FOR POD SOUNDCHECK".
+- **Editable means a Google Slides link, never a .pptx.** Teammates don't have PowerPoint ("WE NEEDA GET IT FOR FIGMA OR GOOGLE SLIDES HE DOESNT HV POWERPOINT", 2026-11-02). Build native text boxes (python-pptx, see `tools/decks/`), upload with `gws drive files create` and mimeType `application/vnd.google-apps.presentation`, give anyone with the link writer access, then export the result to PDF and look at every slide before sending the link. Screenshot slides are not editable.
+- **After the link is out, edit in place.** Use `gws slides presentations batchUpdate` (replaceAllText) and don't re-upload, because a re-upload wipes teammates' edits.
+- **Credit comes from the thread, not memory.** Before a contributions slide or a "X is right" text, match each point to the handle that actually wrote it in the gc. On 2026-11-02 the P4b deck and a gc text gave Sam Cheng's deadline, 4a resubmit and Instinct points to Mia Lin.
+
 ## A how-to guide people will pass around
 
 - **Written for the least technical reader.** Every account they make gets one line on what it's for. Every command gets one gray line on what it does and what will look scary (an invisible password, the lines Homebrew prints under Next steps). Every tool, account and page is a link.

@@ -140,6 +140,15 @@ one call, and a lapsed session renews itself from Chrome:
   Check with the `submissions` op after. Never drive the web form in his
   Chrome: it takes his screen (ACAD 185 A19, 2026-10-22).
 
+Course nicknames: read `aliases:` in each ledger file before searching. "POD" is ACAD 324g
+The Practice of Design, and on 2026-11-02 he had to spell out "Practice of design peridot"
+because a grep for POD hit ACAD 185 slides (points of difference) first.
+
+Never call a dropbox upload BLOCKED before trying `brightspace submit --dry-run`. On
+2026-11-02 a tab told him to upload P4b by hand from a stale checkout of this file that
+predated the submit command. It only needed him to sign into Brightspace once, then
+`brightspace submit 299120 603067 <pdf>` landed it at 10:16 for a 10:30 deadline.
+
 Never-dos, in his words (2026-10-11, mid quiz):
 
 - "IT should never take this long to find a place you already know": the

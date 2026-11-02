@@ -1110,15 +1110,20 @@ function cmdTexts(argv) {
   const days = Number(flags.days || (person ? 36500 : 3));
   const limit = Number(flags.limit || 300);
   const full = Boolean(flags.full || person);
-  let sql = `SELECT who, from_me, body, sent_at, source FROM messages
+  let sql = `SELECT who, handle, room, from_me, body, sent_at, source FROM messages
               WHERE julianday('now') - julianday(sent_at) <= ?`;
   const args = [days];
   if (person) {
     sql += " AND person_id = ?";
     args.push(person.id);
   } else if (who) {
-    sql += " AND lower(who) LIKE ?";
-    args.push("%" + who.toLowerCase() + "%");
+    // A group thread is a room, and only his own rows carry the room's name
+    // in `who`; everyone else's carry their own name. Matching `who` alone
+    // printed "people texts Peridot" as his side only, so on 2026-11-02 a
+    // session fell back to raw chat.db, saw bare numbers, and credited Sam
+    // Cheng's points to Mia Lin on a graded team deck.
+    sql += " AND (lower(who) LIKE ? OR lower(coalesce(room,'')) LIKE ?)";
+    args.push("%" + who.toLowerCase() + "%", "%" + who.toLowerCase() + "%");
   }
   sql += " ORDER BY sent_at DESC LIMIT ?";
   args.push(limit);
@@ -1141,15 +1146,20 @@ function cmdTexts(argv) {
     say(c.dim(`  showing the newest ${limit}; --limit N for more`));
   let last = null;
   for (const r of rows) {
-    if (r.who !== last) {
-      say(`\n${c.cyn(printable(r.who))}`);
-      last = r.who;
+    const thread = r.room || r.who;
+    if (thread !== last) {
+      say(`\n${c.cyn(printable(thread))}`);
+      last = thread;
     }
+    // In a room, every line names its sender, resolved from Contacts at
+    // sync time, so nobody has to map a phone number to a person by guess.
+    const sender =
+      r.room && !r.from_me ? c.b(printable(r.who === r.room ? r.handle || r.who : r.who)) + ": " : "";
     const body = full
       ? printable(r.body).replace(/\n/g, "\n                 ")
       : printable(r.body).replace(/\s+/g, " ").slice(0, 100);
     say(
-      `  ${c.dim(r.sent_at.slice(5, 16))} ${r.from_me ? c.cyn("->") : "  "} ${tag(r)}${body}`,
+      `  ${c.dim(r.sent_at.slice(5, 16))} ${r.from_me ? c.cyn("->") : "  "} ${tag(r)}${sender}${body}`,
     );
   }
   say("");

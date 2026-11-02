@@ -44,4 +44,16 @@ grep -q "NEWEST" <<<"$out"          || fail "--days with --who still drops the n
 out="$("$P" texts gavin 2>&1)"
 grep -q "ESC]0;pwnedDONE" <<<"$out"  || fail "the escape-carrying message did not print at all"
 printf '%s' "$out" | LC_ALL=C grep -q "$(printf '\033')\]0;" && fail "raw ESC from a message body reached the terminal"
+# A group thread read by its name shows every member, each line named. On
+# 2026-11-02 "people texts Peridot" printed only his own side, and a team
+# deck credited Sam Cheng's points to Mia Lin.
+sqlite3 "$DB" "
+  INSERT INTO messages (msg_id, person_id, who, handle, from_me, body, sent_at, source, room) VALUES
+   (991001, NULL, 'Pod Group', 'chatPOD1', 1, 'MINELINE', datetime('now','-5 minute'), 'imessage', 'Pod Group'),
+   (991002, NULL, 'Sam Cheng', '+15550301', 0, 'SAMLINE resubmit 4a', datetime('now','-4 minute'), 'imessage', 'Pod Group'),
+   (991003, NULL, 'Pod Group', '+15550302', 0, 'UNSAVEDLINE', datetime('now','-3 minute'), 'imessage', 'Pod Group');"
+out="$("$P" texts "pod group" 2>&1)"
+grep -q "MINELINE" <<<"$out"                || fail "group read lost his own messages"
+grep -q "Sam Cheng: SAMLINE" <<<"$out"      || fail "group read dropped a member's message or its sender name"
+grep -q "+15550302: UNSAVEDLINE" <<<"$out"  || fail "an unsaved sender in a group was not shown by number"
 exit 0

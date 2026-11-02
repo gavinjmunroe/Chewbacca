@@ -637,6 +637,11 @@ class Solo(unittest.TestCase):
                            capture_output=True, text=True, env=dict(os.environ))
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertIn("Nothing has been sent", p.stdout)
+        # On 2026-11-02 stress landed in gtme_solo but this door didn't list it,
+        # so `chewbacca gtme stress` answered "invalid choice".
+        p = subprocess.run([sys.executable, str(ROOT / "tools" / "gtme_operator.py"), "stress", "--client", "Dana Co"],
+                           capture_output=True, text=True, env=dict(os.environ))
+        self.assertIn("not checked.", p.stdout, p.stderr)
 
 
 if __name__ == "__main__":

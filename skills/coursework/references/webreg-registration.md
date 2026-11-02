@@ -18,6 +18,12 @@ Read this before submitting a WebReg checkout for a student.
   browser before calling it signed out: on 10/31 one of three had the session.
 - Term select: /Terms?term=<YYYYT>&handler=TermSelect, then Continue past the
   Restrictions page, then /CourseBin (/myCourseBin is a 404).
+- Swapping a registered class for one in the same slot: Add refuses a section
+  that overlaps a scheduled one ("overlaps with MDES-301"). Unschedule the old
+  class in /CourseBin first, then Add the new lecture and its discussion, then
+  Checkout. The drop and the add land together on submit, so the old seat is
+  held until the new one goes through. On 11/1 MDES 301 to ANTH 371 worked
+  this way.
 
 ## Picking a GE section
 

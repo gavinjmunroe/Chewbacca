@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""chewbacca pdf: markdown (or text) files to PDFs, in seconds, never a hang.
+"""chewbacca pdf: markdown, text or HTML files to PDFs, in seconds, never a hang.
 
     chewbacca pdf brief.md other.md            PDFs next to each file
     chewbacca pdf *.md --out "~/Downloads/For Sagar"
+    chewbacca pdf guide.html                   prints the page as styled
 
 Caleb, 2026-10-11 9:56pm: "Bro this should be a 2 sec task wtf???", then "Fix
 chewb so u never take forever on smth that should take 2 seconds". Headless
@@ -65,7 +66,16 @@ def main(argv=None) -> int:
         slang = text_speak(text)
         if slang:
             print(f"note: {src.name} uses chat shorthand ({', '.join(slang)}); a PDF is read like a document, so write the full words")
-        route = op.to_pdf(text, src.stem, dest)
+        # 2026-11-02: a styled setup guide (guide.html) came out as 9 pages of
+        # its own source, because md_to_html escaped the tags, and the guard
+        # refuses printing it by hand. An .html file is already the page.
+        render = op.md_to_html
+        if src.suffix.lower() in (".html", ".htm"):
+            op.md_to_html = lambda page, _title: page
+        try:
+            route = op.to_pdf(text, src.stem, dest)
+        finally:
+            op.md_to_html = render
         if route and dest.exists():
             print(f"{dest}  ({pages(dest)} pages, {time.time() - t0:.1f}s, {route})")
         else:

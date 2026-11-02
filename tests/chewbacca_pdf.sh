@@ -21,6 +21,9 @@ done
 # lingers; a hang is the failure this guards, so the bound is loose but finite.
 [ "$took" -le 60 ] && echo "ok    both files in ${took}s" || { echo "FAIL  took ${took}s"; fail=1; }
 pgrep -f "print-to-pdf=$T" >/dev/null && { echo "FAIL  a Chrome print process was left running"; fail=1; } || echo "ok    no Chrome left running"
+printf '<!doctype html><html><body><h1 style="color:#0a6cff">Styled</h1></body></html>' > "$T/guide.html"
+python3 "$ROOT/bin/chewbacca-pdf" "$T/guide.html" --out "$T/out" >/dev/null 2>&1
+if [ -s "$T/out/guide.pdf" ] && ! pdftotext "$T/out/guide.pdf" - 2>/dev/null | grep -q 'doctype'; then echo "ok    an .html file prints as the page, not its source"; else echo "FAIL  .html printed as raw source"; fail=1; fi
 python3 "$ROOT/bin/chewbacca-pdf" "$T/nope.md" >/dev/null 2>&1 && { echo "FAIL  a missing file exited 0"; fail=1; } || echo "ok    a missing file exits 1"
 python3 - "$ROOT" <<'PY' && echo "ok    inline code and bold render as tags, not raw marks" || { echo "FAIL  inline markdown printed raw"; fail=1; }
 import sys; sys.path.insert(0, sys.argv[1] + "/tools")

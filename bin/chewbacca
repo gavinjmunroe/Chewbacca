@@ -52,6 +52,7 @@ COMMANDS=(
   "work-ledger|preserve workspace commitments across messages and runtimes"
   "tabs|see what every other live agent tab is doing, in any runtime"
   "land|put your files or commits on origin/main without anyone else's"
+  "claude-jobs|scheduled Claude jobs on your own plan, no API key, laptop shut or not"
   "launch|open a new named, briefed session in the Claude desktop app"
   "graph-fuse|inspect possible entity matches without merging records"
   "review-gate|run independent code review and check its current receipt"
@@ -238,6 +239,12 @@ permissions|permission|perms)
   shift
   [ $# -eq 0 ] && set -- walk
   exec python3 "$ROOT/bin/chewbacca-permissions" "$@"
+  ;;
+claude-jobs)
+  # Scheduled Claude jobs on the user's own plan via claude setup-token, run
+  # on Railway so they keep going with the laptop shut. See apps/claude-jobs.
+  shift
+  exec node "$ROOT/bin/chewbacca-claude-jobs" "$@"
   ;;
 land)
   # The one way a tab pushes: builds on a fresh worktree of origin/main,

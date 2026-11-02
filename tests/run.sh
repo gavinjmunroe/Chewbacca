@@ -678,6 +678,16 @@ if group "team"; then
   fi
 fi
 
+# ── scheduled claude jobs ─────────────────────────────────────────────────────
+if group "claude-jobs"; then
+  if command -v node >/dev/null 2>&1; then
+    check "claude-jobs runs read-only on schedule, keeps tokens out of argv and output, guards its server" node --test "$ROOT"/apps/claude-jobs/test/*.test.js
+    check "chewbacca claude-jobs lists the shipped jobs" bash -c '"$1"/bin/chewbacca claude-jobs list | grep -q "^morning-brief "' _ "$ROOT"
+  else
+    skip "claude-jobs runs read-only on schedule, keeps tokens out of argv and output, guards its server" "no node"
+  fi
+fi
+
 # ── browser (ChatGPT and Claude in Chrome as Chewbacca) ──────────────────────
 if group "browser"; then
   check "browser host: a fixed table, writes need a native press, injected writes and shells refused, every call logged" python3 "$ROOT/tests/test_browser_host.py"

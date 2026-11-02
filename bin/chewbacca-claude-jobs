@@ -1,0 +1,97 @@
+#!/usr/bin/env node
+// @ts-nocheck
+/**
+ * chewbacca claude-jobs: scheduled Claude jobs on your own Claude plan, no API key.
+ *
+ *   chewbacca claude-jobs list              every job file, when it runs, and any error in it
+ *   chewbacca claude-jobs org-chart         the roles and their jobs, one page
+ *   chewbacca claude-jobs run NAME          run one job here, on this Mac's Claude login
+ *   chewbacca claude-jobs status            the Railway service's jobs, last run, last error
+ *   chewbacca claude-jobs latest NAME       the newest output of one job from Railway
+ *   chewbacca claude-jobs trigger NAME      run one job on Railway now
+ *
+ * The jobs live in apps/claude-jobs/jobs/, one markdown file each. The service
+ * in apps/claude-jobs runs them on Railway, so they keep going with the laptop
+ * shut. status, latest and trigger read CLAUDE_JOBS_URL and JOBS_SECRET from the
+ * environment or ~/.chewbacca/claude-jobs.env. See apps/claude-jobs/README.md.
+ */
+"use strict";
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
+
+const APP = path.join(__dirname, "..", "apps", "claude-jobs");
+const JOBS = process.env.JOBS_DIR || path.join(APP, "jobs");
+const ENV_FILE = path.join(os.homedir(), ".chewbacca", "claude-jobs.env");
+
+function die(msg, code = 1) {
+  console.error(msg);
+  process.exit(code);
+}
+
+function remote() {
+  const env = { ...process.env };
+  try {
+    for (const line of fs.readFileSync(ENV_FILE, "utf8").split("\n")) {
+      const m = line.match(/^\s*([A-Z_]+)\s*=\s*(.*?)\s*$/);
+      if (m && !env[m[1]]) env[m[1]] = m[2].replace(/^["']|["']$/g, "");
+    }
+  } catch (e) {
+    if (e.code !== "ENOENT") die(`can't read ${ENV_FILE}: ${e.message}`);
+  }
+  if (!env.CLAUDE_JOBS_URL || !env.JOBS_SECRET)
+    die(`CLAUDE_JOBS_URL and JOBS_SECRET are not set. Put them in ${ENV_FILE}.`, 2);
+  return async (p, method = "GET") => {
+    const res = await fetch(env.CLAUDE_JOBS_URL.replace(/\/$/, "") + p, {
+      method,
+      headers: { authorization: `Bearer ${env.JOBS_SECRET}` },
+    });
+    const body = await res.text();
+    if (!res.ok) die(`${res.status}: ${body}`);
+    return body;
+  };
+}
+
+(async () => {
+  const lib = await import(path.join(APP, "lib", "jobs.js"));
+  const [cmd = "list", name] = process.argv.slice(2);
+  const find = () => {
+    if (!name) die(`usage: chewbacca claude-jobs ${cmd} NAME`, 2);
+    const job = lib.loadJobs(JOBS).find((j) => j.name === name);
+    if (!job) die(`no job named ${name} in ${JOBS}`);
+    return job;
+  };
+
+  if (cmd === "list") {
+    for (const j of lib.loadJobs(JOBS))
+      console.log(j.error ? `${j.name}  BROKEN: ${j.error}` : `${j.name}  ${j.days} at ${j.at}  ${j.role || ""}`.trimEnd());
+  } else if (cmd === "org-chart") {
+    console.log(lib.orgChart(lib.loadJobs(JOBS)));
+  } else if (cmd === "run") {
+    const job = find();
+    const sched = lib.createScheduler({
+      dataDir: path.join(os.homedir(), ".chewbacca", "claude-jobs"),
+      jobsDir: JOBS,
+      appDir: APP,
+      enabled: true,
+    });
+    const r = await sched.run(job);
+    if (!r.ok) die(r.error);
+    process.stdout.write(sched.latest(job.name).text);
+  } else if (cmd === "status") {
+    const { enabled, jobs } = JSON.parse(await remote()("/jobs"));
+    console.log(enabled ? "token set, jobs run on schedule" : "BLOCKED: CLAUDE_CODE_OAUTH_TOKEN is not set on the service");
+    for (const j of jobs)
+      console.log(`${j.name}  ${j.days} at ${j.at}  last run ${j.lastRun || "never"}${j.running ? "  RUNNING" : ""}${j.lastError ? `\n  last error: ${j.lastError.replace(/\n/g, " | ")}` : ""}`);
+  } else if (cmd === "latest") {
+    find();
+    process.stdout.write(await remote()(`/runs/${name}`));
+  } else if (cmd === "trigger") {
+    find();
+    console.log(await remote()(`/run/${name}`, "POST"));
+  } else if (cmd === "-h" || cmd === "--help" || cmd === "help") {
+    console.log(fs.readFileSync(__filename, "utf8").split("*/")[0].split("\n").slice(3).map((l) => l.replace(/^ \* ?/, "")).join("\n"));
+  } else {
+    die(`unknown command ${cmd}. Try: list, org-chart, run, status, latest, trigger`, 2);
+  }
+})().catch((e) => die(e.message));

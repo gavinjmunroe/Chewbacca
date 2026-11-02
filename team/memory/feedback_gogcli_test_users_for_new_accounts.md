@@ -1,6 +1,6 @@
 ---
 name: feedback_gogcli_test_users_for_new_accounts
-description: Before any `chewbacca email add` for an account not signed in before, check it's a test user on the gogcli OAuth app (project 1067120400776), or Google answers "Access blocked"
+description: gogcli is published as of 2026-11-02, so new accounts just sign in past the unverified warning. While it was in Testing, before any `chewbacca email add` for an account not signed in before, check it's a test user on the gogcli OAuth app (project 1067120400776), or Google answers "Access blocked"
 metadata:
   type: feedback
 ---
@@ -17,7 +17,18 @@ Workspace accounts had been added.
 **Why:** the sign-in is the last step before a send, so a block there stalls
 outbound on a credential step that should have been cleared days earlier.
 
-**How to apply:** when a new account (a new Workspace inbox, a teammate) needs
+**Update, 2026-11-02 ~3pm: the app is published ("In production").** The
+Branding page needed a privacy policy before Publish would enable, so
+https://firmfoundation.tech/privacy went live (firm-foundation 937599f) and the
+Branding page now lists firmfoundation.tech as homepage, privacy link and
+authorized domain. Caleb clicked Publish himself, since the agent's permission
+layer refuses that click. Any Google account can now sign in by clicking past
+the unverified app warning, and refresh tokens no longer die after 7 days. The
+test-user step below only matters if the app is ever set back to Testing.
+Starting several `chewbacca email add` runs at once is safe since 5e55dac8
+(one sign-in log per address).
+
+**How to apply (only while in Testing):** when a new account (a new Workspace inbox, a teammate) needs
 `chewbacca email add`, first open
 https://console.cloud.google.com/auth/audience?project=1067120400776 for Caleb,
 have every new address added as a test user, then run the sign-in. Publishing

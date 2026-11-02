@@ -189,6 +189,14 @@ Never-dos, in his words (2026-10-11, mid quiz):
   dropbox and "overdue" against `brightspace due` and the quizzes op first;
   that night it showed WP2 already submitted and quiz #7 not posted at all.
 
+- "is it slop" then "Fix it" (2026-11-02, ACAD 185 A20 Hero's Journey deck):
+  slop-check scoring 0 doesn't answer "is it slop". Before handing over a
+  graded deck or script, read each slide's last line and the closer yourself.
+  A pitch kicker ("the next person who fronts money opens Kyber too") or
+  presenter filler ("That's the whole journey on one slide") gets rewritten to
+  end on a concrete moment before he has to ask. After any deck edit, look at
+  the rendered page: that day Kyber's export.sh kept the old PDF because its
+  wait loop saw a non-empty file, and the edit never showed.
 A quiz's questions 403 until the student opens an attempt, so no tool can
 read them first. Ask them to paste the questions; never start an attempt.
 On 2026-10-11 a quiz check took six tool calls across four tools (grep,

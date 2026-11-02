@@ -246,6 +246,33 @@ class Solo(unittest.TestCase):
             {"clients": [{"name": "Dana Co", "sender_company": "Crumb Books"}]}))
         self.assertEqual(self.run_cli("batch", "--client", "Dana Co"), 2)
 
+    def test_copy_refuses_a_link_in_email_1(self):
+        seq = self.tmp / "seq.json"
+        seq.write_text(json.dumps([{"step": 1, "day": 0, "subject": "{{company}} bakery bookkeeping",
+                                    "body": "Hi {{first_name}}. Dana Co does bookkeeping for small bakeries. "
+                                            "See who we are at danaco.tech/team."}]))
+        self.assertEqual(self.run_cli("copy", "--client", "Dana Co", "--file", str(seq)), 2)
+
+    def test_stress_reads_the_campaign_against_the_playbooks(self):
+        self.ready()
+        real = gtme_solo.email_listing
+        self.addCleanup(setattr, gtme_solo, "email_listing", real)
+        gtme_solo.email_listing = lambda: "  dana@me.test  (not signed in: chewbacca email add dana@me.test)\n"
+        plan = json.loads((self.d / "plan.json").read_text())
+        plan["copy"] = [{"step": 1, "day": 0, "subject": "{{company}} bakery bookkeeping",
+                         "body": "Hi {{first_name}}. Dana Co does bookkeeping. www.danaco.tech"}]
+        (self.d / "plan.json").write_text(json.dumps(plan))
+        (self.d / "lines.json").write_text(json.dumps(
+            {"maria@crumbcorner.test": {"line": "Your hours page is gone.", "source": "https://crumbcorner.test/",
+                                        "checked": "2026-10-01 audit"}}))
+        rows = {rule: v for v, rule, _ in gtme_solo.stress("Dana Co")}
+        self.assertEqual(rows["email 1 has no links"], "FAIL")
+        self.assertEqual(rows["the sending inbox dana@me.test is signed in"], "FAIL")
+        self.assertEqual(next(v for r, v in rows.items() if "addresses verified" in r), "FAIL")
+        self.assertEqual(next(v for r, v in rows.items() if "re-checked in the last" in r), "FAIL")
+        self.assertIn("NOT CHECKED", rows.values())
+        self.assertEqual(self.run_cli("stress", "--client", "Dana Co"), 1)
+
     def test_copy_refuses_a_question_subject(self):
         seq = self.tmp / "seq.json"
         seq.write_text(json.dumps([{"step": 1, "day": 0, "subject": "Question",

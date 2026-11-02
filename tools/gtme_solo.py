@@ -87,7 +87,13 @@ TITLE_RX = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
 META_RX = re.compile(r"<meta[^>]+(?:name|property)=[\"'](?:og:)?description[\"'][^>]*content=[\"']([^\"']{10,400})",
                      re.I)
 DASH = re.compile("[—–]")
-EDU = re.compile(r"\.edu$", re.I)
+# A link of any kind in email 1: every practitioner in demand-gen-playbooks.md
+# agrees on plain text with no links in the first email (Lieben via Hunter,
+# +68% replies). On 2026-11-02 an FF SoCal email 1 carried
+# firmfoundation.tech/team, and only a stress test by hand caught it.
+LINK = re.compile(r"https?://|\bwww\.|\b[a-z0-9-]+\.(?:com|org|net|tech|church|io|co|us|app|ai|so)(?:/\S*)?\b",
+                  re.I)
+EDU =re.compile(r"\.edu$", re.I)
 # The footer address kinds a sender may choose. A home is not one: on 2026-10-29
 # a founder's family home sat in FF SoCal's plan as the footer of every email.
 ADDRESS_KINDS = ("business", "po_box", "virtual", "registered_agent")
@@ -597,6 +603,8 @@ def problems(mail: dict) -> list[str]:
         out.append(f"{words} words, over {MAX_WORDS}")
     if mail.get("line") and not re.match(r"https?://", mail.get("line_source") or ""):
         out.append("the personal line has no public source link")
+    if mail.get("step") == 1 and LINK.search(body.split(OPT_OUT)[0]):
+        out.append("email 1 has a link in it; the first email goes out plain, with no links")
     return out
 
 
@@ -1178,6 +1186,8 @@ def cmd_copy(a) -> int:
             bad.append("step 1 needs a subject")
         if n == 1 and c.get("subject"):
             bad += sagar_review(plan, c)[0]
+        if n == 1 and LINK.search(body):
+            bad.append("step 1 has a link; email 1 goes out plain, with no links")
     if bad:
         raise Refused("Not saved: " + "; ".join(bad) + ".")
     plan["copy"] = [{k: c.get(k, "") for k in ("step", "day", "subject", "body")} for c in seq]
@@ -1328,8 +1338,113 @@ def cmd_sender(a) -> int:
     return 0
 
 
+# Titles that rarely decide, from Growth Engine X's list scorecard: bad titles
+# under 2% is normal, over 10% means the filter is loose.
+WEAK_TITLE = re.compile(r"intern|assistant|coordinator|student|part[- ]time|retired|recep|secretar|"
+                        r"office (?:admin|manager)", re.I)
+# How many upcoming first emails the stress test reads: about four weeks at the
+# new-inbox ramp of 5, 10, 15 and 20 a day, three send days a week.
+STRESS_NEXT = 50
+# A line re-checked within this many days counts as fresh (gtm-engineering,
+# the 3-day rule: FF's 10/18 lines went five days stale before 10/23).
+STRESS_FRESH_DAYS = 3
+
+
+def email_listing() -> str:
+    """`chewbacca email`'s list of connected inboxes, or '' when it can't run.
+    Under test fixtures it never reaches the real accounts."""
+    if os.environ.get("GTME_FIXTURES"):
+        return ""
+    try:
+        return subprocess.run(["chewbacca", "email"], capture_output=True, text=True, timeout=20).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def stress(client: str) -> list[tuple[str, str, str]]:
+    """The campaign checked against demand-gen-playbooks.md and Sagar's rules,
+    as (verdict, rule, source). Reads only; it never sends or writes. Caleb,
+    2026-11-02, after a hand audit found a link in email 1, an unverified list
+    and undated lines: "Fix chewbs so I never hv to stress test it again"."""
+    plan, d, out = plan_of(client), cdir(client), []
+
+    def add(ok, rule, src, warn=False):
+        out.append(("PASS" if ok else "WARN" if warn else "FAIL", rule, src))
+
+    sender = plan.get("sender") or {}
+    add(bool(sender.get("name") and sender.get("address")), "a sender name and a mailing address on every email",
+        "CAN-SPAM; GEX launch checklist")
+    inbox = sender.get("inbox") or sender.get("email") or ""
+    listed = email_listing()
+    if inbox and inbox in listed:
+        add(f"{inbox}  (not signed in" not in listed, f"the sending inbox {inbox} is signed in",
+            "gtme send needs it, and so does the reply checker")
+    else:
+        out.append(("NOT CHECKED", f"the sending inbox {inbox or '(none set)'} is signed in", "chewbacca email"))
+    copy = {c.get("step"): c for c in plan.get("copy") or []}
+    one = copy.get(1) or {}
+    add(bool(one) and not LINK.search(one.get("body") or ""), "email 1 has no links",
+        "demand-gen-playbooks, where they agree")
+    add(bool(one) and not sagar_review(plan, one)[0], "email 1 passes Sagar's review", "references/sagar.md")
+    lines = lines_from(str(d / "lines.json"))
+    words = sorted(len((v.get("line") or "").split()) for v in lines.values() if v.get("line"))
+    typical = words[len(words) // 2] if words else 0
+    n = len((one.get("body") or "").replace("{{signal_line}}", "").split()) + typical
+    add(50 <= n <= 90, f"email 1 runs about {n} words with a typical line (50 to 90)",
+        "GEX copy rubric; Coleman's 72", warn=n <= 100)
+    add(len(copy) >= 3 and not (copy.get(2) or {}).get("subject"), "3 steps, with email 2 threaded under email 1",
+        "Lieben: 3 steps, empty subject so it threads", warn=True)
+    add(False, "2 variants of email 1 rotating (gtme sends one)", "Sagar: 2 variants of 3 messages", warn=True)
+    leads_csv = d / "leads.csv"
+    rows = list(csv.DictReader(leads_csv.open())) if leads_csv.exists() else []
+    off, sent = suppressed(client), {r.get("email") for r in jsonl(d / "sent.jsonl")}
+    nxt = [r for r in rows if r.get("email") and r["email"].lower() not in off and r["email"] not in sent]
+    nxt = nxt[:STRESS_NEXT]
+    if not nxt:
+        out.append(("NOT CHECKED", "the next leads", "no unsent leads"))
+        return out
+    k = len(nxt)
+    ver = sum(1 for r in nxt if (r.get("email_verdict") or "") == treg_client.SENDABLE)
+    add(ver == k, f"{ver} of the next {k} addresses verified", "every playbook: verify before the first send")
+    missing = dated = fresh = 0
+    for r in nxt:
+        ln = lines.get(r["email"].lower()) or {}
+        m = re.match(r"\d{4}-\d{2}-\d{2}", str(ln.get("checked") or ""))
+        if not ln.get("line"):
+            missing += 1
+        elif m:
+            dated += 1
+            fresh += (op.utc_now().date() - date.fromisoformat(m.group(0))).days <= STRESS_FRESH_DAYS
+    add(missing == 0, f"{k - missing} of the next {k} have a sourced personal line", "Sagar: signals lead messaging",
+        warn=True)
+    add(fresh == k - missing, f"{fresh} of {k - missing} lines re-checked in the last {STRESS_FRESH_DAYS} days "
+        f"({dated} carry a date at all)", "gtm-engineering, the 3-day rule")
+    weak = sum(1 for r in nxt if WEAK_TITLE.search(r.get("title") or ""))
+    add(weak / k <= 0.02, f"{weak} of the next {k} have a title that rarely decides", "GEX list scorecard",
+        warn=weak / k <= 0.10)
+    role = sum(1 for r in nxt if ROLE.match(r["email"]))
+    add(role == 0, f"{role} of the next {k} are role inboxes, which need their own email 1",
+        "GEX scorecard counts role addresses apart", warn=True)
+    rel = any(re.search(r"relationship|known|degree", c, re.I) for c in rows[0])
+    add(rel, "the list carries a relationship column, so people we know get a text", "Sagar", warn=True)
+    out.append(("NOT CHECKED", "test sends land in the primary tab at a personal Gmail and Outlook",
+                "GEX launch checklist: send one to yourself first"))
+    return out
+
+
+def cmd_stress(a) -> int:
+    rows = stress(a.client)
+    for verdict, rule, src in rows:
+        print(f"{verdict:12} {rule}  [{src}]")
+    count = {v: sum(1 for x, _, _ in rows if x == v) for v in ("FAIL", "WARN", "NOT CHECKED")}
+    print(f"\n{count['FAIL']} fail, {count['WARN']} warn, {count['NOT CHECKED']} not checked.")
+    return 1 if count["FAIL"] else 0
+
+
 def cmd_today(a) -> int:
-    print("Replies first:")
+    print("Stress test, every playbook rule:")
+    cmd_stress(a)
+    print("\nReplies first:")
     cmd_inbox(a)
     print("\nToday's batch:")
     return cmd_batch(a)
@@ -1394,6 +1509,8 @@ def main(argv=None) -> int:
     p = sub.add_parser("week", help="this week's sends, replies and holds as markdown in ~/Downloads")
     p.add_argument("--client", required=True)
     p.add_argument("--out")
+    p = sub.add_parser("stress", help="check the campaign against every playbook rule, before anyone has to")
+    p.add_argument("--client", required=True)
     p = sub.add_parser("copy", help="set the email sequence from a JSON file")
     p.add_argument("--client", required=True)
     p.add_argument("--file", required=True)
@@ -1409,7 +1526,7 @@ def main(argv=None) -> int:
         code = {"sender": cmd_sender, "find": cmd_find, "verify": cmd_verify, "batch": cmd_batch, "send": cmd_send,
                 "inbox": cmd_inbox, "reply": cmd_reply, "today": cmd_today, "package": cmd_package,
                 "costs": cmd_costs, "autosend": cmd_autosend, "share": cmd_share,
-                "copy": cmd_copy, "week": cmd_week}[a.cmd](a)
+                "copy": cmd_copy, "week": cmd_week, "stress": cmd_stress}[a.cmd](a)
     except Refused as err:
         print(str(err), file=sys.stderr)
         return 2

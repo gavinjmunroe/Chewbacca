@@ -596,6 +596,23 @@ toward a list for an ICP nobody had confirmed.
 - **During a live call, 3 lines max.** Caleb mid-demo: "This is too much
   text bro wtf". Give him what to say, not why.
 
+## The stress test runs itself (2026-11-02)
+
+Caleb, after asking whether a campaign used everything we'd learned and a hand
+audit finding a link in email 1, 1 of 50 addresses verified and no line
+re-checked in 3 days: "Fix chewbs so I never hv to stress test it again".
+
+- `chewbacca gtme stress --client NAME` checks an own-inbox campaign against
+  every rule in demand-gen-playbooks.md and sagar.md that the ledger can
+  answer, each with its source, and prints FAIL, WARN or NOT CHECKED. It reads
+  only, and `gtme today` runs it before the replies and the batch.
+- `gtme copy` refuses a link in email 1, and `gtme batch` holds one.
+- Before telling him a campaign is ready, optimal, or "takes everything into
+  account", run it and report its FAIL list as it stands. Read
+  demand-gen-playbooks.md before designing a campaign, not after he asks.
+- A rule it can't read off the ledger (test sends landing in the primary tab)
+  prints NOT CHECKED, and that counts as not done.
+
 ## Never call a launch ready without `gtme ready`
 
 - **Never say a launch is ready, good to go, "good until X", "only waiting on

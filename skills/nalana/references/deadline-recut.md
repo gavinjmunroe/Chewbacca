@@ -33,3 +33,19 @@ Caleb's ask: "move them around and make the story more succinct".
   the speaker's own measured pace (Colin's v1: 735 words over about 222s,
   3.3 words a second). A script called "about 450 words, 2:35" was 633 words
   and 3:10 when counted, after Caleb had already read the wrong number.
+
+## Handing it off the same night
+
+- Fold every numbered answer into the script before showing it. Caleb answered
+  30 questions in one message, the next draft dropped the $100K cap, the chicken
+  and egg line and the culture team, and he wrote "READ EVERY LINE IN THIS
+  CHAT". Tick each answer against the draft before sending it back.
+- Script lines go through slop-check like any copy. Two that got cut: "wasn't a
+  job title, it was" (binary reveal) and "its memory, its context, its
+  security" (a rhythm triplet).
+- `mac messages send` exiting clean is not delivery. Two texts to Colin showed
+  as sent while the thread showed "unsupported content", and Caleb said
+  "messages aren't sending". For a handoff due tonight, build the one-file
+  version from the start: one .md w every link and who does what at the top,
+  then each doc in full, inside a Downloads folder w the repo zip and assets,
+  ready to AirDrop.

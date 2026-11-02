@@ -465,6 +465,16 @@ friend's thread, every fact sourced, then cut into short texts to pass the
 voice check; the user replied "I did smth way diff" and wrote his own. A card
 is personal, so the user's own words beat a polished draft.
 
+### Two tabs, one recipient: one sender
+
+On 2026-11-01 Colin got the same Silo screens twice, a Drive folder from the
+parent tab and iMessage attachments from its side session, plus a repeated
+intro text after the side session read its own sent text back as
+`unsupported content`. When a task spans linked sessions, the tab that started
+the work owns sending to that person. Any other tab writes "sending X to
+<name>" in the shared notes file and checks it first, and decides what already
+went out from that log, never from the thread.
+
 ## Sending
 
 To send, use `people send`, and only when the user asked for a specific

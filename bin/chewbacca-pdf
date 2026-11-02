@@ -45,6 +45,17 @@ def text_speak(text: str) -> list:
     return sorted({m.group(0) for m in TEXT_SPEAK.finditer(text)})
 
 
+# An .html file may come from anywhere, so the print runs no scripts and
+# loads nothing off disk or the network: inline styles and data: images only.
+CSP = ('<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; '
+       'style-src \'unsafe-inline\'; img-src data:; font-src data:">')
+
+
+def lock_down(page: str) -> str:
+    head = re.search(r"<head[^>]*>", page, re.I)
+    return page[:head.end()] + CSP + page[head.end():] if head else CSP + page
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="chewbacca pdf", description=__doc__.splitlines()[0])
     ap.add_argument("files", nargs="+")
@@ -71,7 +82,7 @@ def main(argv=None) -> int:
         # refuses printing it by hand. An .html file is already the page.
         render = op.md_to_html
         if src.suffix.lower() in (".html", ".htm"):
-            op.md_to_html = lambda page, _title: page
+            op.md_to_html = lambda page, _title: lock_down(page)
         try:
             route = op.to_pdf(text, src.stem, dest)
         finally:

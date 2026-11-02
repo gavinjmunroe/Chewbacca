@@ -185,6 +185,17 @@ Describe the thing from its code, never from a test post's wording: the same
 draft called Jonah's assistant "read only" because the test question was, when
 src/agents/client-assistant sends replies, decks, follow-ups and blocklists
 behind a Do it card. Caleb: "Nothing chewb does/makes should ever be read only".
+Before advising on a thread or drafting the next text, re-read it from the
+newest message, every time he asks, because the other person kept typing while
+you worked. On 2026-11-02 the advice for Angie was built on a read from 10:30
+and Caleb had to say "Read text again": by 10:35 she'd said "I have nothing
+against github, I'm saying I'm struggling to access it" and that her laptop is
+old. When a teammate says a repo "won't let me", check access yourself before
+arguing tools: `gh repo view` (a MOVED.md or archived repo means the work lives
+elsewhere) and `gh api repos/<owner>/<repo>/invitations` for a pending invite.
+Angie's invite to calebnewtonusc/kyber had never been accepted, after
+kyber-landing moved there.
+
 A thread in iMessage is never the whole picture: Maggie and Sagar also work in
 Slack, and other tabs close things. Before calling anything from a thread still
 open, search Slack and `git log` too. On 2026-10-10 three "open" items from

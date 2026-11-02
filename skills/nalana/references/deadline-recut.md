@@ -67,3 +67,9 @@ Caleb's ask: "move them around and make the story more succinct".
   over tools and settings; the schedule is theirs.
 - Running a repo's `fix_paths.py` on a cloned copy rewrites the tracked
   .blend to this Mac's paths. Never commit it; discard it before leaving.
+- Files someone texts over (VO, music, screenshots) land in
+  `~/Library/Messages/Attachments/` and `mac messages history --json` carries
+  no attachment info. Find them with `find ... -type f -mmin -60`, check audio
+  with `afinfo` (Colin's VO was a 190.6s m4a, matching the 3:10 script), and
+  copy them into the project folder under a plain name. "VO + music incoming"
+  delivered one audio file; say which one is missing instead of assuming.

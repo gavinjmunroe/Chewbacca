@@ -370,7 +370,13 @@ def gate_list(rows, args, verdicts, suppressed, gate):
     if not ecol:
         gate.fail("the list has no email column", LASTLOOK)
         return
-    emails = [r[ecol].lower() for r in rows]
+    # A blank email isn't a duplicate, it's a row that can't send: on 11/2 the Baptize sample's 69
+    # blanks failed as "68 duplicate addresses" and one domain "carrying 69 leads".
+    blank = sum(1 for r in rows if not (r[ecol] or "").strip())
+    if blank:
+        gate.warn(f"{blank} rows have no email, so they're outside the send set until one is found and verified",
+                  GEX_LIST)
+    emails = [r[ecol].strip().lower() for r in rows if (r[ecol] or "").strip()]
     fn = col(rows, "first_name", "firstname")
     co = col(rows, "company", "company_name", "firm", "organization")
     ti = col(rows, "title", "job_title")
@@ -394,7 +400,7 @@ def gate_list(rows, args, verdicts, suppressed, gate):
         if bad:
             gate.fail(f"{bad} of {n} rows are not verified valid ({ca} catch-all); only Verified "
                       f"rows enter the send set", INSTANTLY)
-    dup = n - len(set(emails))
+    dup = len(emails) - len(set(emails))
     if dup:
         gate.fail(f"{dup} duplicate addresses in the list", GEX_LIST)
     if suppressed is None:

@@ -651,5 +651,12 @@ with patch.object(G, "STATE", receipt.parent), patch.object(G, "load_key", retur
     check("warmup receipt: expiry or changed caps/bounces refuses before START",
           "conditions changed" in G.verify("1372623", "cam_test1", "launch"))
 
+# 11/2 Baptize: 69 rows with no email failed as "68 duplicate addresses" and one domain over the cap
+_g = G.Gate(1, "list")
+G.gate_list([{"email": "", "first_name": "A"}, {"email": "", "first_name": "B"},
+             {"email": "a@x.org", "first_name": "C"}], type("A", (), {})(), None, None, _g)
+check("blank emails are unsendable, never duplicates",
+      not any("duplicate" in f for f in _g.fails) and any("no email" in w for w in _g.warns))
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

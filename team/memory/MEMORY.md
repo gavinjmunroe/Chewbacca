@@ -512,3 +512,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_dough_new_market_titles: site audit only knows titles from markets already run; test a new market's staff page before gtme accounts (law firms missed, 11/2)
 - reference_people_check_amber_rules: chewbacca people-check runs Amber's people rules over the store, Jev settles the unsure; cli.mjs row shape is Amber's (emails as a comma string), Jev noul answers are {noul: p}
 - feedback_formatter_hook_breaks_scripted_patch: the formatter hook reflows after Write, so a scripted str.replace no-ops silently; use Edit or assert old in s
+- project_travis_trials_2026_11_02: Travis trials (AuraPath PIP vs Botified, Baptize churches); reply sent 11/2, domains 11/3, sends 11/13 to 11/18; 27 PIP firms, 24 verified emails

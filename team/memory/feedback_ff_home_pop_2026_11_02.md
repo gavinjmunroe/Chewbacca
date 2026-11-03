@@ -35,6 +35,13 @@ What he corrected that night, in order:
   read as "2d pasted on". Anything in the hero is drawn in the church's medium: paper faces
   in the slab tones, dotted edges, royal cubes. Six prop passes missed that night; the
   instruments are parked in heroScene.ts until there's a model to match first.
+- 11:24pm round: gradients and glows read as "slop", and a rounded royal box holding four
+  same-colour rounded cards as "SO SLOP I am disgusted". Grounds are flat colour; a list of
+  steps is type on the ground with arrows, no containers; no hard lines unless they're the
+  point ("NO FIRM LINES": sand thins out, it never stops on an edge). Footer socials are
+  logo icons, not words. Text over the hero's sand gets a paper halo so it reads.
+- Mission: each beat is one punch in big type with its proof under it, and the stat is
+  the hero of its beat (a 71% that counts up), not a clause in small grey text.
 - The church's dots are drawn right after their own face (housePts.slot), so the near roof
   hides the wall's top and corner. Drawn after every face, they showed through the roof.
 

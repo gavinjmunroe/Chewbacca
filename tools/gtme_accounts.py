@@ -928,6 +928,76 @@ def find_emails(rows: list[dict], client: str, acc: dict, work: Path, finder=Non
     return {"found": found, "verified_published": checked}
 
 
+DM_MAX_USD = 0.04  # anymailfinder decision maker, per success; a miss is free (treg catalog, 2026-11-02)
+
+
+def name_on_site(tools, website: str, name: str) -> str:
+    """The page on the org's own site that names this person, or "". A paid lookup's buyer
+    counts only when the firm's own site names them too (own_page's rule, for paid data)."""
+    audit_site, lead_card = tools
+    last = (name or "").split()[-1:] or [""]
+    if len(last[0]) < 3:
+        return ""
+    rx = re.compile(r"\b" + re.escape(last[0]) + r"\b", re.I)
+    html, final = page_html(audit_site, lead_card, website)
+    pages = [(html, final)]
+    from urllib.parse import urljoin
+    for href, text in ICP_LINK.findall(html)[:400]:
+        if len(pages) > ICP_PAGES:
+            break
+        link = urljoin(final, href)
+        if re.search(r"attorney|lawyer|team|about|staff|people|leadership|partner", href + " " + text, re.I) \
+                and same_site(link, final):
+            pages.append(page_html(audit_site, lead_card, link))
+    return next((u for h, u in pages if rx.search(re.sub(r"<[^>]+>", " ", h))), "")
+
+
+def find_buyers(rows: list[dict], client: str, acc: dict, work: Path, tools, lookup=None) -> dict:
+    """For an ICP-fit row whose own site named nobody: ask treg's decision maker finder, then
+    keep the person only if the firm's own site names them. On 2026-11-02 62 Michigan PIP firms
+    showed PIP work but no reader-visible owner. Cached like emails, so nobody is bought twice."""
+    budget = float(acc.get("treg_budget_usd") or 0)
+    spend = work / "spend.jsonl"
+    cats = (acc.get("buyer_lookup") or {}).get("categories") or ["ceo", "operations"]
+    lookup = lookup or (lambda dom: treg_client.call(
+        "anymailfinder.people.decision_makers", {"domain": dom, "decision_maker_category": cats},
+        customer=client, spend_file=spend, budget_usd=budget, max_cost_usd=DM_MAX_USD))
+    cache_file = work / "buyers.json"
+    cache = json.loads(cache_file.read_text()) if cache_file.exists() else {}
+    added = asked = 0
+    for r in rows:
+        if r["buyer"] or r.get("icp_fit") != "yes" or str(r.get("dnc") or "").startswith("SUPPRESSED"):
+            continue
+        dom = _domain(r["website"])
+        try:
+            if dom not in cache:
+                res = lookup(dom)
+                out = res.get("output") if isinstance(res.get("output"), dict) else (res.get("raw") or {})
+                cache[dom] = {k: out.get(k) for k in ("person_full_name", "person_job_title", "valid_email",
+                                                      "email_status")}
+                cache_file.write_text(json.dumps(cache, indent=1))
+                asked += 1
+        except treg_client.Refused as e:
+            r["buyer_check"] = f"lookup not run: {e}"
+            if "budget" in str(e):
+                break
+            continue
+        hit = cache[dom]
+        name = hit.get("person_full_name") or ""
+        if not name or not is_person(name):
+            continue
+        page = name_on_site(tools, r["website"], name)
+        if not page:
+            r["buyer_check"] = f"lookup found {name}, but the firm's own site never names them: held"
+            continue
+        r.update({"buyer": name, "buyer_title": hit.get("person_job_title") or "", "buyer_source": page,
+                  "buyer_check": "treg decision maker, named on own site"})
+        if hit.get("email_status") == "valid" and hit.get("valid_email"):
+            r["buyer_email"], r["email_verdict"] = hit["valid_email"].lower(), "valid"
+        added += 1
+    return {"asked": asked, "added": added}
+
+
 def email_line(summary: dict) -> str:
     """11/2: the first --find-emails run skipped every row and still printed only "priced, not
     spent", so nobody could tell the step ran and did nothing."""
@@ -958,6 +1028,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--refresh", action="store_true", help="re-read every site instead of the cache")
     ap.add_argument("--check", action="store_true", help="validate the accounts block and stop")
+    ap.add_argument("--find-buyers", action="store_true",
+                    help="for ICP-fit rows with no buyer, a paid decision-maker lookup kept only if their own site names them")
     ap.add_argument("--find-emails", action="store_true",
                     help="spend the client's treg_budget_usd on verified buyer emails (ICP-fit rows only)")
     a = ap.parse_args(argv)
@@ -970,6 +1042,9 @@ def main(argv: list[str] | None = None) -> int:
         slug = path.stem
         work = clients_dir() / slug / "accounts"
         rows, summary = build(slug, acc, work, limit=a.limit, workers=a.workers, refresh=a.refresh)
+        if a.find_buyers:
+            summary["buyers_found"] = find_buyers(rows, slug, acc, work, site_audit())
+            summary["fill"]["buyer"] = sum(1 for r in rows if r["buyer"])
         if a.find_emails:
             summary["emails"] = find_emails(rows, slug, acc, work)
             summary["fill"]["buyer_email"] = sum(1 for r in rows if r["buyer_email"])

@@ -437,6 +437,32 @@ class Parts(unittest.TestCase):
         self.assertEqual(paid, ["Jonathan R. Marko"])
         self.assertEqual(second[0]["buyer_email"], "jon@markolaw.com")
 
+    def test_paid_buyer_kept_only_when_their_own_site_names_them(self):
+        site = {"https://ok.example/": '<a href="/our-attorneys">Our Attorneys</a>',
+                "https://ok.example/our-attorneys": "<h2>Dana Wells</h2> founding attorney",
+                "https://no.example/": "<p>Call us today</p>"}
+        tools = (SimpleNamespace(fetch=lambda u: {"html": site.get(u, ""), "final_url": u}), None)
+        answers = {"ok.example": {"output": {"person_full_name": "Dana Wells", "person_job_title": "Owner",
+                                             "valid_email": "Dana@ok.example", "email_status": "valid"}},
+                   "no.example": {"output": {"person_full_name": "Sam Ortiz", "person_job_title": "CEO"}}}
+        asked = []
+
+        def lookup(dom):
+            asked.append(dom)
+            return answers[dom]
+        rows = [{"buyer": "", "website": "https://ok.example/", "icp_fit": "yes", "dnc": "", "buyer_email": ""},
+                {"buyer": "", "website": "https://no.example/", "icp_fit": "yes", "dnc": "", "buyer_email": ""},
+                {"buyer": "", "website": "https://off.example/", "icp_fit": "no", "dnc": "", "buyer_email": ""}]
+        with tempfile.TemporaryDirectory() as d:
+            out = ga.find_buyers(rows, "acme", {"treg_budget_usd": 5}, Path(d), tools, lookup=lookup)
+            ga.find_buyers(rows, "acme", {"treg_budget_usd": 5}, Path(d), tools, lookup=lookup)
+        self.assertEqual(asked, ["ok.example", "no.example"])  # off-ICP never asked, nothing bought twice
+        self.assertEqual((rows[0]["buyer"], rows[0]["buyer_email"]), ("Dana Wells", "dana@ok.example"))
+        self.assertEqual(rows[0]["buyer_source"], "https://ok.example/our-attorneys")
+        self.assertEqual(rows[1]["buyer"], "")
+        self.assertIn("never names them", rows[1]["buyer_check"])
+        self.assertEqual(out["added"], 1)
+
     def test_an_email_step_that_found_nothing_says_so(self):
         self.assertIn("found NOTHING", ga.email_line({"emails": {"found": 0, "verified_published": 0}}))
         self.assertNotIn("NOTHING", ga.email_line({"emails": {"found": 3, "verified_published": 1}}))

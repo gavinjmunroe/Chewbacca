@@ -1170,7 +1170,9 @@ def one_per_org(rows: list[dict], acc: dict) -> list[dict]:
     best: dict[str, dict] = {}
     out, seen_campus = [], set()
     for r in rows:
-        if r["buyer"] and keep_all.search(r["buyer_title"] or ""):
+        # only a campus the title names is its own pitch: E2's "Campus Pastor" next to its lead
+        # pastor was the same email twice to one church on 11/2
+        if r["buyer"] and keep_all.search(r["buyer_title"] or "") and campus_of(r["buyer_title"]):
             # one per campus: two "Campus Pastor"s at Bayside Santa Rosa got the same pitch on 11/2
             k = (org_key(r), campus_of(r["buyer_title"]))
             if k in seen_campus:

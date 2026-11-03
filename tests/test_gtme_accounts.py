@@ -964,7 +964,7 @@ class ChurchMode(unittest.TestCase):
         rows = [row("Mason Williams", "Campus Pastor", "m@x"), row("Steve Bond", "Campus Pastor"),
                 row("Ann Lee", "Campus Pastor, Fontana")]
         got = [r["buyer"] for r in ga.one_per_org(rows, {"titles": ["Campus Pastor"], "one_per_org_except": "campus"})]
-        self.assertEqual(got, ["Mason Williams", "Ann Lee"])
+        self.assertEqual(got, ["Ann Lee", "Mason Williams"])  # unnamed campus pastors compete as one
         self.assertEqual((ga.campus_of("Campus Pastor, Fontana"), ga.campus_of("Brea Campus Pastor"),
                           ga.campus_of("Campus Pastors")), ("Fontana", "Brea", ""))
 

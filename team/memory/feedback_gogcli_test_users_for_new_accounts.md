@@ -43,12 +43,12 @@ works. Never fill it with the family home.
 Related: [[feedback_google_signin_calendar_write]], [[project_firm_foundation_outbound]].
 
 **Update 2026-11-02 night:** the app (project nova-gogcli-2026, owned by
-calebsnewton@gmail.com) is now In production, so test users no longer matter;
+Caleb's personal Gmail) is now In production, so test users no longer matter;
 the unverified-app warning shows, then Advanced and continue. The next wall
 was a 403 "Caller does not have required permission to use project
 nova-gogcli-2026": a Workspace inbox needs roles/serviceusage.serviceUsageConsumer
 on the project. caleb@, gavin@ and team@firmfoundation.tech were granted it,
 and since a648bc9e and dbe1370c `chewbacca email add` grants it itself through
 gcloud, only to the account the token belongs to. Chrome's default Google
-account is not calebsnewton@gmail.com, so open the console with
-authuser=calebsnewton@gmail.com.
+account is not Caleb's personal Gmail, so open the console with
+authuser set to that personal address.

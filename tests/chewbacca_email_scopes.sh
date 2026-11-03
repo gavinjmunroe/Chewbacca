@@ -105,6 +105,7 @@ out=$(CHEWBACCA_GWS="$tmp/bin/gws2" CHEWBACCA_BIN="$tmp/bin/fakechewb" CHEWBACCA
 # grants it itself, so a teammate never has to open the Cloud console.
 grep -q 'grant_project_use "$cfg" "$addr"' "$f" || { echo "FAIL: email add no longer grants project use after login"; fail=1; }
 grep -q 'roles/serviceusage.serviceUsageConsumer' "$f" || { echo "FAIL: the project-use grant names the wrong role"; fail=1; }
+grep -qF '[ "$(status_user "$cfg")" = ' "$f" || { echo "FAIL: the project-use grant no longer checks the token belongs to the address"; fail=1; }
 
 [ $fail -eq 0 ] && echo "ok: chewbacca email scopes"
 exit $fail

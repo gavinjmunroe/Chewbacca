@@ -68,6 +68,10 @@ whoami_in() {
 grant_project_use() {
   local cfg="$1" addr="$2" err project acct n=0
   [ -n "$(whoami_in "$cfg")" ] && return 0
+  # Only the account the token actually belongs to gets the grant, read from
+  # `gws auth status`, which needs no project access. A typo'd or different
+  # address never gains a role on the project.
+  [ "$(status_user "$cfg")" = "$(printf '%s' "$addr" | tr '[:upper:]' '[:lower:]')" ] || return 0
   err=$(GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$cfg" gws gmail users getProfile --params '{"userId":"me"}' 2>&1)
   printf '%s' "$err" | grep -q 'serviceusage' || return 0
   project=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print((d.get("installed") or d.get("web") or {}).get("project_id",""))' "$cfg/client_secret.json" 2>/dev/null)

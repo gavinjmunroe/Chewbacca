@@ -56,6 +56,24 @@ The accounts block, in ~/.chewbacca/gtm/clients/<slug>.json:
       "dnc": {"csv": ["~/x/dnc.csv"], "client": "aurapath"}, optional
       "treg_budget_usd": 5,
       "out": "~/Downloads/AuraPath leads/AuraPath leads.csv"}
+
+For churches and other many-people orgs (Baptize the World, 2026-11-02), all optional:
+
+      "source": {"kind": "api", "site": "google-maps", "op": "searchPlaces",
+                 "queries": ["baptist church in Fresno CA", ...],      one call per query, deduped
+                 "keep_category": "church", "drop_category": "catholic|kingdom hall"},
+      "audit_titles": "pastors",          the site audit's title table: church (default), org, pastors
+      "per_person": true,                 one row per named person, so each campus pastor gets a row
+      "page_signals": [{"name": "baptism", "link_words": "baptis", "line_words": "baptis"}],
+                                          the org's own pages whose link says link_words, and the
+                                          lines on them that say line_words, kept with their URL
+      "checks": [{"name": "baptized_2026", "question": "...", "lines": ["baptism"],
+                  "pass": "yes", "bar": 0.8}],        one Jev call per org answers every check;
+                                          pass "yes" holds a row under the bar, pass "no" excludes
+                                          a row at or over it, and an unscored check holds the row
+      "segments": [{"name": "B", "category": "baptist", "title": "next steps", "checks": ["..."]}]
+                                          the first segment whose category, title and passing
+                                          checks all match; none means the row is held
 """
 from __future__ import annotations
 
@@ -290,13 +308,52 @@ def _mapped(raw: dict, cols: dict, n: int, where: str) -> dict:
             "size": f"${rev:,} revenue" if rev else "", "account_source": where}
 
 
-def api_rows(src: dict, cache: Path) -> list[dict]:
+def api_rows(src: dict, cache: Path, call=None) -> list[dict]:
+    """One call per query in `queries` (Maps returns 20 places a query), deduped on the place
+    id or site, then kept or dropped on the place's category. Each answer is cached under
+    `cache`, so a rerun asks nothing it already asked."""
     import gtme_operator as op
-    res = op.api(src["site"], src["op"], **(src.get("args") or {}))
-    if res.get("ok") is False:
-        raise Refused(f"chewbacca api {src['site']} {src['op']} failed: {res.get('reason')}")
+    call = call or op.api
     cols = src.get("columns") or {"title": "name", "displayName": "name"}
-    return [_mapped(r, cols, i, f"chewbacca api {src['site']} {src['op']}") for i, r in enumerate(_first_list(res))]
+    keep = re.compile(src["keep_category"], re.I) if src.get("keep_category") else None
+    drop = re.compile(src["drop_category"], re.I) if src.get("drop_category") else None
+    queries = src.get("queries") or [None]
+    out, seen = [], set()
+    cache.mkdir(parents=True, exist_ok=True)
+    for q in queries:
+        args = dict(src.get("args") or {}, **({"query": q} if q else {}))
+        hit = cache / ("api-" + re.sub(r"[^a-z0-9]+", "-", json.dumps(args, sort_keys=True).lower())[:120] + ".json")
+        if hit.exists():
+            res = json.loads(hit.read_text())
+        else:
+            res = call(src["site"], src["op"], **args)
+            if res.get("ok") is False:
+                if q is None:
+                    raise Refused(f"chewbacca api {src['site']} {src['op']} failed: {res.get('reason')}")
+                print(f"gtme accounts: query {q!r} failed: {res.get('reason')}", file=sys.stderr)
+                continue
+            hit.write_text(json.dumps(res))
+        where = f"chewbacca api {src['site']} {src['op']}" + (f" {q!r}" if q else "")
+        for raw in _first_list(res):
+            cats = " ".join([str(raw.get("category") or "")] + [str(c) for c in raw.get("categories") or []])
+            if (keep and not keep.search(cats)) or (drop and drop.search(cats)):
+                continue
+            r = _mapped(raw, cols, len(out), where)
+            k = raw.get("placeId") or urllib.parse.urlparse(r["website"]).netloc.removeprefix("www.") or r["name"]
+            if k in seen:
+                continue
+            seen.add(k)
+            r["key"] = str(k)
+            r["category"] = str(raw.get("category") or "")
+            if not r["city"] and raw.get("address"):
+                # "1338 W Indianapolis Ave, Fresno, CA 93705"
+                parts = [x.strip() for x in str(raw["address"]).split(",")]
+                if len(parts) >= 3:
+                    r["city"], r["state"] = parts[-2], parts[-1].split()[0]
+            if raw.get("reviewCount") is not None:
+                r["size"] = f"{raw['reviewCount']} Google reviews"
+            out.append(r)
+    return out
 
 
 def csv_rows(src: dict, cache: Path) -> list[dict]:
@@ -426,7 +483,7 @@ def news(lead_card, name: str, words: re.Pattern, growth: re.Pattern) -> list[di
     return hits[:3] + grow[:3]
 
 
-def leaders(contacts, titles=None) -> list[dict]:
+def leaders(contacts, titles=None, keep_all: bool = False, cap: int | None = None) -> list[dict]:
     """The people worth scoring. The client's own `titles` are kept and ranked first, so any
     ICP works from its config; the built-in LEADER words cover the markets Dough has run."""
     mine = [t.lower() for t in titles or [] if t]
@@ -435,6 +492,9 @@ def leaders(contacts, titles=None) -> list[dict]:
         t = title.lower()
         return next((i for i, w in enumerate(mine) if w in t), len(mine))
 
+    if keep_all:
+        # the audit's own title table already chose them (titles="pastors"): keep them all, client titles first
+        return sorted(contacts or [], key=lambda c: icp_rank(c.get("title", "")))[:cap or LEADERS_KEPT]
     out = [c for c in contacts or [] if LEADER.search(c.get("title", "")) or icp_rank(c.get("title", "")) < len(mine)]
     out.sort(key=lambda c: (icp_rank(c["title"]),
                             0 if re.search(r"technology|information|\bit\b|cto|cio|data|digital", c["title"], re.I)
@@ -442,8 +502,97 @@ def leaders(contacts, titles=None) -> list[dict]:
     return out[:LEADERS_KEPT]
 
 
-def enrich_one(a: dict, tools, words, growth, titles=None, must_show="") -> dict:
+
+OFFSITE_SIGNAL_HOSTS = (".churchcenter.com", ".subsplash.com")
+
+
+def without_org(line: str, org: str) -> str:
+    """The line with the org's own name words taken out, so a signal can't match on the name.
+    On 11/2 "baptis" matched every church named Baptist, and only Baptize's config was fixed."""
+    for w in set(re.findall(r"[A-Za-z]{4,}", org or "")):
+        line = re.sub(r"\b" + re.escape(w) + r"\b", " ", line, flags=re.I)
+    return line
+# On the 11/2 Baptize run, 514 of 698 churches showed no baptism line on the home page or the 3
+# links it named, though many keep a /baptism page the menu hides. A sitemap lists it.
+SITEMAP_MAX = 3
+# 855 sites took about 55 minutes at 10 workers on 11/2: ~39 seconds a site per worker
+SECONDS_PER_SITE = 39
+
+
+def sitemap_urls(audit_site, base: str) -> list[str]:
+    """Page addresses from the site's sitemap.xml, following up to SITEMAP_MAX child sitemaps."""
+    root = urllib.parse.urljoin(base, "/sitemap.xml")
+    todo, seen, out = [root], set(), []
+    while todo and len(seen) <= SITEMAP_MAX:
+        u = todo.pop(0)
+        if u in seen:
+            continue
+        seen.add(u)
+        try:
+            r = audit_site.fetch(u)
+        except Exception:
+            continue
+        body = r.get("html") or ""
+        if (r.get("status") or 0) >= 400 or "<loc>" not in body:
+            continue
+        locs = [x.strip() for x in re.findall(r"<loc>\s*([^<]+?)\s*</loc>", body)]
+        if "<sitemapindex" in body:
+            # pages and posts first; a WordPress index also lists tags and authors
+            todo += sorted(locs, key=lambda x: not re.search(r"page|post|sitemap\.xml$", x))
+        else:
+            out += locs
+    return out
+
+
+def page_lines(audit_site, start: str, signals: list[dict], max_pages: int = 3, max_lines: int = 14,
+               org: str = "") -> dict:
+    """{signal name: [{"url", "lines"}]}: the org's own pages whose link text or address says the
+    signal's link_words (the home page too), and the lines on them that say its line_words, each
+    kept with the line after it, since a baptism heading's date is often on the next line."""
+    out: dict[str, list] = {}
+    home = audit_site.fetch(start)
+    if not home.get("html"):
+        return out
+    base = home.get("final_url") or start
+    hp = audit_site.parse(home["html"])
+    for sig in signals:
+        link = re.compile(sig.get("link_words") or sig["line_words"], re.I)
+        line = re.compile(sig["line_words"], re.I)
+        urls, pages = [], [(base, hp)]
+        for href, text, _ in hp.links:
+            u = urllib.parse.urljoin(base, href).split("#")[0]
+            host = urllib.parse.urlparse(u).netloc.lower()
+            # baptism sign-ups often live on the church's Planning Center or Subsplash page
+            ours = audit_site.same_site(u, base) or host.endswith(OFFSITE_SIGNAL_HOSTS)
+            if (link.search(text or "") or link.search(urllib.parse.urlparse(u).path)) and \
+                    ours and u.rstrip("/") != base.rstrip("/") and u not in urls:
+                urls.append(u)
+        if sig.get("sitemap"):
+            for u in sitemap_urls(audit_site, base):
+                if line.search(urllib.parse.urlparse(u).path) and audit_site.same_site(u, base) and u not in urls:
+                    urls.insert(0, u)
+        # a link that names the signal itself ("Baptism") before a broad one ("Events")
+        urls.sort(key=lambda u: not line.search(urllib.parse.urlparse(u).path + " " + " ".join(
+            t for h, t, _ in hp.links if urllib.parse.urljoin(base, h).split("#")[0] == u)))
+        for u in urls[:max_pages]:
+            r = audit_site.fetch(u)
+            if r.get("html") and (r.get("status") or 0) < 400:
+                pages.append((r.get("final_url") or u, audit_site.parse(r["html"])))
+        hits = []
+        for u, pg in pages:
+            ls = pg.clean_lines
+            got = [" / ".join(x for x in ls[i:i + 2] if len(x) <= 300) for i, l in enumerate(ls)
+                   if line.search(without_org(l, org))]
+            if got:
+                hits.append({"url": u, "lines": got[:max_lines]})
+        out[sig["name"]] = hits
+    return out
+
+
+
+def enrich_one(a: dict, tools, words, growth, acc: dict | None = None, titles=None, must_show="") -> dict:
     audit_site, lead_card = tools
+    acc = acc or {}
     rec = dict(a)
     if not rec.get("website"):
         try:
@@ -456,18 +605,23 @@ def enrich_one(a: dict, tools, words, growth, titles=None, must_show="") -> dict
         try:
             # titles="org": executive, tech, ops and finance chiefs, not the church buyer rules
             params = inspect.signature(audit_site.audit).parameters
+            mode = acc.get("audit_titles") or "org"
             if "buyer_titles" in params:
-                au = audit_site.audit(rec["website"], None, titles="org", buyer_titles=titles)
+                au = audit_site.audit(rec["website"], None, titles=mode, buyer_titles=titles)
             elif "titles" in params:
-                au = audit_site.audit(rec["website"], None, titles="org")
+                au = audit_site.audit(rec["website"], None, titles=mode)
             else:
                 au = audit_site.audit(rec["website"], None)
             rec["site_status"] = au.get("status")
-            rec["leaders"] = leaders(au.get("contacts"), titles)
+            rec["leaders"] = leaders(au.get("contacts"), titles, keep_all=bool(acc.get("per_person")),
+                                     cap=int(acc.get("max_people") or 0) or None)
             rec["site_people"] = au.get("staff_count")
             rec["titles_key"] = titles_key(titles, must_show)
             if must_show:
                 rec["icp_fit"] = icp_evidence(audit_site, lead_card, au.get("final_url") or rec["website"], must_show)
+            if acc.get("page_signals") and au.get("status") == "ok":
+                rec["signals"] = page_lines(audit_site, au.get("final_url") or rec["website"], acc["page_signals"],
+                                            org=rec.get("maps_name") or rec.get("name", ""))
             rec["page_emails"] = [e.get("email") for e in au.get("page_emails") or []][:8]
             rec["chms"] = au.get("chms") or ""
             rec["jobs"] = lead_card.jobs(au.get("final_url") or rec["website"])
@@ -535,7 +689,8 @@ def icp_evidence(audit_site, lead_card, url: str, must_show: str) -> dict:
 
 
 def enrich(accounts: list[dict], work: Path, tools, words, growth, workers: int, refresh: bool,
-           titles=None, must_show="") -> list[dict]:
+           titles=None, must_show="", acc: dict | None = None, refresh_signals: bool = False,
+           refresh_empty: str | bool = False) -> list[dict]:
     path = work / "enriched.jsonl"
     done, lines = {}, 0
     if path.exists() and not refresh:
@@ -548,15 +703,43 @@ def enrich(accounts: list[dict], work: Path, tools, words, growth, workers: int,
                 stale = r.get("website") and r.get("titles_key", "") != titles_key(titles, must_show)
                 if not r.get("error") and not str(r.get("site_status") or "").startswith("error") and not stale:
                     done[r["key"]] = r
+    if refresh_signals and (acc or {}).get("page_signals"):
+        # page signals changed (a new word, the sitemap) but staff pages didn't: reread only those
+        again = [r for r in done.values() if r.get("site_status") == "ok"]
+        print(f"gtme accounts: rereading page signals for {len(again)} cached accounts", file=sys.stderr)
+
+        def resig(r):
+            try:
+                r["signals"] = page_lines(tools[0], r["website"], acc["page_signals"],
+                                          org=r.get("maps_name") or r.get("name", ""))
+            except Exception as e:
+                r["signals_error"] = str(e)[:200]
+            return r
+        with cf.ThreadPoolExecutor(max_workers=workers) as ex:
+            list(ex.map(resig, again))
+        refresh = True  # rewrite the cache file below with the new signals
+    if refresh_empty:
+        # the audit learned new titles: reread the sites that showed a signal but no person
+        # Only the signal that matters: on 11/2 "any signal" counted belief and story lines, which
+        # nearly every site has, and a reread meant for ~250 sites ran 694 for 45 minutes.
+        names = [refresh_empty] if isinstance(refresh_empty, str) else None
+        empty = [k for k, r in done.items() if r.get("site_status") == "ok" and not r.get("leaders")
+                 and any(p.get("lines") for n, v in (r.get("signals") or {}).items() if names is None or n in names
+                         for p in v)]
+        print(f"gtme accounts: rereading {len(empty)} cached accounts with a {'/'.join(names or ['page'])} signal and no "
+              f"person, about {max(1, round(len(empty) * SECONDS_PER_SITE / max(workers, 1) / 60))} minutes",
+              file=sys.stderr)
+        for k in empty:
+            del done[k]
     todo = [a for a in accounts if a["key"] not in done]
     print(f"gtme accounts: {len(accounts)} accounts, {len(done)} cached, {len(todo)} to read", file=sys.stderr)
     # rewrite when errors were dropped, so the file only ever holds lookups that happened
-    rewrite = refresh or lines != len(done)
+    rewrite = refresh or refresh_signals or refresh_empty or lines != len(done)
     with cf.ThreadPoolExecutor(max_workers=workers) as ex, open(path, "w" if rewrite else "a") as fh:
         if rewrite:
             for rec in done.values():
                 fh.write(json.dumps(rec) + "\n")
-        for rec in ex.map(lambda a: enrich_one(a, tools, words, growth, titles, must_show), todo):
+        for rec in ex.map(lambda a: enrich_one(a, tools, words, growth, acc, titles, must_show), todo):
             with lock:
                 fh.write(json.dumps(rec) + "\n")
                 fh.flush()
@@ -706,6 +889,185 @@ def jev_check(row: dict, acc: dict, slug: str, ask=jev_ask) -> None:
     row["fit"], row["tier"], row["tier_rationale"] = int(row["fit"]) - 20, t["tier"], t["rationale"]
 
 
+# ── step 5b: org checks, one row per person, segments ────────────────────
+
+# A line that dates itself or asks for a sign-up beats a line that only says the word.
+DATED = re.compile(r"\b20\d\d\b|\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.? \d{1,2}\b|"
+                   r"sign ?up|register|next baptism|upcoming", re.I)
+
+
+def evidence(rec: dict, name: str) -> tuple[str, str]:
+    """The best line a page signal found, with the page it is on, or two blanks."""
+    best = ("", "", -1)
+    for page in (rec.get("signals") or {}).get(name) or []:
+        for ln in page["lines"]:
+            # this year's date beats any date, and an old year sinks it: on 11/2 a 2019 water
+            # baptism and a 2022 sermon came up as churches' baptism lines
+            year = str(dt.date.today().year)
+            rank = 4 * (year in ln) + 2 * bool(DATED.search(ln)) + (page["url"].rstrip("/").count("/") > 2) - \
+                5 * bool(re.search(r"\b20(0\d|1\d|2[0-%d])\b" % (int(year[-1]) - 1), ln))
+            if rank > best[2]:
+                best = (ln[:300], page["url"], rank)
+    return best[0], best[1]
+
+
+JEV_CACHE: dict | None = None
+JEV_CACHE_PATH: Path | None = None
+
+
+def cached_ask(ask, state: dict, qs: dict, decision: str) -> dict:
+    """Jev once per exact question and evidence: a rerun after a column change asked the same
+    2,638 questions again on 11/2. Only scored answers are kept, so a timeout is asked again."""
+    import hashlib
+    key = hashlib.sha256(json.dumps([state, qs], sort_keys=True).encode()).hexdigest()
+    if JEV_CACHE is not None and key in JEV_CACHE:
+        return JEV_CACHE[key]
+    res = ask(state, qs, decision) or {}
+    if JEV_CACHE is not None and res:
+        with lock:
+            JEV_CACHE[key] = res
+    return res
+
+
+def org_checks(rec: dict, acc: dict, slug: str, ask=jev_ask) -> dict:
+    """Every check in `checks` for one org, in one Jev call, over the lines its own pages gave.
+    {name: probability or None}. No lines for a check means Jev isn't asked it: None."""
+    checks = acc.get("checks") or []
+    if not checks:
+        return {}
+    sigs = rec.get("signals") or {}
+    state = {"organization": rec.get("maps_name") or rec.get("name"), "website": rec.get("website", ""),
+             "google_category": rec.get("category", ""), "today": dt.date.today().isoformat()}
+    qs = {}
+    for c in checks:
+        text = [f"[{p['url']}] {ln}" for n in c.get("lines") or [] for p in sigs.get(n) or [] for ln in p["lines"]]
+        if text or c.get("ask_without_lines"):
+            state[c["name"] + "_lines"] = text[:30]
+            qs[c["name"]] = {"type": "noul", "instructions": c["question"]}
+    if not qs:
+        return {c["name"]: None for c in checks}
+    try:
+        res = cached_ask(ask, state, qs, f"{slug}-org-checks")
+    except Exception:
+        res = {}
+    out = {}
+    for c in checks:
+        p = (res.get(c["name"]) or {}).get("noul") if c["name"] in qs else None
+        out[c["name"]] = p if isinstance(p, (int, float)) and not isinstance(p, bool) and 0 <= p <= 1 else None
+    return out
+
+
+def check_verdicts(probs: dict, acc: dict) -> dict:
+    """{name: "pass" | "fail" | "held"} from each check's pass side and bar."""
+    out = {}
+    for c in acc.get("checks") or []:
+        p, bar = probs.get(c["name"]), float(c.get("bar", 0.8))
+        if p is None:
+            # an exclusion nobody could read evidence for passes; a requirement doesn't
+            out[c["name"]] = "pass" if c.get("pass") == "no" and c.get("absent_passes") else "held"
+        elif c.get("pass") == "no":
+            out[c["name"]] = "fail" if p >= bar else "pass"
+        else:
+            out[c["name"]] = "pass" if p >= bar else "fail"
+    return out
+
+
+def per_person(recs: list[dict]) -> list[dict]:
+    """One record per named person, so a church with three campus pastors is three rows."""
+    out = []
+    for r in recs:
+        people = r.get("leaders") or []
+        if len(people) <= 1:
+            out.append(r)
+            continue
+        for i, person in enumerate(people):
+            out.append(dict(r, leaders=[person], key=f"{r['key']}#{i}"))
+    return out
+
+
+def title_rank(title: str, titles: list[str]) -> int:
+    low = (title or "").lower()
+    return next((i for i, t in enumerate(titles) if t.lower() in low), len(titles))
+
+
+def one_per_org(rows: list[dict], acc: dict) -> list[dict]:
+    """The best-titled person per org, by the order of `titles`, plus everyone whose title says
+    `one_per_org_except` (each campus pastor of a multi-campus church). Six pastors at one church
+    getting the same cold invitation reads as a blast."""
+    keep_all = re.compile(acc["one_per_org_except"], re.I)
+    best: dict[str, dict] = {}
+    out = []
+    for r in rows:
+        if r["buyer"] and keep_all.search(r["buyer_title"] or ""):
+            out.append(r)
+            continue
+        k = org_key(r)
+        if k not in best or title_rank(r["buyer_title"], acc["titles"]) < title_rank(best[k]["buyer_title"], acc["titles"]):
+            best[k] = r
+    campus = {org_key(r) for r in out}
+    return out + [r for k, r in best.items() if k not in campus or r["buyer"]]
+
+
+def segment_of(row: dict, verdicts: dict, acc: dict) -> str:
+    for seg in acc.get("segments") or []:
+        if seg.get("category") and not re.search(seg["category"], row.get("category") or "", re.I):
+            continue
+        if seg.get("title") and not re.search(seg["title"], row.get("buyer_title") or "", re.I):
+            continue
+        if any(verdicts.get(n) != "pass" for n in seg.get("checks") or []):
+            continue
+        return seg["name"]
+    return ""
+
+
+# "Bayside Santa Rosa / Campus Pastor" and "Lead Pastors / Lead Pastor" came back as people on
+# 11/2, and Jev passed both. A name that is the org's own name or a title isn't a person.
+NOT_PASTOR_NAME = re.compile(r"\b(pastors?|church|campus|team|staff|ministr\w*|leadership|elders)\b", re.I)
+
+
+def not_a_person(name: str, org: str) -> bool:
+    words = [w for w in re.findall(r"[a-z]+", (name or "").lower()) if w not in ("pastor", "rev", "dr")]
+    org_words = set(re.findall(r"[a-z]{4,}", (org or "").lower())) - {"church", "community", "christian"}
+    return bool(NOT_PASTOR_NAME.search(re.sub(r"^(pastor|rev\.?|dr\.?)\s+", "", name or "", flags=re.I))) or \
+        bool(words and all(w in org_words for w in words))
+
+
+def church_fields(row: dict, rec: dict, probs: dict, acc: dict) -> None:
+    if row.get("buyer") and not_a_person(row["buyer"], row.get("org", "")):
+        row["buyer_check"] = f"not a person: {row['buyer']}"
+        row["buyer"] = row["buyer_title"] = row["buyer_email"] = ""
+    verdicts = check_verdicts(probs, acc)
+    row["category"] = rec.get("category", "")
+    for sig in acc.get("page_signals") or []:
+        row[sig["name"] + "_evidence"], row[sig["name"] + "_source"] = evidence(rec, sig["name"])
+    held = []
+    for c in acc.get("checks") or []:
+        p = probs.get(c["name"])
+        row["check_" + c["name"]] = f"{verdicts[c['name']]} (Jev {p:.2f})" if p is not None else \
+            f"{verdicts[c['name']]} (no evidence on their pages)"
+        if verdicts[c["name"]] == "fail" and c.get("pass") == "no":
+            held.append("excluded: " + c["name"])
+        elif verdicts[c["name"]] != "pass" and c.get("required"):
+            held.append(c["name"] + " " + verdicts[c["name"]])
+    row["segment"] = segment_of(row, verdicts, acc) if row.get("buyer") else ""
+    if not row.get("buyer"):
+        held.append("no named person on their site" if not row.get("buyer_check") else "person " + row["buyer_check"])
+    elif not row["segment"] and not held:
+        held.append("no segment fits")
+    row["held_why"] = "; ".join(held)
+    if not row["buyer_email"]:
+        row["email_status"] = ""
+    else:
+        row["email_status"] = "published next to their name on the church's site, not run through a validator"
+
+
+def church_columns(acc: dict) -> list[str]:
+    cols = ["segment", "held_why", "category", "email_status"]
+    for sig in acc.get("page_signals") or []:
+        cols += [sig["name"] + "_evidence", sig["name"] + "_source"]
+    return cols + ["check_" + c["name"] for c in acc.get("checks") or []]
+
+
 # ── step 6: dedupe ───────────────────────────────────────────────────────
 
 
@@ -722,12 +1084,13 @@ def org_key(row: dict) -> str:
     return dom or gtme_score.normalize_company_name(row["org"] or "")
 
 
-def dedupe(rows: list[dict]) -> list[dict]:
-    """One row per org (two IRS filers often share one site), then gtme-dedupe's exact passes
-    over the buyers, so one person heading two orgs is written to once."""
+def dedupe(rows: list[dict], by_person: bool = False) -> list[dict]:
+    """One row per org (two IRS filers often share one site), or per org and person when each
+    person gets a row, then gtme-dedupe's exact passes over the buyers, so one person heading
+    two orgs is written to once."""
     best: dict[str, dict] = {}
     for r in rows:
-        k = org_key(r)
+        k = org_key(r) + ("|" + (r.get("buyer") or "").lower() if by_person else "")
         if k not in best or (r["tier"], -int(r["fit"]), -int(r["why_now_score"])) < \
                 (best[k]["tier"], -int(best[k]["fit"]), -int(best[k]["why_now_score"])):
             best[k] = r
@@ -837,7 +1200,8 @@ def price_treg(row: dict) -> float:
 
 
 def build(client: str, acc: dict, work: Path, *, limit: int | None = None, workers: int = 4,
-          refresh: bool = False, tools=None, ask=jev_ask, about=None, today: dt.date | None = None) -> tuple[list[dict], dict]:
+          refresh: bool = False, tools=None, ask=jev_ask, about=None, today: dt.date | None = None,
+          refresh_signals: bool = False, refresh_empty: str | bool = False) -> tuple[list[dict], dict]:
     today = today or dt.date.today()
     work.mkdir(parents=True, exist_ok=True)
     accounts = SOURCES[acc["source"]["kind"]](acc["source"], work / "source")
@@ -849,7 +1213,7 @@ def build(client: str, acc: dict, work: Path, *, limit: int | None = None, worke
     titles = acc.get("titles") or []
     must_show = (acc.get("icp") or {}).get("must_show") or ""
     if len(accounts) > SAMPLE and not acc.get("allow_low_buyer_fill"):
-        sample = enrich(accounts[:SAMPLE], work, tools, words, growth, workers, refresh, titles, must_show)
+        sample = enrich(accounts[:SAMPLE], work, tools, words, growth, workers, refresh, titles, must_show, acc)
         read = [r for r in sample if r.get("site_status") == "ok"]
         found = sum(1 for r in read if r.get("leaders"))
         if read and found / len(read) < MIN_BUYER_FILL:
@@ -858,7 +1222,8 @@ def build(client: str, acc: dict, work: Path, *, limit: int | None = None, worke
                           f"(now: {', '.join(titles) or 'none'}), check one site by hand, then rerun. Set "
                           f"allow_low_buyer_fill: true only if buyers really aren't on these sites.")
         refresh = False  # the sample is read; the full run reuses it
-    recs = enrich(accounts, work, tools, words, growth, workers, refresh, titles, must_show)
+    recs = enrich(accounts, work, tools, words, growth, workers, refresh, titles, must_show, acc, refresh_signals,
+                  refresh_empty)
     recs = [r for r in recs if r.get("website") and same_org(r["name"], r.get("maps_name"))]
     hiring_cfg = (acc.get("why_now") or {}).get("linkedin_jobs")
     if hiring_cfg:
@@ -872,11 +1237,32 @@ def build(client: str, acc: dict, work: Path, *, limit: int | None = None, worke
         jw = re.compile(job_words, re.I)
         for r in recs:
             r["jobs"] = [j for j in r.get("jobs") or [] if jw.search(j.get("title", ""))]
-    rows = [score(r, acc, words, today, about) for r in recs]
-    for r in rows:
-        jev_check(r, acc, client, ask)
-    jev_calls = sum(1 for r in rows if r.pop("_jev_called", False))
-    rows = dedupe(rows)
+    org_jev = 0
+    global JEV_CACHE, JEV_CACHE_PATH
+    JEV_CACHE_PATH = work / "jev-cache.json"
+    JEV_CACHE = json.loads(JEV_CACHE_PATH.read_text()) if JEV_CACHE_PATH.exists() else {}
+    if acc.get("checks"):
+        for r in recs:
+            r["_probs"] = org_checks(r, acc, client, ask)
+            org_jev += 1
+    JEV_CACHE_PATH.write_text(json.dumps(JEV_CACHE))
+    if acc.get("per_person"):
+        recs = per_person(recs)
+    rows = []
+    for rec in recs:
+        row = score(rec, acc, words, today, about)
+        jev_check(row, acc, client, ask)
+        if acc.get("checks") or acc.get("page_signals"):
+            church_fields(row, rec, rec.get("_probs") or {}, acc)
+        rows.append(row)
+    jev_calls = sum(1 for r in rows if r.pop("_jev_called", False)) + org_jev
+    if acc.get("per_person"):
+        # a person Jev held is dropped when someone else at that org kept their row
+        kept = {r["org"] for r in rows if r["buyer"]}
+        rows = [r for r in rows if r["buyer"] or r["org"] not in kept]
+    rows = dedupe(rows, by_person=bool(acc.get("per_person")))
+    if acc.get("per_person") and acc.get("one_per_org_except"):
+        rows = one_per_org(rows, acc)
     entries, where = dnc_entries(acc)
     db = people_db()
     treg_total = 0.0
@@ -886,7 +1272,11 @@ def build(client: str, acc: dict, work: Path, *, limit: int | None = None, worke
         treg_total += price_treg(r)
         for k in ("_page_emails", "_suppressed"):
             r.pop(k, None)
-    rows.sort(key=lambda r: (r["tier"], -int(r["why_now_score"]), -int(r["fit"]), r["org"] or ""))
+    if acc.get("segments"):
+        # segmented rows first, by segment, then the held ones with their reason
+        rows.sort(key=lambda r: (not r.get("segment"), r.get("segment") or "", r["org"] or "", r["buyer"] or ""))
+    else:
+        rows.sort(key=lambda r: (r["tier"], -int(r["why_now_score"]), -int(r["fit"]), r["org"] or ""))
     fill = {c: sum(1 for r in rows if str(r.get(c) or "").strip()) for c in
             ("website", "buyer", "buyer_email", "why_now", "relationship")}
     summary = {"client": client, "accounts_sourced": len(accounts), "rows": len(rows),
@@ -894,9 +1284,13 @@ def build(client: str, acc: dict, work: Path, *, limit: int | None = None, worke
                "jev_confirmed": sum(1 for r in rows if r["buyer_check"].startswith("Jev") and "held" not in r["buyer_check"]),
                "jev_held": [r["org"] for r in rows if "held" in r["buyer_check"]],
                "tiers": {t: sum(1 for r in rows if r["tier"] == t) for t in (1, 2, 3)},
-               "jev_calls": jev_calls, "dropped_no_site": len(accounts) - len(recs),
+               "jev_calls": jev_calls, "dropped_no_site": len(accounts) - len({r["key"].split("#")[0] for r in recs}),
                "dnc": where, "treg_priced_rows": sum(1 for r in rows if r["treg_find"]),
                "treg_priced_usd": round(treg_total, 2), "treg_budget_usd": acc.get("treg_budget_usd")}
+    if acc.get("segments"):
+        summary["segments"] = {s["name"]: sum(1 for r in rows if r.get("segment") == s["name"])
+                               for s in acc["segments"]}
+        summary["held"] = sum(1 for r in rows if not r.get("segment"))
     return rows, summary
 
 
@@ -1027,10 +1421,10 @@ def email_line(summary: dict) -> str:
             f"not spent (--find-emails spends it)")
 
 
-def write(rows: list[dict], out: Path) -> None:
+def write(rows: list[dict], out: Path, columns: list[str] | None = None) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     with open(out, "w", newline="") as fh:
-        w = csv.DictWriter(fh, fieldnames=COLUMNS, extrasaction="ignore")
+        w = csv.DictWriter(fh, fieldnames=columns or COLUMNS, extrasaction="ignore")
         w.writeheader()
         # buyer titles and headlines are read off strangers' pages, and the CSV opens in Sheets
         w.writerows({k: gtme_signals.csv_cell(v) if isinstance(v, str) else v for k, v in r.items()} for r in rows)
@@ -1044,6 +1438,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--limit", type=int, help="first N accounts only, for a test run")
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--refresh", action="store_true", help="re-read every site instead of the cache")
+    ap.add_argument("--refresh-signals", action="store_true",
+                    help="reread only the page signals of cached accounts (after a signal change)")
+    ap.add_argument("--refresh-empty", metavar="SIGNAL", nargs="?", const=True, default=False,
+                    help="reread cached accounts whose pages showed SIGNAL (default: any page signal) but no "
+                         "named person; prints how many and about how long first")
     ap.add_argument("--check", action="store_true", help="validate the accounts block and stop")
     ap.add_argument("--find-buyers", action="store_true",
                     help="for ICP-fit rows with no buyer, a paid decision-maker lookup kept only if their own site names them")
@@ -1058,7 +1457,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         slug = path.stem
         work = clients_dir() / slug / "accounts"
-        rows, summary = build(slug, acc, work, limit=a.limit, workers=a.workers, refresh=a.refresh)
+        rows, summary = build(slug, acc, work, limit=a.limit, workers=a.workers, refresh=a.refresh,
+                              refresh_signals=a.refresh_signals, refresh_empty=a.refresh_empty)
         if a.find_buyers:
             summary["buyers_found"] = find_buyers(rows, slug, acc, work, site_audit())
             summary["fill"]["buyer"] = sum(1 for r in rows if r["buyer"])
@@ -1069,13 +1469,17 @@ def main(argv: list[str] | None = None) -> int:
         print(f"gtme accounts: {e}", file=sys.stderr)
         return 2
     out = Path(os.path.expanduser(a.out or acc.get("out") or str(work / "accounts.csv")))
-    write(rows, out)
+    extra = church_columns(acc) if (acc.get("checks") or acc.get("page_signals")) else []
+    write(rows, out, extra[:2] + COLUMNS + extra[2:] if extra else None)
     (work / "summary.json").write_text(json.dumps(summary, indent=2))
     f = summary["fill"]
     n = summary["rows"] or 1
     print(f"{summary['rows']} accounts from {summary['accounts_sourced']} sourced"
           f"{' (LIMITED test run)' if summary['limited'] else ''} -> {out}")
     print(f"  tiers 1/2/3: {summary['tiers'][1]}/{summary['tiers'][2]}/{summary['tiers'][3]}")
+    if summary.get("segments"):
+        print("  segments: " + ", ".join(f"{k} {v}" for k, v in summary["segments"].items()) +
+              f"; held {summary['held']}")
     print(f"  Jev-confirmed buyers: {summary['jev_confirmed']}; held: {', '.join(summary['jev_held']) or 'none'}")
     print("  fill: " + ", ".join(f"{k} {v}/{n}" for k, v in f.items()))
     print(f"  Jev calls: {summary['jev_calls']}; sourced but no site found: {summary['dropped_no_site']}")

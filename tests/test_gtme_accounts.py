@@ -569,5 +569,246 @@ class Parts(unittest.TestCase):
         self.assertIn("icp", p.stdout.lower())
 
 
+CHURCH_ACC = {
+    "titles": ["Next Steps", "Campus Pastor", "Lead Pastor", "Pastor"],
+    "per_person": True,
+    "page_signals": [{"name": "baptism", "link_words": "baptism|events", "line_words": "baptism|baptiz"}],
+    "checks": [{"name": "baptized_2026", "lines": ["baptism"], "pass": "yes", "bar": 0.8, "required": True,
+                "question": "2026 baptism?"},
+               {"name": "affirming", "lines": ["baptism"], "pass": "no", "bar": 0.5, "absent_passes": True,
+                "question": "affirming?"}],
+    "segments": [{"name": "B", "category": "baptist|non-denominational", "title": "pastor",
+                  "checks": ["baptized_2026", "affirming"]}],
+}
+
+
+class ChurchMode(unittest.TestCase):
+    """Baptize the World (2026-11-02): many Maps queries, one row per pastor, a sourced baptism
+    line, Jev checks per church, segments. Every church here is invented."""
+
+    def test_api_queries_dedupe_filter_and_cache(self):
+        calls = []
+
+        def call(site, op, query):
+            calls.append(query)
+            return {"ok": True, "data": [
+                {"name": "Grace Baptist", "website": "https://grace.example/", "placeId": "p1",
+                 "category": "Baptist church", "address": "1 Main St, Fresno, CA 93701", "reviewCount": 300},
+                {"name": "Hall", "website": "https://hall.example/", "placeId": "p2", "category": "Kingdom Hall of Jehovah's Witnesses"}]}
+        src = {"kind": "api", "site": "google-maps", "op": "searchPlaces", "queries": ["a", "b"],
+               "keep_category": "church|hall", "drop_category": "kingdom hall"}
+        with tempfile.TemporaryDirectory() as d:
+            rows = ga.api_rows(src, Path(d), call=call)
+            again = ga.api_rows(src, Path(d), call=call)
+        self.assertEqual([r["name"] for r in rows], ["Grace Baptist"])  # p1 twice, the hall dropped
+        self.assertEqual((rows[0]["city"], rows[0]["state"], rows[0]["category"]), ("Fresno", "CA", "Baptist church"))
+        self.assertEqual(rows[0]["size"], "300 Google reviews")
+        self.assertEqual(calls, ["a", "b"])  # the rerun read the cache
+        self.assertEqual(len(again), 1)
+
+    def test_baptist_in_a_name_is_not_a_baptism_line(self):
+        import re
+        pages = {"https://grace.example/": "<a href='/baptism'>Baptism</a><p>Grace Baptist Church</p>",
+                 "https://grace.example/baptism": "<p>Baptism Sunday</p><p>June 14, 2026</p><p>Sign up below</p>"}
+
+        class AS:
+            @staticmethod
+            def fetch(u):
+                return {"html": pages.get(u, ""), "final_url": u, "status": 200 if u in pages else 404}
+
+            @staticmethod
+            def parse(h):
+                return SimpleNamespace(links=[(m, m.strip("/").title(), 0) for m in re.findall(r"href='([^']+)'", h)],
+                                       clean_lines=re.findall(r"<p>([^<]+)</p>", h))
+
+            @staticmethod
+            def same_site(a, b):
+                return a.startswith("https://grace.example")
+        got = ga.page_lines(AS, "https://grace.example/", CHURCH_ACC["page_signals"])
+        self.assertEqual(got["baptism"], [{"url": "https://grace.example/baptism",
+                                           "lines": ["Baptism Sunday / June 14, 2026"]}])
+        line, src = ga.evidence({"signals": got}, "baptism")
+        self.assertEqual((line, src), ("Baptism Sunday / June 14, 2026", "https://grace.example/baptism"))
+
+    def test_sitemap_finds_a_baptism_page_the_menu_hides(self):
+        pages = {"https://hope.example/": "<p>Welcome</p>",
+                 "https://hope.example/sitemap.xml": "<sitemapindex><sitemap><loc>https://hope.example/page-sitemap.xml</loc>"
+                                                     "</sitemap></sitemapindex>",
+                 "https://hope.example/page-sitemap.xml": "<urlset><url><loc>https://hope.example/about</loc></url>"
+                                                          "<url><loc>https://hope.example/baptism/</loc></url></urlset>",
+                 "https://hope.example/baptism/": "<p>Next baptism: Sunday, December 6, 2026</p>"}
+        import re
+
+        class AS:
+            @staticmethod
+            def fetch(u):
+                return {"html": pages.get(u, ""), "final_url": u, "status": 200 if u in pages else 404}
+
+            @staticmethod
+            def parse(h):
+                return SimpleNamespace(links=[], clean_lines=re.findall(r"<p>([^<]+)</p>", h))
+
+            @staticmethod
+            def same_site(a, b):
+                return a.startswith("https://hope.example")
+        sig = [dict(CHURCH_ACC["page_signals"][0], sitemap=True)]
+        got = ga.page_lines(AS, "https://hope.example/", sig)
+        self.assertEqual(got["baptism"], [{"url": "https://hope.example/baptism/",
+                                           "lines": ["Next baptism: Sunday, December 6, 2026"]}])
+        self.assertEqual(ga.page_lines(AS, "https://hope.example/", CHURCH_ACC["page_signals"])["baptism"], [])
+
+    def test_refresh_signals_rereads_only_the_signals(self):
+        calls = []
+        tools = (SimpleNamespace(audit=lambda *a, **k: calls.append("audit")), None)
+        acc = {"page_signals": CHURCH_ACC["page_signals"]}
+        orig = ga.page_lines
+        ga.page_lines = lambda a_s, url, sigs, **k: calls.append("signals") or {"baptism": [{"url": url, "lines": ["new"]}]}
+        try:
+            with tempfile.TemporaryDirectory() as d:
+                rec = {"key": "p1", "name": "Grace", "website": "https://grace.example/", "site_status": "ok",
+                       "signals": {"baptism": []}}
+                (Path(d) / "enriched.jsonl").write_text(json.dumps(rec) + "\n")
+                got = ga.enrich([{"key": "p1"}], Path(d), tools, None, None, 1, False, acc=acc, refresh_signals=True)
+                saved = json.loads((Path(d) / "enriched.jsonl").read_text())
+        finally:
+            ga.page_lines = orig
+        self.assertEqual(calls, ["signals"])  # no site audit rerun
+        self.assertEqual(got[0]["signals"]["baptism"][0]["lines"], ["new"])
+        self.assertEqual(saved["signals"]["baptism"][0]["lines"], ["new"])
+
+    def test_refresh_empty_rereads_signal_but_no_person(self):
+        seen = []
+        tools = (None, None)
+        orig = ga.enrich_one
+        ga.enrich_one = lambda a, *rest: seen.append(a["key"]) or dict(a, site_status="ok", leaders=[{"name": "X"}])
+        recs = [{"key": "a", "site_status": "ok", "leaders": [], "signals": {"baptism": [{"url": "u", "lines": ["x"]}]}},
+                {"key": "b", "site_status": "ok", "leaders": [], "signals": {"baptism": []}},
+                {"key": "c", "site_status": "ok", "leaders": [{"name": "Y"}], "signals": {"baptism": [{"url": "u", "lines": ["x"]}]}}]
+        try:
+            with tempfile.TemporaryDirectory() as d:
+                (Path(d) / "enriched.jsonl").write_text("".join(json.dumps(r) + "\n" for r in recs))
+                ga.enrich([{"key": k} for k in "abc"], Path(d), tools, None, None, 1, False, acc={}, refresh_empty=True)
+        finally:
+            ga.enrich_one = orig
+        self.assertEqual(seen, ["a"])
+
+    def test_a_campus_name_or_a_title_is_not_a_person(self):
+        self.assertTrue(ga.not_a_person("Bayside Santa Rosa", "Bayside Church - Santa Rosa Campus"))
+        self.assertTrue(ga.not_a_person("Lead Pastors", "Carmel Church San Diego"))
+        self.assertFalse(ga.not_a_person("Pastor Mike Elliott", "Compass Bible Church Tustin"))
+        self.assertFalse(ga.not_a_person("Grace Lee", "Grace City Church"))  # one word shared with the org is a person
+
+    def test_this_years_line_beats_an_old_one(self):
+        year = date.today().year
+        rec = {"signals": {"baptism": [{"url": "https://x.example/events/old", "lines": [f"Water Baptism / {year - 6}"]},
+                                       {"url": "https://x.example/baptism", "lines": [f"Baptism Sunday / June 7, {year}"]}]}}
+        self.assertEqual(ga.evidence(rec, "baptism")[1], "https://x.example/baptism")
+
+    def test_jev_cache_asks_once(self):
+        calls = []
+        ga.JEV_CACHE = {}
+        try:
+            for _ in range(2):
+                ga.cached_ask(lambda st, q, d: calls.append(1) or {"x": {"noul": 0.9}}, {"a": 1}, {"x": {}}, "t")
+        finally:
+            ga.JEV_CACHE = None
+        self.assertEqual(len(calls), 1)
+
+    def test_a_signal_never_matches_the_orgs_own_name(self):
+        import re
+        pages = {"https://fbc.example/": "<p>First Baptist Church of Fresno</p><p>Baptism Sunday is June 7</p>"}
+
+        class AS:
+            @staticmethod
+            def fetch(u):
+                return {"html": pages.get(u, ""), "final_url": u, "status": 200 if u in pages else 404}
+
+            @staticmethod
+            def parse(h):
+                return SimpleNamespace(links=[], clean_lines=re.findall(r"<p>([^<]+)</p>", h))
+
+            @staticmethod
+            def same_site(a, b):
+                return True
+        sig = [{"name": "baptism", "line_words": "baptis"}]
+        got = ga.page_lines(AS, "https://fbc.example/", sig, org="First Baptist Church of Fresno")
+        self.assertEqual(got["baptism"][0]["lines"], ["Baptism Sunday is June 7"])
+
+    def test_refresh_empty_can_name_the_signal(self):
+        seen = []
+        orig = ga.enrich_one
+        ga.enrich_one = lambda a, *rest: seen.append(a["key"]) or dict(a, site_status="ok", leaders=[])
+        recs = [{"key": "a", "site_status": "ok", "leaders": [], "signals": {"baptism": [{"url": "u", "lines": ["x"]}]}},
+                {"key": "b", "site_status": "ok", "leaders": [], "signals": {"beliefs": [{"url": "u", "lines": ["x"]}]}}]
+        try:
+            with tempfile.TemporaryDirectory() as d:
+                (Path(d) / "enriched.jsonl").write_text("".join(json.dumps(r) + "\n" for r in recs))
+                ga.enrich([{"key": "a"}, {"key": "b"}], Path(d), (None, None), None, None, 1, False, acc={},
+                          refresh_empty="baptism")
+        finally:
+            ga.enrich_one = orig
+        self.assertEqual(seen, ["a"])
+
+    def test_checks_one_call_and_verdicts(self):
+        seen = []
+
+        def ask(state, qs, decision):
+            seen.append(sorted(qs))
+            return {"baptized_2026": {"noul": 0.93}, "affirming": {"noul": 0.1}}
+        rec = {"name": "Grace", "signals": {"baptism": [{"url": "u", "lines": ["Baptism Sunday 2026"]}]}}
+        probs = ga.org_checks(rec, CHURCH_ACC, "t", ask)
+        self.assertEqual(seen, [["affirming", "baptized_2026"]])
+        self.assertEqual(ga.check_verdicts(probs, CHURCH_ACC), {"baptized_2026": "pass", "affirming": "pass"})
+        self.assertEqual(ga.check_verdicts({"baptized_2026": 0.5, "affirming": 0.7}, CHURCH_ACC),
+                         {"baptized_2026": "fail", "affirming": "fail"})
+        # no lines read: the requirement is held, the exclusion with absent_passes passes
+        self.assertEqual(ga.check_verdicts({"baptized_2026": None, "affirming": None}, CHURCH_ACC),
+                         {"baptized_2026": "held", "affirming": "pass"})
+
+    def test_each_campus_pastor_gets_a_row_and_a_segment(self):
+        rec = {"key": "p1", "name": "Grace Baptist", "category": "Baptist church", "website": "https://grace.example/",
+               "leaders": [{"name": "Ann Lee", "title": "Campus Pastor, Fresno", "email": "ann@grace.example",
+                            "source_url": "https://grace.example/staff"},
+                           {"name": "Bo Kim", "title": "Campus Pastor, Clovis", "email": "",
+                            "source_url": "https://grace.example/staff"}],
+               "signals": {"baptism": [{"url": "https://grace.example/baptism", "lines": ["Baptism Sunday 2026"]}]}}
+        recs = ga.per_person([rec])
+        self.assertEqual([r["leaders"][0]["name"] for r in recs], ["Ann Lee", "Bo Kim"])
+        self.assertEqual(len({r["key"] for r in recs}), 2)
+        acc = dict(CHURCH_ACC, criteria={})
+        rows = []
+        for r in recs:
+            row = ga.score(dict(r, city="", state="CA"), acc, ga.re.compile("x"), date(2026, 11, 2), lambda o, s: (s, []))
+            ga.church_fields(row, r, {"baptized_2026": 0.9, "affirming": 0.0}, acc)
+            rows.append(row)
+        self.assertEqual([(r["buyer"], r["segment"], r["held_why"]) for r in rows],
+                         [("Ann Lee", "B", ""), ("Bo Kim", "B", "")])
+        self.assertTrue(rows[0]["email_status"].startswith("published"))
+        self.assertEqual(rows[1]["email_status"], "")  # no address is guessed
+        self.assertEqual(rows[0]["baptism_source"], "https://grace.example/baptism")
+        self.assertEqual(len(ga.dedupe(rows, by_person=True)), 2)
+        self.assertEqual(len(ga.dedupe(rows)), 1)  # org mode keeps one row per org
+
+    def test_one_per_org_keeps_every_campus_pastor(self):
+        def row(org, who, title):
+            return {"org": org, "website": f"https://{org}.example/", "buyer": who, "buyer_title": title}
+        rows = [row("grace", "Al", "Lead Pastor"), row("grace", "Bea", "Next Steps Pastor"),
+                row("grace", "Cy", "Campus Pastor, Clovis"), row("grace", "Di", "Campus Pastor, Fresno"),
+                row("hope", "Ed", "Associate Pastor"), row("hope", "Flo", "Senior Pastor")]
+        acc = {"titles": ["Next Steps", "Campus Pastor", "Lead Pastor", "Senior Pastor", "Associate Pastor"],
+               "one_per_org_except": "campus"}
+        got = sorted(r["buyer"] for r in ga.one_per_org(rows, acc))
+        self.assertEqual(got, ["Bea", "Cy", "Di", "Flo"])
+
+    def test_excluded_church_is_held_with_its_reason(self):
+        rec = {"key": "p1", "name": "Open Church", "category": "Non-denominational church",
+               "leaders": [{"name": "Cy Dee", "title": "Lead Pastor", "email": "", "source_url": "s"}]}
+        row = ga.score(dict(rec, city="", state="CA", website="https://open.example/"), dict(CHURCH_ACC, criteria={}),
+                       ga.re.compile("x"), date(2026, 11, 2), lambda o, s: (s, []))
+        ga.church_fields(row, rec, {"baptized_2026": 0.95, "affirming": 0.9}, CHURCH_ACC)
+        self.assertEqual(row["segment"], "")
+        self.assertIn("excluded: affirming", row["held_why"])
+
+
 if __name__ == "__main__":
     unittest.main()

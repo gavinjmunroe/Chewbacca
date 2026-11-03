@@ -634,6 +634,29 @@ using the smart thigns we hv in chewbs".
   best fits (Sagar: the strongest list). A checklist count of missing features
   is a signal, never the ranking.
 
+## Signal first, and price the yield before scaling (Baptize churches, 2026-11-02)
+
+Caleb, two hours into a list for Travis Johnson: "What is taking so long????", then
+"Ru brute forcing this or is the intelligent dough system doing it?", then "Will
+chewbs ever run into the mistakes it made today again?". It was brute force. 216
+Maps searches pulled 1,770 churches and every site got read, but only 76 of the
+1,357 with a site cleared the brief (about 5%). The plant segment came back with 0. One Church Center search for 2026 baptism pages then turned up real CA churches
+right away.
+
+- When the brief names a signal (a baptism this year, a hire, a raise), find the
+  signal first, then the org. Enumerating every org and checking each one is the
+  fallback, not the plan.
+- Before any full run or reread, run 40 rows, count the yield, and say what that
+  yield means at full size in time and rows. `--refresh-empty <signal>` now prints
+  the count and minutes. On 11/2 a reread meant for about 250 sites ran 694.
+- Read every row Jev passes before it goes to a client. On 11/2 Jev passed two
+  sermons, a 2024 date, a campus name as a person and two wrong-person emails.
+  The emails, names and old dates are now guarded in code. A dated event or a
+  sign-up in the quoted line is NOT checked yet, so read for it.
+- Church outreach runs `gtme accounts` with `audit_titles: "pastors"`,
+  `per_person`, `page_signals` with `sitemap`, Jev `checks` and `segments`. The
+  model config is `~/.chewbacca/gtm/clients/baptize.json`.
+
 ## Never call a launch ready without `gtme ready`
 
 - **Never say a launch is ready, good to go, "good until X", "only waiting on

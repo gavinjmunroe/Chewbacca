@@ -672,6 +672,19 @@ class Solo(unittest.TestCase):
         self.assertIn("Replies: 1 (50% of first emails)", md)
         self.assertIn("Never emailing again: 1", md)
 
+    def test_a_meeting_counts_only_for_someone_we_emailed_and_shows_per_100(self):
+        # AuraPath, 11/2: a head-to-head is judged on meetings per contact, and nothing recorded them
+        self.ready()
+        b = self.batch()
+        self.run_cli("send", "--client", "Dana Co", "--batch", b["id"], "--gap", "0")
+        self.assertEqual(self.run_cli("meeting", "--client", "Dana Co", "--email", "stranger@nowhere.test"), 2)
+        self.assertEqual(self.run_cli("meeting", "--client", "Dana Co", "--email", "maria@crumbcorner.test",
+                                      "--when", "Tue 2pm"), 0)
+        self.assertEqual(self.run_cli("week", "--client", "Dana Co", "--out", str(self.tmp)), 0)
+        md = next(self.tmp.glob("Dana Co week *.md")).read_text()
+        self.assertIn("Meetings booked: 1", md)
+        self.assertIn("Per 100 people emailed: 0.0 positive replies, 50.0 meetings", md)
+
     def test_gtme_front_door_routes_here(self):
         self.ready()
         p = subprocess.run([sys.executable, str(ROOT / "tools" / "gtme_operator.py"), "batch", "--client", "Dana Co"],

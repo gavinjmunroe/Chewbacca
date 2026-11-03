@@ -1268,7 +1268,44 @@ def week_numbers(client: str, days: int = 7) -> dict:
             "replies": len(replies), "kinds": kinds,
             "people": sorted({r.get("from") or "" for r in replies if r.get("kind") in ("interested", "question")}),
             "held": sum(1 for r in checks if r.get("held")), "checked": len(checks),
-            "suppressed": len(suppressed(client))}
+            "suppressed": len(suppressed(client)),
+            "positive": sum(1 for r in replies if r.get("kind") == "interested"),
+            "meetings": len(recent(jsonl(d / "meetings.jsonl")))}
+
+
+def per_100(n: dict, plan: dict) -> list[str]:
+    """Positive replies and meetings per 100 people first emailed, next to the client's bar.
+
+    The bar is what the client already gets, so the report answers the only question a head-to-head
+    asks. AuraPath, 2026-11-02: Botified's published campaigns come to about 0.8 to 1.2 positive and
+    0.3 to 0.4 meetings per 100, and Travis judges on meetings booked.
+    """
+    if not n["first"]:
+        return []
+    pos, mtg = 100 * n["positive"] / n["first"], 100 * n["meetings"] / n["first"]
+    lines = [f"- Per 100 people emailed: {pos:.1f} positive replies, {mtg:.1f} meetings"]
+    bar = plan.get("benchmark") or {}
+    if bar:
+        lines.append(f"- {bar.get('name', 'Their current channel')}: {bar.get('positive_per_100', '?')} positive, "
+                     f"{bar.get('meetings_per_100', '?')} meetings per 100 ({bar.get('source', 'source not given')})")
+        need = bar.get("min_contacts") or 300
+        if n["first"] < need:
+            lines.append(f"- Too few sends to call a winner yet: {n['first']} of the {need} it takes to tell "
+                         f"rates this small apart")
+    return lines
+
+
+def cmd_meeting(a) -> int:
+    """Write down a booked or held meeting against the person it came from."""
+    d = cdir(a.client)
+    sent = {(r.get("email") or "").lower() for r in jsonl(d / "sent.jsonl")}
+    who = a.email.lower().strip()
+    if who not in sent:
+        raise Refused(f"{who} was never emailed for {a.client}, so a meeting can't be credited to this campaign")
+    append(d / "meetings.jsonl", {"email": who, "at": op.stamp(), "when": a.when or "", "held": bool(a.held),
+                                  "note": a.note or ""})
+    print(f"Meeting for {who} recorded.")
+    return 0
 
 
 def cmd_week(a) -> int:
@@ -1282,7 +1319,9 @@ def cmd_week(a) -> int:
     lines += [f"  - {k}: {v}" for k, v in sorted(n["kinds"].items(), key=lambda kv: -kv[1])]
     lines += [f"- Answered on their own with the booking reply: {n['auto']}",
               f"- Held by the checks before sending: {n['held']} of {n['checked']}",
-              f"- Never emailing again: {n['suppressed']}"]
+              f"- Never emailing again: {n['suppressed']}",
+              f"- Meetings booked: {n['meetings']}"]
+    lines += per_100(n, plan_of(a.client) if (cdir(a.client) / "plan.json").exists() else {})
     if n["people"]:
         lines += ["", "## Interested or asked something", ""] + [f"- {p}" for p in n["people"]]
     out = Path(a.out or Path.home() / "Downloads") / f"{a.client} week {day}.md"
@@ -1637,6 +1676,12 @@ def main(argv=None) -> int:
     p.add_argument("--client", required=True)
     p.add_argument("--seeds", help="real customers' domains, comma separated")
     p.add_argument("--show", type=int, default=15)
+    p = sub.add_parser("meeting", help="record a meeting booked from a campaign email, so it counts")
+    p.add_argument("--client", required=True)
+    p.add_argument("--email", required=True, help="the person the meeting came from")
+    p.add_argument("--when", help="the meeting time, as text")
+    p.add_argument("--held", action="store_true", help="it happened, not just booked")
+    p.add_argument("--note")
     p = sub.add_parser("challenge", help="add a question Caleb asked, so every stress run asks it")
     p.add_argument("--client")
     p.add_argument("--text", required=True)
@@ -1657,7 +1702,7 @@ def main(argv=None) -> int:
                 "inbox": cmd_inbox, "reply": cmd_reply, "today": cmd_today, "package": cmd_package,
                 "costs": cmd_costs, "autosend": cmd_autosend, "share": cmd_share,
                 "copy": cmd_copy, "week": cmd_week, "stress": cmd_stress, "rank": cmd_rank,
-                "challenge": cmd_challenge}[a.cmd](a)
+                "challenge": cmd_challenge, "meeting": cmd_meeting}[a.cmd](a)
     except Refused as err:
         print(str(err), file=sys.stderr)
         return 2

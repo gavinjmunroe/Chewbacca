@@ -34,6 +34,12 @@ Attorney", "Firm Founder", "Recent Articles") and Jev passed them at 0.82 to 0.9
 now guarded in code twice: ORG_NOT_NAME in the reader and is_person() in gtme_accounts
 (29d2dcc8). Read every buyer name by hand before a list goes to a client.
 
+The upgrade that followed (icp.must_show, maps and linkedin_jobs sources, own-site buyers,
+--find-emails) hit two traps worth knowing. A new helper named org_key silently replaced an
+existing org_key(row) used by dedupe, caught only because a test called it. Grep a module for
+a name before adding one. And any page check that follows scraped links has to stay on the
+org's own http(s) host, or a planted href reads file:// or localhost (same_site, 57a1972a).
+
 How to apply: before `chewbacca gtme accounts` runs for a new market, write two lines of
 that market's real staff page into a find_contacts test with titles="org". If the buyer
 doesn't come back, add the titles first. Run with GTME_SITE_AUDIT_DIR pointing at a clean

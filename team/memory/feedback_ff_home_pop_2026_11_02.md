@@ -27,6 +27,16 @@ What he corrected that night, in order:
   drawings (rose window, arch, cornerstone, dome), unframed at about 100px with one
   purpose label each, are the version he asked for: "similar vibe not just blocky tech bro".
 - A break tag's leader must not cross the whole church. It sits under the break.
+- Later the same night: a moving field reused in three sections was "spamming the wavy
+  background". One technique per section, chosen by the section's job (site/HOME-POP-SPEC.md
+  in the repo): motion in the hero, the product lit in what we do, photos on night for the
+  work, faces on paper with the hero's sand for the team, the hero's cross for the close.
+- Hero props drawn as stroked canvas hairlines read as "desmos", and as DOM drawings they
+  read as "2d pasted on". Anything in the hero is drawn in the church's medium: paper faces
+  in the slab tones, dotted edges, royal cubes. Six prop passes missed that night; the
+  instruments are parked in heroScene.ts until there's a model to match first.
+- The church's dots are drawn right after their own face (housePts.slot), so the near roof
+  hides the wall's top and corner. Drawn after every face, they showed through the roof.
 
 **Why:** a pastor decides in seconds whether two college founders can build something
 better than their current site. A flat page gives them nothing to picture.

@@ -16,6 +16,14 @@ commit e4adc25 on branch fix/audit-law-titles: a "law" title group, exclusions f
 paralegals, of counsel and law clerks, attorney and lawyer pages as staff pages, and 6 tests.
 Caleb, same night: "my caereer and reputation are on the line and I have a client to serve".
 
+The first rerun still found a buyer at 1 of 145 firms, because there were two more holes.
+Dough's own LEADER filter in tools/gtme_accounts.py also lacked law words and kept only 3
+leaders, sorted IT first, so Marko Law's IT director beat its founder (fix 9bf2cb40 on
+fix/gtme-accounts-law-buyers). And small firms name the owner in a bio paragraph ("Alyssa
+Vanstone is the founder of..."), which find_contacts skipped as an over-140-character line
+(BIO_ROLE, on fix/audit-law-titles). Check the buyer fill count on the first 20 rows before
+running all of them: a fill near zero means the reader is blind to that market.
+
 How to apply: before `chewbacca gtme accounts` runs for a new market, write two lines of
 that market's real staff page into a find_contacts test with titles="org". If the buyer
 doesn't come back, add the titles first. Run with GTME_SITE_AUDIT_DIR pointing at a clean

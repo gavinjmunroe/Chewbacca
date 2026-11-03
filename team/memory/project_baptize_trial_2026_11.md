@@ -1,0 +1,21 @@
+---
+name: project_baptize_trial_2026_11
+description: Baptize the World church outbound trial for Travis Johnson (AuraPath), state on 2026-11-03
+metadata:
+  type: project
+---
+
+The Baptize the World trial is a church outbound test Travis Johnson (AuraPath AI) sent on 11/2
+(Test2-Church.pdf). It invites CA pastors to register their church for Pentecost Sunday, May 16, 2027.
+Built on Dough (`gtme accounts` church mode, config ~/.chewbacca/gtm/clients/baptize.json and
+baptize-search.json).
+
+State on 11/3 11am: 85 churches and 97 pastor rows (80 B, 5 P), passing list-gate, in
+~/Downloads/travis-tests/Baptize church sample - CA.csv. Total search spend about $0.034. Nothing
+sent or loaded anywhere.
+
+Open: 15 churches short of 100, and segment C (Pentecostal or charismatic plants under 3 years)
+is 0. Both need a plant or denomination directory source. None of the 21 published emails is
+verified. The drip's render and send gates wait on Baptize's registered list (Q3), sender,
+inboxes and mailing address (Q4), and form and FAQ links (Q5). The reply to Travis is drafted,
+not sent.

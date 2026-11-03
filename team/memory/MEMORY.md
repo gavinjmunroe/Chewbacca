@@ -522,3 +522,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_red_team_the_gate_before_done: a send gate is done only after a subagent runs probes against it and every reproduced hole has a test; Dough's Jonah checks had 20 holes in 3 rounds (11/2)
 - project_ff_brand_search_2026_11_03: FF brand search, a San Diego IT shop holds "firm foundation tech", on-site SEO done, off-site left
 - reference_ff_workspace_profile_photos: FF Workspace photos are admin-set only, all 3 set to the FF mark 11/3
+- project_baptize_trial_2026_11: Baptize the World church trial for Travis, 85 of 100 churches, C at 0, emails unverified (11/3)

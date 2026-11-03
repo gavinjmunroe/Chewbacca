@@ -1445,19 +1445,20 @@ def stress(client: str) -> list[tuple[str, str, str]]:
     k = len(nxt)
     ver = sum(1 for r in nxt if (r.get("email_verdict") or "") == treg_client.SENDABLE)
     add(ver == k, f"{ver} of the next {k} addresses verified", "every playbook: verify before the first send")
-    missing = dated = fresh = 0
-    for r in nxt:
-        ln = lines.get(r["email"].lower()) or {}
-        m = re.match(r"\d{4}-\d{2}-\d{2}", str(ln.get("checked") or ""))
-        if not ln.get("line"):
-            missing += 1
-        elif m:
-            dated += 1
-            fresh += (op.utc_now().date() - date.fromisoformat(m.group(0))).days <= STRESS_FRESH_DAYS
+    missing = sum(1 for r in nxt if not (lines.get(r["email"].lower()) or {}).get("line"))
     add(missing == 0, f"{k - missing} of the next {k} have a sourced personal line", "Sagar: signals lead messaging",
         warn=True)
-    add(fresh == k - missing, f"{fresh} of {k - missing} lines re-checked in the last {STRESS_FRESH_DAYS} days "
-        f"({dated} carry a date at all)", "gtm-engineering, the 3-day rule")
+    # Freshness only matters for what goes out before a line can age past the
+    # rule: the next CHALLENGE_NEXT leads. On 2026-11-03 FF's next 15 per region
+    # were re-audited that night and this still failed, counting leads 16 to 50
+    # that wouldn't send for weeks.
+    soon = [r for r in nxt[:CHALLENGE_NEXT] if (lines.get(r["email"].lower()) or {}).get("line")]
+    fresh = 0
+    for r in soon:
+        m = re.match(r"\d{4}-\d{2}-\d{2}", str((lines.get(r["email"].lower()) or {}).get("checked") or ""))
+        fresh += bool(m) and (op.utc_now().date() - date.fromisoformat(m.group(0))).days <= STRESS_FRESH_DAYS
+    add(fresh == len(soon), f"{fresh} of the next {len(soon)} lines re-checked in the last {STRESS_FRESH_DAYS} days",
+        "gtm-engineering, the 3-day rule")
     weak = sum(1 for r in nxt if WEAK_TITLE.search(r.get("title") or ""))
     add(weak / k <= 0.02, f"{weak} of the next {k} have a title that rarely decides", "GEX list scorecard",
         warn=weak / k <= 0.10)

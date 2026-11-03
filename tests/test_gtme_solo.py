@@ -281,6 +281,19 @@ class Solo(unittest.TestCase):
         # The fine-looking site still sits in the next 15, so "aint even that bad" fails.
         self.assertEqual(next(v for k, v in asked.items() if "aint even that bad" in k), "FAIL")
 
+    def test_line_freshness_only_counts_the_leads_that_send_soon(self):
+        # 2026-11-03: FF's next 15 were re-audited that night and stress still
+        # failed on leads 16 to 50, which wouldn't send for weeks.
+        rows = [f"Church {i},c{i}.test,Pat,Executive Pastor,pat@c{i}.test,valid,4" for i in range(20)]
+        (self.d / "leads.csv").write_text("company,website,name,title,email,email_verdict,dated_score\n"
+                                          + "\n".join(rows) + "\n")
+        lines = {f"pat@c{i}.test": {"line": "Times sit on the 3rd screen.", "source": f"https://c{i}.test/",
+                                    "checked": "2026-10-12 audit" if i < 15 else "2026-09-01 audit"}
+                 for i in range(20)}
+        (self.d / "lines.json").write_text(json.dumps(lines))
+        rows = {rule: v for v, rule, _ in gtme_solo.stress("Dana Co")}
+        self.assertEqual(next(v for r, v in rows.items() if "re-checked in the last" in r), "PASS")
+
     def test_a_new_question_is_asked_on_every_run(self):
         path = self.tmp / "challenges.json"
         path.write_text(json.dumps({"challenges": []}))

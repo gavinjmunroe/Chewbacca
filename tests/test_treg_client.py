@@ -29,6 +29,11 @@ class FakeTreg(BaseHTTPRequestHandler):
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         CALLS.append({"path": self.path, "headers": dict(self.headers), "body": body})
+        if body.get("email") == "busy@saturated.test":
+            self.send_response(503)
+            self.end_headers()
+            self.wfile.write(b'{"detail":"treg\'s database pool is saturated"}')
+            return
         if self.path == "/call/treg.people.email.verify":
             # The routed verifier answers {output: {valid, status}}; status is
             # the provider's own word. A catch-all domain says valid=true.
@@ -130,6 +135,13 @@ class Paid(test_gtme_solo.Solo):
         treg_client._record(f, "dana-co", "treg.people.email.find", {}, self.op.utc_now(), 0.05)
         rows = [json.loads(x) for x in f.read_text().splitlines()]
         self.assertEqual(rows[0]["cost_micro"], 50000)
+
+    def test_a_saturated_treg_charges_nothing_against_the_budget(self):
+        f = self.tmp / "verify-spend.jsonl"
+        with self.assertRaises(treg_client.Refused):
+            treg_client.verify_email(email="busy@saturated.test", customer="dana-co", spend_file=f,
+                                     budget_usd=0.10, now=self.op.utc_now())
+        self.assertEqual([json.loads(x)["cost_micro"] for x in f.read_text().splitlines()], [0])
 
     def test_no_token_spends_nothing(self):
         self.ready()

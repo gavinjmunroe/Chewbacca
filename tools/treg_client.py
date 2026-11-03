@@ -114,7 +114,10 @@ def call(endpoint: str, body: dict, *, customer: str, spend_file: Path, budget_u
     except urllib.error.HTTPError as err:
         heads, payload = err.headers, err.read()
         if err.code >= 400:
-            _record(spend_file, customer, endpoint, heads, now, max_cost_usd)
+            # A 429 or 503 is treg turning the call away before any provider runs ("Nothing was
+            # reserved or charged"). On 11/3 a saturated treg answered 503 to 6 Baptize verifies,
+            # each was counted at the $0.015 cap, and the $0.10 budget ran out after 5 real checks.
+            _record(spend_file, customer, endpoint, heads, now, 0 if err.code in (429, 503) else max_cost_usd)
             raise Refused(f"treg said {err.code}: {payload[:200].decode('utf-8', 'replace')}")
     except (urllib.error.URLError, OSError) as err:
         raise Refused(f"couldn't reach treg: {err}")

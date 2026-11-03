@@ -562,8 +562,17 @@ def sent_today(client: str) -> int:
     return sum(1 for r in jsonl(cdir(client) / "sent.jsonl") if op.parse_time(r["at"]).date() == day)
 
 
+# A staff page lists "Pastor Eduardo Bueno", and on 2026-11-03 the SoCal batch
+# opened "Hi Pastor," to him. The greeting skips titles to reach the first name.
+TITLES = {"pastor", "ps", "rev", "reverend", "dr", "fr", "father", "elder", "bishop",
+          "deacon", "mr", "mrs", "ms", "miss", "sister", "brother"}
+
+
 def fill(text: str, lead: dict) -> str:
-    first = (lead.get("name") or "").split(" ")[0].strip()
+    words = (lead.get("name") or "").split()
+    while len(words) > 1 and words[0].rstrip(".").lower() in TITLES:
+        words = words[1:]
+    first = words[0].strip() if words else ""
     greet = first if first and not lead.get("role_inbox") else f"{lead.get('company') or 'there'} team"
     out = (text.replace("{{first_name}}", greet).replace("{{company}}", lead.get("company") or "your team")
                .replace("{{signal_line}}", lead.get("line") or ""))

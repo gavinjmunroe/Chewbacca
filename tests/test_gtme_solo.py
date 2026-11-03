@@ -698,6 +698,13 @@ class Solo(unittest.TestCase):
         self.assertIn("Meetings booked: 1", md)
         self.assertIn("Per 100 people emailed: 0.0 positive replies, 50.0 meetings", md)
 
+    def test_greeting_skips_a_title(self):
+        # 2026-11-03: "Pastor Eduardo Bueno" on leads.csv became "Hi Pastor,".
+        for name, want in (("Pastor Eduardo Bueno", "Hi Eduardo,"), ("Rev. Dr. Ann Lee", "Hi Ann,"),
+                           ("Fr. John Ortiz", "Hi John,"), ("Cynthia Wagner", "Hi Cynthia,"),
+                           ("Pastor", "Hi Pastor,")):
+            self.assertEqual(gtme_solo.fill("Hi {{first_name}},", {"name": name}), want, name)
+
     def test_gtme_front_door_routes_here(self):
         self.ready()
         p = subprocess.run([sys.executable, str(ROOT / "tools" / "gtme_operator.py"), "batch", "--client", "Dana Co"],

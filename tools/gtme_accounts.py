@@ -145,6 +145,18 @@ NOT_PERSON = re.compile(r"\b(partners?|founders?|owners?|attorneys?|lawyers?|man
                         r"president|chief|ceo|coo|cfo|cto|executive|contact|about|office)\b", re.I)
 
 
+def site_home(rec: dict) -> str:
+    """Where the org's site really lives after redirects. Calvary Chapel North Long Beach is
+    listed on Maps as ccnlb.com and serves calvarynlb.org, so own_page dropped its pastor on 11/2.
+    Older cached reads have no final_url; their first signal page is the home page they reached."""
+    if rec.get("final_url"):
+        return rec["final_url"]
+    for pages in (rec.get("signals") or {}).values():
+        if pages:
+            return pages[0].get("url", "")
+    return ""
+
+
 def own_page(page: str, website: str) -> bool:
     """A buyer counts only when the org's own site names them. A page on another domain is
     someone else's claim, the shape of IEHP's buyer on 10/29 (a title from another org)."""
@@ -613,6 +625,7 @@ def enrich_one(a: dict, tools, words, growth, acc: dict | None = None, titles=No
             else:
                 au = audit_site.audit(rec["website"], None)
             rec["site_status"] = au.get("status")
+            rec["final_url"] = au.get("final_url") or ""
             rec["leaders"] = leaders(au.get("contacts"), titles, keep_all=bool(acc.get("per_person")),
                                      cap=int(acc.get("max_people") or 0) or None)
             rec["site_people"] = au.get("staff_count")
@@ -793,7 +806,8 @@ def score(rec: dict, acc: dict, words: re.Pattern, today: dt.date, about=None) -
     cands = [{"contact_id": c.get("email") or c.get("name"), "full_name": c.get("name"), "title": c.get("title", ""),
               "email": c.get("email") or "", "email_verified": False,  # published, never run through a validator
               "source_url": c.get("source_url", "")} for c in rec.get("leaders") or []
-             if is_person(c.get("name")) and own_page(c.get("source_url", ""), rec.get("website", ""))
+             if is_person(c.get("name")) and (own_page(c.get("source_url", ""), rec.get("website", ""))
+                                              or bool(site_home(rec)) and own_page(c.get("source_url", ""), site_home(rec)))
              and not GONE.search(c.get("title", ""))]
     prim = gtme_score.resolve_primary(cands, acc["titles"]) if cands else None
     pc = next((c for c in cands if prim and c["contact_id"] == prim["primary_contact_id"]), None)
@@ -1032,15 +1046,46 @@ def segment_of(row: dict, verdicts: dict, acc: dict) -> str:
 NOT_PASTOR_NAME = re.compile(r"\b(pastors?|church|campus|team|staff|ministr\w*|leadership|elders)\b", re.I)
 
 
-def not_a_person(name: str, org: str) -> bool:
+# Widget words read as names in reads cached before the site audit learned them ("My Account")
+WIDGET_NAME = re.compile(r"\b(account|hello|youtube|channel|search|process|author|oversight|login|subscribe)\b", re.I)
+
+
+def not_a_person(name: str, org: str, title: str = "") -> bool:
     words = [w for w in re.findall(r"[a-z]+", (name or "").lower()) if w not in ("pastor", "rev", "dr")]
     org_words = set(re.findall(r"[a-z]{4,}", (org or "").lower())) - {"church", "community", "christian"}
-    return bool(NOT_PASTOR_NAME.search(re.sub(r"^(pastor|rev\.?|dr\.?)\s+", "", name or "", flags=re.I))) or \
+    first_org = (re.findall(r"[a-z]{4,}", (org or "").lower()) or [""])[0]
+    bare = re.sub(r"^(pastor|rev\.?|dr\.?)\s+", "", name or "", flags=re.I)
+    # "Bayside Santa Rosa / Campus Pastor": a campus pastor whose "name" starts with the church's name
+    # three words or more, so a pastor named Grace Lee at Grace City Church still counts
+    campus_name = "campus" in (title or "").lower() and len(words) >= 3 and words[0] == first_org
+    return bool(NOT_PASTOR_NAME.search(bare)) or bool(WIDGET_NAME.search(bare)) or campus_name or \
         bool(words and all(w in org_words for w in words))
 
 
+WEEKDAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+MONTHS = ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
+
+
+def stale_weekday(line: str, today: dt.date | None = None) -> bool:
+    """"Sun, Apr 21" with no year is 2024 when April 21 isn't a Sunday this year or next. Lake
+    Hills Christian Center's only baptism line on 11/2 was exactly that."""
+    m = re.search(r"\b(mon|tue|wed|thu|fri|sat|sun)[a-z]*\.?,?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?"
+                  r"\s+(\d{1,2})\b(?!,?\s*\d{4})", line, re.I)
+    if not m:
+        return False
+    year = (today or dt.date.today()).year
+    want = WEEKDAYS.index(m.group(1).lower()[:3])
+    for y in (year, year + 1):
+        try:
+            if dt.date(y, MONTHS.index(m.group(2).lower()[:3]) + 1, int(m.group(3))).weekday() == want:
+                return False
+        except ValueError:
+            continue
+    return True
+
+
 def church_fields(row: dict, rec: dict, probs: dict, acc: dict) -> None:
-    if row.get("buyer") and not_a_person(row["buyer"], row.get("org", "")):
+    if row.get("buyer") and not_a_person(row["buyer"], row.get("org", ""), row.get("buyer_title", "")):
         row["buyer_check"] = f"not a person: {row['buyer']}"
         row["buyer"] = row["buyer_title"] = row["buyer_email"] = ""
     verdicts = check_verdicts(probs, acc)
@@ -1063,7 +1108,15 @@ def church_fields(row: dict, rec: dict, probs: dict, acc: dict) -> None:
         # and a hand read had to hold 10 of 98. A signal can name what its quoted line must show.
         must = sig.get("evidence_must")
         line = row.get(sig["name"] + "_evidence") or ""
-        if must and not re.search(must, line, re.I):
+        bad = sig.get("evidence_not")
+        src = row.get(sig["name"] + "_source") or ""
+        if bad and line and re.search(bad, line + " " + urllib.parse.urlparse(src).path, re.I):
+            weak = True
+            held.append(f"{sig['name']} line is {sig.get('evidence_not_label') or 'excluded'}")
+        elif line and stale_weekday(line):
+            weak = True
+            held.append(f"{sig['name']} line's weekday and date don't fit this year or next")
+        elif must and not re.search(must, line, re.I):
             weak = True
             held.append(f"{sig['name']} line shows no {sig.get('evidence_must_label') or 'required detail'}"
                         if line else f"no {sig['name']} line to quote")

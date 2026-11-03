@@ -706,6 +706,9 @@ class ChurchMode(unittest.TestCase):
         self.assertTrue(ga.not_a_person("Bayside Santa Rosa", "Bayside Church - Santa Rosa Campus"))
         self.assertTrue(ga.not_a_person("Lead Pastors", "Carmel Church San Diego"))
         self.assertFalse(ga.not_a_person("Pastor Mike Elliott", "Compass Bible Church Tustin"))
+        self.assertTrue(ga.not_a_person("Bayside Santa Rosa", "Bayside Church - Adventure Campus", "Campus Pastor"))
+        self.assertTrue(ga.not_a_person("My Account", "Faro Church Assemblies of God"))
+        self.assertFalse(ga.not_a_person("Grace Lee", "Grace City Church", "Campus Pastor, Irvine"))
         self.assertFalse(ga.not_a_person("Grace Lee", "Grace City Church"))  # one word shared with the org is a person
 
     def test_this_years_line_beats_an_old_one(self):
@@ -827,6 +830,31 @@ class ChurchMode(unittest.TestCase):
         self.assertIn("baptism line shows no date or sign-up", sermon["held_why"])
         self.assertEqual(row_for("Baptism Sunday, June 7, 2026")["segment"], "B")
         self.assertEqual(row_for("Baptism: sign up here")["segment"], "B")
+
+    def test_a_weekday_that_doesnt_fit_this_year_is_stale(self):
+        self.assertTrue(ga.stale_weekday("Baptism / Sun, Apr 21", date(2026, 11, 2)))   # a 2024 Sunday
+        self.assertFalse(ga.stale_weekday("Baptism / Sun, Sep 20", date(2026, 11, 2)))  # a 2026 Sunday
+        self.assertFalse(ga.stale_weekday("Baptism Sunday, June 7, 2026", date(2026, 11, 2)))
+
+    def test_a_redirected_site_still_owns_its_staff_page(self):
+        rec = {"website": "http://www.ccnlb.com/", "final_url": "https://calvarynlb.org/"}
+        self.assertTrue(ga.own_page("https://calvarynlb.org/people/pastor-brandon/", ga.site_home(rec)))
+        self.assertEqual(ga.site_home({"signals": {"baptism": [{"url": "https://calvarynlb.org/"}]}}),
+                         "https://calvarynlb.org/")
+
+    def test_a_sermon_is_not_a_baptism_event(self):
+        acc = dict(CHURCH_ACC, criteria={}, page_signals=[dict(CHURCH_ACC["page_signals"][0],
+                   evidence_not="sermon|message", evidence_not_label="a sermon")])
+        rec = {"key": "p1", "name": "Grace Baptist", "category": "Baptist church",
+               "leaders": [{"name": "Ann Lee", "title": "Lead Pastor", "email": "",
+                            "source_url": "https://grace.example/staff"}],
+               "signals": {"baptism": [{"url": "https://grace.example/sermons/baptism",
+                                        "lines": ["Obedience and Baptism / October 4, 2026"]}]}}
+        row = ga.score(dict(rec, city="", state="CA", website="https://grace.example/"), acc, ga.re.compile("x"),
+                       date(2026, 11, 2), lambda o, s: (s, []))
+        ga.church_fields(row, rec, {"baptized_2026": 0.95, "affirming": 0.0}, acc)
+        self.assertEqual(row["segment"], "")
+        self.assertIn("baptism line is a sermon", row["held_why"])
 
     def test_excluded_church_is_held_with_its_reason(self):
         rec = {"key": "p1", "name": "Open Church", "category": "Non-denominational church",

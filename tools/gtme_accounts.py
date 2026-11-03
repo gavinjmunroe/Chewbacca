@@ -1591,6 +1591,52 @@ def find_buyers(rows: list[dict], client: str, acc: dict, work: Path, tools, loo
     return {"asked": asked, "added": added}
 
 
+def evaluate(rows: list[dict], gold_path: Path) -> dict:
+    """Score a run against hand labels, so a change that makes Dough worse shows up as a number.
+
+    gold CSV columns: website, icp (yes/no), buyer (the person who signs, blank if the site names
+    nobody), checked_by, note. Built 2026-11-02 after the Michigan PIP list went from 1 buyer to 32
+    to 5 fake names to a dead founder, every miss caught by eye and none by a number.
+    """
+    with open(gold_path, newline="", encoding="utf-8-sig") as fh:
+        gold = {_domain(g["website"]): g for g in csv.DictReader(fh) if g.get("website")}
+    seen = {_domain(r["website"]): r for r in rows}
+    tp = fp = fn = tn = 0
+    right = wrong = missed = invented = 0
+    misses = []
+    for dom, g in gold.items():
+        r = seen.get(dom)
+        if not r:
+            misses.append(f"{dom}: not in this run")
+            continue
+        want, got = g["icp"].strip().lower() == "yes", r.get("icp_fit") == "yes"
+        tp += want and got
+        fp += got and not want
+        fn += want and not got
+        tn += not want and not got
+        if want != got:
+            misses.append(f"{dom}: icp gold {g['icp']}, run {r.get('icp_fit') or 'blank'}")
+        gb = (g.get("buyer") or "").strip().lower().split()
+        rb = (r.get("buyer") or "").strip().lower().split()
+        if gb and rb:
+            # first and last name both: the late founder Joseph Lobb is not Cherie Lobb, the owner now
+            ok = gb[-1] == rb[-1] and gb[0] == rb[0]
+            right += ok
+            wrong += not ok
+            if not ok:
+                misses.append(f"{dom}: buyer gold {g['buyer']}, run {r['buyer']}")
+        elif gb:
+            missed += 1
+        elif rb:
+            invented += 1
+            misses.append(f"{dom}: run named {r['buyer']}, gold says nobody")
+    div = lambda a, b: round(a / b, 3) if b else None  # noqa: E731
+    return {"labeled": len(gold), "in_run": sum(1 for d in gold if d in seen),
+            "icp_precision": div(tp, tp + fp), "icp_recall": div(tp, tp + fn),
+            "buyer_right": right, "buyer_wrong": wrong, "buyer_missed": missed, "buyer_invented": invented,
+            "buyer_precision": div(right, right + wrong + invented), "misses": misses}
+
+
 def email_line(summary: dict) -> str:
     """11/2: the first --find-emails run skipped every row and still printed only "priced, not
     spent", so nobody could tell the step ran and did nothing."""
@@ -1628,6 +1674,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--check", action="store_true", help="validate the accounts block and stop")
     ap.add_argument("--find-buyers", action="store_true",
                     help="for ICP-fit rows with no buyer, a paid decision-maker lookup kept only if their own site names them")
+    ap.add_argument("--eval", metavar="GOLD_CSV",
+                    help="score the run against hand labels (website, icp, buyer) and print precision and recall")
     ap.add_argument("--find-emails", action="store_true",
                     help="spend the client's treg_budget_usd on verified buyer emails (ICP-fit rows only)")
     a = ap.parse_args(argv)
@@ -1669,6 +1717,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  sites we couldn't read, so ICP fit is unknown (check by hand): {', '.join(summary['icp_unread'])}")
     print(f"  dnc: {summary['dnc']}")
     print(email_line(summary))
+    if a.eval:
+        ev = evaluate(rows, Path(os.path.expanduser(a.eval)))
+        (work / "eval.json").write_text(json.dumps(ev, indent=2))
+        print(f"  eval on {ev['in_run']} of {ev['labeled']} labeled: ICP precision {ev['icp_precision']}, "
+              f"recall {ev['icp_recall']}; buyer right {ev['buyer_right']}, wrong {ev['buyer_wrong']}, "
+              f"missed {ev['buyer_missed']}, invented {ev['buyer_invented']}")
+        for m in ev["misses"][:15]:
+            print(f"    {m}")
     return 0
 
 

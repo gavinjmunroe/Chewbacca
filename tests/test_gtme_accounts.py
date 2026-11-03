@@ -336,6 +336,24 @@ class Parts(unittest.TestCase):
                                None, "https://other.example/", r"no[- ]fault|\bPIP\b")
         self.assertFalse(none["ok"])
 
+    def test_eval_scores_icp_and_buyers_against_hand_labels(self):
+        gold = ("website,icp,buyer,checked_by,note\n"
+                "https://a.example/,yes,Jonathan Marko,caleb,\n"
+                "https://b.example/,yes,,caleb,blocked site\n"
+                "https://c.example/,no,,caleb,\n"
+                "https://d.example/,yes,Cherie Lobb,caleb,\n")
+        rows = [{"website": "https://www.a.example/", "icp_fit": "yes", "buyer": "Jonathan R. Marko"},
+                {"website": "https://b.example/", "icp_fit": "unread", "buyer": ""},
+                {"website": "https://c.example/", "icp_fit": "yes", "buyer": "Managing Partner Ann"},
+                {"website": "https://d.example/", "icp_fit": "yes", "buyer": "Joseph Lobb"}]
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "gold.csv"
+            p.write_text(gold)
+            ev = ga.evaluate(rows, p)
+        self.assertEqual((ev["icp_precision"], ev["icp_recall"]), (0.667, 0.667))
+        self.assertEqual((ev["buyer_right"], ev["buyer_wrong"], ev["buyer_invented"]), (1, 1, 1))
+        self.assertTrue(any("b.example: icp gold yes, run unread" in m for m in ev["misses"]))
+
     def test_a_blocked_site_is_unread_never_no(self):
         # Sinas Dramis answered 403 on 11/2 and came back "no" for PIP work
         ev = ga.icp_evidence(SimpleNamespace(fetch=lambda u: {"html": "<h1>403 Forbidden</h1>", "final_url": u}),

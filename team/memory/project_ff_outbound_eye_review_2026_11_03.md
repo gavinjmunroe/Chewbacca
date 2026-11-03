@@ -10,7 +10,7 @@ Firm Foundation's 11/3 outbound list came from re-auditing all 1,297 in-band chu
 Rules that came out of it:
 
 - The audit script can't judge a site. On 11/3 it told Legacy Church of Downey their 10:30 time was 8 screens down when it sat on screen 2 in a flyer image. Caleb: "Bro I hva. feeling ur being rlly stupid with how you go abt grading a church's site". Every line gets checked on the screenshot and live before it goes out, and the line leads with what a guest notices first.
-- No LDS, no LGBT-affirming churches, no cults or heresy (Oneness, Unity, Christian Science, UBF, Celestial and other Aladura churches and the like). Caleb, 11/3: "No LDS or woke ahh LGBT churches!!!!!", "Or other heresy", "Wack theology and whatnot". exclude.py keeps the church's own phrase as proof.
+- No LDS, no LGBT-affirming churches, no cults or heresy (Oneness, Unity, Christian Science, UBF, Celestial and other Aladura churches and the like). Caleb, 11/3: "No LDS or woke ahh LGBT churches!!!!!", "Or other heresy", "Wack theology and whatnot". exclude.py keeps the church's own phrase as proof. The USC campus groups Caleb meant ("the ones that go in the USC village - Harvest") are on the USC ORSL caution list, read 11/3: City of Angels ICC, D.R.E.A.M. Campus Ministry and Restored Church Worldwide (both formerly The Harvest at USC, an ICC offshoot), Shincheonji and World Mission Society Church of God. All five are blocked by name. restoredla.com ("Restored Church", LA) is a different church and wasn't on the list.
 - Every email gets reviewed with Caleb one at a time (feedback_ff_outbound_one_email_at_a_time).
 - The email's "one of N fixes" comes from that church's fix list, never typed by hand. 8 of the first 61 lists confirmed fewer items than the line promised.
 

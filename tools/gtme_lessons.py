@@ -328,7 +328,10 @@ def record(lesson_id, result, verdict, next_decision=None, oracle=None, when=Non
 
 STOP = set("""a an and are as at be been but by can do does for from get go got has have how i if in into is it
 its just make of on or our out so that the their them then there they this to up us use was we what when where
-which who why will with you your each every first new about after before over per than any all one two""".split())
+which who why will with you your each every first new about after before over per than any all one two
+next last""".split())
+# "next" and "last" joined the list on 2026-11-02: once a lesson named `gtme next-move`, the
+# held-out "book a dentist appointment next tuesday" matched it on "next" plus book=meeting.
 
 # Words that mean the same thing in GTM work. Each word maps to its group, and
 # a group counts as one matched idea. Written from the playbook and the

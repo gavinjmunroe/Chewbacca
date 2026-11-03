@@ -98,7 +98,7 @@ def ig_posts(handle):
                 for p in api_anything("instagram", "getPosts", username=handle)]
     except RuntimeError as first:
         # 2026-10-17: the logged-out getPosts template stopped replaying ("embedded data not
-        # found") for @noah.rolette and @rawdawgclub, while `chewbacca ig posts` read 24 of
+        # found") for two creator handles, while `chewbacca ig posts` read 24 of
         # Noah's posts through the signed-in session, GNC, NOCCO and Airbnb deals included.
         # Two pages at most: that reader paces itself one page every 3 s for the account's sake.
         try:

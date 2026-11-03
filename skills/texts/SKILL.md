@@ -454,6 +454,23 @@ The rest of that night's corrections, all on the same Sagar text:
 The version he sent answered Sagar's three numbered questions in order, then
 gave short lines on his position. Sagar: "Thank you I will think about this".
 
+### A text to someone outside the work: no jargon, name who's who, keep it short
+
+A text to his dad, family or anyone outside GTM gets plain words for every tool
+and term, one line on who each named person is, and a blurb, not a briefing.
+On 2026-11-03 a money ask to Dad went through four rounds: "He doesn't know any
+GTM terms speak english" (Clay, Instantly, inboxes, outbound), then "He doesnt
+know who travis johnson is", then "Bro u dont needa text all dat lol just
+include a blurb or 2". The version he took was one line per expense, the
+explanation folded into that expense's line in two sentences, and a total.
+
+- Swap every tool name for what it does ("a tool that warms up new email
+  accounts so they don't land in spam", never "Instantly").
+- Anyone the reader hasn't met gets who they are in a few words, inside the
+  line that mentions them.
+- Before handing it over, delete every sentence the reader doesn't need in
+  order to say yes.
+
 ### A blast to many people: show the final list, then never re-send
 
 On 2026-10-26 a link blast to ~86 USC friends went out from three lists Caleb

@@ -48,6 +48,8 @@ The accounts block, in ~/.chewbacca/gtm/clients/<slug>.json:
             or {"kind": "formd", "since_days": 30, "industry": "Technology", "state": "CA"}
             or {"kind": "api", "site": "google-maps", "op": "searchPlaces", "args": {"query": "..."}}
             or {"kind": "csv", "path": "~/Downloads/x.csv", "columns": {"Company": "name"}}
+            or {"kind": "search", "queries": ["baptism 2026 site:churchcenter.com California"], "state": "CA",
+                "signal": "baptism", "budget_usd": 1, "customer": "baptize"}   signal first, metered SERP
       "titles": ["Chief Operating", "COO", "Executive Director"],
       "criteria": {"revenue_range": {"min": 10000000, "max": 50000000}},
       "lanes": {"R": "advocacy", "I": "legal aid"},          NTEE letter -> what the row says it is
@@ -444,7 +446,105 @@ def linkedin_hiring(cfg: dict, call=None) -> dict:
     return out
 
 
-SOURCES = {"irs_eo": irs_rows, "formd": formd_rows, "api": api_rows, "csv": csv_rows, "maps": maps_rows}
+# ── signal first: search for the signal, then find the org ─────────────────
+
+# On 11/2 the Baptize list read 1,357 churches from Maps to find 76 that posted a baptism this
+# year (about 5%). A search for the signal itself ("baptism 2026" on Church Center) found real
+# California churches on its first page. Guessed, never measured: one SERP page is 10 results.
+SEARCH_ENDPOINT = "treg.google.serp.organic"
+SEARCH_MAX_USD = 0.002  # routed SERP lists at $0.00015 to $0.002 a page (treg catalog, 11/2)
+SHARED_SIGNAL_HOSTS = ("churchcenter.com", "subsplash.com")
+
+
+def _get_html(url: str) -> str:
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Macintosh) gtme-accounts"})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            return r.read(400000).decode("utf-8", "replace")
+    except Exception:
+        return ""
+
+
+def org_name_from_page(html: str) -> str:
+    """Church Center titles every page "<page> - <church>", a 404 for an old event included."""
+    m = re.search(r'property="og:title" content="([^"]+)"', html) or re.search(r"<title[^>]*>([^<]+)", html)
+    title = (m.group(1) if m else "").strip()
+    return title.rsplit(" - ", 1)[-1].strip() if " - " in title else ""
+
+
+def search_rows(src: dict, cache: Path, call=None, fetch=None, place=None) -> list[dict]:
+    """Accounts found by searching for the signal. Each search hit becomes the org's seeded
+    signal line (its title, date and snippet, with its link); a hit on a shared host like Church
+    Center is resolved to the church by the page's title, then to its own site on Maps. Every
+    search is a metered treg call, so the client's `budget_usd` caps it, and each answer is cached
+    so a rerun pays for nothing twice."""
+    import gtme_operator as op
+    cache.mkdir(parents=True, exist_ok=True)
+    spend = cache / "spend.jsonl"
+    customer = src.get("customer") or "gtme"
+    call = call or (lambda q: treg_client.call(src.get("endpoint") or SEARCH_ENDPOINT,
+                                               {"q": q, "country": "us", "limit": int(src.get("per_query") or 10)},
+                                               customer=customer, spend_file=spend,
+                                               budget_usd=float(src.get("budget_usd") or 0),
+                                               max_cost_usd=float(src.get("max_cost_usd") or SEARCH_MAX_USD)))
+    fetch = fetch or _get_html
+    place = place or (lambda q: op.api("google-maps", "getPlace", query=q))
+    state = (src.get("state") or "").upper()
+    hits: dict[str, dict] = {}
+    for q in src.get("queries") or []:
+        hit = cache / ("search-" + re.sub(r"[^a-z0-9]+", "-", q.lower())[:120] + ".json")
+        if hit.exists():
+            res = json.loads(hit.read_text())
+        else:
+            try:
+                res = call(q)
+            except treg_client.Refused as e:
+                raise Refused(f"search source: {e}")
+            hit.write_text(json.dumps(res))
+        out = res.get("output") if isinstance(res.get("output"), dict) else res
+        for r in out.get("results") or []:
+            url = r.get("url") or ""
+            host = _domain(url)
+            if not host:
+                continue
+            shared = host.endswith(SHARED_SIGNAL_HOSTS)
+            key = host if shared or not any(host.endswith(h) for h in SHARED_HOSTS) else host + urllib.parse.urlparse(url).path
+            line = " / ".join(x for x in (r.get("title"), r.get("date"), r.get("snippet")) if x)
+            hits.setdefault(key, {"shared": shared, "url": url, "lines": []})["lines"].append(line[:300])
+    rows = []
+    for key, h in hits.items():
+        name = website = city = category = ""
+        st = ""
+        if h["shared"]:
+            name = org_name_from_page(fetch(h["url"]))
+        else:
+            u = urllib.parse.urlparse(h["url"])
+            website = f"{u.scheme or 'https'}://{u.netloc}/"
+            name = org_name_from_page(fetch(website)) or ""
+        lookup = f"{name} {state}".strip() if name else ""
+        p = {}
+        if lookup:
+            res = place(lookup)
+            rows_ = _first_list(res) if isinstance(res, dict) else (res or [])
+            p = rows_[0] if rows_ else {}
+        if p:
+            parts = [x.strip() for x in str(p.get("address") or "").split(",")]
+            city, st = (parts[-2], parts[-1].split()[0]) if len(parts) >= 3 else ("", "")
+            category = str(p.get("category") or "")
+            website = website or p.get("website") or ""
+            name = p.get("name") or name
+        if not website or not name or (state and st and st.upper() != state):
+            continue
+        rows.append({"key": _domain(website), "name": name, "city": city, "state": st, "revenue": None,
+                     "headcount": None, "ntee": "", "website": website, "category": category,
+                     "size": f"{p.get('reviewCount')} Google reviews" if p.get("reviewCount") is not None else "",
+                     "account_source": f"search: {h['url']}",
+                     "seed_signals": {src.get("signal") or "signal": [{"url": h["url"], "lines": h["lines"]}]}})
+    return rows
+
+
+SOURCES = {"irs_eo": irs_rows, "formd": formd_rows, "api": api_rows, "csv": csv_rows, "maps": maps_rows,
+           "search": search_rows}
 
 
 # ── step 3: enrich ───────────────────────────────────────────────────────
@@ -635,6 +735,9 @@ def enrich_one(a: dict, tools, words, growth, acc: dict | None = None, titles=No
             if acc.get("page_signals") and au.get("status") == "ok":
                 rec["signals"] = page_lines(audit_site, au.get("final_url") or rec["website"], acc["page_signals"],
                                             org=rec.get("maps_name") or rec.get("name", ""))
+            # what the search found comes first: it's the reason this org is on the list
+            for n, pages in (rec.get("seed_signals") or {}).items():
+                rec.setdefault("signals", {})[n] = pages + (rec.get("signals") or {}).get(n, [])
             rec["page_emails"] = [e.get("email") for e in au.get("page_emails") or []][:8]
             rec["chms"] = au.get("chms") or ""
             rec["jobs"] = lead_card.jobs(au.get("final_url") or rec["website"])

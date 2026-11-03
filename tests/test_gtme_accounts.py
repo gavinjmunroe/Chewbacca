@@ -856,6 +856,51 @@ class ChurchMode(unittest.TestCase):
         self.assertEqual(row["segment"], "")
         self.assertIn("baptism line is a sermon", row["held_why"])
 
+    def test_search_source_finds_the_church_behind_a_signal(self):
+        calls = []
+
+        def call(q):
+            calls.append(q)
+            return {"output": {"results": [
+                {"url": "https://hope.churchcenter.com/registrations/events/1", "title": "Baptism Sunday",
+                 "date": "Apr 26, 2026", "snippet": "Register for baptism"},
+                {"url": "https://hope.churchcenter.com/registrations/events/2", "title": "Baptism Class"},
+                {"url": "https://www.gracefresno.example/baptism", "title": "Baptism | Grace Fresno"},
+                {"url": "https://www.texaschurch.example/baptism", "title": "Baptism | Lone Star"}]}}
+        pages = {"https://hope.churchcenter.com/registrations/events/1":
+                 '<meta property="og:title" content="Baptism Sunday - Hope Church OC"/>',
+                 "https://www.gracefresno.example/": "<title>Home - Grace Fresno</title>",
+                 "https://www.texaschurch.example/": "<title>Home - Lone Star Church</title>"}
+        places = {"Hope Church OC CA": {"name": "Hope Church OC", "website": "https://hopeoc.example/",
+                                        "address": "1 Main St, Irvine, CA 92618", "category": "Non-denominational church",
+                                        "reviewCount": 410},
+                  "Grace Fresno CA": {"name": "Grace Fresno", "address": "2 Elm, Fresno, CA 93701",
+                                      "category": "Baptist church"},
+                  "Lone Star Church CA": {"name": "Lone Star Church", "address": "3 Oak, Austin, TX 78701"}}
+        src = {"kind": "search", "queries": ["baptism 2026 churchcenter CA"], "state": "CA", "signal": "baptism"}
+        with tempfile.TemporaryDirectory() as d:
+            rows = ga.search_rows(src, Path(d), call=call, fetch=lambda u: pages.get(u, ""),
+                                  place=lambda q: {"data": [places[q]]} if q in places else {})
+            again = ga.search_rows(src, Path(d), call=call, fetch=lambda u: pages.get(u, ""),
+                                   place=lambda q: {"data": [places[q]]} if q in places else {})
+        by = {r["name"]: r for r in rows}
+        self.assertEqual(sorted(by), ["Grace Fresno", "Hope Church OC"])  # the Texas church is dropped
+        hope = by["Hope Church OC"]
+        self.assertEqual((hope["website"], hope["city"], hope["category"]),
+                         ("https://hopeoc.example/", "Irvine", "Non-denominational church"))
+        self.assertEqual(hope["seed_signals"]["baptism"][0]["lines"],
+                         ["Baptism Sunday / Apr 26, 2026 / Register for baptism", "Baptism Class"])
+        self.assertEqual(by["Grace Fresno"]["website"], "https://www.gracefresno.example/")
+        self.assertEqual(calls, ["baptism 2026 churchcenter CA"])  # the rerun paid for nothing
+        self.assertEqual(len(again), 2)
+
+    def test_search_source_refuses_without_a_budget(self):
+        with tempfile.TemporaryDirectory() as d:
+            def call(q):
+                raise ga.treg_client.Refused("no budget")
+            with self.assertRaises(ga.Refused):
+                ga.search_rows({"queries": ["x"]}, Path(d), call=call)
+
     def test_excluded_church_is_held_with_its_reason(self):
         rec = {"key": "p1", "name": "Open Church", "category": "Non-denominational church",
                "leaders": [{"name": "Cy Dee", "title": "Lead Pastor", "email": "", "source_url": "s"}]}

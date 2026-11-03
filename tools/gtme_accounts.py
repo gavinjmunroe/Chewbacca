@@ -153,7 +153,7 @@ IRS_EO = "https://www.irs.gov/pub/irs-soi/eo_{state}.csv"
 COLUMNS = ["tier", "fit", "why_now_score", "hold", "kind", "org", "city", "state", "website", "revenue", "size",
            "stack", "buyer", "buyer_title", "buyer_email", "buyer_source", "buyer_check", "relationship",
            "channel", "dnc", "treg_find", "dupe_of", "why_now", "why_now_date", "why_now_source",
-           "tier_rationale", "account_source", "icp_fit", "icp_line", "icp_source"]
+           "tier_rationale", "account_source", "icp_fit", "icp_line", "icp_source", "email_verdict"]
 lock = threading.Lock()
 
 
@@ -862,6 +862,42 @@ def build(client: str, acc: dict, work: Path, *, limit: int | None = None, worke
     return rows, summary
 
 
+def find_emails(rows: list[dict], client: str, acc: dict, work: Path, finder=None, verifier=None) -> dict:
+    """Spend the client's data budget on the rows worth it: a confirmed buyer, ICP work shown on
+    their own site, and no email yet. Only a "valid" verdict fills buyer_email; catch-all and
+    risky stay out of it, because a bounce costs the inbox more than a missing row. treg_client
+    refuses any call past `treg_budget_usd` for the month, so the cap lives in client config.
+    A published email gets verified the same way before it counts."""
+    budget = float(acc.get("treg_budget_usd") or 0)
+    spend = work / "spend.jsonl"
+    finder = finder or (lambda dom, name: treg_client.find_email(domain=dom, full_name=name, customer=client,
+                                                              spend_file=spend, budget_usd=budget))
+    verifier = verifier or (lambda email: treg_client.verify_email(email=email, customer=client,
+                                                                  spend_file=spend, budget_usd=budget))
+    found = checked = 0
+    for r in rows:
+        if not r["buyer"] or r.get("icp_fit") == "no" or r.get("dnc"):
+            continue
+        try:
+            if r["buyer_email"]:
+                v = verifier(r["buyer_email"])["verdict"]
+                checked += 1
+                r["email_verdict"] = v
+                if v != "valid":
+                    r["buyer_email"] = ""
+            elif r["treg_find"]:
+                res = finder(_domain(r["website"]), r["buyer"])
+                r["email_verdict"] = res.get("verdict") or ("none found" if not res.get("email") else "unknown")
+                r["treg_find"] = f"spent ${res.get('cost_usd', 0):.3f}"
+                if res.get("email") and res.get("verdict") == "valid":
+                    r["buyer_email"], found = res["email"], found + 1
+        except treg_client.Refused as e:
+            r["email_verdict"] = f"not run: {e}"
+            if "budget" in str(e):
+                break
+    return {"found": found, "verified_published": checked}
+
+
 def write(rows: list[dict], out: Path) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     with open(out, "w", newline="") as fh:
@@ -880,6 +916,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--refresh", action="store_true", help="re-read every site instead of the cache")
     ap.add_argument("--check", action="store_true", help="validate the accounts block and stop")
+    ap.add_argument("--find-emails", action="store_true",
+                    help="spend the client's treg_budget_usd on verified buyer emails (ICP-fit rows only)")
     a = ap.parse_args(argv)
     try:
         path, cfg = load(a.client)
@@ -890,6 +928,9 @@ def main(argv: list[str] | None = None) -> int:
         slug = path.stem
         work = clients_dir() / slug / "accounts"
         rows, summary = build(slug, acc, work, limit=a.limit, workers=a.workers, refresh=a.refresh)
+        if a.find_emails:
+            summary["emails"] = find_emails(rows, slug, acc, work)
+            summary["fill"]["buyer_email"] = sum(1 for r in rows if r["buyer_email"])
     except Refused as e:
         print(f"gtme accounts: {e}", file=sys.stderr)
         return 2

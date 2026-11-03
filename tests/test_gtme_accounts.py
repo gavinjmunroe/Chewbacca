@@ -383,6 +383,29 @@ class Parts(unittest.TestCase):
         self.assertEqual(posts[ga.name_key("Hamo Law Firm - Auto Accident Lawyers")][0]["title"], "PIP Case Manager")
         self.assertNotIn(ga.name_key("Michigan Injury Attorneys"), posts)
 
+    def test_find_emails_keeps_only_valid_and_skips_off_icp(self):
+        rows = [{"buyer": "Jonathan R. Marko", "buyer_email": "", "website": "https://markolaw.com/",
+                 "treg_find": "priced", "icp_fit": "yes", "dnc": ""},
+                {"buyer": "Cherie Lobb", "buyer_email": "", "website": "https://thelobblawfirm.com/",
+                 "treg_find": "priced", "icp_fit": "yes", "dnc": ""},
+                {"buyer": "Kara Weisman", "buyer_email": "", "website": "https://thevwlaw.com/",
+                 "treg_find": "priced", "icp_fit": "no", "dnc": ""},
+                {"buyer": "Ryan Vanstone", "buyer_email": "ryan@vanstone.law", "website": "https://vanstone.law/",
+                 "treg_find": "", "icp_fit": "yes", "dnc": ""}]
+        asked = []
+
+        def finder(dom, name):
+            asked.append(name)
+            return {"email": f"x@{dom}", "verdict": "valid" if "marko" in dom else "catch_all", "cost_usd": 0.05}
+        with tempfile.TemporaryDirectory() as d:
+            out = ga.find_emails(rows, "acme", {"treg_budget_usd": 5}, Path(d), finder=finder,
+                                 verifier=lambda e: {"verdict": "invalid"})
+        self.assertEqual(asked, ["Jonathan R. Marko", "Cherie Lobb"])  # never spends on an off-ICP row
+        self.assertEqual(rows[0]["buyer_email"], "x@markolaw.com")
+        self.assertEqual(rows[1]["buyer_email"], "")  # catch-all stays out
+        self.assertEqual(rows[3]["buyer_email"], "")  # a published email that fails verify is cleared
+        self.assertEqual(out, {"found": 1, "verified_published": 1})
+
     def test_buyer_named_on_another_site_is_dropped(self):
         acc = {"titles": ["Founder"], "criteria": {}}
         rec = {"name": "Marko Law", "city": "", "state": "MI", "website": "https://www.markolaw.com/",

@@ -250,10 +250,15 @@ Pictures are specific", Nano Banana, one character bible), and that deck had
 never been pulled. Angie caught it the night before it was due, and Caleb
 wrote "WHY WEREND THEY PULLED TO DISK??????". Name the deck and
 its slide in the build's SPEC file, or the draft hasn't started.
-`lecture-gate` enforces this. `brightspace-sync decks` writes
-`assigned-in.json` (which session assigned each A-number), and a Write or
-Edit to a `*SPEC*.md` whose name or title names that assignment is refused
-until the SPEC names the session or the deck title.
+`lecture-gate` enforces this for every course. `brightspace-sync refresh`
+(the daemon's `course-decks` job, 7am and 7pm) pulls each course's new files,
+finds a master sheet from the announcements, pulls its decks, and writes
+`deck-index.json`: every deck that names each ledger assignment (A20, P4b as
+"Project 4b", WP3 as "Writing Project 3"), the one that assigned it first. A
+Write or Edit to a `*SPEC*.md` whose name or title is that assignment is
+refused until it cites one of those decks, and a `brightspace submit` of a
+file named for it is refused until such a SPEC exists, so skipping the SPEC
+doesn't get past it either.
 
 Never do these:
 - Build a graded deliverable from the dropbox brief alone.

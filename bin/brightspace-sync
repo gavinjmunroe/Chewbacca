@@ -9,6 +9,8 @@ dates to Apple Reminders, and download course files.
   brightspace-sync files <course> [--since YYYY-MM-DD] [--from-chapter N] [--also REGEX] [--out DIR] [--apply]
   brightspace-sync transcripts <course> [--from-chapter N] [--out DIR] [--apply]
   brightspace-sync links <course>          Panopto recording links in a course
+  brightspace-sync refresh [--out DIR] [--apply]   the daily job: files, master
+                                           sheet, decks and deck index for every course
   brightspace-sync decks <course|all> [--sheet ID] [--out DIR] [--apply]
                                            every Google Slides deck the course's
                                            master sheet links, as PDF and text
@@ -347,11 +349,50 @@ def cmd_files(client, a):
 COURSES = Path(os.environ.get("COURSEWORK_DIR", "~/coursework")).expanduser() / "courses"
 
 
+def ledger_file(code):
+    """The course ledger for a code. ACAD 324's is acad-324g.yml, so a suffix is allowed."""
+    base = re.sub(r"[\s_-]+", "-", code).lower()
+    exact = COURSES / (base + ".yml")
+    if exact.exists():
+        return exact
+    return next(iter(sorted(COURSES.glob(base + "*.yml"))), None)
+
+
 def master_sheet(code):
     """The Google Sheet id a course ledger names as master_sheet, or None."""
-    f = COURSES / (re.sub(r"[\s_-]+", "-", code).lower() + ".yml")
-    m = f.exists() and re.search(r"^master_sheet:\s*[\"']?([\w-]{20,})", f.read_text(), re.M)
+    f = ledger_file(code)
+    m = f and re.search(r"^master_sheet:\s*[\"']?([\w-]{20,})", f.read_text(), re.M)
     return m[1] if m else None
+
+
+def find_master_sheet(client, c, a):
+    """A Google Sheet an announcement links, written to the ledger as master_sheet.
+
+    ACAD 185 links its master sheet from an announcement, not from Content, so
+    nothing found it until someone typed the id in (2026-11-02). Only a sheet
+    whose rows are WnSn sessions counts, so a sign-up sheet never becomes one.
+    """
+    f = ledger_file(c["code"])
+    if not f or master_sheet(c["code"]):
+        return None
+    try:
+        news = json.dumps(client.json(f"/le/1.99/{c['id']}/news/"))
+    except Stop:
+        raise
+    except Exception:
+        return None
+    for gid in dict.fromkeys(re.findall(r"docs\.google\.com/spreadsheets/d/([\w-]{20,})", news)):
+        try:
+            if not any(True for _ in sheet_decks(google_export("sheet", gid, "xlsx"))):
+                continue
+        except Exception:
+            continue
+        if a.apply:
+            text = f.read_text()
+            f.write_text(text + ("" if text.endswith("\n") else "\n") + f'master_sheet: "{gid}"\n')
+        print(f"{'found' if a.apply else 'would set'}  {c['code']} master_sheet {gid} (from an announcement)")
+        return gid
+    return None
 
 
 def google_export(kind, gid, fmt):
@@ -459,6 +500,131 @@ def sync_decks(code, sheet, a):
     return new
 
 
+DECK_EXT = {".pdf", ".pptx", ".ppt", ".docx", ".txt"}
+
+
+def deck_text(path):
+    """Plain text of one deck, cached beside it as .text/<name>.txt."""
+    if path.suffix == ".txt":
+        return path.read_text(errors="replace")
+    cache = path.parent / ".text" / (path.name + ".txt")
+    if cache.exists() and cache.stat().st_mtime >= path.stat().st_mtime:
+        return cache.read_text(errors="replace")
+    import importlib.machinery
+    import importlib.util
+    loader = importlib.machinery.SourceFileLoader("usc", str(Path(__file__).resolve().parent / "chewbacca-usc"))
+    spec = importlib.util.spec_from_loader("usc", loader)
+    usc = importlib.util.module_from_spec(spec)
+    loader.exec_module(usc)
+    try:
+        pages = usc.file_pages(path) or []
+    except Exception:
+        pages = []
+    text = "\n".join(t for _, t in pages)
+    cache.parent.mkdir(exist_ok=True)
+    cache.write_text(text)
+    return text
+
+
+def ledger_ids(code):
+    """Assignment ids from the ledger's names: A20, WP3, and "Project 4b" as P4b."""
+    f = ledger_file(code)
+    ids = set()
+    for name in re.findall(r'name:\s*"([^"]+)"', f.read_text() if f else ""):
+        m = re.match(r"([A-Z]{1,3}\d+[a-z]?)\b", name) or re.match(r"Project\s+(\d+[a-z]?)\b", name)
+        if m:
+            ids.add(m[1] if m[1][0].isalpha() else "P" + m[1])
+    return ids
+
+
+def id_pattern(aid):
+    """A20; P4b also as "Project 4b"; WP2 also as "Writing Project 2", the prompt's name for it."""
+    alt = ""
+    if m := re.fullmatch(r"P(\d+[a-z]?)", aid):
+        alt = rf"|Project\s*{m[1]}"
+    elif m := re.fullmatch(r"WP(\d+)", aid):
+        alt = rf"|Writing\s+Project\s*{m[1]}"
+    return re.compile(rf"\b(?:{aid}{alt})\b", re.I)
+
+
+def natural(s):
+    """wk9 before wk10, so the first deck listed is the earliest one."""
+    return [int(x) if x.isdigit() else x.lower() for x in re.split(r"(\d+)", s)]
+
+
+def index_course(code, out):
+    """<out>/<CODE>/deck-index.json: every deck that mentions each ledger assignment.
+
+    The master sheet says where ACAD 185 assigned each one (assigned-in.json,
+    listed first). Every other course has no sheet, so the decks that name an
+    assignment stand in: on 2026-11-02 lecture-gate covered ACAD 185 only.
+    """
+    root = Path(out).expanduser() / code
+    ids = ledger_ids(code)
+    if not root.is_dir() or not ids:
+        return {}
+    given = {}
+    if (root / "assigned-in.json").exists():
+        given = json.load(open(root / "assigned-in.json"))
+    by_stem = {}
+    for p in sorted(root.rglob("*")):
+        if p.is_file() and p.suffix.lower() in DECK_EXT and ".text" not in p.parts:
+            stem = str(p.relative_to(root))[: -len(p.suffix)]
+            # A deck's .txt sidecar is the cheap read; keep it over the PDF.
+            if stem not in by_stem or p.suffix == ".txt":
+                by_stem[stem] = p
+    texts = [(stem, p, deck_text(p)) for stem, p in by_stem.items()]
+    index = {}
+    for aid in sorted(ids):
+        hits = []
+        if aid in given:
+            title = given[aid]["deck"][:-4].split(" ", 1)[-1]
+            hits.append({"deck": given[aid]["deck"], "cite": [given[aid]["session"], title]})
+        pat = id_pattern(aid)
+        # A deck named for the assignment (the WP3 prompt) is its spec; then
+        # every other deck that mentions it, earliest week first.
+        ranked = sorted(texts, key=lambda t: (not pat.search(Path(t[0]).name),
+                                              not re.search(r"prompt|assignment", Path(t[0]).name, re.I),
+                                              natural(t[0])))
+        for stem, p, text in ranked:
+            if (pat.search(Path(stem).name) or pat.search(text)) \
+                    and not any(stem == h["deck"].rsplit(".", 1)[0] for h in hits):
+                pdf = p.with_suffix(".pdf")
+                hits.append({"deck": str((pdf if p.suffix == ".txt" and pdf.exists() else p).relative_to(root)),
+                             "cite": [Path(stem).name, re.sub(r"^W\d+S\d+\s+", "", Path(stem).name)]
+                             # A SPEC quoting "the prompt" read the one file the course calls that
+                             # (the WP2 spec, 2026-10-21, never named it any other way).
+                             + (["prompt"] if re.search(r"prompt", Path(stem).name, re.I) else [])})
+        if hits:
+            index[aid] = hits
+    (root / "deck-index.json").write_text(json.dumps(index, indent=1) + "\n")
+    return index
+
+
+def cmd_refresh(client, a):
+    """Every current course: new Brightspace files, a master sheet found from the
+    announcements, its decks, and the deck index lecture-gate reads. The daily job."""
+    current = courses(client)
+    if a.apply:
+        # lecture-gate maps a `brightspace submit <ou>` back to its course.
+        out = Path(a.out).expanduser()
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "courses.json").write_text(json.dumps({str(c["id"]): c["code"] for c in current}, indent=1) + "\n")
+    for c in current:
+        try:
+            sync_files(client, c, a)
+            sheet = master_sheet(c["code"]) or find_master_sheet(client, c, a)
+            if sheet:
+                sync_decks(c["code"], sheet, a)
+            if a.apply:
+                n = len(index_course(c["code"], a.out))
+                print(f"indexed     {c['code']}: {n} assignments mapped to decks", file=sys.stderr)
+        except Stop:
+            raise
+        except Exception as e:
+            print(f"skipped     {c['code']}: {e}", file=sys.stderr)
+
+
 def cmd_decks(client, a):
     if a.course == "all":
         # What the daily daemon job runs: every ledger that names a master sheet.
@@ -466,11 +632,15 @@ def cmd_decks(client, a):
             sheet = master_sheet(f.stem)
             if sheet:
                 sync_decks(f.stem.upper(), sheet, a)
+                if a.apply:
+                    index_course(f.stem.upper(), a.out)
         return
     sheet = a.sheet or master_sheet(a.course)
     if not sheet:
         raise Stop(f"no master_sheet in the {a.course} ledger; pass --sheet <Google Sheet id>")
     sync_decks(a.course, sheet, a)
+    if a.apply:
+        index_course(a.course, a.out)
 
 
 def sync_files(client, c, a):
@@ -581,6 +751,10 @@ def main():
     f.add_argument("--apply", action="store_true")
     l = sub.add_parser("links")
     l.add_argument("course")
+    rf = sub.add_parser("refresh")
+    rf.add_argument("--out", default=DOWNLOADS)
+    rf.add_argument("--apply", action="store_true")
+    rf.add_argument("--since")
     k = sub.add_parser("decks")
     k.add_argument("course")
     k.add_argument("--sheet", help="Google Sheet id; default is master_sheet from the course ledger")
@@ -601,7 +775,7 @@ def main():
                 print(f"{c['id']}\t{c['code']}\t{c['name']}")
         else:
             {"due": cmd_due, "reminders": cmd_reminders, "files": cmd_files, "links": cmd_links,
-             "transcripts": cmd_transcripts}[a.cmd](client, a)
+             "transcripts": cmd_transcripts, "refresh": cmd_refresh}[a.cmd](client, a)
     except Stop as e:
         print(f"stopped: {e}", file=sys.stderr)
         sys.exit(2)

@@ -12,69 +12,143 @@ type hook_init >/dev/null 2>&1 && hook_init lecture-gate.sh 5
 # never been pulled to disk. A teammate caught it the night before it was due.
 # Caleb: "WHY WEREND THEY PULLED TO DISK??????".
 #
-# The map comes from `brightspace-sync decks`, which writes
-# <slides>/<CODE>/assigned-in.json: {"A20": {"session": "W10S20", "deck": ...}}.
-# A SPEC naming an assignment in that map has to name its session or deck.
+# The map comes from `brightspace-sync refresh` (daily), which writes
+# <slides>/<CODE>/deck-index.json: every deck that names each ledger
+# assignment, the one that assigned it first. A SPEC whose name or title is
+# that assignment has to cite one of them, and `brightspace submit` of a file
+# named for it needs such a SPEC on disk, so skipping the SPEC can't get past.
 #
 # Exit 2 blocks the call.
 
 set -uo pipefail
 payload="$(cat)"
 slides="${LECTURE_GATE_SLIDES:-${COURSEWORK_DIR:-$HOME/coursework}/slides}"
-ls "$slides"/*/assigned-in.json >/dev/null 2>&1 || exit 0
+have=""
+for f in "$slides"/*/deck-index.json "$slides"/*/assigned-in.json; do [ -f "$f" ] && have=1 && break; done
+[ -n "$have" ] || exit 0
+# Every Bash call reaches this hook; only a submit is its business.
+case "$payload" in *'"tool_name":"Bash"'*|*'"tool_name": "Bash"'*)
+  case "$payload" in *"brightspace"*submit*) ;; *) exit 0 ;; esac ;;
+esac
 
 # Read into a variable first: bash 3.2 misparses quotes in a heredoc inside $( ).
 IFS= read -r -d '' py <<'PY'
-import glob, json, os, re
+import glob, json, os, re, time
 p = json.loads(os.environ["PAYLOAD"] or "{}")
 ti = p.get("tool_input") or {}
-path = ti.get("file_path") or ""
-if p.get("tool_name") not in ("Write", "Edit", "MultiEdit") or not re.search(r"spec[^/]*\.md$", path, re.I):
-    raise SystemExit
-if p["tool_name"] == "Write":
-    text = ti.get("content") or ""
-else:
-    try:
-        text = open(path).read()
-    except OSError:
-        text = ""
-    edits = ti.get("edits") or [ti]
-    for e in edits:
-        text = text.replace(e.get("old_string") or "", e.get("new_string") or "", 1) if e.get("old_string") else text + (e.get("new_string") or "")
 slides = os.environ["SLIDES"]
+tool = p.get("tool_name")
+
+ID = re.compile(r"\b([A-Z]{1,3}\d+[a-z]?)\b|\bProject\s+(\d+[a-z]?)\b")
+
+
+def ids_in(s):
+    return {m[1] or "P" + m[2] for m in ID.finditer(s)}
+
+
 maps = {}
-for f in glob.glob(f"{slides}/*/assigned-in.json"):
-    code = os.path.basename(os.path.dirname(f))
+for d in glob.glob(f"{slides}/*/"):
+    code = os.path.basename(os.path.dirname(d))
+    idx = {}
     try:
-        maps[code] = json.load(open(f))
-    except ValueError:
-        continue
-# The SPEC's own deliverable: ids in its file name and title line. Ids in the
-# body are usually sources (the real A20 SPEC cites A15, A17, A19, A21, A8).
-title = next((l for l in text.splitlines() if l.strip()), "")
-named = set(re.findall(r"\bA\d+[a-z]?\b", os.path.basename(path) + " " + title))
-for code, given in maps.items():
-    spaced = code.replace("-", "[ -]?")
-    hits = [a for a in named if a in given]
-    # An id alone could be another course's; take it when the SPEC names the
-    # course, or when only this course has that id.
-    hits = [a for a in hits if re.search(spaced, text, re.I) or sum(a in g for g in maps.values()) == 1]
-    for a in sorted(hits):
-        g = given[a]
-        stem = g["deck"][:-4]
-        if g["session"] in text or stem.split(" ", 1)[-1].lower() in text.lower():
+        idx = json.load(open(os.path.join(d, "deck-index.json")))
+    except (OSError, ValueError):
+        try:
+            for a, g in json.load(open(os.path.join(d, "assigned-in.json"))).items():
+                idx[a] = [{"deck": g["deck"], "cite": [g["session"], g["deck"][:-4].split(" ", 1)[-1]]}]
+        except (OSError, ValueError):
+            pass
+    if idx:
+        maps[code] = idx
+
+
+def cited(text, hits):
+    low = text.lower()
+    return any(c.lower() in low for h in hits for c in h["cite"])
+
+
+def wanted(code, aid):
+    hits = maps[code][aid]
+    first = os.path.join(slides, code, hits[0]["deck"])
+    if not os.path.exists(first):
+        first += f" (NOT on disk: run brightspace-sync refresh --out {slides} --apply)"
+    return first, hits
+
+
+def deliverable_ids(path, text):
+    title = next((l for l in text.splitlines() if l.strip()), "")
+    return ids_in(os.path.basename(path) + " " + title)
+
+
+def courses_for(aid, text, only=None):
+    out = []
+    for code, idx in maps.items():
+        if aid not in idx or (only and code != only):
             continue
-        deck = os.path.join(slides, code, g["deck"])
-        where = deck if os.path.exists(deck) else f"{deck} (NOT on disk: run brightspace-sync decks {code} --out {slides} --apply)"
-        print(f"{a} was assigned in {code} {g['session']}. This SPEC never cites that deck:\n  {where}")
+        spaced = code.replace("-", "[ -]?")
+        if only or re.search(spaced, text, re.I) or sum(aid in m for m in maps.values()) == 1:
+            out.append(code)
+    return out
+
+
+if tool in ("Write", "Edit", "MultiEdit"):
+    path = ti.get("file_path") or ""
+    if not re.search(r"spec[^/]*\.md$", path, re.I):
+        raise SystemExit
+    if tool == "Write":
+        text = ti.get("content") or ""
+    else:
+        try:
+            text = open(path).read()
+        except OSError:
+            text = ""
+        for e in ti.get("edits") or [ti]:
+            if e.get("old_string"):
+                text = text.replace(e["old_string"], e.get("new_string") or "", 1)
+            else:
+                text += e.get("new_string") or ""
+    for aid in sorted(deliverable_ids(path, text)):
+        for code in courses_for(aid, text):
+            first, hits = wanted(code, aid)
+            if not cited(text, hits):
+                print(f"{aid} ({code}) comes from a lecture this SPEC never cites. Start with:\n  {first}")
+elif tool == "Bash":
+    cmd = ti.get("command") or ""
+    m = re.search(r"\bbrightspace\s+submit\s+(?:--dry-run\s+)?(\d+)\s+\d+\s+(.*)", cmd)
+    if not m or "--dry-run" in cmd:
+        raise SystemExit
+    try:
+        code = json.load(open(os.path.join(slides, "courses.json"))).get(m[1])
+        if code is None:
+            raise SystemExit  # an ou outside this term's courses
+    except (OSError, ValueError):
+        code = None
+    # The work went in without a SPEC at all: the other way past the Write gate.
+    dirs = os.environ.get("LECTURE_GATE_SPEC_DIRS") or " ".join(
+        os.path.expanduser(x) for x in ("~/Downloads", "~/code/school", "~/coursework", "~/code/kits"))
+    specs = []
+    cutoff = time.time() - 45 * 86400
+    for d in dirs.split():
+        for f in glob.glob(os.path.join(d, "**", "*.md"), recursive=True):
+            if re.search(r"(spec|outline)[^/]*\.md$", f, re.I) and "node_modules" not in f:
+                try:
+                    if os.path.getmtime(f) >= cutoff:
+                        specs.append((f, open(f, errors="replace").read()))
+                except OSError:
+                    pass
+    for aid in sorted(ids_in(m[2])):
+        for c in courses_for(aid, cmd, only=code):
+            first, hits = wanted(c, aid)
+            if not any(aid in deliverable_ids(f, t) and cited(t, hits) for f, t in specs):
+                print(f"{aid} ({c}) is being submitted with no SPEC that cites the lecture behind it. Start with:\n  {first}")
 PY
 msg="$(PAYLOAD="$payload" SLIDES="$slides" /usr/bin/python3 -I -c "$py")"
 [ -n "$msg" ] || exit 0
 cat >&2 <<MSG
 lecture-gate: refusing. $msg
 
-Read that deck whole and write what it asks for into this SPEC, naming the
-session (or the deck title) next to each requirement. The dropbox brief is a
+Read that deck whole and write what it asks for into a SPEC, naming the deck
+(or its session) next to each requirement. The dropbox brief is a
 summary. The lecture is the spec. See "Read the lecture that assigned it
 before building" in skills/coursework/SKILL.md.
 MSG

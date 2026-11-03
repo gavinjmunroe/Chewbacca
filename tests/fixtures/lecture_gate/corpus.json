@@ -37,9 +37,9 @@
  {
   "file": "P4a-REWRITE-SPEC.md",
   "title": "# P4a doc rewrite spec (2026-10-26)",
-  "body": "ACAD 324 team doc",
-  "expect": "allow",
-  "why": "ACAD 324 has no master sheet map"
+  "body": "Rewrite from the P4a audio feedback",
+  "expect": "deny",
+  "why": "the P4a rewrite spec cites no ACAD 324 deck; deck-index now covers every course"
  },
  {
   "file": "ACAD 324 Quiz 2 SPEC.md",
@@ -47,13 +47,6 @@
   "body": "quiz prep",
   "expect": "allow",
   "why": "no A-number"
- },
- {
-  "file": "DRAFT-SPEC.md",
-  "title": "# WP2 revised draft spec, v2 (2026-10-21)",
-  "body": "WRIT 150",
-  "expect": "allow",
-  "why": "another course"
  },
  {
   "file": "HERO-SPEC.md",
@@ -68,5 +61,33 @@
   "body": "Sources: A15 persona worksheet style",
   "expect": "allow",
   "why": "an A-number in the body is a source, not the deliverable"
+ },
+ {
+  "file": "P4a-REWRITE-SPEC.md",
+  "title": "# P4a doc rewrite spec (2026-10-26)",
+  "body": "Per PoD_wk9.2_UX1_Define_CounterScan_102126: define the problem space",
+  "expect": "allow",
+  "why": "the same spec citing the week 9 deck"
+ },
+ {
+  "file": "P3 eval SPEC.md",
+  "title": "# P3 Team and Self Evaluation spec",
+  "body": "eval form fields",
+  "expect": "deny",
+  "why": "the real P3 eval spec cites no deck"
+ },
+ {
+  "file": "DRAFT-SPEC.md",
+  "title": "# WP2 revised draft spec, v2 (2026-10-21)",
+  "body": "Why v1 failed: off prompt. The prompt's job is: name a practice",
+  "expect": "allow",
+  "why": "the real WP2 spec works from the assignment prompt"
+ },
+ {
+  "file": "DRAFT-SPEC.md",
+  "title": "# WP3 draft spec",
+  "body": "op-ed on schools",
+  "expect": "deny",
+  "why": "a WP3 spec that never read Writing Project 3 Assignment Prompt"
  }
 ]

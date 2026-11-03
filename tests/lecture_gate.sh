@@ -24,7 +24,7 @@ out=$(w "$tmp/work/A20-SPEC.md" "$brief" | bash "$H" 2>&1 >/dev/null)
 printf '%s' "$out" | grep -q 'W10S20 Storytelling for Product Leaders.pdf' || { echo "  FAIL refusal should name the deck path: $out"; fail=$((fail+1)); }
 rm "$tmp/slides/ACAD-185/W10S20 Storytelling for Product Leaders.pdf"
 out=$(w "$tmp/work/A20-SPEC.md" "$brief" | bash "$H" 2>&1 >/dev/null)
-printf '%s' "$out" | grep -q 'NOT on disk: run brightspace-sync decks ACAD-185' || { echo "  FAIL a missing deck should say how to pull it: $out"; fail=$((fail+1)); }
+printf '%s' "$out" | grep -q 'NOT on disk: run brightspace-sync refresh' || { echo "  FAIL a missing deck should say how to pull it: $out"; fail=$((fail+1)); }
 echo "SHOULD PASS (exit 0):"
 t "cites the session"                     0 "$(w "$tmp/work/A20-SPEC.md" "$brief
 Lecture: W10S20 asks for an AI-image storyboard.")"
@@ -38,5 +38,22 @@ printf '%s\n' "$brief" > "$tmp/work/A20-SPEC.md"
 t "an Edit that adds the session"         0 "$(python3 -c 'import json,sys;print(json.dumps({"tool_name":"Edit","tool_input":{"file_path":sys.argv[1],"old_string":"plus a script.","new_string":"plus a script. W10S20: AI images."}}))' "$tmp/work/A20-SPEC.md")"
 t "a Bash call"                           0 '{"tool_name":"Bash","tool_input":{"command":"ls"}}'
 LECTURE_GATE_SLIDES="$tmp/none" t "no map on this machine" 0 "$(w "$tmp/work/A20-SPEC.md" "$brief")"
+
+# Every course, not just ACAD 185: ACAD 324 names deliverables "Project 4b"
+# and its decks say P4b. deck-index.json is what `brightspace-sync refresh` writes.
+echo '{"P4b": [{"deck": "Class Slides/PoD_wk10.2_Select.pdf", "cite": ["PoD_wk10.2_Select"]}]}' > "$tmp/slides/ACAD-324/deck-index.json"
+t "ACAD 324 P4b spec, no deck"            2 "$(w "$tmp/work/P4b-SPEC.md" "# P4b Ideation and Selection spec")"
+t "ACAD 324 'Project 4b' title, no deck"  2 "$(w "$tmp/work/IDEATION-SPEC.md" "# Project 4b Ideation spec")"
+t "ACAD 324 P4b spec citing its deck"     0 "$(w "$tmp/work/P4b-SPEC.md" "# P4b spec
+From PoD_wk10.2_Select: three concepts, one pick.")"
+# The way past the SPEC gate is to never write a SPEC. The submit is gated too.
+echo '{"298850": "ACAD-185"}' > "$tmp/slides/courses.json"
+mkdir -p "$tmp/nospecs" "$tmp/specs"
+sub() { python3 -c 'import json,sys;print(json.dumps({"tool_name":"Bash","tool_input":{"command":sys.argv[1]}}))' "$1"; }
+LECTURE_GATE_SPEC_DIRS="$tmp/nospecs" t "submit with no SPEC at all" 2 "$(sub "brightspace submit 298850 647598 \"$tmp/Kyber - A20 Hero's Journey v1.pdf\"")"
+printf '# A20 spec\nW10S20 asks for AI images.\n' > "$tmp/specs/A20-SPEC.md"
+LECTURE_GATE_SPEC_DIRS="$tmp/specs" t "submit with a SPEC citing W10S20" 0 "$(sub "brightspace submit 298850 647598 \"$tmp/Kyber - A20 Hero's Journey v1.pdf\"")"
+LECTURE_GATE_SPEC_DIRS="$tmp/nospecs" t "a dry-run submit"  0 "$(sub "brightspace submit --dry-run 298850 647598 \"$tmp/A20.pdf\"")"
+LECTURE_GATE_SPEC_DIRS="$tmp/nospecs" t "another course's ou" 0 "$(sub "brightspace submit 999 1 \"$tmp/A20.pdf\"")"
 echo "lecture-gate: $pass passed, $fail failed"
 [ "$fail" = 0 ]

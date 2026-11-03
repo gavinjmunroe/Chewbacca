@@ -2113,9 +2113,10 @@ _register("PreToolUse", hooks_dir + "/use-the-kit-guard.sh", timeout=5,
 _register("PreToolUse", hooks_dir + "/essay-gate.sh", timeout=15,
           matcher="Bash", status="Checking this reads like a person wrote it...")
 # 2026-11-02: ACAD 185 A20 was built from the dropbox brief while the W10S20
-# lecture that assigned it sat unpulled. A coursework SPEC now has to cite it.
-_register("PreToolUse", hooks_dir + "/lecture-gate.sh", timeout=5,
-          matcher="Write|Edit|MultiEdit", status="Checking this spec read the lecture that assigned it...")
+# lecture that assigned it sat unpulled. A coursework SPEC now has to cite it,
+# and a `brightspace submit` needs such a SPEC, so skipping the SPEC fails too.
+_register("PreToolUse", hooks_dir + "/lecture-gate.sh", timeout=10,
+          matcher="Write|Edit|MultiEdit|Bash", status="Checking this spec read the lecture that assigned it...")
 # 2026-10-11: the corrections Caleb repeated most in the fortnight before
 # (docs/plans/REPEAT-MISTAKES.md). A long check in the foreground ("Wtf taking
 # so long?", eight times), 3D work without Nalana, a new project with no look

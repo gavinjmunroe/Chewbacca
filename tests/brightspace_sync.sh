@@ -133,5 +133,33 @@ out=$(python3 "$BS" decks all --out "$T/sl" 2>&1) || fail "decks all exited non-
 printf '%s\n' "$out" | grep -q 'saved' && fail "decks all pulled a deck already on disk: $out"
 printf '%s\n' "$out" | grep -q 'linked decks' || fail "decks all did not reach the TEST-101 ledger: $out"
 python3 "$BS" decks NOLEDGER-1 --out "$T/sl" >/dev/null 2>&1 && fail "decks with no master_sheet should exit non-zero"
+
+# refresh pieces: ledger ids ("Project 4b" is P4b), the deck index, and a
+# master sheet found from an announcement (where ACAD 185 links its own).
+mkdir -p "$T/cw2/courses" "$T/sl2/ACAD-324" "$T/sl2/ACAD-185"
+printf '  - { name: "Project 4b Ideation and Selection", due: 2026-11-02 }\n  - { name: "Quiz 2: Design" }\n' > "$T/cw2/courses/acad-324g.yml"
+printf 'brightspace_org: "x"\n  - { name: "A20 Hero'"'"'s Journey v1" }\n' > "$T/cw2/courses/acad-185.yml"
+printf 'P4b due Monday. Bring three concepts.\n' > "$T/sl2/ACAD-324/PoD_wk10.2_Select.txt"
+printf 'Nothing to see\n' > "$T/sl2/ACAD-324/PoD_wk1.txt"
+COURSEWORK_DIR="$T/cw2" GOOGLE_EXPORT_FIXTURE="$GX" python3 - "$BS" "$T" <<'PY2' || fail "refresh pieces"
+import importlib.machinery, importlib.util, json, sys, types
+loader = importlib.machinery.SourceFileLoader("bs", sys.argv[1])
+spec = importlib.util.spec_from_loader("bs", loader); m = importlib.util.module_from_spec(spec); loader.exec_module(m)
+T = sys.argv[2]
+assert m.ledger_ids("ACAD-324") == {"P4b"}, m.ledger_ids("ACAD-324")
+idx = m.index_course("ACAD-324", f"{T}/sl2")
+assert [h["deck"] for h in idx["P4b"]] == ["PoD_wk10.2_Select.txt"], idx
+assert json.load(open(f"{T}/sl2/ACAD-324/deck-index.json")) == idx
+class News:
+    def json(self, path):
+        assert path == "/le/1.99/7/news/", path
+        return [{"Body": {"Html": '<a href="https://docs.google.com/spreadsheets/d/SHEETxxxxxxxxxxxxxxxxxxxxxxx/edit">Master Spreadsheet</a>'}}]
+c = {"id": 7, "code": "ACAD-185"}
+assert m.find_master_sheet(News(), c, types.SimpleNamespace(apply=False)) == "SHEETxxxxxxxxxxxxxxxxxxxxxxx"
+assert "master_sheet" not in open(f"{T}/cw2/courses/acad-185.yml").read(), "a scan wrote the ledger"
+m.find_master_sheet(News(), c, types.SimpleNamespace(apply=True))
+assert m.master_sheet("ACAD-185") == "SHEETxxxxxxxxxxxxxxxxxxxxxxx"
+assert m.find_master_sheet(News(), c, types.SimpleNamespace(apply=True)) is None, "a second run should leave a set sheet alone"
+PY2
 unset GOOGLE_EXPORT_FIXTURE COURSEWORK_DIR
 echo "  ok"

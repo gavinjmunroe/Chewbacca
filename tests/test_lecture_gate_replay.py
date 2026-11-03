@@ -2,8 +2,9 @@
 """Replay real SPEC titles through .claude/hooks/lecture-gate.sh and check each recorded verdict.
 
 Corpus: tests/fixtures/lecture_gate/corpus.json, the title lines of every SPEC on the
-Mac on 2026-11-02 (A20, A22 and A16 for ACAD 185, then ACAD 324, WRIT 150 and non-school
-specs), against the real ACAD 185 assigned-in.json that `brightspace-sync decks` wrote.
+Mac on 2026-11-02 (A20, A22 and A16 for ACAD 185, P3 and P4a for ACAD 324, WP2 and WP3
+for WRIT 150, and non-school specs), against the real deck-index.json files that
+`brightspace-sync refresh` wrote for those three courses that night.
 """
 import json
 import os

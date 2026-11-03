@@ -24,6 +24,11 @@ Vanstone is the founder of..."), which find_contacts skipped as an over-140-char
 (BIO_ROLE, on fix/audit-law-titles). Check the buyer fill count on the first 20 rows before
 running all of them: a fill near zero means the reader is blind to that market.
 
+Caleb, after: "Dough should be able to take on ANY ICP". So the accounts block's `titles` now
+drive the reader (audit `buyer_titles`, branch fix/audit-law-titles) and Dough's leader filter
+(6de54177 on fix/gtme-accounts-law-buyers), and a full run first reads 20 sites and refuses
+when under 20% have a buyer. A new market is a config change, not a code change.
+
 How to apply: before `chewbacca gtme accounts` runs for a new market, write two lines of
 that market's real staff page into a find_contacts test with titles="org". If the buyer
 doesn't come back, add the titles first. Run with GTME_SITE_AUDIT_DIR pointing at a clean

@@ -1172,6 +1172,8 @@ if group "installer"; then
     bash "$ROOT/tests/orphan_reap.sh"
   check  "app-revive restarts an app whose window lost its renderer and spares the rest" \
     bash "$ROOT/tests/app_revive.sh"
+  check  "seo-check names a noindex before anything else about ranking" \
+    bash "$ROOT/tests/seo_check.sh"
   check  "jobs queue admits, pauses and resumes heavy work against the machine" \
     bash "$ROOT/tests/jobs.sh"
   check  "after a restart, queued and running jobs run again and the daemon's services come back" \

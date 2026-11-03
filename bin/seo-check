@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+"""seo-check <url>: why a site does or doesn't show up in search and answer engines.
+
+Reads, in this order, what decides it: the X-Robots-Tag header and robots meta (a noindex
+means nothing else matters), robots.txt, sitemap.xml, llms.txt, and the page's JSON-LD
+types. On 2026-11-02 Caleb asked why firmfoundation.tech lost "firm foundation tech" to a
+San Diego repair shop, and the agent studied the competitor first. The answer was one
+header on our own site: noindex, nofollow on every page. This runs that check first.
+
+Read only. Exit 0 when the page can be indexed, 2 when it can't.
+"""
+import json, re, sys, urllib.error, urllib.parse, urllib.request
+
+UA = "Mozilla/5.0 (compatible; seo-check/1.0)"
+
+
+def get(url):
+    req = urllib.request.Request(url, headers={"User-Agent": UA})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return r.status, {k.lower(): v for k, v in r.headers.items()}, r.read(2_000_000).decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        return e.code, {k.lower(): v for k, v in e.headers.items()}, ""
+
+
+def main(argv):
+    if len(argv) != 1 or argv[0] in ("-h", "--help"):
+        print(__doc__.strip())
+        return 0 if argv and argv[0] in ("-h", "--help") else 1
+    page = argv[0] if "://" in argv[0] else "https://" + argv[0]
+    root = "{0.scheme}://{0.netloc}".format(urllib.parse.urlsplit(page))
+    status, headers, html = get(page)
+    header = headers.get("x-robots-tag", "")
+    metas = re.findall(r'<meta[^>]+name="robots"[^>]+content="([^"]+)"', html, re.I)
+    blocked = "noindex" in header.lower() or any("noindex" in m.lower() for m in metas)
+    rstatus, _, robots = get(root + "/robots.txt")
+    disallow_all = bool(re.search(r"(?im)^user-agent:\s*\*\s*$(?:\n(?!user-agent).*)*\n\s*disallow:\s*/\s*$", robots))
+    sstatus, _, _ = get(root + "/sitemap.xml")
+    lstatus, _, _ = get(root + "/llms.txt")
+    types = []
+    for block in re.findall(r'<script[^>]+application/ld\+json[^>]*>(.*?)</script>', html, re.S | re.I):
+        try:
+            data = json.loads(block)
+        except ValueError:
+            continue
+        for node in data.get("@graph", [data]) if isinstance(data, dict) else data:
+            if isinstance(node, dict) and node.get("@type"):
+                types.append(node["@type"])
+    out = {
+        "url": page,
+        "status": status,
+        "indexable": not blocked and not disallow_all,
+        "x_robots_tag": header or None,
+        "robots_meta": metas,
+        "robots_txt": rstatus,
+        "robots_disallows_all": disallow_all,
+        "sitemap": sstatus,
+        "llms_txt": lstatus,
+        "json_ld": types,
+    }
+    if blocked:
+        out["first_fix"] = "the page says noindex: nothing else ranks until that comes off"
+    elif disallow_all:
+        out["first_fix"] = "robots.txt disallows every crawler"
+    print(json.dumps(out))
+    return 0 if out["indexable"] else 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

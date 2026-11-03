@@ -222,6 +222,30 @@ Pick the surface before the layout. An overlay HUD and a settings page are
 different templates, and building the second one into the first is the common
 mistake.
 
+## Social images come from the product's own drawing code
+
+Banners, profile pictures, share cards (og.png) and video thumbnails are rendered from
+the code that draws the brand: the site's figure modules, the video's Remotion scenes,
+the wordmark component. Never crop a frame grab, screenshot the site, or reuse files in
+a `public/brand/` folder without checking they match the live mark. Firm Foundation keeps
+them as stills in `video/src/Brand.tsx` (`npx remotion still OgCard|LinkedInBanner|
+YouTubeBanner|YouTubeThumb`). On 2026-11-02 Caleb said all of these to one tab:
+"BRO the logo is the FF one" (a stale brand file had the old cross), "Bro ur so lazy to
+photoshop in the image I gave you", then "U HAVE THE SOURCE CODE".
+
+Per platform, checked that night:
+- LinkedIn's page logo covers the banner's bottom left, and the name sits right under it.
+  Leave the lockup off the banner, keep the art clear of the logo, and center the main
+  thing so phones, which crop the sides, still show it.
+- YouTube channel art is 2560 x 1440. Every device shows only the center 1546 x 423, so
+  the key art goes there and the extra pieces go in the band's ends.
+- Profile pictures crop to a circle on YouTube. Keep the mark inside about 70% of the square.
+- White backgrounds, never dull paper ("make it white not dull"). Grain also blurs once a
+  platform recompresses the image.
+- Render at 2x, then look at the live page in member view before calling it done.
+- A link preview of linkedin.com always uses LinkedIn's own 200 x 200 logo JPEG. To
+  share the company, send the site link, since its og card is ours.
+
 ## Reference files
 
 - [references/taxonomy.md](references/taxonomy.md): every component and

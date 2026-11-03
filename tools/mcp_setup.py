@@ -889,8 +889,17 @@ def cmd_hub(args):
         daemon = ROOT / "bin/chewbacca-daemon"
         port = hub_config().get("port", HUB_PORT)
         node = shutil.which("node") or "node"
+        # The kit's stable path, never a versioned snapshot that the next
+        # update deletes, the same way every other service is registered.
+        current = HOME / ".chewbacca/kit/current/bin/mcp-hub"
+        hub = current if current.exists() else ROOT / "bin/mcp-hub"
+        # The daemon starts services with a bare PATH, and the servers behind
+        # the hub are npx and uvx, which live wherever this shell found them.
+        path = os.pathsep.join(dict.fromkeys(
+            [str(Path(node).parent)] + os.environ.get("PATH", "").split(os.pathsep)))
         r = subprocess.run([node, str(daemon), "register", "mcp-hub", "--keepalive", "--listen", str(port),
-                            "--health-http", "/health", "--", node, str(ROOT / "bin/mcp-hub"), "serve"],
+                            "--health-http", "/health", "--env", f"PATH={path}",
+                            "--", node, str(hub), "serve"],
                            capture_output=True, text=True)
         print((r.stdout + r.stderr).strip() or "registered mcp-hub")
         return r.returncode

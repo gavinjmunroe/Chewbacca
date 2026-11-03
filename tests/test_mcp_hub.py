@@ -179,5 +179,24 @@ with tempfile.TemporaryDirectory() as t:
     if "db" in json.loads((hub_dir / "mcp-hub.json").read_text())["servers"]:
         no("undo left db in the hub config")
 
+# hub start: registered under the kit's stable path, never a versioned
+# snapshot, with a PATH that has node in it so npx servers can start.
+with tempfile.TemporaryDirectory() as t:
+    t = Path(t)
+    stable = t / ".chewbacca/kit/current/bin/mcp-hub"
+    stable.parent.mkdir(parents=True)
+    stable.touch()
+    env3 = dict(os.environ, HOME=str(t), CHEWBACCA_DAEMON_DIR=str(t / "daemon"), CHEWBACCA_MCP_HUB_DIR=str(t / "hub"))
+    subprocess.run([sys.executable, str(ROOT / "tools/mcp_setup.py"), "hub", "start"], env=env3, capture_output=True)
+    try:
+        svc = json.loads((t / "daemon/services/mcp-hub.json").read_text())
+    except (OSError, ValueError):
+        svc = {}
+    if svc.get("argv", [None, None])[1] != str(stable):
+        no(f"hub start should register the stable kit path: {svc.get('argv')}")
+    node_dir = os.path.dirname(subprocess.run(["sh", "-c", "command -v node"], capture_output=True, text=True).stdout.strip())
+    if node_dir not in svc.get("env", {}).get("PATH", "").split(os.pathsep):
+        no("hub start's PATH has no node in it, so npx servers would fail under the daemon")
+
 print("ok" if not fails else f"{len(fails)} failed")
 sys.exit(1 if fails else 0)

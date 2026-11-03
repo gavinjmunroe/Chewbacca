@@ -390,6 +390,29 @@ def sheet_decks(xlsx):
                 yield sid, title, m[1], m[2]
 
 
+def assigned_in(xlsx):
+    """(session, deck title, assignment id) from each session row's "Given" column."""
+    import io
+    import openpyxl
+    for ws in openpyxl.load_workbook(io.BytesIO(xlsx)):
+        head = col = None
+        for row in ws.iter_rows():
+            cells = [str(c.value or "") for c in row]
+            if head is None:
+                hit = [i for i, v in enumerate(cells) if re.search(r"assignment.*given", v, re.I)]
+                if hit:
+                    head, col = True, hit[0]
+                continue
+            sid = cells[0].strip()
+            if not re.fullmatch(r"W\d+S\d+", sid) or col >= len(cells):
+                continue
+            deck = next((c for c in row if c.hyperlink and "docs.google.com" in (c.hyperlink.target or "")), None)
+            if deck is None:
+                continue
+            for aid in dict.fromkeys(re.findall(r"\bA\d+[a-z]?\b", cells[col])):
+                yield sid, str(deck.value or "").strip(), aid
+
+
 def sync_decks(code, sheet, a):
     """Every deck the master sheet links into <a.out>/<CODE>/<session> <title>.pdf plus .txt.
 
@@ -426,6 +449,12 @@ def sync_decks(code, sheet, a):
     if a.apply:
         out.mkdir(parents=True, exist_ok=True)
         (out / "master.xlsx").write_bytes(xlsx)
+        # Which deck assigned each assignment, so lecture-gate can refuse a
+        # SPEC that never cites it (the A20 miss in sync_decks' docstring).
+        given = {}
+        for sid, title, aid in assigned_in(xlsx):
+            given.setdefault(aid, {"session": sid, "deck": safe(f"{sid} {title}") + ".pdf"})
+        (out / "assigned-in.json").write_text(json.dumps(given, indent=1) + "\n")
     print(f"{new} linked decks" + ("" if a.apply else " (dry run, pass --apply)"), file=sys.stderr)
     return new
 

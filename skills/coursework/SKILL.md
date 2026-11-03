@@ -250,6 +250,10 @@ Pictures are specific", Nano Banana, one character bible), and that deck had
 never been pulled. Angie caught it the night before it was due, and Caleb
 wrote "WHY WEREND THEY PULLED TO DISK??????". Name the deck and
 its slide in the build's SPEC file, or the draft hasn't started.
+`lecture-gate` enforces this. `brightspace-sync decks` writes
+`assigned-in.json` (which session assigned each A-number), and a Write or
+Edit to a `*SPEC*.md` whose name or title names that assignment is refused
+until the SPEC names the session or the deck title.
 
 Never do these:
 - Build a graded deliverable from the dropbox brief alone.

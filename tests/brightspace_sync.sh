@@ -96,13 +96,15 @@ GX="$T/gx"; mkdir -p "$GX" "$T/cw/courses"
 python3 - "$GX" <<'PY2'
 import openpyxl, sys
 wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Schedule and Deliverables"
-ws.append(["Session ID", "Date", "Session Topic"])
+ws.append(["Session ID", "Date", "Session Topic", "Course Assignment(s) Given"])
 rows = [("W10S20", "Storytelling for Product Leaders", "presentation/d/DECKaaaaaaaaaaaaaaaaaaaa1"),
         ("W11S21", "Advertising in the Age of AI", "presentation/d/DECKbbbbbbbbbbbbbbbbbbbb2"),
         ("W11S22", "Private Deck", "presentation/d/DECKcccccccccccccccccccc3"),
         ("W12S23", "Same deck linked twice", "presentation/d/DECKaaaaaaaaaaaaaaaaaaaa1")]
 for i, (sid, title, path) in enumerate(rows, start=2):
     ws.cell(i, 1, sid); c = ws.cell(i, 3, title); c.hyperlink = f"https://docs.google.com/{path}/edit"
+ws.cell(2, 4, "A20 Hero's Journey, A22 Landing Page Live")
+ws.cell(5, 4, "A20 v2 feedback")
 wb.save(f"{sys.argv[1]}/SHEETxxxxxxxxxxxxxxxxxxxxxxx.xlsx")
 for gid in ("DECKaaaaaaaaaaaaaaaaaaaa1", "DECKbbbbbbbbbbbbbbbbbbbb2"):
     open(f"{sys.argv[1]}/{gid}.pdf", "wb").write(b"%PDF-1.4\n%%EOF\n")
@@ -118,6 +120,12 @@ mkdir -p "$T/sl/TEST-101"; : > "$T/sl/TEST-101/W11S21 Advertising in the Age of 
 out=$(python3 "$BS" decks TEST-101 --out "$T/sl" --apply 2>&1) || fail "decks --apply exited non-zero: $out"
 [ -s "$T/sl/TEST-101/W10S20 Storytelling for Product Leaders.pdf" ] || fail "W10S20 deck not saved: $out"
 [ -s "$T/sl/TEST-101/master.xlsx" ] || fail "the master sheet copy was not saved"
+python3 - "$T/sl/TEST-101/assigned-in.json" <<'PY2' || fail "assigned-in.json should map A20 and A22 to W10S20, first session wins"
+import json, sys
+g = json.load(open(sys.argv[1]))
+assert g["A20"] == {"session": "W10S20", "deck": "W10S20 Storytelling for Product Leaders.pdf"}, g
+assert g["A22"]["session"] == "W10S20", g
+PY2
 printf '%s\n' "$out" | grep -q 'saved.*W11S21' && fail "a deck already on disk was pulled again: $out"
 printf '%s\n' "$out" | grep -q 'not shared  W11S22 Private Deck' || fail "a sign-in page should be reported: $out"
 [ -e "$T/sl/TEST-101/W11S22 Private Deck.pdf" ] && fail "a sign-in page was saved as a deck"

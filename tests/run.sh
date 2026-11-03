@@ -1145,6 +1145,8 @@ if group "installer"; then
 
   check  "essay-gate refuses generated prose into a Google Doc and passes hand-written prose" \
     bash "$ROOT/tests/essay_gate.sh"
+  check  "lecture-gate refuses a coursework SPEC that never cites the deck that assigned it" \
+    bash "$ROOT/tests/lecture_gate.sh"
 
   # chatdb_guard.sh existed since 2026-10-03 and was never in the suite.
   check  "chatdb-guard refuses raw thread reads and permits the people CLI" \

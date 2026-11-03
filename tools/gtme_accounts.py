@@ -533,29 +533,40 @@ def search_rows(src: dict, cache: Path, call=None, fetch=None, place=None) -> li
             # crawl4ai calls it snippet; the scrapecreators fallback treg routes to calls it description
             line = " / ".join(x for x in (r.get("title"), r.get("date"), r.get("snippet") or r.get("description")) if x)
             hits.setdefault(key, {"shared": shared, "url": url, "lines": []})["lines"].append(line[:300])
+    # each hit costs a page fetch and a Maps lookup to resolve; on 11/3 a 40-query round reran
+    # all ~700 old hits for 20+ minutes before reaching the new ones, so resolutions are cached
+    resolved_file = cache / "resolved.json"
+    resolved = json.loads(resolved_file.read_text()) if resolved_file.exists() else {}
     rows = []
     for key, h in hits.items():
         name = website = city = category = ""
         st = ""
-        if h["shared"]:
-            name = org_name_from_page(fetch(h["url"]))
+        if key in resolved:
+            name, website, p = resolved[key]["name"], resolved[key]["website"], resolved[key]["place"]
         else:
-            u = urllib.parse.urlparse(h["url"])
-            website = f"{u.scheme or 'https'}://{u.netloc}/"
-            name = org_name_from_page(fetch(website)) or ""
-        lookup = f"{name} {state}".strip() if name else ""
-        p = {}
-        if lookup:
-            res = place(lookup)
-            cands = _first_list(res) if isinstance(res, dict) else (res or [])
-            if not h["shared"]:
-                # the org's own site: the place has to list this same domain
-                p = next((c for c in cands if c.get("website") and _domain(c["website"]) == _domain(website)), {})
+            if h["shared"]:
+                name = org_name_from_page(fetch(h["url"]))
             else:
-                # a Church Center page: the place whose name matches the church the page names
-                p = next((c for c in cands if gtme_score.jaro_winkler(
-                    gtme_score.normalize_company_name(c.get("name") or ""),
-                    gtme_score.normalize_company_name(name)) >= NAME_MATCH), {})
+                u = urllib.parse.urlparse(h["url"])
+                website = f"{u.scheme or 'https'}://{u.netloc}/"
+                name = org_name_from_page(fetch(website)) or ""
+            lookup = f"{name} {state}".strip() if name else ""
+            p, res = {}, {}
+            if lookup:
+                res = place(lookup)
+                cands = _first_list(res) if isinstance(res, dict) else (res or [])
+                if not h["shared"]:
+                    # the org's own site: the place has to list this same domain
+                    p = next((c for c in cands if c.get("website") and _domain(c["website"]) == _domain(website)), {})
+                else:
+                    # a Church Center page: the place whose name matches the church the page names
+                    p = next((c for c in cands if gtme_score.jaro_winkler(
+                        gtme_score.normalize_company_name(c.get("name") or ""),
+                        gtme_score.normalize_company_name(name)) >= NAME_MATCH), {})
+            # a failed fetch or Maps call may be a blip, so only an answer is kept
+            if name and not (isinstance(res, dict) and res.get("reason")):
+                resolved[key] = {"name": name, "website": website, "place": p}
+                resolved_file.write_text(json.dumps(resolved))
         if p:
             parts = [x.strip() for x in str(p.get("address") or "").split(",")]
             city, st = (parts[-2], parts[-1].split()[0]) if len(parts) >= 3 else ("", "")

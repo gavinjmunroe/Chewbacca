@@ -903,11 +903,18 @@ class ChurchMode(unittest.TestCase):
                   "Other Church CA": {"name": "Other Church", "address": "4 Pine, Fresno, CA 93701"},
                   "Lone Star Church CA": {"name": "Lone Star Church", "address": "3 Oak, Austin, TX 78701"}}
         src = {"kind": "search", "queries": ["baptism 2026 churchcenter CA"], "state": "CA", "signal": "baptism"}
+        fetched = []
+
+        def fetch(u):
+            fetched.append(u)
+            return pages.get(u, "")
         with tempfile.TemporaryDirectory() as d:
-            rows = ga.search_rows(src, Path(d), call=call, fetch=lambda u: pages.get(u, ""),
+            rows = ga.search_rows(src, Path(d), call=call, fetch=fetch,
                                   place=lambda q: {"data": [places[q]]} if q in places else {})
-            again = ga.search_rows(src, Path(d), call=call, fetch=lambda u: pages.get(u, ""),
+            first = len(fetched)
+            again = ga.search_rows(src, Path(d), call=call, fetch=fetch,
                                    place=lambda q: {"data": [places[q]]} if q in places else {})
+        self.assertEqual(len(fetched), first)  # the rerun resolved nothing twice either
         by = {r["name"]: r for r in rows}
         self.assertEqual(sorted(by), ["Grace Fresno", "Hope Church OC"])  # the Texas church is dropped
         hope = by["Hope Church OC"]

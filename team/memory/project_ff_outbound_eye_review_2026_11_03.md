@@ -15,3 +15,7 @@ Rules that came out of it:
 - The email's "one of N fixes" comes from that church's fix list, never typed by hand. 8 of the first 61 lists confirmed fewer items than the line promised.
 
 Open as of 11/3: whether HFF DFW (Saturday Sabbath, feast pages) stays, three progressive-denomination churches with no explicit affirming statement, and Spanish or Portuguese emails for Iglesia CAFE, IBFH and ADMES.
+
+Final state, 11/3 2:25pm: 101 keepers (46 SoCal, 55 DFW, 21 fives), each with an email 1 draft and a fix list, and 51 churches excluded with proof. Drafts are in ~/Downloads/FF email drafts 11-3.md. Nothing sent.
+
+Two pipeline traps from the last hour, both fixed in FF 0fdfb99. exclude.py used to overwrite excluded.jsonl, so a rescan of only the keepers dropped 36 exclusions and four excluded churches came back into the drafts; it merges now. And a fixed list of about pages missed Interwoven's LGBTQIA+ statement at /statement-of, so the scan now follows the church's own about, beliefs and inclusion links.

@@ -895,6 +895,10 @@ def find_emails(rows: list[dict], client: str, acc: dict, work: Path, finder=Non
                                                               spend_file=spend, budget_usd=budget))
     verifier = verifier or (lambda email: treg_client.verify_email(email=email, customer=client,
                                                                   spend_file=spend, budget_usd=budget))
+    # every paid answer is kept, so a rerun never pays twice for the same person (a retry after
+    # 5 treg timeouts on 2026-11-02 would have re-bought the 17 emails already found)
+    cache_file = work / "emails.json"
+    cache = json.loads(cache_file.read_text()) if cache_file.exists() else {}
     found = checked = 0
     for r in rows:
         # "not checked" and "clear" are both sendable; only a suppression stops a spend. On
@@ -909,7 +913,10 @@ def find_emails(rows: list[dict], client: str, acc: dict, work: Path, finder=Non
                 if v != "valid":
                     r["buyer_email"] = ""
             elif r["treg_find"]:
-                res = finder(_domain(r["website"]), r["buyer"])
+                key = f"{_domain(r['website'])}|{r['buyer'].lower()}"
+                res = cache.get(key) or finder(_domain(r["website"]), r["buyer"])
+                cache[key] = {k: res.get(k) for k in ("email", "verdict", "cost_usd")}
+                cache_file.write_text(json.dumps(cache, indent=1))
                 r["email_verdict"] = res.get("verdict") or ("none found" if not res.get("email") else "unknown")
                 r["treg_find"] = f"spent ${res.get('cost_usd', 0):.3f}"
                 if res.get("email") and res.get("verdict") == "valid":

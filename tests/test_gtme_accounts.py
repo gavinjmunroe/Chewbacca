@@ -420,6 +420,23 @@ class Parts(unittest.TestCase):
         self.assertEqual(rows[3]["buyer_email"], "")  # a published email that fails verify is cleared
         self.assertEqual(out, {"found": 1, "verified_published": 1})
 
+    def test_a_found_email_is_never_bought_twice(self):
+        paid = []
+
+        def finder(dom, name):
+            paid.append(name)
+            return {"email": "jon@markolaw.com", "verdict": "valid", "cost_usd": 0.05}
+
+        def row():
+            return [{"buyer": "Jonathan R. Marko", "buyer_email": "", "website": "https://markolaw.com/",
+                     "treg_find": "priced", "icp_fit": "yes", "dnc": ""}]
+        with tempfile.TemporaryDirectory() as d:
+            first, second = row(), row()
+            ga.find_emails(first, "acme", {"treg_budget_usd": 5}, Path(d), finder=finder)
+            ga.find_emails(second, "acme", {"treg_budget_usd": 5}, Path(d), finder=finder)
+        self.assertEqual(paid, ["Jonathan R. Marko"])
+        self.assertEqual(second[0]["buyer_email"], "jon@markolaw.com")
+
     def test_an_email_step_that_found_nothing_says_so(self):
         self.assertIn("found NOTHING", ga.email_line({"emails": {"found": 0, "verified_published": 0}}))
         self.assertNotIn("NOTHING", ga.email_line({"emails": {"found": 3, "verified_published": 1}}))

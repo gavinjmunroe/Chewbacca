@@ -518,3 +518,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_ff_home_pop_2026_11_02: FF home must stand out vs church site builders; no default paper, text outweighs drawings, real sites in browser frames, small playable hero gizmos
 - feedback_hook_heredoc_in_command_sub: inline Python in a hook goes through read -d, never a heredoc inside $( ) (bash 3.2); new guards need a decision-evals replay
 - feedback_jev_import_by_path: Dough loads Jev with gtme_jev.kit_jev(); a bare import jev can load tools/jev.py and silently hold every buyer (11/2)
+- feedback_dough_owns_its_stack: Dough never depends on Clay; Clay only for a step it does better, sending stays in gtme send (Caleb, AuraPath night 11/2)

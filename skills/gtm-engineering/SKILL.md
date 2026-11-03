@@ -726,6 +726,19 @@ own copy rules, then check these:
   fix the same turn (schema alternateName, title), and list the off-site
   steps that need his accounts.
 
+## An own-inbox batch reuses its saved copy (2026-11-03, FF SoCal)
+
+`gtme batch` names a batch by a hash of who it goes to, and a rebuild with the
+same recipients prints the saved `batches/<id>.json` from the ledger instead of
+filling the copy again. On 11/3 the title fix (0707d091) landed and the SoCal
+batch still opened "Hi Pastor," until the saved f3c2b5492b.json was moved aside.
+After any change to the copy, the fill or a lead row, move that batch file out
+of the ledger's `batches/` folder, rebuild, and read the greetings before
+`gtme ready`. Then point `ready/drafts.json` at the new id and write
+`ready/reviews/<id>.json` from a real read as the recipient. Re-audit each
+first line with `audit_site.py <url> --browser` the same day, and give every
+line an https source, since `gtme ready` fails an http one.
+
 ## Grading a campaign before it goes out
 
 Run the five gates in [the playbook's grading section](references/demand-gen-playbooks.md#grading-a-campaign-before-it-goes-out)

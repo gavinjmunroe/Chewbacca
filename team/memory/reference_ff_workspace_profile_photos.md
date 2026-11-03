@@ -5,7 +5,7 @@ metadata:
   type: reference
 ---
 
-Firm Foundation's Workspace has three users: caleb@, gavin@ and team@firmfoundation.tech (team@ is named Gavin Munroe). caleb@ is an admin.
+Firm Foundation's Workspace has three users: caleb@, gavin@ and team@firmfoundation.tech (team@ was named Gavin Munroe until 2026-11-03, when Caleb had it renamed Firm Foundation). caleb@ is an admin.
 
 The users can't change their own photo. In myaccount.google.com the upload button is greyed out and says "Your profile picture is managed by your organization". Set it from admin.google.com instead: Users, open the user, and upload to the avatar's file input under "Manage profile photo". Admin asks for caleb@'s password first, so Caleb has to type it.
 

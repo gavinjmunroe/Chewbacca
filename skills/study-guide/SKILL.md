@@ -53,6 +53,11 @@ since study guides say "watch all animations". Transcribe the videos
 the lessons. `head`, `cut -c` and reading part of a file don't count as reading
 it. When something was only partly read, the reply says which file.
 
+A video with only music comes back from Whisper as "Thank you." or one line
+repeated over and over. On 2026-11-02, 2 of the 11 BISC animations (endo and
+exocytosis, vesicle transport) did this. Treat that output as no narration,
+say so, and cover the video from its slides. Never quote those lines as content.
+
 ## Making one
 
 ```sh

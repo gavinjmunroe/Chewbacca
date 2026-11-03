@@ -530,7 +530,8 @@ def search_rows(src: dict, cache: Path, call=None, fetch=None, place=None) -> li
                 continue
             shared = host.endswith(SHARED_SIGNAL_HOSTS)
             key = host if shared or not any(host.endswith(h) for h in SHARED_HOSTS) else host + urllib.parse.urlparse(url).path
-            line = " / ".join(x for x in (r.get("title"), r.get("date"), r.get("snippet")) if x)
+            # crawl4ai calls it snippet; the scrapecreators fallback treg routes to calls it description
+            line = " / ".join(x for x in (r.get("title"), r.get("date"), r.get("snippet") or r.get("description")) if x)
             hits.setdefault(key, {"shared": shared, "url": url, "lines": []})["lines"].append(line[:300])
     rows = []
     for key, h in hits.items():

@@ -884,7 +884,8 @@ class ChurchMode(unittest.TestCase):
             return {"output": {"results": [
                 {"url": "https://hope.churchcenter.com/registrations/events/1", "title": "Baptism Sunday",
                  "date": "Apr 26, 2026", "snippet": "Register for baptism"},
-                {"url": "https://hope.churchcenter.com/registrations/events/2", "title": "Baptism Class"},
+                {"url": "https://hope.churchcenter.com/registrations/events/2", "title": "Baptism Class",
+                 "description": "Next class May 3"},
                 {"url": "https://www.gracefresno.example/baptism", "title": "Baptism | Grace Fresno"},
                 {"url": "https://www.texaschurch.example/baptism", "title": "Baptism | Lone Star"},
                 {"url": "https://spoof.example/baptism", "title": "Baptism"}]}}
@@ -913,7 +914,7 @@ class ChurchMode(unittest.TestCase):
         self.assertEqual((hope["website"], hope["city"], hope["category"]),
                          ("https://hopeoc.example/", "Irvine", "Non-denominational church"))
         self.assertEqual(hope["seed_signals"]["baptism"][0]["lines"],
-                         ["Baptism Sunday / Apr 26, 2026 / Register for baptism", "Baptism Class"])
+                         ["Baptism Sunday / Apr 26, 2026 / Register for baptism", "Baptism Class / Next class May 3"])
         self.assertEqual(by["Grace Fresno"]["website"], "https://www.gracefresno.example/")
         self.assertEqual(calls, ["baptism 2026 churchcenter CA"])  # the rerun paid for nothing
         self.assertEqual(len(again), 2)

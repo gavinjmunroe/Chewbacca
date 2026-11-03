@@ -50,6 +50,20 @@ Same Claude.app, same REA 6.4.0:
 uselemma.ai's Next.js chunks: CLI 4 of 39 parsed in 6 min 40 s; MCP 38 of 38
 in 106 s.
 
+## Games: get the build before naming the engine
+
+The engine decides the whole approach (Unity Mono gives back C#, IL2CPP needs
+`GameAssembly.dll` plus `global-metadata.dat`, Godot ships a `.pck`,
+GameMaker a `data.win`), and only the files prove which one it is. Don't read
+it off the store page: on 2026-11-02 a `grep -i unity` of a Steam page counted
+38 hits for PSI: Pressure Climbing, every one from the word "community". Look
+for `*_Data/Managed/Assembly-CSharp.dll`, `GameAssembly.dll`, a `.pck` or a
+`data.win` in the install folder instead. `store.steampowered.com/api/appdetails?appids=<id>`
+gives platforms and size reliably. A Windows-only game won't download on a Mac
+through the Steam client: ask the developer for a zip, or pull the Windows
+depot with SteamCMD (`+@sSteamCmdForcePlatformType windows`), which needs the
+user's own login and an owned copy. Anti-cheat stays off limits either way.
+
 ## Which tool answers which question
 
 | Question                                                                  | Tool and arguments                                                                                                                                                                                 | Time here                                                                                  | Grep instead?                                                                                                                                                      |

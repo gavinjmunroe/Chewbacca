@@ -504,6 +504,7 @@ fi
 # ── GTM engineering ───────────────────────────────────────────────────────────
 if group "gtme"; then
   check "workflow graph validates evidence and bounds execution" python3 "$ROOT/tests/test_gtme_graph.py"
+  check "gtme dns reads MX, SPF, DKIM, DMARC, RDAP age and the site before a domain sends" python3 "$ROOT/tests/test_gtme_dns.py"
   check "GTM arithmetic validates assumptions and heldout labels" python3 "$ROOT/tests/test_gtme_math.py"
   check "research library preserves source and reading status" python3 "$ROOT/tests/test_gtme_library.py"
   check "learning promotion requires paired holdouts and preserved regressions" python3 "$ROOT/tests/test_gtme_learning.py"

@@ -2463,6 +2463,9 @@ def main(argv=None) -> int:
     if argv and argv[0] == "accounts":
         import gtme_accounts
         return gtme_accounts.main(argv[1:])
+    if argv and argv[0] == "dns":
+        import gtme_dns
+        return gtme_dns.main(argv[1:])
     if argv and argv[0] == "recovery-preview":
         import gtme_recovery
         return gtme_recovery.main(argv[1:])

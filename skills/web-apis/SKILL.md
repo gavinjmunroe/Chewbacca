@@ -24,6 +24,14 @@ several model turns.
 3. One-off public page: `scrape <url>`.
 4. Needs clicks in his signed-in Chrome: `jev-browse`.
 
+When an op comes back `drift` and the heal fails, don't stop: the same read is
+usually a treg catalog call. On 2026-11-03 the instagram `getProfile` op and
+`chewbacca ig posts` both drifted, and four web-search agents spent an hour
+missing a creator's school that one treg call (`scrapecreators.instagram.user.profile`,
+param `handle`, ~$0.002) read from her bio in seconds. Instagram follower and
+following lists are `tikhub.x.instagram-v2-fetch-user-followers` / `-following`
+(49 per page, `pagination_token`); treg 503s when saturated, so retry with backoff.
+
 Check `ok` before using `data`. `class: "input"` means the args were wrong or the
 search found nothing, and nothing was sent wrong. `class: "auth"` names the
 `chewbacca api login` command. `tier` 1 is plain HTTP.

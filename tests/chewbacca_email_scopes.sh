@@ -100,5 +100,11 @@ out=$(CHEWBACCA_GWS="$tmp/bin/gws2" CHEWBACCA_BIN="$tmp/bin/fakechewb" CHEWBACCA
   HEAL_MARK="$tmp/heal/mark" python3 "$g" recent 3 2>&1); rc=$?
 { [ $rc -ne 0 ] && printf '%s' "$out" | grep -q invalid_grant; } || { echo "FAIL: a failed renewal must exit with the real error"; fail=1; }
 
+# A Workspace account with a valid token was refused every Gmail call until it
+# got serviceUsageConsumer on the sign-in app's project (2026-11-02). `add`
+# grants it itself, so a teammate never has to open the Cloud console.
+grep -q 'grant_project_use "$cfg" "$addr"' "$f" || { echo "FAIL: email add no longer grants project use after login"; fail=1; }
+grep -q 'roles/serviceusage.serviceUsageConsumer' "$f" || { echo "FAIL: the project-use grant names the wrong role"; fail=1; }
+
 [ $fail -eq 0 ] && echo "ok: chewbacca email scopes"
 exit $fail

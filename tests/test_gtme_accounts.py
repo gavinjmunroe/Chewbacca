@@ -402,7 +402,9 @@ class Parts(unittest.TestCase):
                 {"buyer": "Kara Weisman", "buyer_email": "", "website": "https://thevwlaw.com/",
                  "treg_find": "priced", "icp_fit": "no", "dnc": ""},
                 {"buyer": "Ryan Vanstone", "buyer_email": "ryan@vanstone.law", "website": "https://vanstone.law/",
-                 "treg_find": "", "icp_fit": "yes", "dnc": ""}]
+                 "treg_find": "", "icp_fit": "yes", "dnc": "not checked: no DNC list for this client"},
+                {"buyer": "Sam Cole", "buyer_email": "", "website": "https://delta.example/",
+                 "treg_find": "priced", "icp_fit": "yes", "dnc": "SUPPRESSED: unsubscribed"}]
         asked = []
 
         def finder(dom, name):
@@ -411,7 +413,8 @@ class Parts(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             out = ga.find_emails(rows, "acme", {"treg_budget_usd": 5}, Path(d), finder=finder,
                                  verifier=lambda e: {"verdict": "invalid"})
-        self.assertEqual(asked, ["Jonathan R. Marko", "Cherie Lobb"])  # never spends on an off-ICP row
+        # never spends on an off-ICP or suppressed row; "not checked" still runs (11/2: it skipped all 54)
+        self.assertEqual(asked, ["Jonathan R. Marko", "Cherie Lobb"])
         self.assertEqual(rows[0]["buyer_email"], "x@markolaw.com")
         self.assertEqual(rows[1]["buyer_email"], "")  # catch-all stays out
         self.assertEqual(rows[3]["buyer_email"], "")  # a published email that fails verify is cleared

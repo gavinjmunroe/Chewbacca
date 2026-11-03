@@ -848,6 +848,13 @@ def build(client: str, acc: dict, work: Path, *, limit: int | None = None, worke
         posts = linkedin_hiring(hiring_cfg)
         for r in recs:
             r["jobs"] = (r.get("jobs") or []) + posts.get(name_key(r.get("maps_name") or r["name"]), [])
+    job_words = (acc.get("why_now") or {}).get("job_words")
+    if job_words:
+        # a hire only counts when it's the work the client sells into: Ben Hall Law hiring a
+        # criminal defense attorney came back as a PIP why-now on 2026-11-02
+        jw = re.compile(job_words, re.I)
+        for r in recs:
+            r["jobs"] = [j for j in r.get("jobs") or [] if jw.search(j.get("title", ""))]
     rows = [score(r, acc, words, today, about) for r in recs]
     for r in rows:
         jev_check(r, acc, client, ask)
@@ -890,7 +897,9 @@ def find_emails(rows: list[dict], client: str, acc: dict, work: Path, finder=Non
                                                                   spend_file=spend, budget_usd=budget))
     found = checked = 0
     for r in rows:
-        if not r["buyer"] or r.get("icp_fit") == "no" or r.get("dnc"):
+        # "not checked" and "clear" are both sendable; only a suppression stops a spend. On
+        # 2026-11-02 any non-empty dnc skipped all 54 buyers, and the run spent nothing.
+        if not r["buyer"] or r.get("icp_fit") == "no" or str(r.get("dnc") or "").startswith("SUPPRESSED"):
             continue
         try:
             if r["buyer_email"]:

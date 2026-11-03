@@ -223,12 +223,37 @@ surfaced in the session briefing.
 ## When a course shows no files
 
 A zero file count means the pull looked in one place. ACAD 185 keeps every
-deck behind an announcement that links a Google Sheet (2026-10-11: "if you
+deck behind a Google master sheet (2026-10-11: "if you
 actually read brightspace you'd see a masterspreadsheet with all the slides on
-it"). Read the course announcements (`/le/1.67/<ou>/news/`) and homepage links,
-follow Google Docs, Sheets and Slides links, and export them (`/export/pdf`,
-`/export?format=xlsx`) into `~/coursework/slides/<CODE>/` before telling the
-student anything is missing.
+it"). Put the sheet id in the ledger as `master_sheet:` and the pull follows
+it: `brightspace-sync files` then also runs
+
+```bash
+brightspace-sync decks <CODE> --out ~/coursework/slides --apply
+```
+
+which saves every session deck the sheet links as `<WnSn> <title>.pdf` plus a
+`.txt` you can read, and a fresh `master.xlsx`. A daily daemon job runs it for
+every ledger with a `master_sheet`. For a course with no master sheet, read the
+announcements (`/le/1.67/<ou>/news/`) and homepage links before saying
+anything is missing.
+
+## Read the lecture that assigned it before building
+
+Before drafting any graded deliverable, find the session that assigned it
+(the master sheet's "Assignment(s) Given" column, or the course calendar),
+make sure that deck is on disk, and read it whole. The dropbox brief is a
+summary. The lecture is the spec. On 2026-11-02 the ACAD 185 A20 Hero's
+Journey went in as 19 slides of text built from the dropbox brief. The W10S20
+deck that assigned it asks for an AI-image storyboard ("Words are generic.
+Pictures are specific", Nano Banana, one character bible), and that deck had
+never been pulled. Angie caught it the night before it was due, and Caleb
+wrote "WHY WEREND THEY PULLED TO DISK??????". Name the deck and
+its slide in the build's SPEC file, or the draft hasn't started.
+
+Never do these:
+- Build a graded deliverable from the dropbox brief alone.
+- Say a lecture "isn't on disk" and stop there. Pull it (`brightspace-sync decks`) in the same turn.
 
 ## A practice app covers the whole semester so far
 

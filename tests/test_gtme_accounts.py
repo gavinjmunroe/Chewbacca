@@ -311,6 +311,42 @@ class Parts(unittest.TestCase):
         prim = ga.gtme_score.resolve_primary(cands, ["Founder", "Managing Partner", "Partner", "Owner"])
         self.assertEqual(prim["primary_contact_id"], "Jonathan R. Marko")
 
+    def test_any_icp_title_from_config_is_kept_and_ranked_first(self):
+        contacts = [{"name": "Noah Overby", "title": "IT Director"},
+                    {"name": "Dana Wells", "title": "Head of Revenue"}]
+        self.assertEqual([c["name"] for c in ga.leaders(contacts)], ["Noah Overby"])
+        self.assertEqual([c["name"] for c in ga.leaders(contacts, ["Head of Revenue"])][0], "Dana Wells")
+
+    def test_blind_sample_refuses_the_full_run(self):
+        # Michigan PIP, 11/2: 145 sites read, 1 buyer, because no title the reader knew fit.
+        def audit(url, _, titles="church", buyer_titles=None):
+            return {"status": "ok", "contacts": [], "page_emails": [], "chms": "", "final_url": url}
+        tools = (SimpleNamespace(audit=audit), fake_tools()[1])
+        old = ga.SAMPLE
+        ga.SAMPLE = 2
+        try:
+            with tempfile.TemporaryDirectory() as d:
+                with self.assertRaises(ga.Refused) as e:
+                    ga.build("acme", plan(Path(d)), Path(d) / "work", tools=tools, ask=fake_ask([]),
+                             about=lambda org, sigs: (sigs, []), today=date(2026, 11, 2))
+            self.assertIn("blind to this market", str(e.exception))
+        finally:
+            ga.SAMPLE = old
+
+    def test_new_titles_reread_cached_sites(self):
+        seen = []
+
+        def audit(url, _, titles="church", buyer_titles=None):
+            seen.append(tuple(buyer_titles or ()))
+            return {"status": "ok", "contacts": [], "page_emails": [], "chms": "", "final_url": url}
+        tools = (SimpleNamespace(audit=audit), fake_tools()[1])
+        acct = [{"key": "1", "name": "Alpha Legal Aid", "city": "", "state": "CA"}]
+        with tempfile.TemporaryDirectory() as d:
+            ga.enrich(acct, Path(d), tools, ga.re.compile("x"), ga.re.compile("x"), 1, False, ["CEO"])
+            ga.enrich(acct, Path(d), tools, ga.re.compile("x"), ga.re.compile("x"), 1, False, ["CEO"])
+            ga.enrich(acct, Path(d), tools, ga.re.compile("x"), ga.re.compile("x"), 1, False, ["Managing Partner"])
+        self.assertEqual(seen, [("CEO",), ("Managing Partner",)])
+
     def test_jev_true_is_not_a_probability(self):
         row = {"buyer": "Pat", "buyer_title": "CEO", "buyer_email": "", "org": "X", "website": "", "buyer_source": "",
                "revenue": "", "fit": 80}

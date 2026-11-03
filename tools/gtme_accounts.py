@@ -119,6 +119,12 @@ LEADER = re.compile(r"\b(ceo|chief|president|executive director|coo|cfo|cto|cio|
 # `titles` order, so this only has to be wide enough to hold the real buyer: at 3, with the
 # tech titles sorted first, Marko Law's three slots went to the IT director and two others.
 LEADERS_KEPT = 6
+# The sample read before a full run, and the buyer fill under which it stops. On 2026-11-02 the
+# Michigan PIP list read all 145 firms and found a buyer at 1, because no title the reader knew
+# was a law title. 20 sites cost about a minute; the bar is a guess, never measured on a list
+# that was right, so lower it for a market where buyers truly aren't on the site.
+SAMPLE = 20
+MIN_BUYER_FILL = 0.2
 LISTICLE = re.compile(r"MinistryWatch|top \d+|largest|\d+ (best|largest)", re.I)
 KNOWN_STACK = re.compile(r"planning center|rock|pushpay|ministry ?platform|ccb|church community builder|breeze|"
                          r"elvanto|fellowship one|realm|shelby|subsplash|churchteams|tithely|touchpoint|acs|"
@@ -324,14 +330,23 @@ def news(lead_card, name: str, words: re.Pattern, growth: re.Pattern) -> list[di
     return hits[:3] + grow[:3]
 
 
-def leaders(contacts) -> list[dict]:
-    out = [c for c in contacts or [] if LEADER.search(c.get("title", ""))]
-    out.sort(key=lambda c: 0 if re.search(r"technology|information|\bit\b|cto|cio|data|digital", c["title"], re.I)
-             else 1 if re.search(r"operat|coo", c["title"], re.I) else 2)
+def leaders(contacts, titles=None) -> list[dict]:
+    """The people worth scoring. The client's own `titles` are kept and ranked first, so any
+    ICP works from its config; the built-in LEADER words cover the markets Dough has run."""
+    mine = [t.lower() for t in titles or [] if t]
+
+    def icp_rank(title: str) -> int:
+        t = title.lower()
+        return next((i for i, w in enumerate(mine) if w in t), len(mine))
+
+    out = [c for c in contacts or [] if LEADER.search(c.get("title", "")) or icp_rank(c.get("title", "")) < len(mine)]
+    out.sort(key=lambda c: (icp_rank(c["title"]),
+                            0 if re.search(r"technology|information|\bit\b|cto|cio|data|digital", c["title"], re.I)
+                            else 1 if re.search(r"operat|coo", c["title"], re.I) else 2))
     return out[:LEADERS_KEPT]
 
 
-def enrich_one(a: dict, tools, words, growth) -> dict:
+def enrich_one(a: dict, tools, words, growth, titles=None) -> dict:
     audit_site, lead_card = tools
     rec = dict(a)
     if not rec.get("website"):
@@ -344,12 +359,16 @@ def enrich_one(a: dict, tools, words, growth) -> dict:
     if rec.get("website"):
         try:
             # titles="org": executive, tech, ops and finance chiefs, not the church buyer rules
-            if "titles" in inspect.signature(audit_site.audit).parameters:
+            params = inspect.signature(audit_site.audit).parameters
+            if "buyer_titles" in params:
+                au = audit_site.audit(rec["website"], None, titles="org", buyer_titles=titles)
+            elif "titles" in params:
                 au = audit_site.audit(rec["website"], None, titles="org")
             else:
                 au = audit_site.audit(rec["website"], None)
             rec["site_status"] = au.get("status")
-            rec["leaders"] = leaders(au.get("contacts"))
+            rec["leaders"] = leaders(au.get("contacts"), titles)
+            rec["titles_key"] = titles_key(titles)
             rec["page_emails"] = [e.get("email") for e in au.get("page_emails") or []][:8]
             rec["chms"] = au.get("chms") or ""
             rec["jobs"] = lead_card.jobs(au.get("final_url") or rec["website"])
@@ -359,7 +378,12 @@ def enrich_one(a: dict, tools, words, growth) -> dict:
     return rec
 
 
-def enrich(accounts: list[dict], work: Path, tools, words, growth, workers: int, refresh: bool) -> list[dict]:
+def titles_key(titles) -> str:
+    return "|".join(sorted(t.lower() for t in titles or []))
+
+
+def enrich(accounts: list[dict], work: Path, tools, words, growth, workers: int, refresh: bool,
+           titles=None) -> list[dict]:
     path = work / "enriched.jsonl"
     done, lines = {}, 0
     if path.exists() and not refresh:
@@ -368,7 +392,9 @@ def enrich(accounts: list[dict], work: Path, tools, words, growth, workers: int,
                 lines += 1
                 r = json.loads(line)
                 # a Maps or audit error is a lookup that didn't happen, so it's retried, never kept
-                if not r.get("error") and not str(r.get("site_status") or "").startswith("error"):
+                # a read made for other buyer titles found other people, so it's read again
+                stale = r.get("website") and r.get("titles_key", "") != titles_key(titles)
+                if not r.get("error") and not str(r.get("site_status") or "").startswith("error") and not stale:
                     done[r["key"]] = r
     todo = [a for a in accounts if a["key"] not in done]
     print(f"gtme accounts: {len(accounts)} accounts, {len(done)} cached, {len(todo)} to read", file=sys.stderr)
@@ -378,7 +404,7 @@ def enrich(accounts: list[dict], work: Path, tools, words, growth, workers: int,
         if rewrite:
             for rec in done.values():
                 fh.write(json.dumps(rec) + "\n")
-        for rec in ex.map(lambda a: enrich_one(a, tools, words, growth), todo):
+        for rec in ex.map(lambda a: enrich_one(a, tools, words, growth, titles), todo):
             with lock:
                 fh.write(json.dumps(rec) + "\n")
                 fh.flush()
@@ -644,7 +670,19 @@ def build(client: str, acc: dict, work: Path, *, limit: int | None = None, worke
         accounts = accounts[:limit]  # a test run, and the summary says so
     words = re.compile(acc.get("news_words") or NEWS_WORDS, re.I)
     growth = re.compile(acc.get("growth_words") or GROWTH_WORDS, re.I)
-    recs = enrich(accounts, work, tools or site_audit(), words, growth, workers, refresh)
+    tools = tools or site_audit()
+    titles = acc.get("titles") or []
+    if len(accounts) > SAMPLE and not acc.get("allow_low_buyer_fill"):
+        sample = enrich(accounts[:SAMPLE], work, tools, words, growth, workers, refresh, titles)
+        read = [r for r in sample if r.get("site_status") == "ok"]
+        found = sum(1 for r in read if r.get("leaders"))
+        if read and found / len(read) < MIN_BUYER_FILL:
+            raise Refused(f"the site reader found a buyer at {found} of {len(read)} sample sites, so it's blind to "
+                          f"this market. Add the titles these orgs really use to the accounts block's `titles` "
+                          f"(now: {', '.join(titles) or 'none'}), check one site by hand, then rerun. Set "
+                          f"allow_low_buyer_fill: true only if buyers really aren't on these sites.")
+        refresh = False  # the sample is read; the full run reuses it
+    recs = enrich(accounts, work, tools, words, growth, workers, refresh, titles)
     recs = [r for r in recs if r.get("website") and same_org(r["name"], r.get("maps_name"))]
     rows = [score(r, acc, words, today, about) for r in recs]
     for r in rows:

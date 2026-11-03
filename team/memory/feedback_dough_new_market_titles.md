@@ -40,6 +40,10 @@ existing org_key(row) used by dedupe, caught only because a test called it. Grep
 a name before adding one. And any page check that follows scraped links has to stay on the
 org's own http(s) host, or a planted href reads file:// or localhost (same_site, 57a1972a).
 
+A site Dough can't read is unknown, never a no. Sinas Dramis, a leading Michigan no-fault firm,
+answered 403 and was scored "no PIP work" until icp_evidence learned to return unread (5011db02).
+Before trusting a cut, sample 15 rejected rows by hand; that sample is how this one surfaced.
+
 How to apply: before `chewbacca gtme accounts` runs for a new market, write two lines of
 that market's real staff page into a find_contacts test with titles="org". If the buyer
 doesn't come back, add the titles first. Run with GTME_SITE_AUDIT_DIR pointing at a clean

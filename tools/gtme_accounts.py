@@ -107,8 +107,18 @@ NEWS_WORDS = (r"\bAI\b|artificial intelligence|chatgpt|technology|digital|data|c
               r"software|CRM|platform")
 GROWTH_WORDS = (r"new (ceo|president|executive director|leader)|names .* (ceo|president)|expan|acquir|merge|"
                 r"campus|launch|grant|campaign|record")
+# Law firms are run by owners and partners. Without these words the 2026-11-02 Michigan PIP
+# list for AuraPath kept 11 of 145 firms' leaders, and at Marko Law it dropped "Principal
+# Attorney/Founder" Jonathan Marko and kept the IT director.
 LEADER = re.compile(r"\b(ceo|chief|president|executive director|coo|cfo|cto|cio|operations|technology|"
-                    r"information|it director|director of it|digital|data)\b", re.I)
+                    r"information|it director|director of it|digital|data|founder|owner|"
+                    r"managing partner|founding partner|senior partner|name partner|partner|principal|"
+                    r"managing (shareholder|member|attorney)|firm administrator|legal administrator|"
+                    r"practice manager)\b", re.I)
+# How many leaders the enrich step keeps. resolve_primary picks among them by the client's own
+# `titles` order, so this only has to be wide enough to hold the real buyer: at 3, with the
+# tech titles sorted first, Marko Law's three slots went to the IT director and two others.
+LEADERS_KEPT = 6
 LISTICLE = re.compile(r"MinistryWatch|top \d+|largest|\d+ (best|largest)", re.I)
 KNOWN_STACK = re.compile(r"planning center|rock|pushpay|ministry ?platform|ccb|church community builder|breeze|"
                          r"elvanto|fellowship one|realm|shelby|subsplash|churchteams|tithely|touchpoint|acs|"
@@ -318,7 +328,7 @@ def leaders(contacts) -> list[dict]:
     out = [c for c in contacts or [] if LEADER.search(c.get("title", ""))]
     out.sort(key=lambda c: 0 if re.search(r"technology|information|\bit\b|cto|cio|data|digital", c["title"], re.I)
              else 1 if re.search(r"operat|coo", c["title"], re.I) else 2)
-    return out[:3]
+    return out[:LEADERS_KEPT]
 
 
 def enrich_one(a: dict, tools, words, growth) -> dict:

@@ -297,6 +297,20 @@ class Parts(unittest.TestCase):
                       ga.re.compile("x"), ga.re.compile("x"), 1, False)
         self.assertEqual(AUDIT_TITLES, ["org"])
 
+    def test_law_firm_founder_kept_over_it_director(self):
+        # Marko Law, 11/2: the founder was dropped and the IT director became the buyer.
+        contacts = [{"name": "Noah Overby", "title": "IT Director"},
+                    {"name": "Ann Lee", "title": "Director of Digital Marketing"},
+                    {"name": "Sam Roe", "title": "Data Analyst"},
+                    {"name": "Jonathan R. Marko", "title": "Principal Attorney/Founder"},
+                    {"name": "Lisa Grant", "title": "Firm Administrator"}]
+        names = [c["name"] for c in ga.leaders(contacts)]
+        self.assertIn("Jonathan R. Marko", names)
+        self.assertIn("Lisa Grant", names)
+        cands = [{"contact_id": c["name"], "full_name": c["name"], "title": c["title"]} for c in ga.leaders(contacts)]
+        prim = ga.gtme_score.resolve_primary(cands, ["Founder", "Managing Partner", "Partner", "Owner"])
+        self.assertEqual(prim["primary_contact_id"], "Jonathan R. Marko")
+
     def test_jev_true_is_not_a_probability(self):
         row = {"buyer": "Pat", "buyer_title": "CEO", "buyer_email": "", "org": "X", "website": "", "buyer_source": "",
                "revenue": "", "fit": 80}

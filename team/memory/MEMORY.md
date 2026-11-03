@@ -509,3 +509,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - project_claude_jobs_on_subscription: apps/claude-jobs runs scheduled Claude jobs on your own Max plan via claude setup-token, no API key, on Railway; built 11/2, not deployed or run live yet
 - project_mcp_hub_2026_11_02: chewbacca mcp adds any of 60 servers or a paste in one command; the MCP hub runs fetch/time/git/chart/filesystem/github/supabase/blender once for every tab, tokens in Keychain; undo per server
 - feedback_dough_new_market_titles: site audit only knows titles from markets already run; test a new market's staff page before gtme accounts (law firms missed, 11/2)
+- reference_people_check_amber_rules: chewbacca people-check runs Amber's people rules over the store, Jev settles the unsure; cli.mjs row shape is Amber's (emails as a comma string), Jev noul answers are {noul: p}

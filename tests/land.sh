@@ -198,4 +198,13 @@ out=$(python3 -I "$LAND" --paths fresh.txt -m "feat: fresh" 2>&1) || fail "land 
 cd "$T/check" && git pull -q
 python3 tools/checksums.py && python3 tools/counts.py && git diff --quiet COUNT SHA256SUMS.txt || fail "count stale after land: $(git diff COUNT)"
 
+
+# zsh's unquoted $F arrives as one argument holding every path (2026-11-02:
+# "not found anywhere" for 24 files that were all there).
+git clone -q "$T/origin.git" "$T/zsh" && cd "$T/zsh"
+echo five > five.txt; echo six > six.txt
+out=$(python3 -I "$LAND" --paths "five.txt six.txt" -m "feat: two in one arg" 2>&1) || fail "one argument of two paths: $out"
+git clone -q "$T/origin.git" "$T/zshcheck"
+[ "$(cat "$T/zshcheck/five.txt" 2>/dev/null)" = five ] && [ "$(cat "$T/zshcheck/six.txt" 2>/dev/null)" = six ] || fail "both paths in one argument should land: $out"
+
 echo ok

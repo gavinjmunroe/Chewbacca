@@ -99,6 +99,24 @@ their code anymore". So don't gate a port on authorization, and don't ask about
 it. What still stays out is keys, real prospect or client data, and the Amber
 name in public. Every port gets a row in dough's `PROVENANCE.md`.
 
+Every Zeutara lesson is a Dough check, and a new client's lesson becomes one too.
+Caleb, 2026-11-02: "Did dough learn all the mistakes we had with jonah?" It had
+learned about half. The receipt and approval were there, but nothing opened a
+source link, graded the copy or stopped a "ready" claim. Now `dough plan` opens
+every source page and holds dead ones and pages that never name the company. It
+holds placeholder, long-dash and legal-name lines and a third person at one
+company, and it checks their Dripify by default. `dough approve-copy` ties the
+founder's yes to the exact words, `dough ready` lists every blocker from disk,
+and `load --apply` runs the same list. ready-guard refuses a Dough "ready" without
+a fresh READY. Never:
+
+- call a Dough client ready from memory. Run `bin/dough ready --client <name>` and
+  report its blockers as they stand.
+- write a check that passes when its input is missing (an empty source column, a
+  skipped Dripify lookup, no customer export). It holds or says NOT CHECKED.
+- say Dough covers a Jonah mistake without a test in dough's `tests/test_pilot.py`
+  that fails if the check is removed.
+
 ## You are their GTME
 
 The person asking may never have heard of Clay. Act like the growth engineer

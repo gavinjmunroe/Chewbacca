@@ -112,6 +112,56 @@ def mentioned(text):
             and any(re.search(r"\b" + re.escape(n) + r"\b", text) for n in names_for(c))]
 
 
+# Dough (calebnewtonusc/dough) has its own `dough ready`, which writes
+# <DOUGH_STATE>/<client>/ready.json with the plan and copy hashes it saw. On
+# 2026-11-02 Caleb asked whether Dough had learned the Jonah mistakes and it
+# hadn't learned this one: nothing stopped a "Junto is ready" claim, because
+# Junto isn't a gtme client and the reply never says campaign or Clay.
+def dough_repo():
+    import subprocess, tempfile
+    home_repo = os.environ.get("DOUGH_REPO") or os.path.expanduser("~/code/dough")
+    if os.path.isfile(os.path.join(home_repo, "dough", "ready.py")):
+        return home_repo
+    if not os.path.isdir(os.path.join(home_repo, ".git")):
+        return None
+    # The checkout can sit on a branch cut before `dough ready` existed. Read main's
+    # copy instead, unpacked once per commit.
+    try:
+        sha = subprocess.run(["git", "-C", home_repo, "rev-parse", "origin/main"], capture_output=True,
+                             text=True, timeout=5).stdout.strip()
+        if not sha:
+            return None
+        dest = os.path.join(tempfile.gettempdir(), f"dough-main-{sha[:12]}")
+        if not os.path.isfile(os.path.join(dest, "dough", "ready.py")):
+            os.makedirs(dest, exist_ok=True)
+            tar = subprocess.run(["git", "-C", home_repo, "archive", "origin/main", "dough", "clients"],
+                                 capture_output=True, timeout=10).stdout
+            subprocess.run(["tar", "-x", "-C", dest], input=tar, timeout=10)
+        return dest if os.path.isfile(os.path.join(dest, "dough", "ready.py")) else None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+DREPO = dough_repo()
+DCLIENTS = {}
+if DREPO:
+    import glob
+    for f in glob.glob(os.path.join(DREPO, "clients", "*.json")):
+        stem = os.path.splitext(os.path.basename(f))[0]
+        try:
+            DCLIENTS[stem] = {stem.lower(), json.load(open(f)).get("name", stem).lower()}
+        except (OSError, ValueError):
+            continue
+
+
+def dmention(text):
+    return [k for k, ns in DCLIENTS.items() if any(re.search(r"\b" + re.escape(n) + r"\b", text) for n in ns)]
+
+
+DOUGH_CTX = re.compile(r"\b(load\w*|copy|lists?|leads?|plan|follow-?ups?|note|pilot|ready|good to go|all set)\b")
+dough_about = bool((re.search(r"\bdough\b", low) or dmention(low)) and DOUGH_CTX.search(low) and not mentioned(low))
+
+
 # "Only needs", "good until", "nothing left" are how anyone reports progress.
 # On 2026-10-16 the manager tab's "A13 is done, and A14 only needs ur
 # engagement-metrics cell" (school assignments, no launch in it) was refused
@@ -134,7 +184,7 @@ REPLY_GTM = re.compile(r"\b(campaigns?|cam_[a-z0-9]+|sequencer|sequences?|gtme|o
 LAUNCH_WORD = re.compile(r"\blaunch(es|ed|ing)?\b")
 NOT_OUTBOUND = re.compile(r"\b(site|page|app|deploy\w*|render\w*|build|preview|vision pro)\b")
 CLIENT_CTX = re.compile(r"\b(copy|drafts?|footer|lists?|sends?|wave|emails?|leads?|mailbox(es)?|inbox(es)?)\b")
-strong_about = REPLY_GTM.search(low) or (LAUNCH_WORD.search(low) and not NOT_OUTBOUND.search(low))
+strong_about = REPLY_GTM.search(low) or (LAUNCH_WORD.search(low) and not NOT_OUTBOUND.search(low)) or dough_about
 about = strong_about or (mentioned(low) and CLIENT_CTX.search(low))
 if not about:
     print("ok"); raise SystemExit
@@ -198,6 +248,32 @@ for raw in lines:
             elif b.get("type") == "text":
                 seen.append(b.get("text", ""))
 work = (" ".join(seen) + " " + body).lower()
+if dough_about or (re.search(r"\bdough\b", work) and not mentioned(low) and not mentioned(work)):
+    if not DREPO:
+        print(f"refuse-dough\t<client>\t{claim}\tthe Dough repo isn't on this machine, so no dough ready can back it")
+        raise SystemExit
+    sys.path.insert(0, DREPO)
+    try:
+        from dough import config as dconfig, ready as dready
+    except Exception as exc:  # a broken import must not hide the claim
+        print(f"refuse-dough\t<client>\t{claim}\tdough ready could not load ({exc.__class__.__name__})"); raise SystemExit
+    dnamed = dmention(low)
+    dpool = dnamed or dmention(work) or [k for k in DCLIENTS if (dconfig.STATE / k / "ready.json").exists()]
+    if not dpool:
+        print(f"refuse-dough\t<client>\t{claim}\tno Dough client named and no dough ready on file"); raise SystemExit
+    dwhys = {}
+    for k in dpool:
+        try:
+            dwhys[k] = dready.check_verdict(dconfig.STATE / k, k, dconfig.load_client(k))
+        except Exception as exc:
+            dwhys[k] = f"dough ready's verdict couldn't be read ({exc.__class__.__name__})"
+    dbad = [k for k, w in dwhys.items() if w]
+    if (dnamed and dbad) or (not dnamed and len(dbad) == len(dpool)):
+        print(f"refuse-dough\t{dbad[0]}\t{claim}\t{dwhys[dbad[0]]}")
+    else:
+        print("ok")
+    raise SystemExit
+
 GTM = re.compile(r"\b(clay|campaigns?|cam_[a-z0-9]+|sequencer|gtme|gtme-grade|gtme_grade|outbound|cold[- ]emails?|"
                  r"pre[-_ ]send|send list|drafts\.json)\b")
 if not (GTM.search(work) or mentioned(work)):
@@ -241,6 +317,18 @@ PY
 )
 
 case "$VERDICT" in
+  refuse-dough*)
+    IFS=$'\t' read -r _ CLIENT CLAIM WHY <<<"$VERDICT"
+    touch "$GUARD"
+    {
+      echo "ready-guard: refusing. This reply says Dough is ready (\"$CLAIM\"), and there is"
+      echo "no READY from \`dough ready\` for $CLIENT that still matches the plan and copy: $WHY."
+      echo
+      echo "The reply is already on his screen, so do not repeat it. Run"
+      echo "\`dough ready --client $CLIENT\` from the dough repo now and add its blocker"
+      echo "list as it stands, in a few short lines. Call nothing ready until it prints READY."
+    } >&2
+    exit 2 ;;
   refuse*)
     IFS=$'\t' read -r _ CLIENT CLAIM WHY <<<"$VERDICT"
     touch "$GUARD"

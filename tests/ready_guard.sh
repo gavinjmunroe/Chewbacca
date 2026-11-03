@@ -128,6 +128,43 @@ jq -cn '{type:"user",message:{role:"user",content:"Stop hook feedback: ready-gua
 probe "its own refusal text never makes the session about another client" 2 "The outbound copy is done, the drafts are good to go." "$FF_T"
 if grep -q "Firm Foundation SoCal" "$TMP/err" && ! grep -q "for Zeutara" "$TMP/err"; then echo "  ok    refusal names the client the session worked on"; else echo "  FAIL  refusal named the wrong client"; cat "$TMP/err"; fail=$((fail+1)); fi
 
+# Dough has its own `dough ready` (2026-11-02). DOUGH_TEST_REPO points at a dough
+# checkout with dough/ready.py; without one only the no-repo probe runs.
+echo "dough:"
+DOUGH_T=$(transcript "upgrade dough for junto" "bin/dough plan --client junto --leads L.csv")
+probe "a Dough claim with no dough repo on the machine" 2 "Dough is good to go for the pilot." "$DOUGH_T"
+grep -q "dough ready" "$TMP/err" && echo "  ok    the refusal names dough ready" \
+  || { echo "  FAIL  dough refusal text"; cat "$TMP/err"; fail=$((fail+1)); }
+if [ -f "${DOUGH_TEST_REPO:-/nonexistent}/dough/ready.py" ]; then
+  export DOUGH_REPO="$DOUGH_TEST_REPO" DOUGH_STATE="$TMP/dough-state"
+  probe "a Dough claim with no dough ready on file" 2 "Junto is good to go." "$DOUGH_T"
+  python3 -I - "$DOUGH_TEST_REPO" "NOT READY" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+from dough import config, ready
+st = config.client_state("junto")
+ready.write_verdict(st, "junto", config.load_client("junto"), ["copy: no follow-ups written"])
+PY
+  probe "a NOT READY from dough ready does not unlock it" 2 "Junto is good to go." "$DOUGH_T"
+  python3 -I - "$DOUGH_TEST_REPO" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+from dough import config, ready
+st = config.client_state("junto")
+(st / "plan.json").write_text('{"client": "junto", "rows": []}')
+ready.write_verdict(st, "junto", config.load_client("junto"), [])
+PY
+  probe "a fresh READY that matches the plan and copy" 0 "Junto is good to go." "$DOUGH_T"
+  python3 -I - <<PY
+import json; p = "$TMP/dough-state/junto/plan.json"; json.dump({"client": "junto", "rows": [{"name": "x"}]}, open(p, "w"))
+PY
+  probe "the plan changed after the READY" 2 "Junto is good to go." "$DOUGH_T"
+  probe "an honest NOT READY report in a Dough session" 0 "NOT READY: Junto, 5 blockers." "$DOUGH_T"
+  unset DOUGH_REPO DOUGH_STATE
+else
+  echo "  skip  DOUGH_TEST_REPO not set, the verdict probes need a dough checkout"
+fi
+
 jq -cn --arg m "We're good to go on the launch." --arg t "$GTM_T" '{last_assistant_message:$m,transcript_path:$t,prompt_id:"probe1"}' \
   | bash "$HOOK" >/dev/null 2>&1 && echo "  ok    fires once per turn" || { echo "  FAIL  fired twice in one turn"; fail=$((fail+1)); }
 

@@ -514,3 +514,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_formatter_hook_breaks_scripted_patch: the formatter hook reflows after Write, so a scripted str.replace no-ops silently; use Edit or assert old in s
 - project_travis_trials_2026_11_02: Travis trials (AuraPath PIP vs Botified, Baptize churches); reply sent 11/2, domains 11/3, sends 11/13 to 11/18; 27 PIP firms, 24 verified emails
 - feedback_client_work_finish_everything: client work runs until only hands-only blockers are left, each on a BLOCKED line (Caleb, AuraPath night 11/2)
+- feedback_ff_home_pop_2026_11_02: FF home must stand out vs church site builders; no default paper, text outweighs drawings, real sites in browser frames, small playable hero gizmos

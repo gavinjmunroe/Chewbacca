@@ -526,3 +526,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_find_christian_students_via_networks: find Christian students/creators via fellowship IG followers + treg profile lookups, not web search; faith from bio OR captions (11/3)
 - feedback_ff_outbound_one_email_at_a_time: FF outbound is reviewed w Caleb one email at a time, evidence shown, never a batch ok
 - project_ff_outbound_eye_review_2026_11_03: FF 11/3 outbound list, 104 churches eye-checked from 1,297, exclusion and eye-check rules
+- project_dough_runs_ff_outbound_2026_11_03: Dough is being upgraded so FF outbound runs through it, email channel first, order of work

@@ -230,6 +230,26 @@ lists and ledger (`ops/README.md` in gavinjmunroe/firm-foundation is the model).
   outbound to the other ucla innovation event founders!" LinkedIn connection
   notes are his to send, since the api-anything LinkedIn site is read-only.
 
+## A fix to our outbound ships in Dough too (2026-11-03)
+
+Dough (calebnewtonusc/dough) is the outbound product we sell founders, and FF
+is meant to run on it. On 11/3 a full day of fixes to FF's church outbound
+(lines checked by eye on phone screenshots, service times read out of images,
+guest-first hooks, titles like Pastor skipped in greetings, per-church copy
+vetting, verify results kept on reload, merge-not-overwrite) all landed in
+the FF repo and the kit's gtme. Caleb asked "is dough upgraded and fixed like
+crazy from all the stuff we've gone through recently?" and the answer was no:
+Dough main still only had the Dripify pilot, and it can't send email at all.
+
+- When a fix to a list, a line, a gate or a reload applies to any founder's
+  outbound, put a row in the work ledger to port it to Dough in the same turn,
+  naming the bug and the test that would catch it there.
+- FF outbound moves onto Dough (Caleb, 11/3: "we needa get it right to do our
+  outbound for FF through it"). Until Dough has an email channel, FF sends
+  through gtme, and nobody says Dough is ready for FF before a real FF send has
+  gone through it with Caleb's ok. Ledger rows: dough-go-ham-ff-1103,
+  dough-port-ff-gate-1103, dough-every-channel-1103.
+
 ## Video in outbound (2026-10-12, Firm Foundation)
 
 Caleb: "The video will make response rate 100x" and "This gotta result in a

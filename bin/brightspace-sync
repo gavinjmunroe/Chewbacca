@@ -9,6 +9,12 @@ dates to Apple Reminders, and download course files.
   brightspace-sync files <course> [--since YYYY-MM-DD] [--from-chapter N] [--also REGEX] [--out DIR] [--apply]
   brightspace-sync transcripts <course> [--from-chapter N] [--out DIR] [--apply]
   brightspace-sync links <course>          Panopto recording links in a course
+  brightspace-sync decks <course|all> [--sheet ID] [--out DIR] [--apply]
+                                           every Google Slides deck the course's
+                                           master sheet links, as PDF and text
+
+files also runs decks when the course ledger (~/coursework/courses/<code>.yml)
+names a master_sheet, because a course like ACAD 185 posts no files at all.
 
 Auth is the session `chewbacca api login brightspace` imports from your
 browser (or one api-anything saved under your Brightspace host).
@@ -21,7 +27,7 @@ files a security ticket. A 401, 403 or 429 stops the run immediately.
 Scans never write. reminders and files only act with --apply.
 
 BRIGHTSPACE_FIXTURE=<file.json> replaces the network with {"path prefix": response}
-for tests.
+for tests. GOOGLE_EXPORT_FIXTURE=<dir> serves Google exports from <dir>/<id>.<ext>.
 """
 import argparse
 import datetime as dt
@@ -331,7 +337,111 @@ def cmd_links(client, a):
 
 
 def cmd_files(client, a):
-    sync_files(client, pick(client, a.course), a)
+    c = pick(client, a.course)
+    sync_files(client, c, a)
+    sheet = master_sheet(c["code"])
+    if sheet:
+        sync_decks(c["code"], sheet, a)
+
+
+COURSES = Path(os.environ.get("COURSEWORK_DIR", "~/coursework")).expanduser() / "courses"
+
+
+def master_sheet(code):
+    """The Google Sheet id a course ledger names as master_sheet, or None."""
+    f = COURSES / (re.sub(r"[\s_-]+", "-", code).lower() + ".yml")
+    m = f.exists() and re.search(r"^master_sheet:\s*[\"']?([\w-]{20,})", f.read_text(), re.M)
+    return m[1] if m else None
+
+
+def google_export(kind, gid, fmt):
+    """Bytes of a Google file exported as fmt. Link-shared files need no sign-in."""
+    fx = os.environ.get("GOOGLE_EXPORT_FIXTURE")
+    if fx:
+        return (Path(fx) / f"{gid}.{fmt}").read_bytes()
+    url = (f"https://docs.google.com/spreadsheets/d/{gid}/export?format={fmt}" if kind == "sheet"
+           else f"https://docs.google.com/{kind}/d/{gid}/export/{fmt}")
+    with urllib.request.urlopen(url, timeout=120) as r:
+        return r.read()
+
+
+def sheet_decks(xlsx):
+    """(session, title, kind, id) for each Google Slides or Docs link in a master sheet."""
+    import io
+    import openpyxl
+    wb = openpyxl.load_workbook(io.BytesIO(xlsx))
+    seen = set()
+    for ws in wb:
+        for row in ws.iter_rows():
+            sid = str(row[0].value or "").strip()
+            # Only session rows. The other tabs hold ~40 classmates' pitch and
+            # exercise decks (2026-11-02 sheet), which are not lecture material.
+            if not re.fullmatch(r"W\d+S\d+", sid):
+                continue
+            for cell in row:
+                link = cell.hyperlink.target if cell.hyperlink else ""
+                m = re.search(r"docs\.google\.com/(presentation|document)/d/([\w-]{20,})", link or "")
+                if not m or m[2] in seen:
+                    continue
+                seen.add(m[2])
+                title = str(cell.value or "").strip()
+                if title.startswith("http"):
+                    title = m[2]
+                yield sid, title, m[1], m[2]
+
+
+def sync_decks(code, sheet, a):
+    """Every deck the master sheet links into <a.out>/<CODE>/<session> <title>.pdf plus .txt.
+
+    ACAD 185 posts nothing to Brightspace Content. Every lecture deck is a
+    Google Slides link in the master sheet, so the Content walk found zero and
+    nothing pulled W8S15 onward: on 2026-11-02 the team built A20 from the
+    dropbox brief alone, a text deck, when the W10S20 lecture that assigned it
+    asked for an AI-image storyboard. The deck is the spec.
+    """
+    out = Path(a.out).expanduser() / safe(code).replace(" ", "-")
+    xlsx = google_export("sheet", sheet, "xlsx")
+    new = 0
+    for sid, title, kind, gid in sheet_decks(xlsx):
+        stem = out / safe(f"{sid} {title}")
+        if Path(f"{stem}.txt").exists() or Path(f"{stem}.pdf").exists():
+            continue
+        new += 1
+        if not a.apply:
+            print(f"would save  {stem.name}.pdf")
+            continue
+        try:
+            pdf = google_export(kind, gid, "pdf")
+        except (urllib.error.URLError, OSError) as e:
+            print(f"not shared  {stem.name}: {e}", file=sys.stderr)
+            continue
+        if not pdf.startswith(b"%PDF"):
+            print(f"not shared  {stem.name}: Google returned a sign-in page", file=sys.stderr)
+            continue
+        out.mkdir(parents=True, exist_ok=True)
+        Path(f"{stem}.pdf").write_bytes(pdf)
+        subprocess.run(["pdftotext", "-layout", str(Path(f"{stem}.pdf")), str(Path(f"{stem}.txt"))],
+                       stderr=subprocess.DEVNULL)
+        print(f"saved       {stem.name}.pdf")
+    if a.apply:
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "master.xlsx").write_bytes(xlsx)
+    print(f"{new} linked decks" + ("" if a.apply else " (dry run, pass --apply)"), file=sys.stderr)
+    return new
+
+
+def cmd_decks(client, a):
+    if a.course == "all":
+        # What the daily daemon job runs: every ledger that names a master sheet.
+        for f in sorted(COURSES.glob("*.yml")):
+            sheet = master_sheet(f.stem)
+            if sheet:
+                sync_decks(f.stem.upper(), sheet, a)
+        return
+    sheet = a.sheet or master_sheet(a.course)
+    if not sheet:
+        raise Stop(f"no master_sheet in the {a.course} ledger; pass --sheet <Google Sheet id>")
+    sync_decks(a.course, sheet, a)
 
 
 def sync_files(client, c, a):
@@ -442,6 +552,11 @@ def main():
     f.add_argument("--apply", action="store_true")
     l = sub.add_parser("links")
     l.add_argument("course")
+    k = sub.add_parser("decks")
+    k.add_argument("course")
+    k.add_argument("--sheet", help="Google Sheet id; default is master_sheet from the course ledger")
+    k.add_argument("--out", default=DOWNLOADS)
+    k.add_argument("--apply", action="store_true")
     t = sub.add_parser("transcripts")
     t.add_argument("course")
     t.add_argument("--from-chapter", type=int)
@@ -449,6 +564,8 @@ def main():
     t.add_argument("--apply", action="store_true")
     a = ap.parse_args()
     try:
+        if a.cmd == "decks":
+            return cmd_decks(None, a)
         client = Client()
         if a.cmd == "courses":
             for c in courses(client, all_terms=a.all_terms):

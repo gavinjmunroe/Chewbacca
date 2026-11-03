@@ -88,4 +88,42 @@ loader = importlib.machinery.SourceFileLoader("bs", sys.argv[1])
 spec = importlib.util.spec_from_loader("bs", loader); m = importlib.util.module_from_spec(spec); loader.exec_module(m)
 assert "d2lSessionVal=fake-session" in m.cookie_header(), m.cookie_header()
 PY
+
+# decks: ACAD 185 posts no Content files. Every lecture deck is a Google Slides
+# link in the master sheet, so the Content walk found nothing after 10/16 and
+# A20 was built on 2026-11-02 without the W10S20 lecture that assigned it.
+GX="$T/gx"; mkdir -p "$GX" "$T/cw/courses"
+python3 - "$GX" <<'PY2'
+import openpyxl, sys
+wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Schedule and Deliverables"
+ws.append(["Session ID", "Date", "Session Topic"])
+rows = [("W10S20", "Storytelling for Product Leaders", "presentation/d/DECKaaaaaaaaaaaaaaaaaaaa1"),
+        ("W11S21", "Advertising in the Age of AI", "presentation/d/DECKbbbbbbbbbbbbbbbbbbbb2"),
+        ("W11S22", "Private Deck", "presentation/d/DECKcccccccccccccccccccc3"),
+        ("W12S23", "Same deck linked twice", "presentation/d/DECKaaaaaaaaaaaaaaaaaaaa1")]
+for i, (sid, title, path) in enumerate(rows, start=2):
+    ws.cell(i, 1, sid); c = ws.cell(i, 3, title); c.hyperlink = f"https://docs.google.com/{path}/edit"
+wb.save(f"{sys.argv[1]}/SHEETxxxxxxxxxxxxxxxxxxxxxxx.xlsx")
+for gid in ("DECKaaaaaaaaaaaaaaaaaaaa1", "DECKbbbbbbbbbbbbbbbbbbbb2"):
+    open(f"{sys.argv[1]}/{gid}.pdf", "wb").write(b"%PDF-1.4\n%%EOF\n")
+open(f"{sys.argv[1]}/DECKcccccccccccccccccccc3.pdf", "wb").write(b"<html>Sign in</html>")
+PY2
+echo 'master_sheet: "SHEETxxxxxxxxxxxxxxxxxxxxxxx"' > "$T/cw/courses/test-101.yml"
+export GOOGLE_EXPORT_FIXTURE="$GX" COURSEWORK_DIR="$T/cw"
+out=$(python3 "$BS" decks TEST-101 --out "$T/sl" 2>&1) || fail "decks scan exited non-zero: $out"
+printf '%s\n' "$out" | grep -q 'would save  W10S20 Storytelling for Product Leaders.pdf' || fail "decks should name the session and title: $out"
+[ "$(printf '%s\n' "$out" | grep -c 'Storytelling')" = 1 ] || fail "a deck linked twice should be listed once: $out"
+[ ! -e "$T/sl" ] || fail "a decks scan without --apply wrote files"
+mkdir -p "$T/sl/TEST-101"; : > "$T/sl/TEST-101/W11S21 Advertising in the Age of AI.txt"
+out=$(python3 "$BS" decks TEST-101 --out "$T/sl" --apply 2>&1) || fail "decks --apply exited non-zero: $out"
+[ -s "$T/sl/TEST-101/W10S20 Storytelling for Product Leaders.pdf" ] || fail "W10S20 deck not saved: $out"
+[ -s "$T/sl/TEST-101/master.xlsx" ] || fail "the master sheet copy was not saved"
+printf '%s\n' "$out" | grep -q 'saved.*W11S21' && fail "a deck already on disk was pulled again: $out"
+printf '%s\n' "$out" | grep -q 'not shared  W11S22 Private Deck' || fail "a sign-in page should be reported: $out"
+[ -e "$T/sl/TEST-101/W11S22 Private Deck.pdf" ] && fail "a sign-in page was saved as a deck"
+out=$(python3 "$BS" decks all --out "$T/sl" 2>&1) || fail "decks all exited non-zero: $out"
+printf '%s\n' "$out" | grep -q 'saved' && fail "decks all pulled a deck already on disk: $out"
+printf '%s\n' "$out" | grep -q 'linked decks' || fail "decks all did not reach the TEST-101 ledger: $out"
+python3 "$BS" decks NOLEDGER-1 --out "$T/sl" >/dev/null 2>&1 && fail "decks with no master_sheet should exit non-zero"
+unset GOOGLE_EXPORT_FIXTURE COURSEWORK_DIR
 echo "  ok"

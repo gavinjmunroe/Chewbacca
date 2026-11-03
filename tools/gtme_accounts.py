@@ -535,6 +535,10 @@ def search_rows(src: dict, cache: Path, call=None, fetch=None, place=None) -> li
             name = p.get("name") or name
         if not website or not name or (state and st and st.upper() != state):
             continue
+        # a page's own title names the church, so a stranger's page could claim any name: when the
+        # hit was the org's own site, Maps has to agree on the domain
+        if not h["shared"] and p.get("website") and _domain(p["website"]) != _domain(website):
+            continue
         rows.append({"key": _domain(website), "name": name, "city": city, "state": st, "revenue": None,
                      "headcount": None, "ntee": "", "website": website, "category": category,
                      "size": f"{p.get('reviewCount')} Google reviews" if p.get("reviewCount") is not None else "",
@@ -735,9 +739,11 @@ def enrich_one(a: dict, tools, words, growth, acc: dict | None = None, titles=No
             if acc.get("page_signals") and au.get("status") == "ok":
                 rec["signals"] = page_lines(audit_site, au.get("final_url") or rec["website"], acc["page_signals"],
                                             org=rec.get("maps_name") or rec.get("name", ""))
-            # what the search found comes first: it's the reason this org is on the list
-            for n, pages in (rec.get("seed_signals") or {}).items():
-                rec.setdefault("signals", {})[n] = pages + (rec.get("signals") or {}).get(n, [])
+            # A search snippet only says where to look. Its text is a stranger's page as Google
+            # summarized it, so it's kept apart and never reaches a Jev check or a quoted line:
+            # only what the org's own site says does (security review, 11/2).
+            if rec.get("seed_signals"):
+                rec["search_hits"] = rec["seed_signals"]
             rec["page_emails"] = [e.get("email") for e in au.get("page_emails") or []][:8]
             rec["chms"] = au.get("chms") or ""
             rec["jobs"] = lead_card.jobs(au.get("final_url") or rec["website"])

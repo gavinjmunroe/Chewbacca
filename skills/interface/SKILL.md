@@ -810,3 +810,18 @@ two-column only at `lg:`, so in Caleb's window the text stacked over a big
 empty right side and the phones slid under the headlines ("Bruh u lazy ahh").
 Split columns at `md:` (768) unless the content truly needs more width, and
 screenshot at 375, about 940, and 1440 before calling it done.
+
+## Every section pops a different way, and the way comes from its job
+
+Firm Foundation home, 11/2. Write the spec first: one row per section with its job,
+what the reader should feel in three seconds, and one pop technique no other section
+uses (motion, the product as the brightest object, real photography, faces, the payoff
+shape). The site's signature background lives in one section only ("now ur spamming
+the wavy background"). Gradients and glows used as filler read as slop. A grid of
+same-color rounded boxes inside a bigger box is the worst offender ("SO SLOP I am
+disgusted"): put steps in one line of type with arrows, quotes on a flat card, and let
+a full-bleed solid ground carry the close. Text that must be read gets its own weight
+and a halo off the image behind it, so it never blends into the art. Parallax is
+small (speed 0.06 to 0.08) and off for reduced motion and touch. Props drawn into a
+3D scene use that scene's own medium (its faces, dots and palette), or they look
+pasted on; six passes of stroked instruments got "desmos" and "awful" and were parked.

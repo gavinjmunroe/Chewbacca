@@ -866,16 +866,20 @@ class ChurchMode(unittest.TestCase):
                  "date": "Apr 26, 2026", "snippet": "Register for baptism"},
                 {"url": "https://hope.churchcenter.com/registrations/events/2", "title": "Baptism Class"},
                 {"url": "https://www.gracefresno.example/baptism", "title": "Baptism | Grace Fresno"},
-                {"url": "https://www.texaschurch.example/baptism", "title": "Baptism | Lone Star"}]}}
+                {"url": "https://www.texaschurch.example/baptism", "title": "Baptism | Lone Star"},
+                {"url": "https://spoof.example/baptism", "title": "Baptism"}]}}
         pages = {"https://hope.churchcenter.com/registrations/events/1":
                  '<meta property="og:title" content="Baptism Sunday - Hope Church OC"/>',
                  "https://www.gracefresno.example/": "<title>Home - Grace Fresno</title>",
-                 "https://www.texaschurch.example/": "<title>Home - Lone Star Church</title>"}
+                 "https://www.texaschurch.example/": "<title>Home - Lone Star Church</title>",
+                 "https://spoof.example/": "<title>Home - Other Church</title>"}
         places = {"Hope Church OC CA": {"name": "Hope Church OC", "website": "https://hopeoc.example/",
                                         "address": "1 Main St, Irvine, CA 92618", "category": "Non-denominational church",
                                         "reviewCount": 410},
                   "Grace Fresno CA": {"name": "Grace Fresno", "address": "2 Elm, Fresno, CA 93701",
-                                      "category": "Baptist church"},
+                                      "category": "Baptist church", "website": "https://gracefresno.example/"},
+                  # claims a name, but Maps has no site for it, so it can't vouch: dropped
+                  "Other Church CA": {"name": "Other Church", "address": "4 Pine, Fresno, CA 93701"},
                   "Lone Star Church CA": {"name": "Lone Star Church", "address": "3 Oak, Austin, TX 78701"}}
         src = {"kind": "search", "queries": ["baptism 2026 churchcenter CA"], "state": "CA", "signal": "baptism"}
         with tempfile.TemporaryDirectory() as d:

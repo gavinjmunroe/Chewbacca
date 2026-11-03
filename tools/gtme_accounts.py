@@ -536,8 +536,9 @@ def search_rows(src: dict, cache: Path, call=None, fetch=None, place=None) -> li
         if not website or not name or (state and st and st.upper() != state):
             continue
         # a page's own title names the church, so a stranger's page could claim any name: when the
-        # hit was the org's own site, Maps has to agree on the domain
-        if not h["shared"] and p.get("website") and _domain(p["website"]) != _domain(website):
+        # hit was the org's own site, Maps has to list that same domain, and a place with no site
+        # can't vouch for it either (fail closed, security review 11/2)
+        if not h["shared"] and (not p.get("website") or _domain(p["website"]) != _domain(website)):
             continue
         rows.append({"key": _domain(website), "name": name, "city": city, "state": st, "revenue": None,
                      "headcount": None, "ntee": "", "website": website, "category": category,

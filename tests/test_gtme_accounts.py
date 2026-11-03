@@ -317,6 +317,12 @@ class Parts(unittest.TestCase):
         self.assertEqual([c["name"] for c in ga.leaders(contacts)], ["Noah Overby"])
         self.assertEqual([c["name"] for c in ga.leaders(contacts, ["Head of Revenue"])][0], "Dana Wells")
 
+    def test_a_title_is_never_a_buyer_name(self):
+        for bad in ["Managing Attorney", "Firm Founder", "Recent Articles", "Managing Partner", "Cher"]:
+            self.assertFalse(ga.is_person(bad), bad)
+        for good in ["Jonathan R. Marko", "Cherie Lobb", "Patrick O’Keefe", "JOSEPH BRUGNOLI"]:
+            self.assertTrue(ga.is_person(good), good)
+
     def test_blind_sample_refuses_the_full_run(self):
         # Michigan PIP, 11/2: 145 sites read, 1 buyer, because no title the reader knew fit.
         def audit(url, _, titles="church", buyer_titles=None):

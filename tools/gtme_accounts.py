@@ -119,6 +119,17 @@ LEADER = re.compile(r"\b(ceo|chief|president|executive director|coo|cfo|cto|cio|
 # `titles` order, so this only has to be wide enough to hold the real buyer: at 3, with the
 # tech titles sorted first, Marko Law's three slots went to the IT director and two others.
 LEADERS_KEPT = 6
+# A buyer's name with a title or heading word in it is not a person. Any reader can hand one
+# over: on 2026-11-02 "Managing Attorney", "Firm Founder" and "Recent Articles" reached Jev as
+# names on the Michigan PIP list, and Jev passed them at 0.82 to 0.91.
+NOT_PERSON = re.compile(r"\b(partners?|founders?|owners?|attorneys?|lawyers?|managing|principal|firm|"
+                        r"articles?|recent|news|blog|team|staff|leadership|management|director|officer|"
+                        r"president|chief|ceo|coo|cfo|cto|executive|contact|about|office)\b", re.I)
+
+
+def is_person(name) -> bool:
+    words = str(name or "").split()
+    return len(words) >= 2 and not NOT_PERSON.search(str(name))
 # The sample read before a full run, and the buyer fill under which it stops. On 2026-11-02 the
 # Michigan PIP list read all 145 firms and found a buyer at 1, because no title the reader knew
 # was a law title. 20 sites cost about a minute; the bar is a guess, never measured on a list
@@ -451,7 +462,7 @@ def score(rec: dict, acc: dict, words: re.Pattern, today: dt.date, about=None) -
     criteria = acc.get("criteria") or {}
     cands = [{"contact_id": c.get("email") or c.get("name"), "full_name": c.get("name"), "title": c.get("title", ""),
               "email": c.get("email") or "", "email_verified": False,  # published, never run through a validator
-              "source_url": c.get("source_url", "")} for c in rec.get("leaders") or []]
+              "source_url": c.get("source_url", "")} for c in rec.get("leaders") or [] if is_person(c.get("name"))]
     prim = gtme_score.resolve_primary(cands, acc["titles"]) if cands else None
     pc = next((c for c in cands if prim and c["contact_id"] == prim["primary_contact_id"]), None)
     items = own_news(rec["name"], rec.get("news"))

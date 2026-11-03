@@ -287,9 +287,9 @@ LENDER_YES = 0.6
 
 def jev_judge(states: list[dict], question: str) -> list[float | None]:
     sys.path.insert(0, str(ROOT / "bin" / "lib"))
-    try:
-        import jev
-    except ImportError:
+    import gtme_jev  # the kit's Jev by path, never tools/jev.py (11/2)
+    jev = gtme_jev.kit_jev()
+    if jev is None:
         return [None] * len(states)
     out: list[float | None] = []
     for i in range(0, len(states), JUDGE_BATCH):

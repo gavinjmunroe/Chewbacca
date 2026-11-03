@@ -181,9 +181,9 @@ def match_question(firm: str, name: str, pitch: str) -> str:
 
 def jev_match(firm: str, names: list[str], pitch: str, names_source=lambda n: "") -> list[tuple[str, float]] | None:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "bin" / "lib"))
-    try:
-        import jev
-    except ImportError:
+    import gtme_jev  # the kit's Jev by path, never tools/jev.py (11/2)
+    jev = gtme_jev.kit_jev()
+    if jev is None:
         return None
     hits, answered = [], False
     for i in range(0, len(names), MATCH_BATCH):
@@ -231,8 +231,8 @@ def _jev():
     lib = str(Path(__file__).resolve().parent.parent / "bin" / "lib")
     if lib not in sys.path[:1]:
         sys.path.insert(0, lib)
-    import jev
-    return jev
+    import gtme_jev  # the kit's Jev by path, never tools/jev.py (11/2)
+    return gtme_jev.kit_jev()
 
 
 def confirm_hits(firm: str, hits: list[tuple[str, float]], pitch: str, source_of, ask=None) -> list[tuple[str, float]]:

@@ -73,5 +73,21 @@ class Grade(unittest.TestCase):
         self.assertFalse(any(k.startswith("grade:") for k in ask.calls[0][1]))
 
 
+class KitJev(unittest.TestCase):
+    def test_kit_jev_ignores_a_same_named_module(self):
+        # 11/2: tools/jev.py (no ask) shadowed bin/lib/jev.py and every buyer check was held
+        import types
+        old = sys.modules.get("jev")
+        sys.modules["jev"] = types.ModuleType("jev")
+        try:
+            gtme_jev._KIT_JEV = None
+            self.assertTrue(hasattr(gtme_jev.kit_jev(), "ask"))
+        finally:
+            if old is None:
+                sys.modules.pop("jev", None)
+            else:
+                sys.modules["jev"] = old
+
+
 if __name__ == "__main__":
     unittest.main()

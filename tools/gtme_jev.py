@@ -32,11 +32,30 @@ LINE_OK = 0.8
 RULE_BROKEN = 0.5
 
 
+_KIT_JEV = None
+
+
+def kit_jev():
+    """The kit's Jev client, bin/lib/jev.py, loaded by path. `import jev` is not safe here:
+    tools/jev.py has the same name and no ask(), and once tools sat first on sys.path (11/2, a
+    Baptize rebuild) every buyer check came back "Jev not scored, held" and the why-now check
+    crashed. None when the file is missing."""
+    global _KIT_JEV
+    if _KIT_JEV is None:
+        import importlib.util
+        path = ROOT / "bin" / "lib" / "jev.py"
+        if not path.exists():
+            return None
+        spec = importlib.util.spec_from_file_location("chewbacca_kit_jev", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        _KIT_JEV = mod
+    return _KIT_JEV
+
+
 def _ask(state: dict, questions: dict):
-    sys.path.insert(0, str(ROOT / "bin" / "lib"))
-    try:
-        import jev  # noqa: E402
-    except ImportError:
+    jev = kit_jev()
+    if jev is None:
         return None, None
     return jev.ask(state, questions, decision="gtme-email-check"), jev
 
@@ -142,10 +161,8 @@ ABOUT_OK = 0.8
 
 
 def _ask_about(state: dict, questions: dict):
-    sys.path.insert(0, str(ROOT / "bin" / "lib"))
-    try:
-        import jev  # noqa: E402
-    except ImportError:
+    jev = kit_jev()
+    if jev is None:
         return None, None
     return jev.ask(state, questions, decision="gtme-signal-about"), jev
 

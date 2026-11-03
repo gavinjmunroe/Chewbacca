@@ -1035,9 +1035,9 @@ AUTOSEND_THRESHOLD = 0.85
 def jev_says_yes(text: str):
     """Jev's probability that a reply is a plain yes to talking, or None."""
     sys.path.insert(0, str(op.ROOT / "bin" / "lib"))
-    try:
-        import jev  # noqa: E402
-    except ImportError:
+    import gtme_jev  # the kit's Jev by path, never tools/jev.py (11/2)
+    jev = gtme_jev.kit_jev()
+    if jev is None:
         return None
     answers = jev.ask({"reply": text[:2000]}, {"yes": {"type": "noul", "instructions":
         "This is a reply to a cold email offering to help with the sender's website and follow-up. "

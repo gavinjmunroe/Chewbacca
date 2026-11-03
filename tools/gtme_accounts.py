@@ -858,8 +858,9 @@ def score(rec: dict, acc: dict, words: re.Pattern, today: dt.date, about=None) -
 
 
 def jev_ask(state: dict, questions: dict, decision: str):
-    import jev
-    if not jev.allowed():
+    import gtme_jev
+    jev = gtme_jev.kit_jev()
+    if jev is None or not jev.allowed():
         return None
     return jev.ask(state, questions, decision=decision)
 
@@ -1049,7 +1050,18 @@ def church_fields(row: dict, rec: dict, probs: dict, acc: dict) -> None:
             held.append("excluded: " + c["name"])
         elif verdicts[c["name"]] != "pass" and c.get("required"):
             held.append(c["name"] + " " + verdicts[c["name"]])
-    row["segment"] = segment_of(row, verdicts, acc) if row.get("buyer") else ""
+    weak = False
+    for sig in acc.get("page_signals") or []:
+        # Jev reads every line a page gave, but the client sees only the one we quote. On 11/2 Jev
+        # passed churches whose quotable line was a sermon title or a description with no date,
+        # and a hand read had to hold 10 of 98. A signal can name what its quoted line must show.
+        must = sig.get("evidence_must")
+        line = row.get(sig["name"] + "_evidence") or ""
+        if must and not re.search(must, line, re.I):
+            weak = True
+            held.append(f"{sig['name']} line shows no {sig.get('evidence_must_label') or 'required detail'}"
+                        if line else f"no {sig['name']} line to quote")
+    row["segment"] = segment_of(row, verdicts, acc) if row.get("buyer") and not weak else ""
     if not row.get("buyer"):
         held.append("no named person on their site" if not row.get("buyer_check") else "person " + row["buyer_check"])
     elif not row["segment"] and not held:

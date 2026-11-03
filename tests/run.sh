@@ -266,6 +266,8 @@ fi
 
 # ── people ────────────────────────────────────────────────────────────────────
 if group "people"; then
+  check "people-amber: Amber's rules pass their own tests, the filler twins agree, and people-check routes unsure rows to Jev" \
+    python3 "$ROOT/tests/test_people_amber.py" "$ROOT"
   check  "contact-photo pulls a card photo from a Sources db and refuses a card with none" bash "$ROOT/tests/contact_photo.sh"
   # `people distill --help` used to start a real distill (2026-10-16): --help on
   # a subcommand prints its usage and never opens the store.

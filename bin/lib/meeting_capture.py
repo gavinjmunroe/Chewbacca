@@ -52,6 +52,9 @@ import unicodedata
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from transcript_filler import strip_transcript_filler  # noqa: E402
+
 APP = "Chewbacca"
 # The same model bin/room-listen loads, so a meeting and a room transcript read
 # the same. small.en ran faster than real time on this Mac on 2026-09-29 with
@@ -122,6 +125,10 @@ def clean_transcript(text: str) -> str:
     text = re.sub(r"\b(\w+)(?:\s+\1\b){2,}", r"\1", text, flags=re.I)
     if text.lower().strip(".! ") in HALLUCINATIONS:
         return ""
+    # Amber's filler list (bin/lib/transcript_filler.py): a chunk that ends in
+    # "Thank you for watching." or "Subtitles by the Amara.org community" keeps
+    # the real words before it and loses the outro the silence decoded to.
+    text = strip_transcript_filler(text)["text"]
     return text if re.search(r"[A-Za-z0-9]", text) else ""
 
 

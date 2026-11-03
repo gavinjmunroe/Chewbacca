@@ -336,6 +336,16 @@ class Parts(unittest.TestCase):
                                None, "https://other.example/", r"no[- ]fault|\bPIP\b")
         self.assertFalse(none["ok"])
 
+    def test_a_blocked_site_is_unread_never_no(self):
+        # Sinas Dramis answered 403 on 11/2 and came back "no" for PIP work
+        ev = ga.icp_evidence(SimpleNamespace(fetch=lambda u: {"html": "<h1>403 Forbidden</h1>", "final_url": u}),
+                             None, "https://sinasdramis.com/", "PIP")
+        self.assertIsNone(ev["ok"])
+        acc = {"titles": ["Founder"], "criteria": {}, "icp": {"must_show": "PIP"}}
+        rec = {"name": "Sinas Dramis", "city": "", "state": "MI", "website": "https://sinasdramis.com/", "icp_fit": ev}
+        row = ga.score(rec, acc, ga.re.compile("x"), date(2026, 11, 2), about=lambda o, s: (s, []))
+        self.assertEqual(row["icp_fit"], "unread")
+
     def test_icp_check_follows_only_the_orgs_own_pages(self):
         fetched = []
 

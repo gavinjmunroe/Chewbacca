@@ -636,6 +636,7 @@ def titles_key(titles, must_show="") -> str:
 
 
 ICP_LINK = re.compile(r'href="([^"#]+)"[^>]*>([^<]{0,80})<', re.I)
+BLOCKED = re.compile(r"\b403\b|forbidden|access denied|just a moment|captcha|attention required|are you a robot", re.I)
 ICP_PAGES = 4  # links followed past the home page; PIP work sat one click deep on 2026-11-02
 
 
@@ -668,6 +669,11 @@ def icp_evidence(audit_site, lead_card, url: str, must_show: str) -> dict:
     or PIP work, and that check ran as a side script outside Dough."""
     rx = re.compile(must_show, re.I)
     html, final = page_html(audit_site, lead_card, url)
+    # A site that blocks us or won't load is unread, never "doesn't do the work": Sinas Dramis,
+    # one of Michigan's best-known no-fault firms, answered 403 on 2026-11-02 and came back "no"
+    words = re.sub(r"<[^>]+>", " ", html).split()
+    if not html.strip() or (len(words) < 150 and BLOCKED.search(html)):
+        return {"ok": None, "line": "", "url": final, "why": "site unread (blocked or empty)"}
     pages = [(html, final)]
     words = re.compile(must_show + r"|practice|services|what we do|about", re.I)
     from urllib.parse import urljoin
@@ -850,7 +856,7 @@ def score(rec: dict, acc: dict, words: re.Pattern, today: dt.date, about=None) -
             "why_now": top.get("what", ""), "why_now_date": top.get("date", ""),
             "why_now_source": top.get("source", ""), "tier_rationale": tier["rationale"],
             "account_source": rec.get("account_source", ""), "icp_fit": "yes" if icp.get("ok") else
-            ("no" if "ok" in icp else ""), "icp_line": icp.get("line", "")[:240], "icp_source": icp.get("url", ""),
+            ("unread" if icp.get("ok") is None and "ok" in icp else "no" if "ok" in icp else ""), "icp_line": icp.get("line", "")[:240], "icp_source": icp.get("url", ""),
             "_page_emails": rec.get("page_emails") or []}
 
 
@@ -1297,6 +1303,7 @@ def build(client: str, acc: dict, work: Path, *, limit: int | None = None, worke
                "jev_held": [r["org"] for r in rows if "held" in r["buyer_check"]],
                "tiers": {t: sum(1 for r in rows if r["tier"] == t) for t in (1, 2, 3)},
                "jev_calls": jev_calls, "dropped_no_site": len(accounts) - len({r["key"].split("#")[0] for r in recs}),
+               "icp_unread": [r["org"] for r in rows if r.get("icp_fit") == "unread"],
                "dnc": where, "treg_priced_rows": sum(1 for r in rows if r["treg_find"]),
                "treg_priced_usd": round(treg_total, 2), "treg_budget_usd": acc.get("treg_budget_usd")}
     if acc.get("segments"):
@@ -1326,7 +1333,7 @@ def find_emails(rows: list[dict], client: str, acc: dict, work: Path, finder=Non
     for r in rows:
         # "not checked" and "clear" are both sendable; only a suppression stops a spend. On
         # 2026-11-02 any non-empty dnc skipped all 54 buyers, and the run spent nothing.
-        if not r["buyer"] or r.get("icp_fit") == "no" or str(r.get("dnc") or "").startswith("SUPPRESSED"):
+        if not r["buyer"] or r.get("icp_fit") in ("no", "unread") or str(r.get("dnc") or "").startswith("SUPPRESSED"):
             continue
         try:
             if r["buyer_email"]:
@@ -1495,6 +1502,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  Jev-confirmed buyers: {summary['jev_confirmed']}; held: {', '.join(summary['jev_held']) or 'none'}")
     print("  fill: " + ", ".join(f"{k} {v}/{n}" for k, v in f.items()))
     print(f"  Jev calls: {summary['jev_calls']}; sourced but no site found: {summary['dropped_no_site']}")
+    if summary.get("icp_unread"):
+        print(f"  sites we couldn't read, so ICP fit is unknown (check by hand): {', '.join(summary['icp_unread'])}")
     print(f"  dnc: {summary['dnc']}")
     print(email_line(summary))
     return 0

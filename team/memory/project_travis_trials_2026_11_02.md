@@ -11,7 +11,7 @@ judged on meetings booked, sent from a separate Clay workspace on lookalike doma
 is Baptize the World: get pastors to register to baptize on Pentecost, May 16, 2027, with a
 100-church sample, then 200, then 2,000 to 5,000.
 
-Caleb replied 11/2 at 9:57pm from calebnew@usc.edu, cc Gavin. The reply says we cover both
+Caleb replied 11/2 at 9:57pm from his USC inbox, cc Gavin. The reply says we cover both
 trials (about $135 the first month for AuraPath, under $60 for Baptize), that the domains
 getaurapath.com, aurapathhq.com and aurapath-ai.com get bought 11/3 with 6 Google Workspace
 inboxes, and that warmup puts the first sends at 11/13 to 11/18. It asks six setup questions
@@ -22,4 +22,4 @@ The PIP list ran through upgraded Dough (`gtme accounts --client aurapath-pip`, 
 fix/gtme-accounts-law-buyers and FF fix/audit-law-titles, not merged): 270 firms sourced,
 27 with a confirmed owner and PIP work on their own site, 24 with treg-verified emails. Paid
 email finds are cached in the client's accounts/emails.json so a rerun never pays twice.
-Botified teardown: dough docs/competitors/botified.md. Plan: dough docs/IMPROVEMENT-PLAN.md.
+The Botified teardown is in dough docs/competitors/botified.md and the plan is dough docs/IMPROVEMENT-PLAN.md.

@@ -524,3 +524,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - reference_ff_workspace_profile_photos: FF Workspace photos are admin-set only, all 3 set to the FF mark 11/3
 - project_baptize_trial_2026_11: Baptize the World church trial for Travis, 85 of 100 churches, C at 0, emails unverified (11/3)
 - feedback_find_christian_students_via_networks: find Christian students/creators via fellowship IG followers + treg profile lookups, not web search; faith from bio OR captions (11/3)
+- feedback_ff_outbound_one_email_at_a_time: FF outbound is reviewed w Caleb one email at a time, evidence shown, never a batch ok

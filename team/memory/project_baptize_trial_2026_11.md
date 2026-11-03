@@ -17,4 +17,4 @@ sent or loaded anywhere.
 Open: 15 churches short of 100, and segment C (Pentecostal or charismatic plants under 3 years)
 is 0. ARC's finder (26 CA plants, 11/3) gave 0 too: plants rarely post a dated baptism, so C needs Baptize's own plant contacts. Of the 21 published emails (verified 11/3): 14 deliverable, 4 catch-all, 1 risky, 1 bounced and removed, 1 unchecked. The drip's render and send gates wait on Baptize's registered list (Q3), sender,
 inboxes and mailing address (Q4), and form and FAQ links (Q5). The reply to Travis (costs plus Q1 to Q6) went out 11/2 9:57pm PT from
-Caleb's USC inbox; no answer as of 11/3 noon.
+Caleb's USC inbox. An update (85 churches, 14 verified emails, the C question) followed 11/3 12:05pm.

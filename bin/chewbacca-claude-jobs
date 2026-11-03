@@ -9,6 +9,9 @@
  *   chewbacca claude-jobs status            the Railway service's jobs, last run, last error
  *   chewbacca claude-jobs latest NAME       the newest output of one job from Railway
  *   chewbacca claude-jobs trigger NAME      run one job on Railway now
+ *   chewbacca claude-jobs set-token PROJECT [SERVICE]
+ *                                           you paste the setup-token, hidden; it goes
+ *                                           straight to Railway over stdin
  *
  * The jobs live in apps/claude-jobs/jobs/, one markdown file each. The service
  * in apps/claude-jobs runs them on Railway, so they keep going with the laptop
@@ -23,6 +26,49 @@ const path = require("path");
 const APP = path.join(__dirname, "..", "apps", "claude-jobs");
 const JOBS = process.env.JOBS_DIR || path.join(APP, "jobs");
 const ENV_FILE = path.join(os.homedir(), ".chewbacca", "claude-jobs.env");
+const { spawnSync } = require("child_process");
+
+// What `claude setup-token` prints: sk-ant-oat01- then the token body.
+const OAUTH_TOKEN = /^sk-ant-oat01-[A-Za-z0-9_-]{20,}$/;
+
+// On 2026-11-02 the token was made, and the last step was Caleb finding the
+// caleb-os Variables page and pasting it there, since an agent never types a
+// token into a service. This makes that step one paste in a terminal: the
+// person types it hidden, and it reaches Railway over stdin, never argv.
+function setToken(project, service, token, run = spawnSync) {
+  if (!OAUTH_TOKEN.test(token)) return { ok: false, error: "that doesn't look like a setup-token (it starts with sk-ant-oat01-)" };
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "claude-jobs-link-"));
+  try {
+    const link = run("railway", ["link", "-p", project, "-s", service, "-e", "production"], { cwd: dir, encoding: "utf8" });
+    if (link.status !== 0) return { ok: false, error: `railway link failed: ${(link.stderr || "").trim().split("\n").pop()}` };
+    const set = run("railway", ["variables", "-s", service, "--set-from-stdin", "CLAUDE_CODE_OAUTH_TOKEN"], { cwd: dir, input: token, encoding: "utf8" });
+    if (set.status !== 0) return { ok: false, error: `railway refused: ${(set.stderr || "").trim().split("\n").pop()}` };
+    return { ok: true };
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+function readHidden(prompt) {
+  process.stderr.write(prompt);
+  spawnSync("stty", ["-echo"], { stdio: "inherit" });
+  try {
+    const buf = Buffer.alloc(4096);
+    let line = "";
+    for (;;) {
+      const n = fs.readSync(0, buf, 0, buf.length, null);
+      if (!n) break;
+      line += buf.toString("utf8", 0, n);
+      if (line.includes("\n")) break;
+    }
+    return line.trim();
+  } finally {
+    spawnSync("stty", ["echo"], { stdio: "inherit" });
+    process.stderr.write("\n");
+  }
+}
+
+module.exports = { setToken, OAUTH_TOKEN };
 
 function die(msg, code = 1) {
   console.error(msg);
@@ -52,7 +98,7 @@ function remote() {
   };
 }
 
-(async () => {
+if (require.main === module) (async () => {
   const lib = await import(path.join(APP, "lib", "jobs.js"));
   const [cmd = "list", name] = process.argv.slice(2);
   const find = () => {
@@ -89,6 +135,15 @@ function remote() {
   } else if (cmd === "trigger") {
     find();
     console.log(await remote()(`/run/${name}`, "POST"));
+  } else if (cmd === "set-token") {
+    const project = name;
+    const service = process.argv[4] || project;
+    if (!project) die("usage: chewbacca claude-jobs set-token PROJECT [SERVICE]", 2);
+    // A person pastes it. Nothing pipes a token in, so an agent can't route one through here.
+    if (!process.stdin.isTTY) die("set-token reads the token from your keyboard, so run it in a terminal", 2);
+    const r = setToken(project, service, readHidden("Paste the token from claude setup-token (hidden), then Enter: "));
+    if (!r.ok) die(r.error);
+    console.log(`CLAUDE_CODE_OAUTH_TOKEN set on ${service}. Railway redeploys it now, and scheduled jobs turn on.`);
   } else if (cmd === "-h" || cmd === "--help" || cmd === "help") {
     console.log(fs.readFileSync(__filename, "utf8").split("*/")[0].split("\n").slice(3).map((l) => l.replace(/^ \* ?/, "")).join("\n"));
   } else {

@@ -46,6 +46,8 @@ Caleb's always-on home is his joel-os instance, https://caleb-os.up.railway.app,
 
 This service is for a kit user without a joel-os instance.
 
+To turn jobs on, run `claude setup-token`, then `chewbacca claude-jobs set-token caleb-os` in a terminal and paste the token at the hidden prompt. It reaches Railway over stdin, never argv, and the command refuses piped input, so a person always does the paste.
+
 ## Railway, standalone
 
 | Variable                  | What it is                                                                     |

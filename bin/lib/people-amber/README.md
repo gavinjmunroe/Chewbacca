@@ -18,3 +18,16 @@ their own tests run here with `node --test`.
 They're ES modules (this folder's package.json says so). From CommonJS:
 `const { filterRealContacts } = await import("../people-amber/people-rank-realness.js")`.
 From Python, `bin/lib/people-amber/cli.mjs` reads JSON on stdin.
+
+## Porting these into another repo
+
+Anchored took a copy on 2026-11-02 (calebnewtonusc/anchored b0c543d, 3b168c3).
+A security review of the first push found the Jev step trusted a `jev: true`
+flag in the request body, so any caller with the dashboard key could send a
+church's names to TypeSafe. When a copy adds a Jev step:
+
+- Consent comes from the server (a stored setting or an env allowlist), never
+  only from the request.
+- Cap the records per call and put one deadline over all batches, not a
+  timeout per batch: a 5,000-row import was 125 batches.
+- Send names and labels, never phone numbers or email addresses, and test it.

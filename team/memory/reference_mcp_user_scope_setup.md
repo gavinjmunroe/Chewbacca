@@ -12,3 +12,5 @@ The `medha` (Amber) MCP server is now registered at **user scope** in `~/.claude
 `search_people` and `upsert_contact` both REQUIRE the owner `did`; `upsert_contact` nests fields under a `contact` object: `{did, contact:{name, company, ...}}` (name required). There is NO delete tool on the MCP, to remove a contact, run a one-off Firestore script from the medha-id repo via `railway run node ...` (path `users/{did}/contacts/{contactId}`; creds `GOOGLE_APPLICATION_CREDENTIALS_JSON` + `GCP_PROJECT_ID=midyear-glazing-485303-u3` come from Railway). See [[reference_medha_id_storage]] and [[reference_amber_mcp]].
 
 The `github` MCP server kept failing to connect, root cause was a **corrupted npx cache** (`ENOTEMPTY` on the zod dir), NOT the deprecation warning. Fix: `rm -rf ~/.npm/_npx/<hash>` then re-add with `claude mcp add github -s user -e GITHUB_PERSONAL_ACCESS_TOKEN=$(gh auth token) -- npx -y @modelcontextprotocol/server-github`. If any other npx-based MCP fails to connect, suspect the npx cache first.
+
+As of 2026-11-02 github and supabase run through the MCP hub with their tokens in the Keychain, and medha answers 404. See [[project_mcp_hub_2026_11_02]].

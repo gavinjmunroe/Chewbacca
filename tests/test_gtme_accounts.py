@@ -420,6 +420,11 @@ class Parts(unittest.TestCase):
         self.assertEqual(rows[3]["buyer_email"], "")  # a published email that fails verify is cleared
         self.assertEqual(out, {"found": 1, "verified_published": 1})
 
+    def test_an_email_step_that_found_nothing_says_so(self):
+        self.assertIn("found NOTHING", ga.email_line({"emails": {"found": 0, "verified_published": 0}}))
+        self.assertNotIn("NOTHING", ga.email_line({"emails": {"found": 3, "verified_published": 1}}))
+        self.assertIn("not spent", ga.email_line({"treg_priced_rows": 2, "treg_priced_usd": 0.1}))
+
     def test_buyer_named_on_another_site_is_dropped(self):
         acc = {"titles": ["Founder"], "criteria": {}}
         rec = {"name": "Marko Law", "city": "", "state": "MI", "website": "https://www.markolaw.com/",

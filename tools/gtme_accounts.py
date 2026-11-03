@@ -921,6 +921,18 @@ def find_emails(rows: list[dict], client: str, acc: dict, work: Path, finder=Non
     return {"found": found, "verified_published": checked}
 
 
+def email_line(summary: dict) -> str:
+    """11/2: the first --find-emails run skipped every row and still printed only "priced, not
+    spent", so nobody could tell the step ran and did nothing."""
+    if "emails" in summary:
+        e = summary["emails"]
+        empty = not (e["found"] or e["verified_published"])
+        return (f"  emails: {e['found']} verified found, {e['verified_published']} published checked"
+                + ("  <- ran and found NOTHING, read email_verdict" if empty else ""))
+    return (f"  treg find priced for {summary['treg_priced_rows']} rows, up to ${summary['treg_priced_usd']:.2f}, "
+            f"not spent (--find-emails spends it)")
+
+
 def write(rows: list[dict], out: Path) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     with open(out, "w", newline="") as fh:
@@ -969,8 +981,7 @@ def main(argv: list[str] | None = None) -> int:
     print("  fill: " + ", ".join(f"{k} {v}/{n}" for k, v in f.items()))
     print(f"  Jev calls: {summary['jev_calls']}; sourced but no site found: {summary['dropped_no_site']}")
     print(f"  dnc: {summary['dnc']}")
-    print(f"  treg find priced for {summary['treg_priced_rows']} rows, up to ${summary['treg_priced_usd']:.2f}, "
-          f"not spent")
+    print(email_line(summary))
     return 0
 
 

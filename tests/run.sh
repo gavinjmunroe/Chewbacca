@@ -1527,6 +1527,9 @@ if group "installer"; then
   # tests/backlog.sh also swaps HOME, so the beside-checkout fallback cannot
   # find a real backlog either.
   check  "the backlog lists open work" bash "$ROOT/tests/backlog.sh" "$ROOT" open
+  check  "chewbacca cloud prints usage and refuses a bad verb" bash "$ROOT/tests/cloud.sh" "$ROOT" usage
+  check  "chewbacca cloud list is empty with no instances" bash "$ROOT/tests/cloud.sh" "$ROOT" empty
+  check  "chewbacca cloud list names an instance and never prints its keys" bash "$ROOT/tests/cloud.sh" "$ROOT" list
 
   check  "the backlog keeps dead items and their reason" bash "$ROOT/tests/backlog.sh" "$ROOT" dead
 

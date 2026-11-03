@@ -53,6 +53,7 @@ COMMANDS=(
   "tabs|see what every other live agent tab is doing, in any runtime"
   "land|put your files or commits on origin/main without anyone else's"
   "claude-jobs|scheduled Claude jobs on your own plan, no API key, laptop shut or not"
+  "cloud|your own always-on CRM and Claude connector on Railway, one command"
   "launch|open a new named, briefed session in the Claude desktop app"
   "graph-fuse|inspect possible entity matches without merging records"
   "review-gate|run independent code review and check its current receipt"
@@ -239,6 +240,12 @@ permissions|permission|perms)
   shift
   [ $# -eq 0 ] && set -- walk
   exec python3 "$ROOT/bin/chewbacca-permissions" "$@"
+  ;;
+cloud)
+  # A per-person deploy of the joel-os template: CRM, Claude connector, and
+  # the bridge that syncs this Mac's people store to it. See bin/chewbacca-cloud.
+  shift
+  exec bash "$ROOT/bin/chewbacca-cloud" "$@"
   ;;
 claude-jobs)
   # Scheduled Claude jobs on the user's own plan via claude setup-token, run

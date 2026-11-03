@@ -15,7 +15,6 @@ State on 11/3 11am: 85 churches and 97 pastor rows (80 B, 5 P), passing list-gat
 sent or loaded anywhere.
 
 Open: 15 churches short of 100, and segment C (Pentecostal or charismatic plants under 3 years)
-is 0. Both need a plant or denomination directory source. None of the 21 published emails is
-verified. The drip's render and send gates wait on Baptize's registered list (Q3), sender,
+is 0. ARC's finder (26 CA plants, 11/3) gave 0 too: plants rarely post a dated baptism, so C needs Baptize's own plant contacts. Of the 21 published emails (verified 11/3): 14 deliverable, 4 catch-all, 1 risky, 1 bounced and removed, 1 unchecked. The drip's render and send gates wait on Baptize's registered list (Q3), sender,
 inboxes and mailing address (Q4), and form and FAQ links (Q5). The reply to Travis is drafted,
 not sent.

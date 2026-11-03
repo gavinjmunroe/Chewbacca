@@ -876,6 +876,29 @@ class ChurchMode(unittest.TestCase):
         self.assertEqual(row["segment"], "")
         self.assertIn("baptism line is a sermon", row["held_why"])
 
+    def test_api_source_keeps_one_state_and_a_directory_tag(self):
+        res = {"ok": True, "data": [
+            {"name": "Royal City Church", "website": "https://royal.example/", "category": "ARC Plant",
+             "address": "1 Main St, Pasadena, CA 91101, United States"},
+            {"name": "Desert Plant", "website": "https://desert.example/", "category": "ARC Plant",
+             "address": "2 Elm St, Phoenix, AZ 85001, United States"},
+            {"name": "ZOE LA", "website": "https://zoe.example/", "category": "ARC Network Church",
+             "address": "3 Oak St, Los Angeles, CA 90013, United States"}]}
+        src = {"kind": "api", "site": "arcchurches", "op": "findChurches", "state": "CA",
+               "args": {"lat": "34", "long": "-118", "radius": "3000"}, "keep_category": "^ARC Plant$",
+               "columns": {"name": "name", "website": "website"}}
+        with tempfile.TemporaryDirectory() as d:
+            rows = ga.api_rows(src, Path(d), call=lambda *a, **k: res)
+        self.assertEqual([(r["name"], r["city"], r["state"]) for r in rows], [("Royal City Church", "Pasadena", "CA")])
+
+    def test_a_name_in_the_title_beats_a_heading_in_the_name(self):
+        f = lambda n, t: (lambda c: (c["name"], c["title"]))(ga.name_from_title({"name": n, "title": t}))
+        self.assertEqual(f("IMMEASURABLY MORE", "Pastor Adam Maga\u00f1a"), ("Adam Maga\u00f1a", "Pastor"))
+        self.assertEqual(f("HUB CITY", "LEAD PASTORS STEVE & VERONICA MENDOZA"), ("Steve & Veronica Mendoza", "Lead Pastors"))
+        self.assertEqual(f("WHAT WE BELIEVE", "PASTOR JP + JACKIE"), ("JP + Jackie", "Pastor"))
+        self.assertEqual(f("Kyle Veach", "Lead Pastor"), ("Kyle Veach", "Lead Pastor"))
+        self.assertEqual(f("Ann Ruiz", "Pastor of Students"), ("Ann Ruiz", "Pastor of Students"))
+
     def test_greeting_name_strips_every_stacked_title(self):
         self.assertEqual(ga.greeting_name("Rev. Dr. Mathew P. John"), "Mathew")
         self.assertEqual(ga.greeting_name("Pastor JOHN SMITH"), "John")

@@ -362,10 +362,16 @@ def api_rows(src: dict, cache: Path, call=None) -> list[dict]:
             if not r["city"] and raw.get("address"):
                 # "1338 W Indianapolis Ave, Fresno, CA 93705"
                 parts = [x.strip() for x in str(raw["address"]).split(",")]
+                # ARC's finder ends with ", United States"
+                if parts and parts[-1].lower() in ("united states", "usa", "us"):
+                    parts = parts[:-1]
                 if len(parts) >= 3:
                     r["city"], r["state"] = parts[-2], parts[-1].split()[0]
             if raw.get("reviewCount") is not None:
                 r["size"] = f"{raw['reviewCount']} Google reviews"
+            # a directory op (ARC's finder) answers by radius, so it crosses state lines
+            if src.get("state") and r["state"] and r["state"].upper() != src["state"].upper():
+                continue
             out.append(r)
     return out
 
@@ -969,7 +975,7 @@ def score(rec: dict, acc: dict, words: re.Pattern, today: dt.date, about=None) -
     criteria = acc.get("criteria") or {}
     cands = [{"contact_id": c.get("email") or c.get("name"), "full_name": c.get("name"), "title": c.get("title", ""),
               "email": c.get("email") or "", "email_verified": False,  # published, never run through a validator
-              "source_url": c.get("source_url", "")} for c in rec.get("leaders") or []
+              "source_url": c.get("source_url", "")} for c in map(name_from_title, rec.get("leaders") or [])
              if is_person(c.get("name")) and (own_page(c.get("source_url", ""), rec.get("website", ""))
                                               or bool(site_home(rec)) and own_page(c.get("source_url", ""), site_home(rec)))
              and not GONE.search(c.get("title", ""))
@@ -1159,6 +1165,24 @@ def check_verdicts(probs: dict, acc: dict) -> dict:
         else:
             out[c["name"]] = "pass" if p >= bar else "fail"
     return out
+
+
+# A staff card with the title above the name reads back swapped. On 11/3 ARC plant sites gave
+# "IMMEASURABLY MORE" titled "Pastor Adam Magana" and "WHAT WE BELIEVE" titled "PASTOR JP + JACKIE",
+# and Jev passed both pairs at 0.80 to 0.85.
+TITLE_HOLDS_NAME = re.compile(r"^((?:lead |senior |founding |executive |campus )?pastors?)\s+"
+                              r"([A-Z][\w.'\u00c0-\u017f-]*(?:\s*(?:[&+]|and)?\s*[A-Z][\w.'\u00c0-\u017f-]*){0,4})$", re.I)
+
+
+def name_from_title(c: dict) -> dict:
+    """A leader whose title is "Pastor <Name>": the name is in the title, so the title's name wins."""
+    m = TITLE_HOLDS_NAME.match((c.get("title") or "").strip())
+    if not m or re.search(r"\b(of|for|to|the|ministr\w*|students?|youth|kids|worship)\b", m.group(2), re.I):
+        return c
+    name = m.group(2)
+    if name.isupper():
+        name = " ".join(w if len(w) <= 2 else w.title() for w in name.split())
+    return dict(c, name=name, title=m.group(1).title())
 
 
 def per_person(recs: list[dict]) -> list[dict]:

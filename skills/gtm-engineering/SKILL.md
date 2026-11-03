@@ -711,6 +711,13 @@ own copy rules, then check these:
   firmfoundationtech.com, so weeks of Business Profile, profile posts and
   backlinks were left. It doesn't hold outbound, since inbox warmup takes 2 to
   3 weeks anyway. Detail is in team/memory/project_ff_brand_search_2026_11_03.md.
+- Never wave off a lost brand search because the domain search works. On
+  11/3 the answer called "Firm Foundation Technologies church" fine to lose,
+  and he wrote "Someone googling firm foundation tech should see us not some
+  san diego it business". Search the exact words a prospect would type (the
+  short name, the profile handle), name who holds page 1, ship the on-site
+  fix the same turn (schema alternateName, title), and list the off-site
+  steps that need his accounts.
 
 ## Grading a campaign before it goes out
 

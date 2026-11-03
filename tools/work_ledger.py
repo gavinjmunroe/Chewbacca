@@ -127,11 +127,19 @@ def update(scope, task_id, **changes):
     for field in set(changes) - {'status'}:
         changes[field] = text(changes[field], field)
     with connection(write=True) as db:
-        row = db.execute('SELECT * FROM tasks WHERE scope=? AND id=?',
-                         (scope_path(scope), task_id)).fetchone()
-        if row is None:
+        # Board and cleanup lists print 8-character id prefixes, and on
+        # 2026-11-03 an update by prefix failed with a generic error until the
+        # full uuid was looked up. A unique prefix of 8+ characters resolves.
+        rows = db.execute("SELECT * FROM tasks WHERE scope=? AND (id=? OR (length(?)>=8 AND id LIKE ? || '%'))",
+                          (scope_path(scope), task_id, task_id, task_id)).fetchall()
+        exact = [r for r in rows if r['id'] == task_id]
+        rows = exact or rows
+        if not rows:
             raise ValueError('task not found in this workspace scope')
-        task = dict(row)
+        if len(rows) > 1:
+            raise ValueError('id prefix matches more than one task')
+        task = dict(rows[0])
+        task_id = task['id']
         desired = changes.get('status', task['status'])
         if desired == 'done' and task['status'] != 'done' and not changes.get('evidence'):
             raise ValueError('marking done requires evidence in this update')

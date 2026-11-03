@@ -35,6 +35,14 @@ class WorkLedgerTests(unittest.TestCase):
         return subprocess.run([sys.executable, str(ROOT / 'bin/work-ledger'), *args,
                                '--scope', str(self.scope)], capture_output=True, text=True, timeout=15)
 
+    def test_update_accepts_unique_id_prefix(self):
+        task = self.add('Prefix', 'p1')['task']
+        updated = ledger.update(self.scope, task['id'][:8], status='done', evidence='seen')
+        self.assertEqual(updated['id'], task['id'])
+        self.assertEqual(ledger.list_tasks(self.scope, include_terminal=True)[0]['status'], 'done')
+        with self.assertRaises(ValueError):
+            ledger.update(self.scope, task['id'][:4], owner='x')
+
     def test_board_groups_by_project_label_and_orders_views(self):
         ledger.add(self.scope, 'Midterm', 'k1', next_action='[School | Backlog] later')
         ledger.add(self.scope, 'Lab coat', 'k2', next_action='[School | Next] Fri')

@@ -26,7 +26,12 @@ case "$MODE" in
     printf '%s' "$out" | grep -q 'not answering'
     ! printf '%s' "$out" | grep -q 'sekret'
     ;;
+  pinned)
+    # The template runs at a fixed commit, never whatever its main points at.
+    grep -Eq '^TEMPLATE_SHA="[0-9a-f]{40}"$' "$ROOT/bin/chewbacca-cloud"
+    ! grep -q 'pull' "$ROOT/bin/chewbacca-cloud"
+    ;;
   all)
-    "$0" "$ROOT" usage && "$0" "$ROOT" empty && "$0" "$ROOT" list
+    "$0" "$ROOT" usage && "$0" "$ROOT" empty && "$0" "$ROOT" list && "$0" "$ROOT" pinned
     ;;
 esac

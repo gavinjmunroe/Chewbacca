@@ -1530,6 +1530,7 @@ if group "installer"; then
   check  "chewbacca cloud prints usage and refuses a bad verb" bash "$ROOT/tests/cloud.sh" "$ROOT" usage
   check  "chewbacca cloud list is empty with no instances" bash "$ROOT/tests/cloud.sh" "$ROOT" empty
   check  "chewbacca cloud list names an instance and never prints its keys" bash "$ROOT/tests/cloud.sh" "$ROOT" list
+  check  "chewbacca cloud runs a pinned template commit" bash "$ROOT/tests/cloud.sh" "$ROOT" pinned
 
   check  "the backlog keeps dead items and their reason" bash "$ROOT/tests/backlog.sh" "$ROOT" dead
 

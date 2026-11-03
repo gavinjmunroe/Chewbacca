@@ -464,6 +464,7 @@ def enrich_one(a: dict, tools, words, growth, titles=None, must_show="") -> dict
                 au = audit_site.audit(rec["website"], None)
             rec["site_status"] = au.get("status")
             rec["leaders"] = leaders(au.get("contacts"), titles)
+            rec["site_people"] = au.get("staff_count")
             rec["titles_key"] = titles_key(titles, must_show)
             if must_show:
                 rec["icp_fit"] = icp_evidence(audit_site, lead_card, au.get("final_url") or rec["website"], must_show)
@@ -635,9 +636,16 @@ def score(rec: dict, acc: dict, words: re.Pattern, today: dt.date, about=None) -
     # A market with no size data (law firms, 2026-11-02: all 145 tier 3) is judged on whether
     # its own site shows the work the ICP needs. That stands in for the size band, never on top.
     on_icp = bool(icp.get("ok")) and not sized
+    # People named on the org's own team page, against the client's band for that count. A firm
+    # of 10 to 150 staff shows roughly 3 to 60 people; the site figure only ever holds a row
+    # back, since a page can list fewer people than work there. Michigan PIP, 2026-11-02.
+    people, band = rec.get("site_people"), criteria.get("site_people_range")
+    too_big = bool(band and people and band.get("max") and people > band["max"])
     # Weights guessed from John Knox's 10/27 call, never measured: can they pay (40), a system
     # to connect (20), someone who signs (20), a reason to help now (20).
     fit = 40 * (in_band or on_icp) + 20 * stack + 20 * bool(pc) + 20 * need
+    if too_big:
+        fit = min(fit, gtme_score.TIER_2 - 1)
     if "must_show" in (acc.get("icp") or {}) and not icp.get("ok"):
         fit = min(fit, gtme_score.TIER_2 - 1)  # the site never showed the ICP's work: never above tier 3
     tier = gtme_score.assign_tier(fit, bool(pc and pc.get("email")), company, criteria)
@@ -649,7 +657,9 @@ def score(rec: dict, acc: dict, words: re.Pattern, today: dt.date, about=None) -
     return {"tier": tier["tier"], "fit": fit, "why_now_score": sig["score"], "hold": "HOLD" if sig["hold"] else "",
             "kind": lanes.get((rec.get("ntee") or " ")[0].upper(), acc.get("kind", "account")),
             "org": rec.get("maps_name") or rec["name"], "city": rec["city"], "state": rec["state"],
-            "website": rec.get("website", ""), "revenue": rec.get("revenue") or "", "size": rec.get("size", ""),
+            "website": rec.get("website", ""), "revenue": rec.get("revenue") or "",
+            "size": rec.get("size") or (f"{people} people on its site" + (" (over the band)" if too_big else "")
+                                        if people else ""),
             "stack": rec.get("chms") or "", "buyer": (pc or {}).get("full_name", ""),
             "buyer_title": (pc or {}).get("title", ""), "buyer_email": (pc or {}).get("email", ""),
             "buyer_source": (pc or {}).get("source_url", ""), "buyer_check": "", "relationship": "",

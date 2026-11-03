@@ -468,6 +468,19 @@ class Parts(unittest.TestCase):
         self.assertNotIn("NOTHING", ga.email_line({"emails": {"found": 3, "verified_published": 1}}))
         self.assertIn("not spent", ga.email_line({"treg_priced_rows": 2, "treg_priced_usd": 0.1}))
 
+    def test_a_firm_too_big_for_the_band_stays_tier_3(self):
+        acc = {"titles": ["Founder"], "criteria": {"site_people_range": {"min": 3, "max": 60}},
+               "icp": {"must_show": "PIP"}}
+        base = {"name": "Big Firm", "city": "", "state": "MI", "website": "https://big.example/",
+                "leaders": [{"name": "Ann Lee", "title": "Founder", "email": "ann@big.example",
+                             "source_url": "https://big.example/team"}],
+                "jobs": [{"title": "PIP Paralegal", "url": "https://big.example/careers"}],
+                "icp_fit": {"ok": True, "line": "PIP", "url": "https://big.example/pip"}}
+        f = lambda rec: ga.score(rec, acc, ga.re.compile("x"), date(2026, 11, 2), about=lambda o, s: (s, []))
+        self.assertEqual(f(dict(base, site_people=240))["tier"], 3)
+        self.assertIn("over the band", f(dict(base, site_people=240))["size"])
+        self.assertLess(f(dict(base, site_people=12))["tier"], 3)
+
     def test_a_founder_in_memoriam_is_never_the_buyer(self):
         acc = {"titles": ["Founder", "Owner"], "criteria": {}}
         rec = {"name": "The Lobb Law Firm", "city": "", "state": "MI", "website": "https://thelobblawfirm.com/",

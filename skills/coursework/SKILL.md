@@ -247,8 +247,13 @@ summary. The lecture is the spec. On 2026-11-02 the ACAD 185 A20 Hero's
 Journey went in as 19 slides of text built from the dropbox brief. The W10S20
 deck that assigned it asks for an AI-image storyboard ("Words are generic.
 Pictures are specific", Nano Banana, one character bible), and that deck had
-never been pulled. Angie caught it the night before it was due. Name the deck and
+never been pulled. Angie caught it the night before it was due, and Caleb
+wrote "WHY WEREND THEY PULLED TO DISK??????". Name the deck and
 its slide in the build's SPEC file, or the draft hasn't started.
+
+Never do these:
+- Build a graded deliverable from the dropbox brief alone.
+- Say a lecture "isn't on disk" and stop there. Pull it (`brightspace-sync decks`) in the same turn.
 
 ## A practice app covers the whole semester so far
 

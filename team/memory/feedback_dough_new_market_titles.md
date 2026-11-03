@@ -29,6 +29,11 @@ drive the reader (audit `buyer_titles`, branch fix/audit-law-titles) and Dough's
 (6de54177 on fix/gtme-accounts-law-buyers), and a full run first reads 20 sites and refuses
 when under 20% have a buyer. A new market is a config change, not a code change.
 
+Jev is not a name check. On the 31-buyer run, 5 "buyers" were page text ("Managing
+Attorney", "Firm Founder", "Recent Articles") and Jev passed them at 0.82 to 0.91. Names are
+now guarded in code twice: ORG_NOT_NAME in the reader and is_person() in gtme_accounts
+(29d2dcc8). Read every buyer name by hand before a list goes to a client.
+
 How to apply: before `chewbacca gtme accounts` runs for a new market, write two lines of
 that market's real staff page into a find_contacts test with titles="org". If the buyer
 doesn't come back, add the titles first. Run with GTME_SITE_AUDIT_DIR pointing at a clean

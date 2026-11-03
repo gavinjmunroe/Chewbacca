@@ -46,7 +46,7 @@ b202ce1ca6e2ff983612c382e00e48259c16fb492162783decaa01acc3f9f75b  .claude/hooks/
 d0d36a808f98696682635f2f8065961a61476bb3b63689873ae320edc2cae8ab  .claude/hooks/kit-route.sh
 cbf80ce05e7b24b22261de49e74f10f267a7453f06c55413acd245537c84bb2c  .claude/hooks/launch-guard.sh
 ef74b454902ac227ac8e076b34f6139ef1a72cd923503d3375d018e7f344e7ee  .claude/hooks/learn-on-land.sh
-7efba6bd4f6b37c673c0e6f177453510bdd70cb3d1b6a605bf9d270938c7b699  .claude/hooks/lecture-gate.sh
+9f867a9442c81458469ecc417543f670f450ca5531c60e14bbfe5bea17489408  .claude/hooks/lecture-gate.sh
 76e2b14ae00a484447d3630ab9e67332ab6d1bccc6b7042bc71967a0b7d30485  .claude/hooks/lesson-guard.sh
 b3440da719850b24ed1036d0967244df4f4c039bae4e2e5a755ac0ffbc513439  .claude/hooks/lib.sh
 6ef9452e65da3a40b84794e23d7f4e206cfff7ac2c0dde11b882e556ac846da9  .claude/hooks/link-guard.sh

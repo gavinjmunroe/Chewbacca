@@ -54,6 +54,9 @@ LECTURE_GATE_SPEC_DIRS="$tmp/nospecs" t "submit with no SPEC at all" 2 "$(sub "b
 printf '# A20 spec\nW10S20 asks for AI images.\n' > "$tmp/specs/A20-SPEC.md"
 LECTURE_GATE_SPEC_DIRS="$tmp/specs" t "submit with a SPEC citing W10S20" 0 "$(sub "brightspace submit 298850 647598 \"$tmp/Kyber - A20 Hero's Journey v1.pdf\"")"
 LECTURE_GATE_SPEC_DIRS="$tmp/nospecs" t "a dry-run submit"  0 "$(sub "brightspace submit --dry-run 298850 647598 \"$tmp/A20.pdf\"")"
+# Security review, 2026-11-02: "--dry-run" anywhere in the command used to pass it.
+LECTURE_GATE_SPEC_DIRS="$tmp/nospecs" t "--dry-run outside the submit argv" 2 "$(sub "brightspace submit 298850 647598 \"$tmp/A20.pdf\" && echo --dry-run")"
+LECTURE_GATE_SPEC_DIRS="$tmp/nospecs" t "submit by full path"  2 "$(sub "/Users/x/.local/bin/brightspace submit 298850 647598 \"$tmp/A20.pdf\"")"
 LECTURE_GATE_SPEC_DIRS="$tmp/nospecs" t "another course's ou" 0 "$(sub "brightspace submit 999 1 \"$tmp/A20.pdf\"")"
 echo "lecture-gate: $pass passed, $fail failed"
 [ "$fail" = 0 ]

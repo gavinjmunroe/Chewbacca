@@ -2,7 +2,7 @@
 # Timing, logging, a watchdog and an output cap. See lib.sh.
 # shellcheck source=/dev/null
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" 2>/dev/null || true
-type hook_init >/dev/null 2>&1 && hook_init lecture-gate.sh 5
+type hook_init >/dev/null 2>&1 && hook_init lecture-gate.sh 10
 # PreToolUse: refuse a coursework SPEC that never cites the lecture deck that
 # assigned the work.
 #
@@ -114,9 +114,25 @@ if tool in ("Write", "Edit", "MultiEdit"):
                 print(f"{aid} ({code}) comes from a lecture this SPEC never cites. Start with:\n  {first}")
 elif tool == "Bash":
     cmd = ti.get("command") or ""
-    m = re.search(r"\bbrightspace\s+submit\s+(?:--dry-run\s+)?(\d+)\s+\d+\s+(.*)", cmd)
-    if not m or "--dry-run" in cmd:
+    import shlex
+    try:
+        argv = shlex.split(cmd)
+    except ValueError:
+        argv = cmd.split()
+    i = next((k for k in range(len(argv) - 1) if argv[k].endswith("brightspace") and argv[k + 1] == "submit"), None)
+    if i is None:
         raise SystemExit
+    args = argv[i + 2:]
+    for k, a in enumerate(args):
+        if a in ("&&", "||", ";", "|"):
+            args = args[:k]
+            break
+    if "--dry-run" in args:
+        raise SystemExit
+    pos = [a for a in args if not a.startswith("-")]
+    if len(pos) < 3 or not pos[0].isdigit():
+        raise SystemExit
+    m = (None, pos[0], " ".join(pos[2:]))
     try:
         code = json.load(open(os.path.join(slides, "courses.json"))).get(m[1])
         if code is None:
@@ -128,14 +144,31 @@ elif tool == "Bash":
         os.path.expanduser(x) for x in ("~/Downloads", "~/code/school", "~/coursework", "~/code/kits"))
     specs = []
     cutoff = time.time() - 45 * 86400
+    # Bounded walk. Unbounded, globbing ~/Downloads and ~/code/school with their
+    # node_modules took over 5 s on 2026-11-02, the watchdog killed the hook,
+    # and tonight's real A20 submit was allowed. Out of budget now means deny.
+    SKIP = {"node_modules", ".git", ".next", "dist", "build", ".venv", "venv", "__pycache__", ".text"}
+    budget = time.time() + 4
+    seen = 0
     for d in dirs.split():
-        for f in glob.glob(os.path.join(d, "**", "*.md"), recursive=True):
-            if re.search(r"(spec|outline)[^/]*\.md$", f, re.I) and "node_modules" not in f:
-                try:
-                    if os.path.getmtime(f) >= cutoff:
-                        specs.append((f, open(f, errors="replace").read()))
-                except OSError:
-                    pass
+        base = d.rstrip("/").count("/")
+        for root, subdirs, files in os.walk(d):
+            subdirs[:] = [x for x in subdirs if x not in SKIP and not x.startswith(".")]
+            if root.count("/") - base >= 4:
+                subdirs[:] = []
+            for name in files:
+                seen += 1
+                if seen > 200000 or time.time() > budget:
+                    print("the SPEC search ran out of time, so nothing could confirm a SPEC cites the lecture.\n"
+                          "  Put the SPEC in ~/coursework or the project folder, or set LECTURE_GATE_SPEC_DIRS.")
+                    raise SystemExit
+                if re.search(r"(spec|outline)[^/]*\.md$", name, re.I):
+                    f = os.path.join(root, name)
+                    try:
+                        if os.path.getmtime(f) >= cutoff:
+                            specs.append((f, open(f, errors="replace").read()))
+                    except OSError:
+                        pass
     for aid in sorted(ids_in(m[2])):
         for c in courses_for(aid, cmd, only=code):
             first, hits = wanted(c, aid)

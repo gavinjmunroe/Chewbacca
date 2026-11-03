@@ -465,11 +465,29 @@ def _get_html(url: str) -> str:
         return ""
 
 
+ORG_WORDS = re.compile(r"church|chapel|fellowship|ministr|assembl|tabernacle|cathedral|parish|worship center|"
+                       r"christian center|community|bible|baptist|vineyard|calvary", re.I)
+PAGE_WORDS = re.compile(r"^(home|welcome|baptisms?|events?|register|registration|sign ?up|about( us)?|"
+                        r"next steps|calendar|404|page not found)$", re.I)
+# Hosts that list many orgs or none: on 11/2, 245 of 690 Baptize search results were google.com
+# links and 70 more were Facebook, Yelp and Instagram.
+NOT_ORG_HOSTS = ("google.com", "yelp.com", "facebook.com", "instagram.com", "eventbrite.com", "youtube.com",
+                 "tiktok.com", "x.com", "twitter.com", "wikipedia.org", "linkedin.com", "happeningnext.com",
+                 "allevents.in", "patch.com", "nextdoor.com")
+
+
 def org_name_from_page(html: str) -> str:
-    """Church Center titles every page "<page> - <church>", a 404 for an old event included."""
-    m = re.search(r'property="og:title" content="([^"]+)"', html) or re.search(r"<title[^>]*>([^<]+)", html)
-    title = (m.group(1) if m else "").strip()
-    return title.rsplit(" - ", 1)[-1].strip() if " - " in title else ""
+    """The org's name from a page title: Church Center writes "<page> - <church>" (a 404 for an
+    old event too), most sites "<Church> | Home" or "Home - <Church>" or just the name."""
+    m = re.search(r'property="og:site_name" content="([^"]+)"', html) or \
+        re.search(r'property="og:title" content="([^"]+)"', html) or re.search(r"<title[^>]*>([^<]+)", html)
+    title = re.sub(r"\s+", " ", (m.group(1) if m else "")).strip()
+    parts = [x.strip() for x in re.split(r"\s+[-|\u2013\u2014:\u00b7]\s+", title) if x.strip()]
+    parts = [x for x in parts if not PAGE_WORDS.match(x)]
+    if not parts:
+        return ""
+    named = [x for x in parts if ORG_WORDS.search(x)]
+    return (named[-1] if named else max(parts, key=len))[:80]
 
 
 def search_rows(src: dict, cache: Path, call=None, fetch=None, place=None) -> list[dict]:
@@ -488,7 +506,10 @@ def search_rows(src: dict, cache: Path, call=None, fetch=None, place=None) -> li
                                                budget_usd=float(src.get("budget_usd") or 0),
                                                max_cost_usd=float(src.get("max_cost_usd") or SEARCH_MAX_USD)))
     fetch = fetch or _get_html
-    place = place or (lambda q: op.api("google-maps", "getPlace", query=q))
+    place = place or (lambda q: op.api("google-maps", "searchPlaces", query=q))
+    skip = NOT_ORG_HOSTS + tuple(src.get("skip_hosts") or [])
+    keep = re.compile(src["keep_category"], re.I) if src.get("keep_category") else None
+    drop = re.compile(src["drop_category"], re.I) if src.get("drop_category") else None
     state = (src.get("state") or "").upper()
     hits: dict[str, dict] = {}
     for q in src.get("queries") or []:
@@ -505,7 +526,7 @@ def search_rows(src: dict, cache: Path, call=None, fetch=None, place=None) -> li
         for r in out.get("results") or []:
             url = r.get("url") or ""
             host = _domain(url)
-            if not host:
+            if not host or any(host == h or host.endswith("." + h) for h in skip):
                 continue
             shared = host.endswith(SHARED_SIGNAL_HOSTS)
             key = host if shared or not any(host.endswith(h) for h in SHARED_HOSTS) else host + urllib.parse.urlparse(url).path
@@ -525,8 +546,15 @@ def search_rows(src: dict, cache: Path, call=None, fetch=None, place=None) -> li
         p = {}
         if lookup:
             res = place(lookup)
-            rows_ = _first_list(res) if isinstance(res, dict) else (res or [])
-            p = rows_[0] if rows_ else {}
+            cands = _first_list(res) if isinstance(res, dict) else (res or [])
+            if not h["shared"]:
+                # the org's own site: the place has to list this same domain
+                p = next((c for c in cands if c.get("website") and _domain(c["website"]) == _domain(website)), {})
+            else:
+                # a Church Center page: the place whose name matches the church the page names
+                p = next((c for c in cands if gtme_score.jaro_winkler(
+                    gtme_score.normalize_company_name(c.get("name") or ""),
+                    gtme_score.normalize_company_name(name)) >= NAME_MATCH), {})
         if p:
             parts = [x.strip() for x in str(p.get("address") or "").split(",")]
             city, st = (parts[-2], parts[-1].split()[0]) if len(parts) >= 3 else ("", "")
@@ -534,6 +562,8 @@ def search_rows(src: dict, cache: Path, call=None, fetch=None, place=None) -> li
             website = website or p.get("website") or ""
             name = p.get("name") or name
         if not website or not name or (state and st and st.upper() != state):
+            continue
+        if (keep and not keep.search(category)) or (drop and drop.search(category)):
             continue
         # a page's own title names the church, so a stranger's page could claim any name: when the
         # hit was the org's own site, Maps has to list that same domain, and a place with no site

@@ -84,6 +84,11 @@
       "type": "replay",
       "test": "tests/test_pasted_call_gate_replay.py",
       "corpus": "tests/fixtures/pasted_call/corpus.json"
+    },
+    ".claude/hooks/lecture-gate.sh": {
+      "type": "replay",
+      "test": "tests/test_lecture_gate_replay.py",
+      "corpus": "tests/fixtures/lecture_gate/corpus.json"
     }
   },
   "grandfathered": [

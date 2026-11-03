@@ -1147,6 +1147,8 @@ if group "installer"; then
     bash "$ROOT/tests/essay_gate.sh"
   check  "lecture-gate refuses a coursework SPEC that never cites the deck that assigned it" \
     bash "$ROOT/tests/lecture_gate.sh"
+  check  "lecture-gate replays real SPEC titles to their recorded verdicts" \
+    python3 "$ROOT/tests/test_lecture_gate_replay.py" "$ROOT"
 
   # chatdb_guard.sh existed since 2026-10-03 and was never in the suite.
   check  "chatdb-guard refuses raw thread reads and permits the people CLI" \

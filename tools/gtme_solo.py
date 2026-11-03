@@ -1429,7 +1429,129 @@ def stress(client: str) -> list[tuple[str, str, str]]:
     add(rel, "the list carries a relationship column, so people we know get a text", "Sagar", warn=True)
     out.append(("NOT CHECKED", "test sends land in the primary tab at a personal Gmail and Outlook",
                 "GEX launch checklist: send one to yourself first"))
+    return out + challenges(client, plan, nxt, lines, sum(1 for v, _, _ in out if v == "FAIL"))
+
+
+# Caleb's own questions of a campaign, asked again on every stress run so he
+# never has to (2026-11-02: "not being systematic... monkey see monkey do",
+# asked after EKKO, a modern site, topped the list on a checklist count).
+CHALLENGES = Path(__file__).resolve().parent.parent / "config" / "gtm" / "challenges.json"
+# A dated_score of this or more means a guest would see the site as out of
+# date. EKKO, the clean site that topped FF's 11/2 list, would score about 2.
+DATED_BAR = 3
+# How many of the next leads a challenge reads: three days at the ramp of 5.
+CHALLENGE_NEXT = 15
+
+
+def challenges(client, plan, nxt, lines, playbook_fails) -> list[tuple[str, str, str]]:
+    body = op.read_json(CHALLENGES, {}) or {}
+    top = nxt[:CHALLENGE_NEXT]
+    target = plan.get("targeting") or {}
+
+    def ranked_from_customers():
+        ok = target.get("method") == "gtme rank" and bool(target.get("seeds"))
+        return ok, (f"ranked by gtme rank from {len(target.get('seeds') or [])} customer seeds"
+                    if ok else "the list was never ranked from real customers with `gtme rank --seeds`")
+
+    def visible_pain_seen():
+        seen = [r for r in top if str(r.get("dated_score") or "").strip()]
+        if not seen:
+            return None, "no one has looked at the next sites; give them a dated_score"
+        weak = [r["company"] for r in seen if float(r["dated_score"]) < DATED_BAR]
+        return (len(seen) == len(top) and not weak,
+                f"{len(seen)} of the next {len(top)} looked at, {len(weak)} look fine to a guest"
+                + (f" ({', '.join(weak[:3])})" if weak else ""))
+
+    def no_playbook_fails():
+        return playbook_fails == 0, f"{playbook_fails} playbook rules fail above"
+
+    def lines_fresh():
+        stale = 0
+        for r in top:
+            m = re.match(r"\d{4}-\d{2}-\d{2}", str((lines.get(r["email"].lower()) or {}).get("checked") or ""))
+            stale += not m or (op.utc_now().date() - date.fromisoformat(m.group(0))).days > STRESS_FRESH_DAYS
+        return stale == 0, f"{stale} of the next {len(top)} lines unchecked in {STRESS_FRESH_DAYS} days"
+
+    checks = {f.__name__: f for f in (ranked_from_customers, visible_pain_seen, no_playbook_fails, lines_fresh)}
+    out = []
+    for c in body.get("challenges") or []:
+        fn = checks.get(c.get("check") or "")
+        res = fn() if fn else None
+        if not res or res[0] is None:
+            why = res[1] if res else "no check answers this yet"
+            out.append(("NOT CHECKED", f"Caleb asked \"{c['asked']}\": {why}", c.get("date", "")))
+        else:
+            out.append(("PASS" if res[0] else "FAIL", f"Caleb asked \"{c['asked']}\": {res[1]}", c.get("date", "")))
     return out
+
+
+def cmd_challenge(a) -> int:
+    body = op.read_json(CHALLENGES, {}) or {"challenges": []}
+    cid = re.sub(r"[^a-z0-9]+", "-", a.text.lower()).strip("-")[:40]
+    body["challenges"].append({"id": cid, "asked": a.text, "date": op.utc_now().date().isoformat(),
+                               "check": a.check or ""})
+    CHALLENGES.write_text(json.dumps(body, indent=2) + "\n")
+    print(f"Every stress run now asks \"{a.text}\"" + ("" if a.check else ", NOT CHECKED until a check answers it")
+          + ". Commit config/gtm/challenges.json so every Mac asks it.")
+    return 0
+
+
+# What a lead is worth contacting first: fit, pain a guest can see, and how
+# reachable the buyer is. Weights guessed, never measured; revisit after the
+# first 200 sends with the reply data.
+RANK_WEIGHTS = {"fit": 40, "pain": 40, "reach": 20}
+BUYER_TITLE = re.compile(r"execut|operation|admin\w* pastor|business|director of admin|senior pastor|lead pastor", re.I)
+NOT_FIT = re.compile(r"cathol|parish|our lady|orthodox|latter|adventist|episcopal|anglican|lutheran|methodist|"
+                     r"\bumc\b|presbyter|\bst\.? |saint|cathedral|unitarian", re.I)
+
+
+def rank_row(r: dict) -> tuple[float, str]:
+    why = []
+    fit = 0.0
+    if NOT_FIT.search(r.get("company") or ""):
+        why.append("tradition outside the plan-a-visit frame")
+    else:
+        fit += 0.5
+    if BUYER_TITLE.search(r.get("title") or ""):
+        fit += 0.5
+        why.append(f"buyer: {r.get('title')}")
+    elif WEAK_TITLE.search(r.get("title") or ""):
+        why.append("title rarely decides")
+    dated = str(r.get("dated_score") or "").strip()
+    pain = float(dated) / 5 if dated else 0.0
+    why.append(f"site looks {'dated' if pain >= DATED_BAR / 5 else 'fine'} ({dated}/5)" if dated else "site not looked at")
+    reach = (0.6 if (r.get("email_verdict") or "") == treg_client.SENDABLE else 0.0) + \
+            (0.4 if r.get("email") and not ROLE.match(r["email"]) else 0.0)
+    score = fit * RANK_WEIGHTS["fit"] + pain * RANK_WEIGHTS["pain"] + reach * RANK_WEIGHTS["reach"]
+    return round(score, 1), "; ".join(why)
+
+
+def cmd_rank(a) -> int:
+    """Orders leads.csv by fit, visible pain and reach, and records the
+    customer seeds the ICP was learned from. Reads dated_score (0 to 5, how
+    out of date the site looks to a guest) from whatever looked at the site."""
+    plan, d = plan_of(a.client), cdir(a.client)
+    seeds = [s.strip() for s in (a.seeds or "").split(",") if s.strip()] or (plan.get("targeting") or {}).get("seeds")
+    if not seeds:
+        raise Refused("Name the real customers this ranking learns from: --seeds durangovineyard.com,...")
+    path = d / "leads.csv"
+    rows = list(csv.DictReader(path.open())) if path.exists() else []
+    if not rows:
+        raise Refused("No leads to rank.")
+    cols = list(rows[0].keys()) + [c for c in ("rank_score", "rank_why") if c not in rows[0]]
+    for r in rows:
+        r["rank_score"], r["rank_why"] = rank_row(r)
+    rows.sort(key=lambda r: -float(r["rank_score"]))
+    with path.open("w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=cols)
+        w.writeheader()
+        w.writerows(rows)
+    plan["targeting"] = {"method": "gtme rank", "seeds": seeds, "weights": RANK_WEIGHTS,
+                         "at": op.utc_now().isoformat(), "looked_at": sum(1 for r in rows if r.get("dated_score"))}
+    op.write_json(d / "plan.json", plan)
+    for r in rows[:a.show]:
+        print(f"{r['rank_score']:>5}  {r.get('company', '')[:34]:34}  {r['rank_why']}")
+    return 0
 
 
 def cmd_stress(a) -> int:
@@ -1511,6 +1633,14 @@ def main(argv=None) -> int:
     p.add_argument("--out")
     p = sub.add_parser("stress", help="check the campaign against every playbook rule, before anyone has to")
     p.add_argument("--client", required=True)
+    p = sub.add_parser("rank", help="order the leads by fit, pain a guest can see, and reach, learned from customers")
+    p.add_argument("--client", required=True)
+    p.add_argument("--seeds", help="real customers' domains, comma separated")
+    p.add_argument("--show", type=int, default=15)
+    p = sub.add_parser("challenge", help="add a question Caleb asked, so every stress run asks it")
+    p.add_argument("--client")
+    p.add_argument("--text", required=True)
+    p.add_argument("--check", help="the check that answers it, if one exists")
     p = sub.add_parser("copy", help="set the email sequence from a JSON file")
     p.add_argument("--client", required=True)
     p.add_argument("--file", required=True)
@@ -1519,14 +1649,15 @@ def main(argv=None) -> int:
     p.add_argument("--client", required=True)
     p.add_argument("--dir", required=True)
     a = ap.parse_args(argv)
-    shared = a.cmd not in ("share", "package", "costs", "week")
+    shared = a.cmd not in ("share", "package", "costs", "week", "challenge")
     try:
         if shared:
             sync_pull(a.client)
         code = {"sender": cmd_sender, "find": cmd_find, "verify": cmd_verify, "batch": cmd_batch, "send": cmd_send,
                 "inbox": cmd_inbox, "reply": cmd_reply, "today": cmd_today, "package": cmd_package,
                 "costs": cmd_costs, "autosend": cmd_autosend, "share": cmd_share,
-                "copy": cmd_copy, "week": cmd_week, "stress": cmd_stress}[a.cmd](a)
+                "copy": cmd_copy, "week": cmd_week, "stress": cmd_stress, "rank": cmd_rank,
+                "challenge": cmd_challenge}[a.cmd](a)
     except Refused as err:
         print(str(err), file=sys.stderr)
         return 2

@@ -2472,7 +2472,7 @@ def main(argv=None) -> int:
         if code != gtme_pipeline.LEGACY:
             return code
     if argv and argv[0] in ("sender", "find", "verify", "batch", "send", "inbox", "reply", "today", "package",
-                            "costs", "autosend", "share", "copy", "week", "stress"):
+                            "costs", "autosend", "share", "copy", "week", "stress", "rank", "challenge"):
         import gtme_solo
         return gtme_solo.main(argv)
     if not argv or argv[0].startswith("-") and argv[0] not in ("-h", "--help"):

@@ -127,6 +127,15 @@ NOT_PERSON = re.compile(r"\b(partners?|founders?|owners?|attorneys?|lawyers?|man
                         r"president|chief|ceo|coo|cfo|cto|executive|contact|about|office)\b", re.I)
 
 
+def own_page(page: str, website: str) -> bool:
+    """A buyer counts only when the org's own site names them. A page on another domain is
+    someone else's claim, the shape of IEHP's buyer on 10/29 (a title from another org)."""
+    if not page or not website:
+        return True  # nothing to compare; the Jev check and a person's read still apply
+    a, b = _domain(page), _domain(website)
+    return a == b or a.endswith("." + b) or b.endswith("." + a)
+
+
 def is_person(name) -> bool:
     words = str(name or "").split()
     return len(words) >= 2 and not NOT_PERSON.search(str(name))
@@ -144,7 +153,7 @@ IRS_EO = "https://www.irs.gov/pub/irs-soi/eo_{state}.csv"
 COLUMNS = ["tier", "fit", "why_now_score", "hold", "kind", "org", "city", "state", "website", "revenue", "size",
            "stack", "buyer", "buyer_title", "buyer_email", "buyer_source", "buyer_check", "relationship",
            "channel", "dnc", "treg_find", "dupe_of", "why_now", "why_now_date", "why_now_source",
-           "tier_rationale", "account_source"]
+           "tier_rationale", "account_source", "icp_fit", "icp_line", "icp_source"]
 lock = threading.Lock()
 
 
@@ -290,7 +299,77 @@ def csv_rows(src: dict, cache: Path) -> list[dict]:
         return [_mapped(r, src.get("columns") or {}, i, str(path)) for i, r in enumerate(csv.DictReader(fh))]
 
 
-SOURCES = {"irs_eo": irs_rows, "formd": formd_rows, "api": api_rows, "csv": csv_rows}
+def _domain(url: str) -> str:
+    from urllib.parse import urlparse
+    host = urlparse(url if "://" in url else "http://" + url).netloc.lower()
+    return host[4:] if host.startswith("www.") else host
+
+
+def maps_rows(src: dict, cache: Path, call=None) -> list[dict]:
+    """Google Maps, every query in every place, one row per website. Each search returns at
+    most 20 places, so a market needs many: the 2026-11-02 Michigan PIP list took 20 searches
+    (2 phrasings x 10 cities) run by hand, and that's what this replaces.
+
+    "source": {"kind": "maps", "queries": ["no-fault PIP attorney", "auto accident lawyer"],
+               "places": ["Southfield MI", "Troy MI"], "state": "MI", "exclude": "Morgan|Mike Morse"}
+    """
+    import gtme_operator as op
+    call = call or (lambda q: op.api("google-maps", "searchPlaces", query=q))
+    state = (src.get("state") or "").upper()
+    skip = re.compile(src["exclude"], re.I) if src.get("exclude") else None
+    seen, out = set(), []
+    for place in src.get("places") or [""]:
+        for q in src.get("queries") or []:
+            query = f"{q} in {place}".strip() if place else q
+            res = call(query)
+            if res.get("ok") is False:
+                print(f"gtme accounts: maps search failed, skipped: {query}: {res.get('reason')}", file=sys.stderr)
+                continue
+            for r in _first_list(res):
+                site, addr = r.get("website") or "", r.get("address") or ""
+                dom = _domain(site)
+                if not dom or dom in seen:
+                    continue
+                if state and not re.search(rf",\s*{state}\s+\d{{5}}", addr):
+                    continue
+                if skip and skip.search(f"{r.get('name', '')} {dom}"):
+                    continue
+                seen.add(dom)
+                city = addr.split(",")[-2].strip() if addr.count(",") >= 2 else ""
+                out.append(_mapped({"key": dom, "name": r.get("name") or "", "website": site.split("?")[0],
+                                    "city": city, "state": state}, {}, len(out), f"google maps: {query}"))
+    return out
+
+
+def name_key(name: str) -> str:
+    """A company name reduced for an exact match: "Hamo Law Firm - Auto Accident Lawyers" and
+    "Hamo Law Firm, PLLC" both become "hamolawfirm". A loose substring match tied 37 of 38
+    LinkedIn posts to the wrong firm on 2026-11-02 (Blue Cross to Michigan Injury Attorneys)."""
+    base = re.split(r"\s[-|]\s", name or "")[0]
+    base = re.sub(r"(?i)\b(pllc|p\.?c\.?|llp|llc|inc\.?|ltd\.?|co\.?)(?=\W|$)", "", base)
+    return re.sub(r"[^a-z0-9]", "", base.lower())
+
+
+def linkedin_hiring(cfg: dict, call=None) -> dict:
+    """{org_key: [job]} from LinkedIn's public job search, every keyword in every place.
+
+    "why_now": {"linkedin_jobs": {"keywords": ["no-fault paralegal"], "places": ["Southfield, Michigan"]}}
+    """
+    import gtme_operator as op
+    call = call or (lambda kw, loc: op.api("linkedin-jobs", "searchJobs", keywords=kw, location=loc))
+    out: dict = {}
+    for place in cfg.get("places") or [""]:
+        for kw in cfg.get("keywords") or []:
+            res = call(kw, place)
+            for j in _first_list(res) if res.get("ok") is not False else []:
+                k = name_key(j.get("company", ""))
+                if len(k) >= 6:
+                    out.setdefault(k, []).append({"title": j.get("title", ""), "url": j.get("url", ""),
+                                                  "date": j.get("postedDate", "")})
+    return out
+
+
+SOURCES = {"irs_eo": irs_rows, "formd": formd_rows, "api": api_rows, "csv": csv_rows, "maps": maps_rows}
 
 
 # ── step 3: enrich ───────────────────────────────────────────────────────
@@ -357,7 +436,7 @@ def leaders(contacts, titles=None) -> list[dict]:
     return out[:LEADERS_KEPT]
 
 
-def enrich_one(a: dict, tools, words, growth, titles=None) -> dict:
+def enrich_one(a: dict, tools, words, growth, titles=None, must_show="") -> dict:
     audit_site, lead_card = tools
     rec = dict(a)
     if not rec.get("website"):
@@ -379,7 +458,9 @@ def enrich_one(a: dict, tools, words, growth, titles=None) -> dict:
                 au = audit_site.audit(rec["website"], None)
             rec["site_status"] = au.get("status")
             rec["leaders"] = leaders(au.get("contacts"), titles)
-            rec["titles_key"] = titles_key(titles)
+            rec["titles_key"] = titles_key(titles, must_show)
+            if must_show:
+                rec["icp_fit"] = icp_evidence(audit_site, lead_card, au.get("final_url") or rec["website"], must_show)
             rec["page_emails"] = [e.get("email") for e in au.get("page_emails") or []][:8]
             rec["chms"] = au.get("chms") or ""
             rec["jobs"] = lead_card.jobs(au.get("final_url") or rec["website"])
@@ -389,12 +470,51 @@ def enrich_one(a: dict, tools, words, growth, titles=None) -> dict:
     return rec
 
 
-def titles_key(titles) -> str:
-    return "|".join(sorted(t.lower() for t in titles or []))
+def titles_key(titles, must_show="") -> str:
+    return "|".join(sorted(t.lower() for t in titles or [])) + ("#" + must_show if must_show else "")
+
+
+ICP_LINK = re.compile(r'href="([^"#]+)"[^>]*>([^<]{0,80})<', re.I)
+ICP_PAGES = 4  # links followed past the home page; PIP work sat one click deep on 2026-11-02
+
+
+def page_html(audit_site, lead_card, url: str) -> tuple[str, str]:
+    """(html, final url). The audit's fetcher first: plain urllib was refused by 46 of 145 law sites."""
+    fetch = getattr(audit_site, "fetch", None)
+    if fetch:
+        d = fetch(url) or {}
+        return d.get("html") or "", d.get("final_url") or url
+    try:
+        return lead_card.get(url) or "", url
+    except Exception:
+        return "", url
+
+
+def icp_evidence(audit_site, lead_card, url: str, must_show: str) -> dict:
+    """Does the org's own site show it does the thing the ICP needs? The matching line and the
+    page it sits on, or ok False. On 2026-11-02 75 of 145 Michigan injury firms showed no-fault
+    or PIP work, and that check ran as a side script outside Dough."""
+    rx = re.compile(must_show, re.I)
+    html, final = page_html(audit_site, lead_card, url)
+    pages = [(html, final)]
+    words = re.compile(must_show + r"|practice|services|what we do|about", re.I)
+    from urllib.parse import urljoin
+    for href, text in ICP_LINK.findall(html)[:400]:
+        if len(pages) > ICP_PAGES:
+            break
+        if words.search(href + " " + text):
+            pages.append(page_html(audit_site, lead_card, urljoin(final, href)))
+    for h, u in pages:
+        text = re.sub(r"<[^>]+>", " ", re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", h))
+        m = rx.search(text)
+        if m:
+            line = re.sub(r"\s+", " ", text[max(0, m.start() - 100):m.end() + 100]).strip()
+            return {"ok": True, "line": line, "url": u}
+    return {"ok": False, "line": "", "url": final if html else ""}
 
 
 def enrich(accounts: list[dict], work: Path, tools, words, growth, workers: int, refresh: bool,
-           titles=None) -> list[dict]:
+           titles=None, must_show="") -> list[dict]:
     path = work / "enriched.jsonl"
     done, lines = {}, 0
     if path.exists() and not refresh:
@@ -404,7 +524,7 @@ def enrich(accounts: list[dict], work: Path, tools, words, growth, workers: int,
                 r = json.loads(line)
                 # a Maps or audit error is a lookup that didn't happen, so it's retried, never kept
                 # a read made for other buyer titles found other people, so it's read again
-                stale = r.get("website") and r.get("titles_key", "") != titles_key(titles)
+                stale = r.get("website") and r.get("titles_key", "") != titles_key(titles, must_show)
                 if not r.get("error") and not str(r.get("site_status") or "").startswith("error") and not stale:
                     done[r["key"]] = r
     todo = [a for a in accounts if a["key"] not in done]
@@ -415,7 +535,7 @@ def enrich(accounts: list[dict], work: Path, tools, words, growth, workers: int,
         if rewrite:
             for rec in done.values():
                 fh.write(json.dumps(rec) + "\n")
-        for rec in ex.map(lambda a: enrich_one(a, tools, words, growth, titles), todo):
+        for rec in ex.map(lambda a: enrich_one(a, tools, words, growth, titles, must_show), todo):
             with lock:
                 fh.write(json.dumps(rec) + "\n")
                 fh.flush()
@@ -462,14 +582,15 @@ def score(rec: dict, acc: dict, words: re.Pattern, today: dt.date, about=None) -
     criteria = acc.get("criteria") or {}
     cands = [{"contact_id": c.get("email") or c.get("name"), "full_name": c.get("name"), "title": c.get("title", ""),
               "email": c.get("email") or "", "email_verified": False,  # published, never run through a validator
-              "source_url": c.get("source_url", "")} for c in rec.get("leaders") or [] if is_person(c.get("name"))]
+              "source_url": c.get("source_url", "")} for c in rec.get("leaders") or []
+             if is_person(c.get("name")) and own_page(c.get("source_url", ""), rec.get("website", ""))]
     prim = gtme_score.resolve_primary(cands, acc["titles"]) if cands else None
     pc = next((c for c in cands if prim and c["contact_id"] == prim["primary_contact_id"]), None)
     items = own_news(rec["name"], rec.get("news"))
     sigs = [{"what": n["title"], "date": n["date"], "scope": "company", "company_match": True, "source": n["url"]}
             for n in items]
     # a job post is the org's own but undated on most sites, so it scores as relevance only
-    sigs += [{"what": "hiring: " + j["title"], "date": "", "scope": "company", "company_match": True,
+    sigs += [{"what": "hiring: " + j["title"], "date": j.get("date", ""), "scope": "company", "company_match": True,
               "source": j["url"]} for j in rec.get("jobs") or []]
     # Jev asks whether each signal is about THIS org; under 0.8 it's dropped, no answer is HOLD
     org = {"name": rec.get("maps_name") or rec["name"], "city": rec.get("city", ""), "state": rec.get("state", ""),
@@ -488,10 +609,20 @@ def score(rec: dict, acc: dict, words: re.Pattern, today: dt.date, about=None) -
         if company["estimated_revenue"] is not None:
             criteria = dict(criteria, revenue_range=criteria["raise_range"])
     stack = bool(KNOWN_STACK.search(rec.get("chms") or ""))
+    icp = rec.get("icp_fit") or {}
+    sized = rec.get("revenue") or rec.get("headcount") or rec.get("raised")
+    # A market with no size data (law firms, 2026-11-02: all 145 tier 3) is judged on whether
+    # its own site shows the work the ICP needs. That stands in for the size band, never on top.
+    on_icp = bool(icp.get("ok")) and not sized
     # Weights guessed from John Knox's 10/27 call, never measured: can they pay (40), a system
     # to connect (20), someone who signs (20), a reason to help now (20).
-    fit = 40 * in_band + 20 * stack + 20 * bool(pc) + 20 * need
+    fit = 40 * (in_band or on_icp) + 20 * stack + 20 * bool(pc) + 20 * need
+    if "must_show" in (acc.get("icp") or {}) and not icp.get("ok"):
+        fit = min(fit, gtme_score.TIER_2 - 1)  # the site never showed the ICP's work: never above tier 3
     tier = gtme_score.assign_tier(fit, bool(pc and pc.get("email")), company, criteria)
+    if on_icp and tier["tier"] == 2 and fit >= gtme_score.TIER_1 and pc and pc.get("email"):
+        tier = {"tier": 1, "rationale": f"Tier 1: fit score {fit}/100, with a reachable primary, the ICP's work "
+                                        f"shown on its own site (no size data in this market)."}
     top = sig["top"][0] if sig["top"] else {}
     lanes = acc.get("lanes") or {}
     return {"tier": tier["tier"], "fit": fit, "why_now_score": sig["score"], "hold": "HOLD" if sig["hold"] else "",
@@ -504,7 +635,9 @@ def score(rec: dict, acc: dict, words: re.Pattern, today: dt.date, about=None) -
             "channel": "", "dnc": "", "treg_find": "", "dupe_of": "",
             "why_now": top.get("what", ""), "why_now_date": top.get("date", ""),
             "why_now_source": top.get("source", ""), "tier_rationale": tier["rationale"],
-            "account_source": rec.get("account_source", ""), "_page_emails": rec.get("page_emails") or []}
+            "account_source": rec.get("account_source", ""), "icp_fit": "yes" if icp.get("ok") else
+            ("no" if "ok" in icp else ""), "icp_line": icp.get("line", "")[:240], "icp_source": icp.get("url", ""),
+            "_page_emails": rec.get("page_emails") or []}
 
 
 # ── step 5: Jev ──────────────────────────────────────────────────────────
@@ -683,8 +816,9 @@ def build(client: str, acc: dict, work: Path, *, limit: int | None = None, worke
     growth = re.compile(acc.get("growth_words") or GROWTH_WORDS, re.I)
     tools = tools or site_audit()
     titles = acc.get("titles") or []
+    must_show = (acc.get("icp") or {}).get("must_show") or ""
     if len(accounts) > SAMPLE and not acc.get("allow_low_buyer_fill"):
-        sample = enrich(accounts[:SAMPLE], work, tools, words, growth, workers, refresh, titles)
+        sample = enrich(accounts[:SAMPLE], work, tools, words, growth, workers, refresh, titles, must_show)
         read = [r for r in sample if r.get("site_status") == "ok"]
         found = sum(1 for r in read if r.get("leaders"))
         if read and found / len(read) < MIN_BUYER_FILL:
@@ -693,8 +827,13 @@ def build(client: str, acc: dict, work: Path, *, limit: int | None = None, worke
                           f"(now: {', '.join(titles) or 'none'}), check one site by hand, then rerun. Set "
                           f"allow_low_buyer_fill: true only if buyers really aren't on these sites.")
         refresh = False  # the sample is read; the full run reuses it
-    recs = enrich(accounts, work, tools, words, growth, workers, refresh, titles)
+    recs = enrich(accounts, work, tools, words, growth, workers, refresh, titles, must_show)
     recs = [r for r in recs if r.get("website") and same_org(r["name"], r.get("maps_name"))]
+    hiring_cfg = (acc.get("why_now") or {}).get("linkedin_jobs")
+    if hiring_cfg:
+        posts = linkedin_hiring(hiring_cfg)
+        for r in recs:
+            r["jobs"] = (r.get("jobs") or []) + posts.get(name_key(r.get("maps_name") or r["name"]), [])
     rows = [score(r, acc, words, today, about) for r in recs]
     for r in rows:
         jev_check(r, acc, client, ask)

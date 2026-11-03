@@ -323,6 +323,74 @@ class Parts(unittest.TestCase):
         for good in ["Jonathan R. Marko", "Cherie Lobb", "Patrick O’Keefe", "JOSEPH BRUGNOLI"]:
             self.assertTrue(ga.is_person(good), good)
 
+    def test_icp_work_found_one_click_deep_with_its_page(self):
+        pages = {"https://firm.example/": '<a href="/practice-areas/auto">Car Accidents</a> Free consult',
+                 "https://firm.example/practice-areas/auto":
+                     "<p>We fight insurers for your Michigan no-fault PIP benefits.</p>"}
+        audit = SimpleNamespace(fetch=lambda u: {"html": pages.get(u, ""), "final_url": u})
+        ev = ga.icp_evidence(audit, None, "https://firm.example/", r"no[- ]fault|\bPIP\b")
+        self.assertTrue(ev["ok"])
+        self.assertEqual(ev["url"], "https://firm.example/practice-areas/auto")
+        self.assertIn("PIP benefits", ev["line"])
+        none = ga.icp_evidence(SimpleNamespace(fetch=lambda u: {"html": "<p>Divorce and custody</p>", "final_url": u}),
+                               None, "https://other.example/", r"no[- ]fault|\bPIP\b")
+        self.assertFalse(none["ok"])
+
+    def test_no_size_market_tiers_on_icp_evidence(self):
+        # Michigan PIP, 11/2: no revenue or headcount, so all 145 firms were tier 3.
+        acc = {"titles": ["Founder"], "criteria": {"headcount_range": {"min": 10, "max": 150}},
+               "icp": {"must_show": "PIP"}}
+        rec = {"name": "Marko Law", "city": "Detroit", "state": "MI", "website": "https://markolaw.com/",
+               "leaders": [{"name": "Jonathan R. Marko", "title": "Founder", "email": "jon@markolaw.com",
+                            "source_url": "https://markolaw.com/staff"}],
+               "jobs": [{"title": "PIP Paralegal", "url": "https://markolaw.com/careers"}],
+               "icp_fit": {"ok": True, "line": "Michigan no-fault PIP", "url": "https://markolaw.com/pip"}}
+        row = ga.score(rec, acc, ga.re.compile("x"), date(2026, 11, 2), about=lambda org, sigs: (sigs, []))
+        self.assertEqual(row["icp_fit"], "yes")
+        self.assertLess(row["tier"], 3)
+        off = dict(rec, icp_fit={"ok": False, "line": "", "url": "https://markolaw.com/"})
+        self.assertEqual(ga.score(off, acc, ga.re.compile("x"), date(2026, 11, 2),
+                                  about=lambda org, sigs: (sigs, []))["tier"], 3)
+
+    def test_maps_source_runs_every_query_in_every_place(self):
+        # Michigan PIP, 11/2: 20 Maps searches run by hand, then merged and deduped by hand.
+        calls = []
+
+        def call(q):
+            calls.append(q)
+            return {"ok": True, "data": [
+                {"name": "Marko Law", "website": "https://www.markolaw.com/?utm=gmb",
+                 "address": "220 W Congress St, Detroit, MI 48226"},
+                {"name": "Mike Morse Injury Law Firm", "website": "https://855mikewins.com/",
+                 "address": "24901 Northwestern Hwy, Southfield, MI 48075"},
+                {"name": "Ohio Injury", "website": "https://ohioinjury.com/", "address": "1 Main St, Toledo, OH 43604"},
+                {"name": "No Site Law", "address": "2 Main St, Troy, MI 48084"}]}
+        rows = ga.maps_rows({"queries": ["PIP attorney", "auto accident lawyer"], "places": ["Detroit MI", "Troy MI"],
+                             "state": "MI", "exclude": "Mike Morse"}, Path("."), call=call)
+        self.assertEqual(len(calls), 4)
+        self.assertEqual([(r["name"], r["website"], r["city"]) for r in rows],
+                         [("Marko Law", "https://www.markolaw.com/", "Detroit")])
+        self.assertIn("maps", ga.SOURCES)
+
+    def test_linkedin_hiring_matches_exact_names_only(self):
+        def call(kw, loc):
+            return {"ok": True, "data": [
+                {"company": "Michigan Auto Law", "title": "Paralegal", "url": "u1", "postedDate": "2026-10-22"},
+                {"company": "Blue Cross Blue Shield of Michigan", "title": "Paralegal", "url": "u2"},
+                {"company": "Hamo Law Firm, PLLC", "title": "PIP Case Manager", "url": "u3", "postedDate": "2026-10-30"}]}
+        posts = ga.linkedin_hiring({"keywords": ["paralegal"], "places": ["Detroit, Michigan"]}, call=call)
+        self.assertEqual(posts[ga.name_key("Michigan Auto Law - Auto Accident Attorneys")][0]["date"], "2026-10-22")
+        self.assertEqual(posts[ga.name_key("Hamo Law Firm - Auto Accident Lawyers")][0]["title"], "PIP Case Manager")
+        self.assertNotIn(ga.name_key("Michigan Injury Attorneys"), posts)
+
+    def test_buyer_named_on_another_site_is_dropped(self):
+        acc = {"titles": ["Founder"], "criteria": {}}
+        rec = {"name": "Marko Law", "city": "", "state": "MI", "website": "https://www.markolaw.com/",
+               "leaders": [{"name": "Alex Kay", "title": "Founder", "source_url": "https://www.michbar.org/alex"},
+                           {"name": "Jonathan R. Marko", "title": "Founder", "source_url": "https://markolaw.com/staff"}]}
+        row = ga.score(rec, acc, ga.re.compile("x"), date(2026, 11, 2), about=lambda org, sigs: (sigs, []))
+        self.assertEqual(row["buyer"], "Jonathan R. Marko")
+
     def test_blind_sample_refuses_the_full_run(self):
         # Michigan PIP, 11/2: 145 sites read, 1 buyer, because no title the reader knew fit.
         def audit(url, _, titles="church", buyer_titles=None):

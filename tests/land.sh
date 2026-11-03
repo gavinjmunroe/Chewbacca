@@ -181,4 +181,21 @@ echo "$out" | grep -q "never had it" || fail "stale-path refusal said: $out"
 cd "$T/check" && git pull -q
 [ "$(cat new.txt)" = "another tab's work" ] || fail "new.txt changed on main"
 
+# The README line count includes SHA256SUMS.txt, so it has to be counted after
+# the manifest is rebuilt. On 2026-11-02 land ran counts first, a new bin file
+# grew the manifest after the count, and pre-push refused the claude-jobs land
+# three times on "About 3,246,000 lines" vs 3,247,000.
+cd "$T/seed" && git pull -q
+cat > tools/counts.py <<'PY'
+import pathlib, subprocess
+files = [f for f in subprocess.run(["git", "ls-files"], capture_output=True, text=True).stdout.split() if f != "COUNT"]
+n = sum(len(pathlib.Path(f).read_text().splitlines()) for f in files if pathlib.Path(f).exists())
+pathlib.Path("COUNT").write_text(f"{n}\n")
+PY
+python3 tools/checksums.py && python3 tools/counts.py && git add -A && git commit -qm counts && git push -q origin main
+git clone -q "$T/origin.git" "$T/counted" && cd "$T/counted" && echo "a brand new file" > fresh.txt
+out=$(python3 -I "$LAND" --paths fresh.txt -m "feat: fresh" 2>&1) || fail "land with counts failed: $out"
+cd "$T/check" && git pull -q
+python3 tools/checksums.py && python3 tools/counts.py && git diff --quiet COUNT SHA256SUMS.txt || fail "count stale after land: $(git diff COUNT)"
+
 echo ok

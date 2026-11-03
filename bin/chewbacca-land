@@ -93,7 +93,11 @@ class Lock:
 def regenerate(wt, quiet=True):
     """Rebuild the files the pre-push gate compares, and fold them into HEAD."""
     changed = False
-    for tool in (["tools/counts.py"], ["tools/checksums.py"]):
+    # The README line count includes SHA256SUMS.txt, and the manifest hashes
+    # the README, so: manifest, count, manifest. Counting first left the count
+    # short by the lines a new file added to the manifest, and pre-push
+    # refused the claude-jobs land three times on 2026-11-02.
+    for tool in (["tools/checksums.py"], ["tools/counts.py"], ["tools/checksums.py"]):
         if os.path.exists(os.path.join(wt, tool[0])):
             run(["python3", "-I", *tool], wt, check=False, quiet=quiet)
     # The worktree is land's own and was clean, so anything dirty now is

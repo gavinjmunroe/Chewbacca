@@ -80,6 +80,27 @@ Both fail the same way, by reading the transcript alone and stopping there.
    not done here (Roy call, 2026-10-29: "Add Roy to the FF site btw tell
    the other tab that's doin it").
 
+## A class lecture is a call too
+
+A pasted lecture has one name on it (Caleb) and a professor talking to a
+room. The people to read are the team, not the speaker. On 2026-11-03 an
+ACAD 185 lecture came in and the first reply answered from the transcript
+alone: the Kyber gc was quiet, but Angie's own thread said she'd take the
+Hypothosheet and redo A20 with generated images, and an attendance code
+Caleb asked for on Zoom was still unanswered.
+
+- Find the team in the course file (`~/coursework/courses/<course>.yml`)
+  and the project note in `second-brain/memory/`, then run `people texts`
+  on the team gc and on each teammate by full name.
+- Match what the prof assigned against the ledger rows for that course.
+  An in-class deliverable due "by end of class" is a Today row even after
+  class ends, until someone confirms it went in.
+- Feedback on the team's work goes in the project note in full (what he
+  praised, each change he asked for), because the next version is graded
+  against it.
+- Whisper garbles end-of-class chatter. A changed due date heard there is
+  a note on the row, never a change to the ledger date.
+
 ## Check before handing over
 
 Read each row as Caleb at 8am: does it say what to do, and is it still true

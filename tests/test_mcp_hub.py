@@ -31,7 +31,8 @@ def no(msg):
 
 
 FAKE_SERVER = r'''
-import json, os, sys
+import json, os, sys, time
+time.sleep(float(os.environ.get("FAKE_BOOT_S", "0")))
 for line in sys.stdin:
     msg = json.loads(line)
     mid, method = msg.get("id"), msg.get("method")
@@ -127,6 +128,39 @@ with tempfile.TemporaryDirectory() as t:
         msg = (body or {}).get("error", {}).get("message", "")
         if "failed 3 times" not in msg:
             no(f"three crashes should open the breaker, got {body}")
+    finally:
+        hub.terminate()
+        hub.wait(timeout=5)
+    # A restart answers initialize and tools/list from the cache while a slow
+    # server boots, and server/discover never waits on a cold start.
+    if not (t / "mcp-hub-cache.json").exists():
+        no("the hub never cached the server's init and tool list")
+    env_slow = dict(env, FAKE_BOOT_S="4")
+    hub = subprocess.Popen(["node", str(ROOT / "bin/mcp-hub"), "serve"], env=env_slow,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        for _ in range(50):
+            try:
+                urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=1)
+                break
+            except Exception:
+                time.sleep(0.1)
+        began = time.time()
+        code, disc = post({"jsonrpc": "2.0", "id": "d", "method": "server/discover"})
+        code, init2 = post({"jsonrpc": "2.0", "id": "i", "method": "initialize", "params": {}})
+        code, tl = post({"jsonrpc": "2.0", "id": "l", "method": "tools/list"})
+        took = time.time() - began
+        if took > 2:
+            no(f"cached answers took {took:.1f}s behind a 4s cold start")
+        if (disc or {}).get("error", {}).get("code") != -32601:
+            no(f"server/discover should be refused at once: {disc}")
+        if (init2 or {}).get("result", {}).get("serverInfo", {}).get("name") != "fake":
+            no(f"initialize was not served from the cache: {init2}")
+        if [t_["name"] for t_ in (tl or {}).get("result", {}).get("tools", [])] != ["whoami"]:
+            no(f"tools/list was not served from the cache: {tl}")
+        code, live = call(400)
+        if code != 200 or "result" not in (live or {}):
+            no(f"a real call after a cached connect failed: {live}")
     finally:
         hub.terminate()
         hub.wait(timeout=5)

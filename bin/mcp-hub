@@ -35,6 +35,12 @@ const DIR = process.env.CHEWBACCA_MCP_HUB_DIR || path.join(HOME, ".chewbacca");
 const CONFIG = path.join(DIR, "mcp-hub.json");
 const TOKEN_FILE = path.join(DIR, "mcp-hub.token");
 const LOG = path.join(DIR, "logs", "mcp-hub.log");
+const CACHE = path.join(DIR, "mcp-hub-cache.json");
+// Answered from the last real reply while the server boots, realm's rule for
+// a sleeping server ("its last tool list is still served"). On 2026-11-02 the
+// first live move timed out 7 of 8 servers: a uvx or npx cold start took 11
+// to 16 s at load 14, eight at once, against Claude Code's 30 s connect limit.
+const CACHEABLE = new Set(["tools/list", "prompts/list", "resources/list", "resources/templates/list"]);
 const KEYCHAIN_SERVICE = "chewbacca-mcp";
 
 // realm's own numbers. 60s is the MCP SDK's default call timeout, which realm
@@ -277,6 +283,34 @@ function serve() {
     }
   }, Math.min(IDLE_MS, 60_000)).unref();
 
+  let cache = readJSON(CACHE, {});
+  const specKey = (u) => JSON.stringify(u.spec);
+  const cached = (u) => (cache[u.name] && cache[u.name].spec === specKey(u) ? cache[u.name] : null);
+  const remember = (u, key, value) => {
+    const entry = cached(u) || { spec: specKey(u), lists: {} };
+    if (key === "init") entry.init = value;
+    else entry.lists[key] = value;
+    cache = { ...cache, [u.name]: entry };
+    try { fs.writeFileSync(CACHE, JSON.stringify(cache), { mode: 0o600 }); } catch { /* cache is an optimization */ }
+  };
+  // Start a server and refresh what's cached for it, without anyone waiting.
+  const warm = (u, pv) => u.start(pv).then(async (init) => {
+    remember(u, "init", init);
+    const tools = await u.request("tools/list", {});
+    if (tools && !tools.__error) remember(u, "tools/list", tools);
+  }).catch((err) => log(`warm ${u.name} failed: ${redact(err.message, u.secrets)}`));
+
+  // A server nobody has started yet gets started once, one at a time, so its
+  // first tab never waits on a cold start and eight never start at once.
+  const prewarm = async () => {
+    for (const name of Object.keys(readJSON(CONFIG, cfg).servers || {})) {
+      const u = upstream(name);
+      if (u && !cached(u) && !u.child) await warm(u);
+    }
+  };
+  prewarm();
+  setInterval(prewarm, 60_000).unref();
+
   const reply = (res, status, body, headers = {}) => {
     res.writeHead(status, { "Content-Type": "application/json", ...headers });
     res.end(body === undefined ? "" : JSON.stringify(body));
@@ -285,19 +319,37 @@ function serve() {
   const handleOne = async (u, msg) => {
     const pv = msg.params && msg.params.protocolVersion;
     if (msg.method === "initialize") {
+      u.usedAt = Date.now();
+      const hit = cached(u);
+      if (hit && hit.init) {
+        if (!u.child) warm(u, pv);
+        return { jsonrpc: "2.0", id: msg.id, result: hit.init };
+      }
       try {
         await u.start(pv);
       } catch (err) {
         return { jsonrpc: "2.0", id: msg.id, error: { code: -32603, message: redact(err.message, u.secrets) } };
       }
-      u.usedAt = Date.now();
+      remember(u, "init", u.init);
       return { jsonrpc: "2.0", id: msg.id, result: u.init };
     }
     if (msg.id === undefined) return null; // initialized, cancelled: nothing to answer
+    // Claude Code probes with server/discover before initialize. Starting a
+    // cold server just to say "unknown method" cost the connect its 30 s.
+    if (msg.method === "server/discover") {
+      return { jsonrpc: "2.0", id: msg.id, error: { code: -32601, message: "Method not found" } };
+    }
+    const hit = cached(u);
+    if (CACHEABLE.has(msg.method) && !(msg.params && msg.params.cursor) && hit && hit.lists[msg.method]) {
+      u.usedAt = Date.now();
+      if (!u.child) warm(u, pv);
+      return { jsonrpc: "2.0", id: msg.id, result: hit.lists[msg.method] };
+    }
     const started = Date.now();
     try {
       const result = await u.call(msg.method, msg.params, pv);
       log(`${u.name} ${msg.method} ${Date.now() - started}ms ${result && result.__error ? "error" : "ok"}`);
+      if (CACHEABLE.has(msg.method) && result && !result.__error && !(msg.params && msg.params.cursor)) remember(u, msg.method, result);
       if (result && result.__error) return { jsonrpc: "2.0", id: msg.id, error: result.__error };
       return { jsonrpc: "2.0", id: msg.id, result };
     } catch (err) {

@@ -532,6 +532,11 @@ check("Sagar: subject_problem passes the 10-11 Zeutara subjects",
       not any(G.subject_problem(s) for s in ("Chicago dating app pre-seed", "Payments identity seed round",
                                              "Medtech regulatory AI pre-seed", "Mushroom coffee brand raise")),
       [G.subject_problem(s) for s in ("Chicago dating app pre-seed", "Payments identity seed round")])
+check("opt-out: the reply-stop line FF's graded copy shipped with counts (AuraPath, 11/2)",
+      all(G.OPT_OUT.search(s) for s in ("If you'd rather not hear from me, reply stop and I won't email again.",
+                                        "Reply stop and I won't email you again.")))
+check("opt-out: a plain sign-off is not an opt-out",
+      not G.OPT_OUT.search("Travis Johnson, AuraPath AI"))
 check("Sagar: subject_problem refuses what shipped before",
       all(G.subject_problem(s) for s in ("Question", "Quick question", "Hi", "Intro", "Re: Question",
                                          "Quick thought for you")))

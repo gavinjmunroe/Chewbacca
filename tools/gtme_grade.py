@@ -129,8 +129,11 @@ YES_NO = re.compile(r"^(would|is|are|do|does|worth|open|could|can|should|want|an
 SENDER_FIRST = re.compile(r"^(i'm|i am|my name|we |we're|our |i work|i run|i co-?founded)", re.I)
 ADDRESS = re.compile(r"\b\d{1,6}\s+[A-Z][\w.]*(\s[\w.]+){0,4}\s(st|street|ave|avenue|rd|road|blvd|"
                      r"suite|ste|drive|dr|lane|way|place|pl)\b", re.I)
+# "reply stop and I won't email you again" is the opt-out Firm Foundation's graded SoCal copy
+# shipped with (10/18), and on 2026-11-02 the AuraPath sequence failed gate 5 for using it.
 OPT_OUT = re.compile(r"(unsubscribe|opt[- ]out|say the word|tell me to stop|i'?ll stop|remove you|"
-                     r"step out of your inbox|rather i stopped)", re.I)
+                     r"step out of your inbox|rather i stopped|reply stop|won'?t email (you )?again|"
+                     r"rather not hear from)", re.I)
 LEAK = re.compile(r"(\bnone\b|\bn/?a\b|\bnull\b|\bundefined\b|couldn'?t find|could not find|"
                   r"not available|no information|unknown|\{\{|\}\}|\[\w)", re.I)
 INVISIBLE = re.compile("[​‌‍⁠﻿­]")

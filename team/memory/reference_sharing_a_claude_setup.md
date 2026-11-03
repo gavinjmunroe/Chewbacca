@@ -57,6 +57,10 @@ Built for team Chip In (ACAD 185): `calebnewtonusc/chip-in-setup`, private. Cale
 
 Dry runs must not call `gh` (even `--version` writes ~/.local/state/gh/device-id) or `code --list-extensions` (creates ~/Library/Application Support/Code); tests/smoke.sh in chip-in-setup asserts an empty HOME stays empty. A one-page PDF for the group chat follows his own gc messages in order and only adds the walls a new account hits.
 
-## No GitHub at all: serve the kit from their own server (2026-11-02)
+## Even a non-technical person gets GitHub, driven by Claude (2026-11-02)
+
+Caleb overruled the no-GitHub build below on the same night: "OF COURSE WERE GONNA USE GITHUB". Default path: the setup installs gh from its release with no brew, stops once so Claude can run `gh auth login --web` in a real terminal while the person clicks (Google sign-in works), then accepts the invites and clones the kit and their app repo, so `chewbacca update` keeps working. joel-os `setup/install.sh` is the worked version. The server-hosted kit below is only a fallback.
+
+## Fallback, no GitHub at all: serve the kit from their own server (2026-11-02)
 
 For someone who won't touch GitHub (Caleb's dad: "I won't be using either of those haha"), the kit can't come from a clone. In `calebnewtonusc/joel-os`, `bin/push-kit <slug>` archives Chewbacca main, strips team/memory, team/tasks, team/members.json and team/gtme-lessons, and uploads about 120 MB to that person's own Railway instance. Their Mac then gets everything from one pasted prompt (`setup/SETUP-FOR-CLAUDE.md`), which runs `<server>/setup.sh` with their key. That script installs the Command Line Tools, Node and Claude Code with no brew, downloads the kit and bridge with the key, and runs `./setup.sh --no-github`. `JOEL_OS_TEST=1` tests it under a throwaway HOME without touching setup.sh or launchd. The full setup.sh run on a truly blank Mac was still untested as of 11/2.

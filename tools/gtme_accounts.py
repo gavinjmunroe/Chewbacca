@@ -189,7 +189,7 @@ KNOWN_STACK = re.compile(r"planning center|rock|pushpay|ministry ?platform|ccb|c
                          r"blackbaud|raiser|salesforce|virtuous|bloomerang|donorperfect|neon", re.I)
 IRS_EO = "https://www.irs.gov/pub/irs-soi/eo_{state}.csv"
 COLUMNS = ["tier", "fit", "why_now_score", "hold", "kind", "org", "city", "state", "website", "revenue", "size",
-           "stack", "buyer", "buyer_title", "buyer_email", "buyer_source", "buyer_check", "relationship",
+           "stack", "buyer", "buyer_first", "buyer_title", "buyer_email", "buyer_source", "buyer_check", "relationship",
            "channel", "dnc", "treg_find", "dupe_of", "why_now", "why_now_date", "why_now_source",
            "tier_rationale", "account_source", "icp_fit", "icp_line", "icp_source", "email_verdict"]
 lock = threading.Lock()
@@ -451,6 +451,18 @@ def linkedin_hiring(cfg: dict, call=None) -> dict:
 # On 11/2 the Baptize list read 1,357 churches from Maps to find 76 that posted a baptism this
 # year (about 5%). A search for the signal itself ("baptism 2026" on Church Center) found real
 # California churches on its first page. Guessed, never measured: one SERP page is 10 results.
+# On 11/3 a hand-built sample stripped one title off "Rev. Dr. Mathew P. John" and greeted him
+# "Hi Dr.,"; gtme-grade caught it. Titles stack, so strip them all.
+HONORIFIC = re.compile(r"^(?:(?:pastor|rev(?:erend)?|dr|bishop|apostle|elder|minister|mr|mrs|ms)\.?\s+)+", re.I)
+
+
+def greeting_name(full: str) -> str:
+    """The first name a cold email greets: every leading title stripped, ALL CAPS fixed."""
+    rest = HONORIFIC.sub("", (full or "").strip())
+    first = rest.split()[0] if rest.split() else ""
+    return first.title() if first.isupper() and len(first.strip(".")) > 2 else first
+
+
 SEARCH_ENDPOINT = "treg.google.serp.organic"
 SEARCH_MAX_USD = 0.002  # routed SERP lists at $0.00015 to $0.002 a page (treg catalog, 11/2)
 SHARED_SIGNAL_HOSTS = ("churchcenter.com", "subsplash.com")
@@ -1019,6 +1031,7 @@ def score(rec: dict, acc: dict, words: re.Pattern, today: dt.date, about=None) -
             "size": rec.get("size") or (f"{people} people on its site" + (" (over the band)" if too_big else "")
                                         if people else ""),
             "stack": rec.get("chms") or "", "buyer": (pc or {}).get("full_name", ""),
+            "buyer_first": greeting_name((pc or {}).get("full_name", "")),
             "buyer_title": (pc or {}).get("title", ""), "buyer_email": (pc or {}).get("email", ""),
             "buyer_source": (pc or {}).get("source_url", ""), "buyer_check": "", "relationship": "",
             "channel": "", "dnc": "", "treg_find": "", "dupe_of": "",

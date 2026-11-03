@@ -876,6 +876,12 @@ class ChurchMode(unittest.TestCase):
         self.assertEqual(row["segment"], "")
         self.assertIn("baptism line is a sermon", row["held_why"])
 
+    def test_greeting_name_strips_every_stacked_title(self):
+        self.assertEqual(ga.greeting_name("Rev. Dr. Mathew P. John"), "Mathew")
+        self.assertEqual(ga.greeting_name("Pastor JOHN SMITH"), "John")
+        self.assertEqual(ga.greeting_name("Dr. T.K. Anderson"), "T.K.")
+        self.assertEqual(ga.greeting_name(""), "")
+
     def test_search_source_finds_the_church_behind_a_signal(self):
         calls = []
 

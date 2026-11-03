@@ -675,6 +675,13 @@ right away.
   for 2 coordinators (not on Travis's titles) and 11 churches getting the same pitch twice. Each
   campus pastor is a separate pitch only when the company field names the campus, and two
   churches with one name need their city.
+- Search runs dry before the list fills. On 11/3, 40 more quoted searches in 20 new CA
+  cities gave 22 new churches and 5 usable ones, after 165 searches had given 17. Past
+  about 200 searches for one signal in one state, the next rows come from a directory
+  (a denomination's or network's church finder) turned into an api-anything op, not more searches.
+- A query with `-site:` filters makes treg's cheap SERP provider miss, and the fallback costs
+  $0.00253 a call (17x). Set `max_cost_usd` to 0.003 on the search source when you use them.
+- Greet with `buyer_first` (every stacked title stripped). Never split a name by hand.
 - Church outreach runs `gtme accounts` with `audit_titles: "pastors"`,
   `per_person`, `page_signals` with `sitemap`, Jev `checks` and `segments`. The
   model config is `~/.chewbacca/gtm/clients/baptize.json`.

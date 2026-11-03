@@ -336,6 +336,17 @@ class Parts(unittest.TestCase):
                                None, "https://other.example/", r"no[- ]fault|\bPIP\b")
         self.assertFalse(none["ok"])
 
+    def test_icp_check_follows_only_the_orgs_own_pages(self):
+        fetched = []
+
+        def fetch(u):
+            fetched.append(u)
+            return {"html": ('<a href="file:///etc/passwd">practice</a><a href="http://127.0.0.1/practice">x</a>'
+                             '<a href="https://evil.example/practice">practice</a>'
+                             '<a href="https://blog.firm.example/practice">practice</a>'), "final_url": u}
+        ga.icp_evidence(SimpleNamespace(fetch=fetch), None, "https://firm.example/", "PIP")
+        self.assertEqual(fetched, ["https://firm.example/", "https://blog.firm.example/practice"])
+
     def test_no_size_market_tiers_on_icp_evidence(self):
         # Michigan PIP, 11/2: no revenue or headcount, so all 145 firms were tier 3.
         acc = {"titles": ["Founder"], "criteria": {"headcount_range": {"min": 10, "max": 150}},

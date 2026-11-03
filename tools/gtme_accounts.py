@@ -490,6 +490,17 @@ def page_html(audit_site, lead_card, url: str) -> tuple[str, str]:
         return "", url
 
 
+def same_site(link: str, home: str) -> bool:
+    from urllib.parse import urlparse
+    u = urlparse(link)
+    if u.scheme not in ("http", "https") or not u.hostname:
+        return False
+    if re.fullmatch(r"[\d.]+|\[?[0-9a-f:]+\]?", u.hostname) or u.hostname == "localhost":
+        return False
+    a, b = _domain(link), _domain(home)
+    return a == b or a.endswith("." + b)
+
+
 def icp_evidence(audit_site, lead_card, url: str, must_show: str) -> dict:
     """Does the org's own site show it does the thing the ICP needs? The matching line and the
     page it sits on, or ok False. On 2026-11-02 75 of 145 Michigan injury firms showed no-fault
@@ -502,8 +513,11 @@ def icp_evidence(audit_site, lead_card, url: str, must_show: str) -> dict:
     for href, text in ICP_LINK.findall(html)[:400]:
         if len(pages) > ICP_PAGES:
             break
-        if words.search(href + " " + text):
-            pages.append(page_html(audit_site, lead_card, urljoin(final, href)))
+        link = urljoin(final, href)
+        # only the org's own pages over http(s): a scraped href can point anywhere, file:// and
+        # localhost included, and those were never what "does their site show the work" asks
+        if words.search(href + " " + text) and same_site(link, final):
+            pages.append(page_html(audit_site, lead_card, link))
     for h, u in pages:
         text = re.sub(r"<[^>]+>", " ", re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", h))
         m = rx.search(text)

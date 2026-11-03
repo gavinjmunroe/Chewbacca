@@ -693,6 +693,25 @@ right away.
   NOT READY list as it stands. The Stop hook `ready-guard.sh` refuses a
   readiness claim without a signed READY under 2 hours old.
 
+## Google ranking never gates a launch (2026-11-03, Firm Foundation)
+
+Asked "we should wait to start outbound until we show up on google right?",
+the answer told him to make sure "the site loads on the domain u link". He
+wrote back "I thought we're not including a link?". The first touch carries no
+link, so a prospect checks us out by typing the domain off the sender address
+or googling the name. Before answering a readiness question, read the client's
+own copy rules, then check these:
+
+- Every sending domain redirects to the main site (`curl -sI https://<domain>`
+  shows a 301 or 308 to it). That's the path most lookups take.
+- `site:<domain>` on Google shows the homepage. If it doesn't, Search Console
+  Request indexing fixes it in days.
+- Brand-name search is a separate, slower problem. On 11/3 "firm foundation
+  tech" belonged to a San Diego IT shop on the exact-match domain
+  firmfoundationtech.com, so weeks of Business Profile, profile posts and
+  backlinks were left. It doesn't hold outbound, since inbox warmup takes 2 to
+  3 weeks anyway. Detail is in team/memory/project_ff_brand_search_2026_11_03.md.
+
 ## Grading a campaign before it goes out
 
 Run the five gates in [the playbook's grading section](references/demand-gen-playbooks.md#grading-a-campaign-before-it-goes-out)

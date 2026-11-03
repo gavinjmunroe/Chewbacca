@@ -136,6 +136,12 @@ def own_page(page: str, website: str) -> bool:
     return a == b or a.endswith("." + b) or b.endswith("." + a)
 
 
+# A buyer who died or retired can still sit on a firm's site. Fieger Law's founder Bernard
+# Fieger came back as a buyer on 2026-11-02, and The Lobb Law Firm lists its founder
+# "In Memoriam (1949-2024)" next to the owner who runs it now.
+GONE = re.compile(r"in memoriam|deceased|\bthe late\b|\bretired\b|emerit|\((?:18|19|20)\d\d\s*[-\u2013]\s*(?:19|20)\d\d\)", re.I)
+
+
 def is_person(name) -> bool:
     words = str(name or "").split()
     return len(words) >= 2 and not NOT_PERSON.search(str(name))
@@ -597,7 +603,8 @@ def score(rec: dict, acc: dict, words: re.Pattern, today: dt.date, about=None) -
     cands = [{"contact_id": c.get("email") or c.get("name"), "full_name": c.get("name"), "title": c.get("title", ""),
               "email": c.get("email") or "", "email_verified": False,  # published, never run through a validator
               "source_url": c.get("source_url", "")} for c in rec.get("leaders") or []
-             if is_person(c.get("name")) and own_page(c.get("source_url", ""), rec.get("website", ""))]
+             if is_person(c.get("name")) and own_page(c.get("source_url", ""), rec.get("website", ""))
+             and not GONE.search(c.get("title", ""))]
     prim = gtme_score.resolve_primary(cands, acc["titles"]) if cands else None
     pc = next((c for c in cands if prim and c["contact_id"] == prim["primary_contact_id"]), None)
     items = own_news(rec["name"], rec.get("news"))

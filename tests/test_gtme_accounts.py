@@ -468,6 +468,15 @@ class Parts(unittest.TestCase):
         self.assertNotIn("NOTHING", ga.email_line({"emails": {"found": 3, "verified_published": 1}}))
         self.assertIn("not spent", ga.email_line({"treg_priced_rows": 2, "treg_priced_usd": 0.1}))
 
+    def test_a_founder_in_memoriam_is_never_the_buyer(self):
+        acc = {"titles": ["Founder", "Owner"], "criteria": {}}
+        rec = {"name": "The Lobb Law Firm", "city": "", "state": "MI", "website": "https://thelobblawfirm.com/",
+               "leaders": [{"name": "Joseph Lobb", "title": "Founder, In Memoriam (1949-2024)",
+                            "source_url": "https://thelobblawfirm.com/about"},
+                           {"name": "Cherie Lobb", "title": "Owner", "source_url": "https://thelobblawfirm.com/about"}]}
+        row = ga.score(rec, acc, ga.re.compile("x"), date(2026, 11, 2), about=lambda org, sigs: (sigs, []))
+        self.assertEqual(row["buyer"], "Cherie Lobb")
+
     def test_buyer_named_on_another_site_is_dropped(self):
         acc = {"titles": ["Founder"], "criteria": {}}
         rec = {"name": "Marko Law", "city": "", "state": "MI", "website": "https://www.markolaw.com/",

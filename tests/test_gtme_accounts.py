@@ -957,6 +957,25 @@ class ChurchMode(unittest.TestCase):
             with self.assertRaises(ga.Refused):
                 ga.search_rows({"queries": ["x"]}, Path(d), call=call)
 
+    def test_one_campus_pastor_per_campus(self):
+        def row(who, title, email=""):
+            return {"org": "bayside", "website": "https://santarosa.bayside.example/", "buyer": who,
+                    "buyer_title": title, "buyer_email": email}
+        rows = [row("Mason Williams", "Campus Pastor", "m@x"), row("Steve Bond", "Campus Pastor"),
+                row("Ann Lee", "Campus Pastor, Fontana")]
+        got = [r["buyer"] for r in ga.one_per_org(rows, {"titles": ["Campus Pastor"], "one_per_org_except": "campus"})]
+        self.assertEqual(got, ["Mason Williams", "Ann Lee"])
+        self.assertEqual((ga.campus_of("Campus Pastor, Fontana"), ga.campus_of("Brea Campus Pastor"),
+                          ga.campus_of("Campus Pastors")), ("Fontana", "Brea", ""))
+
+    def test_client_can_rule_out_titles(self):
+        rec = {"key": "p1", "name": "Access Church", "city": "", "state": "CA", "website": "https://access.example/",
+               "leaders": [{"name": "Jada Johnson", "title": "Connections Coordinator", "email": "",
+                            "source_url": "https://access.example/team"}]}
+        acc = {"titles": ["Connections"], "criteria": {}, "exclude_titles": "coordinator"}
+        row = ga.score(rec, acc, ga.re.compile("x"), date(2026, 11, 2), lambda o, s: (s, []))
+        self.assertEqual(row["buyer"], "")
+
     def test_excluded_church_is_held_with_its_reason(self):
         rec = {"key": "p1", "name": "Open Church", "category": "Non-denominational church",
                "leaders": [{"name": "Cy Dee", "title": "Lead Pastor", "email": "", "source_url": "s"}]}

@@ -948,7 +948,10 @@ def score(rec: dict, acc: dict, words: re.Pattern, today: dt.date, about=None) -
               "source_url": c.get("source_url", "")} for c in rec.get("leaders") or []
              if is_person(c.get("name")) and (own_page(c.get("source_url", ""), rec.get("website", ""))
                                               or bool(site_home(rec)) and own_page(c.get("source_url", ""), site_home(rec)))
-             and not GONE.search(c.get("title", ""))]
+             and not GONE.search(c.get("title", ""))
+             # a client can rule titles out: coordinators aren't on Travis's 11/2 Baptize title list,
+             # and list-gate refused two of them as too junior to decide
+             and not (acc.get("exclude_titles") and re.search(acc["exclude_titles"], c.get("title", ""), re.I))]
     prim = gtme_score.resolve_primary(cands, acc["titles"]) if cands else None
     pc = next((c for c in cands if prim and c["contact_id"] == prim["primary_contact_id"]), None)
     items = own_news(rec["name"], rec.get("news"))
@@ -1151,15 +1154,28 @@ def title_rank(title: str, titles: list[str]) -> int:
     return next((i for i, t in enumerate(titles) if t.lower() in low), len(titles))
 
 
+def campus_of(title: str) -> str:
+    """The campus a title names: "Campus Pastor, Fontana" and "Brea Campus Pastor" name one,
+    "Campus Pastor" alone names none."""
+    t = re.sub(r"(?i)\b(campus|site|location)\s+pastors?\b|\bpastors?\b|\b(lead|senior|executive|associate)\b|"
+               r"[,&/|]|\band\b|\bcontact\b", " ", title or "")
+    return " ".join(t.split()).strip().title()
+
+
 def one_per_org(rows: list[dict], acc: dict) -> list[dict]:
     """The best-titled person per org, by the order of `titles`, plus everyone whose title says
     `one_per_org_except` (each campus pastor of a multi-campus church). Six pastors at one church
     getting the same cold invitation reads as a blast."""
     keep_all = re.compile(acc["one_per_org_except"], re.I)
     best: dict[str, dict] = {}
-    out = []
+    out, seen_campus = [], set()
     for r in rows:
         if r["buyer"] and keep_all.search(r["buyer_title"] or ""):
+            # one per campus: two "Campus Pastor"s at Bayside Santa Rosa got the same pitch on 11/2
+            k = (org_key(r), campus_of(r["buyer_title"]))
+            if k in seen_campus:
+                continue
+            seen_campus.add(k)
             out.append(r)
             continue
         k = org_key(r)

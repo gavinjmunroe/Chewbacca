@@ -671,6 +671,10 @@ right away.
   sermons, a 2024 date, a campus name as a person and two wrong-person emails.
   The emails, names and old dates are now guarded in code. A dated event or a
   sign-up in the quoted line is NOT checked yet, so read for it.
+- Run `list-gate` on the sample before calling it done. On 11/2 it refused the Baptize sample
+  for 2 coordinators (not on Travis's titles) and 11 churches getting the same pitch twice. Each
+  campus pastor is a separate pitch only when the company field names the campus, and two
+  churches with one name need their city.
 - Church outreach runs `gtme accounts` with `audit_titles: "pastors"`,
   `per_person`, `page_signals` with `sitemap`, Jev `checks` and `segments`. The
   model config is `~/.chewbacca/gtm/clients/baptize.json`.

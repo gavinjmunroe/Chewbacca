@@ -23,3 +23,11 @@ fix/gtme-accounts-law-buyers and FF fix/audit-law-titles, not merged): 270 firms
 27 with a confirmed owner and PIP work on their own site, 24 with treg-verified emails. Paid
 email finds are cached in the client's accounts/emails.json so a rerun never pays twice.
 The Botified teardown is in dough docs/competitors/botified.md and the plan is dough docs/IMPROVEMENT-PLAN.md.
+
+Final state at 11:25pm 11/2, on main (Chewbacca 5011db02, firm-foundation 6962cbd): 267 firms
+sourced, 45 send-ready leads with a sourced first line, a verified email and an owner named on
+their own site. The review pack is ~/Downloads/travis-tests/AuraPath PIP list for Travis.md and
+.csv, built by make_travis_pack.py next to them, and it goes to Travis after he answers. The copy
+(copy/aurapath-pip-sequence.txt, 2 variants of 3) passes gtme-grade gates 2 and 3. Gates 1, 4
+and 5 wait on Travis's postal address, his do-not-contact list and the senders from the 11/3
+setup. Copy lines were hand-written per firm, and 5 firms are held in copy/aurapath-pip-leads-held.csv.

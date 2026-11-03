@@ -109,6 +109,14 @@ by Carlton Aikins, 2026-11-02:
   (MIT): app-growth, app-review, ghostwrite, heavy-work, ship-feature and
   swiftui, installed the way `deslop` already was.
 
+From Amber's own amber-id (`amber/id/src/lib`, 9d29252), under Karthik's
+2026-10-20 ruling that features move between Amber and Chewbacca freely:
+`people-rank-realness`, `name-nicknames`, `contact-duplicates`, `source-trust`,
+`transcript-filler` and `person-mentions`, with the five files they import and
+their tests, in `bin/lib/people-amber/` (2026-11-02). `chewbacca people-check`
+runs them over the people store and sends the cases they can't settle to Jev;
+meeting capture uses a Python twin of `transcript-filler`.
+
 The import design came from one repo:
 [31Carlton7/realm](https://github.com/31Carlton7/realm), by Carlton Aikins.
 Its Settings > Import reads Claude Code, Codex and Cursor history with a strict

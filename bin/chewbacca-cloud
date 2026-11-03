@@ -13,7 +13,7 @@ set -euo pipefail
 TEMPLATE_REPO="${CHEWBACCA_CLOUD_REPO:-calebnewtonusc/joel-os}"
 # The exact template commit this kit runs. Bump it on purpose, after reading
 # the diff, never by following the remote head (security review, 11/2).
-TEMPLATE_SHA="d1c817c7d99a5d987939eecc89fcc25b42e582d4"
+TEMPLATE_SHA="095a6ec18d9becaa07c7790d2868d1ca5cda5124"
 TEMPLATE="${CHEWBACCA_CLOUD_TEMPLATE:-$HOME/.chewbacca/cloud/template}"
 SECRETS_DIR="$HOME/.chewbacca/secrets"
 

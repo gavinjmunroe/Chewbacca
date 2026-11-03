@@ -46,6 +46,8 @@ Caleb's always-on home is his joel-os instance, https://caleb-os.up.railway.app,
 
 This service is for a kit user without a joel-os instance.
 
+To turn jobs on for any Railway service, run `chewbacca claude-jobs connect <project> [service]` in a terminal and approve in the browser. It runs `claude setup-token` and sends the token it prints straight to that service, so nobody copies or pastes it. `chewbacca claude-jobs set-token <project>` is the fallback when you already have a token: paste it at the hidden prompt. It reaches Railway over stdin, never argv, and the command refuses piped input, so a person always does the paste.
+
 ## Railway, standalone
 
 | Variable                  | What it is                                                                     |

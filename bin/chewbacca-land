@@ -264,6 +264,19 @@ def main():
     a = ap.parse_args()
     if bool(a.commits) == bool(a.paths):
         ap.error("give either commits or --paths, not both")
+    # zsh doesn't word-split an unquoted $F, so `land --paths $F` hands over
+    # every path as one argument with spaces in it. On 2026-11-02 that printed
+    # "not found anywhere" for 24 files that were all there. A path that
+    # doesn't exist but whose space-separated pieces all do is that list.
+    if a.paths:
+        split = []
+        for p in a.paths:
+            pieces = p.split()
+            if len(pieces) > 1 and not os.path.exists(p) and all(os.path.exists(x) for x in pieces):
+                split.extend(pieces)
+            else:
+                split.append(p)
+        a.paths = split
     if a.paths and not a.message:
         ap.error("--paths needs -m")
 

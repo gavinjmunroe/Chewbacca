@@ -1,6 +1,6 @@
 ---
 name: project_claude_jobs_on_subscription
-description: apps/claude-jobs runs scheduled Claude jobs on the owner's own Pro/Max plan via `claude setup-token` (CLAUDE_CODE_OAUTH_TOKEN), no API key, on Railway so they run with the laptop shut. Built 2026-11-02, not yet deployed or run live
+description: apps/claude-jobs runs scheduled Claude jobs on the owner's own Pro/Max plan via `claude setup-token` (CLAUDE_CODE_OAUTH_TOKEN), no API key, on Railway so they run with the laptop shut. Live on caleb-os since 2026-11-02
 metadata:
   type: project
 ---
@@ -20,11 +20,12 @@ Ported from calebnewtonusc/joel-os, which found the setup-token path on
 repeats argv and leaked an MCP secret), close the child's stdin, retry a failed
 job after 30 minutes, validate job names against `^[a-z0-9-]+$`.
 
-Status as of 2026-11-02: code and tests landed. Not deployed and never run
-live: the token needs the owner to run `claude setup-token` and approve it in
-a browser, and the Railway service needs a fine-grained GITHUB_TOKEN with
-Contents read on the repos the jobs name. The first job is the 07:30 morning
-brief from second-brain. The Mac's own 08:00 brief daemon service is unchanged.
+Status as of 2026-11-02 21:22 PT: LIVE. `chewbacca claude-jobs connect caleb-os`
+ran setup-token, Caleb approved in the browser, and the token went straight to
+the caleb-os Railway service (health then said jobs: true). A triggered
+morning-brief run on caleb-os returned ok and wrote 610 chars from his CRM, on
+his plan, no API key. `connect <project> [service]` is the one-step setup for
+anyone's Railway service; `set-token` is the paste fallback.
 
 Caleb's deployed home for scheduled jobs is his joel-os instance (caleb-os on
 Railway, via joel-os `bin/cloud-up`), not a second service from this app. Next

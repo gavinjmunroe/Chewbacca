@@ -9,6 +9,13 @@
  *   chewbacca claude-jobs status            the Railway service's jobs, last run, last error
  *   chewbacca claude-jobs latest NAME       the newest output of one job from Railway
  *   chewbacca claude-jobs trigger NAME      run one job on Railway now
+ *   chewbacca claude-jobs connect PROJECT [SERVICE]
+ *                                           the whole setup: runs claude setup-token, you
+ *                                           approve in the browser, and the token goes
+ *                                           straight to that Railway service. No copy, no paste
+ *   chewbacca claude-jobs set-token PROJECT [SERVICE]
+ *                                           you paste the setup-token, hidden; it goes
+ *                                           straight to Railway over stdin
  *
  * The jobs live in apps/claude-jobs/jobs/, one markdown file each. The service
  * in apps/claude-jobs runs them on Railway, so they keep going with the laptop
@@ -23,6 +30,87 @@ const path = require("path");
 const APP = path.join(__dirname, "..", "apps", "claude-jobs");
 const JOBS = process.env.JOBS_DIR || path.join(APP, "jobs");
 const ENV_FILE = path.join(os.homedir(), ".chewbacca", "claude-jobs.env");
+const { spawn, spawnSync } = require("child_process");
+
+// What `claude setup-token` prints: sk-ant-oat01- then the token body.
+const OAUTH_TOKEN = /^sk-ant-oat01-[A-Za-z0-9_-]{20,}$/;
+
+// On 2026-11-02 the token was made, and the last step was Caleb finding the
+// caleb-os Variables page and pasting it there, since an agent never types a
+// token into a service. This makes that step one paste in a terminal: the
+// person types it hidden, and it reaches Railway over stdin, never argv.
+function setToken(project, service, token, run = spawnSync) {
+  if (!OAUTH_TOKEN.test(token)) return { ok: false, error: "that doesn't look like a setup-token (it starts with sk-ant-oat01-)" };
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "claude-jobs-link-"));
+  try {
+    const link = run("railway", ["link", "-p", project, "-s", service, "-e", "production"], { cwd: dir, encoding: "utf8" });
+    if (link.status !== 0) return { ok: false, error: `railway link failed: ${(link.stderr || "").trim().split("\n").pop()}` };
+    const set = run("railway", ["variables", "-s", service, "--set-from-stdin", "CLAUDE_CODE_OAUTH_TOKEN"], { cwd: dir, input: token, encoding: "utf8" });
+    if (set.status !== 0) return { ok: false, error: `railway refused: ${(set.stderr || "").trim().split("\n").pop()}` };
+    return { ok: true };
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+function readHidden(prompt) {
+  process.stderr.write(prompt);
+  spawnSync("stty", ["-echo"], { stdio: "inherit" });
+  try {
+    const buf = Buffer.alloc(4096);
+    let line = "";
+    for (;;) {
+      const n = fs.readSync(0, buf, 0, buf.length, null);
+      if (!n) break;
+      line += buf.toString("utf8", 0, n);
+      if (line.includes("\n")) break;
+    }
+    return line.trim();
+  } finally {
+    spawnSync("stty", ["echo"], { stdio: "inherit" });
+    process.stderr.write("\n");
+  }
+}
+
+// The token in what setup-token printed, with the terminal's colour and
+// cursor codes taken out first, since Ink draws the screen with them.
+function extractToken(output) {
+  const plain = String(output)
+    .replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, "")
+    .replace(/\x1b\[[0-9;?]*[ -\/]*[@-~]/g, "")
+    .replace(/\x1b[@-_]/g, "");
+  const found = plain.match(/sk-ant-oat01-[A-Za-z0-9_-]{20,}/g);
+  return found ? found[found.length - 1] : null;
+}
+
+// On 2026-11-02 turning jobs on took Caleb three steps after the browser
+// approval: find the token in a terminal tab, find the Railway Variables page,
+// paste it there. Then he asked "Bro do it for me" and "Whats the token". This
+// is the one step left: setup-token runs here under `script` so it still has a
+// real terminal for its prompt, and the token it prints goes to Railway over
+// stdin. It never reaches argv, a file, or an agent.
+function connect(project, service, { run = spawn, set = setToken, out = process.stdout } = {}) {
+  return new Promise((resolve) => {
+    // Wide columns so Ink never wraps the token across two lines.
+    const child = run("script", ["-q", "/dev/null", "/bin/sh", "-c", "stty cols 1000 2>/dev/null; exec claude setup-token"], {
+      stdio: ["inherit", "pipe", "inherit"],
+    });
+    let seen = "";
+    child.stdout.on("data", (chunk) => {
+      seen += chunk.toString("utf8");
+      out.write(chunk);
+    });
+    child.on("close", (code) => {
+      const token = extractToken(seen);
+      seen = "";
+      if (!token) return resolve({ ok: false, error: `no token came back from claude setup-token (exit ${code})` });
+      resolve(set(project, service, token));
+    });
+    child.on("error", (e) => resolve({ ok: false, error: `could not start claude setup-token: ${e.code || e.message}` }));
+  });
+}
+
+module.exports = { setToken, OAUTH_TOKEN, extractToken, connect };
 
 function die(msg, code = 1) {
   console.error(msg);
@@ -52,7 +140,7 @@ function remote() {
   };
 }
 
-(async () => {
+if (require.main === module) (async () => {
   const lib = await import(path.join(APP, "lib", "jobs.js"));
   const [cmd = "list", name] = process.argv.slice(2);
   const find = () => {
@@ -89,6 +177,24 @@ function remote() {
   } else if (cmd === "trigger") {
     find();
     console.log(await remote()(`/run/${name}`, "POST"));
+  } else if (cmd === "connect") {
+    const project = name;
+    const service = process.argv[4] || project;
+    if (!project) die("usage: chewbacca claude-jobs connect PROJECT [SERVICE]", 2);
+    if (!process.stdin.isTTY) die("connect opens a browser approval and needs your terminal, so run it in one", 2);
+    console.error(`Approve in the browser that opens. The token goes straight to ${service} on Railway.\n`);
+    const r = await connect(project, service);
+    if (!r.ok) die(r.error);
+    console.log(`\nCLAUDE_CODE_OAUTH_TOKEN set on ${service}. Railway redeploys it now, and its Claude jobs run on your plan.`);
+  } else if (cmd === "set-token") {
+    const project = name;
+    const service = process.argv[4] || project;
+    if (!project) die("usage: chewbacca claude-jobs set-token PROJECT [SERVICE]", 2);
+    // A person pastes it. Nothing pipes a token in, so an agent can't route one through here.
+    if (!process.stdin.isTTY) die("set-token reads the token from your keyboard, so run it in a terminal", 2);
+    const r = setToken(project, service, readHidden("Paste the token from claude setup-token (hidden), then Enter: "));
+    if (!r.ok) die(r.error);
+    console.log(`CLAUDE_CODE_OAUTH_TOKEN set on ${service}. Railway redeploys it now, and scheduled jobs turn on.`);
   } else if (cmd === "-h" || cmd === "--help" || cmd === "help") {
     console.log(fs.readFileSync(__filename, "utf8").split("*/")[0].split("\n").slice(3).map((l) => l.replace(/^ \* ?/, "")).join("\n"));
   } else {

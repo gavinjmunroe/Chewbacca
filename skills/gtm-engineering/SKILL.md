@@ -613,6 +613,27 @@ re-checked in 3 days: "Fix chewbs so I never hv to stress test it again".
 - A rule it can't read off the ledger (test sends landing in the primary tab)
   prints NOT CHECKED, and that counts as not done.
 
+## His questions run on every stress, and targeting starts from customers (2026-11-02)
+
+FF's list put EKKO first: a clean, modern site that a checklist counted 8
+"fixes" on, with a line a new popup had already made false. Caleb: "wait bro
+this site aint even that bad?", then "I hv a feeling you're not being
+systematic or smart ur literally just being monkey see monkey do and not
+using the smart thigns we hv in chewbs".
+
+- Every question he asks of a campaign goes in `config/gtm/challenges.json`
+  with `chewbacca gtme challenge add --text "<his words>" [--check <id>]`,
+  the same turn he asks it. `gtme stress` asks every one of them on every run,
+  so he never asks twice. One with no check prints NOT CHECKED, and wiring it
+  to a check is the follow-up.
+- Rank accounts before writing a line: `gtme rank --client NAME --seeds
+<real customers' domains>`. It orders by fit, pain a guest can see
+  (`dated_score`, 0 to 5, from a look at the site on a phone and a desktop) and
+  reach, and writes a `rank_why` per lead. Learn the ICP from the customer
+  first (perfect-company-list), judge every row, then run lookalikes of the
+  best fits (Sagar: the strongest list). A checklist count of missing features
+  is a signal, never the ranking.
+
 ## Never call a launch ready without `gtme ready`
 
 - **Never say a launch is ready, good to go, "good until X", "only waiting on

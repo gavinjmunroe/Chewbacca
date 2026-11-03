@@ -56,6 +56,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - project_firm_foundation_founding_2026_10_09: Firm Foundation founding call 10/9: firmfoundation.tech, site direction, pricing ideas, Upper Room lead, closers, competitors
 - project_firm_foundation_llc_2026_10_29: FF signs as Firm Foundation Technology LLC (singular), footer address waits on Form 1583, new WY LLC 50/50, Dad filing via WyomingAgents 10/29, Gavin opens TX checking, no CA address, OA draft Doc
 - project_firm_foundation_site_motion_split: FF site what-we-do panels are scroll, click and timed; Monday is the only Apple-style part (2026-10-17 call)
+- project_ff_site_seo_launch_flag: FF site ranks only once LAUNCHED flips in site/lib/launch.ts (noindex till both founders say launch); firmfoundationtech.com is a San Diego repair shop, not us
 - project_framer_transfer: 2026-05-13 session, explored options to move bluemodernadvisory.com and...
 - project_hud_adhoc_signing_and_warm: BobHUD was ad-hoc signed so every rebuild dropped Accessibility, and the speech...
 - project_hud_backlog: Where the remaining Bob HUD work lives, and which nine issues actually matter
@@ -506,6 +507,10 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_gogcli_test_users_for_new_accounts: new accounts must be test users on the gogcli OAuth app (project 1067120400776) before chewbacca email add, or Google says Access blocked (FF Workspace inboxes, 11/2)
 - project_ff_wave1_trust_and_pool_2026_11_02: FF wave 1: cold email reads as spam ~0.78 in Jev, trust is the lever; evangelical named-buyer pool is 22 SoCal / 29 DFW; plan in FF ops/WAVE-1.md
 - reference_ff_socal_ledger_checkout: FF SoCal gtme ledger is ~/code/ff-ledger (own worktree on main), bc the shared FF working copy couldn't pull; never point a state_dir at a hand-edited one
-- project_claude_jobs_on_subscription: apps/claude-jobs runs scheduled Claude jobs on your own Max plan via claude setup-token, no API key, on Railway; built 11/2, not deployed or run live yet
+- project_claude_jobs_on_subscription: apps/claude-jobs runs scheduled Claude jobs on your own Max plan via claude setup-token, no API key, on Railway; live on caleb-os 11/2, set up anyone with `chewbacca claude-jobs connect <railway service>`
 - project_mcp_hub_2026_11_02: chewbacca mcp adds any of 60 servers or a paste in one command; the MCP hub runs fetch/time/git/chart/filesystem/github/supabase/blender once for every tab, tokens in Keychain; undo per server
 - feedback_dough_new_market_titles: site audit only knows titles from markets already run; test a new market's staff page before gtme accounts (law firms missed, 11/2)
+- reference_people_check_amber_rules: chewbacca people-check runs Amber's people rules over the store, Jev settles the unsure; cli.mjs row shape is Amber's (emails as a comma string), Jev noul answers are {noul: p}
+- feedback_formatter_hook_breaks_scripted_patch: the formatter hook reflows after Write, so a scripted str.replace no-ops silently; use Edit or assert old in s
+- project_travis_trials_2026_11_02: Travis trials (AuraPath PIP vs Botified, Baptize churches); reply sent 11/2, domains 11/3, sends 11/13 to 11/18; 27 PIP firms, 24 verified emails
+- feedback_client_work_finish_everything: client work runs until only hands-only blockers are left, each on a BLOCKED line (Caleb, AuraPath night 11/2)

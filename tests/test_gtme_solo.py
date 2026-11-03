@@ -253,6 +253,47 @@ class Solo(unittest.TestCase):
                                             "See who we are at danaco.tech/team."}]))
         self.assertEqual(self.run_cli("copy", "--client", "Dana Co", "--file", str(seq)), 2)
 
+    def _ranked_leads(self):
+        cols = ["company", "website", "name", "title", "email", "email_verdict", "dated_score"]
+        rows = [["Fine Site Church", "fine.test", "Ann", "Office Administrator", "ann@fine.test", "valid", "2"],
+                ["Old Site Church", "old.test", "Bo", "Executive Pastor", "bo@old.test", "valid", "4"],
+                ["St Mary Parish", "mary.test", "Cy", "Business Manager", "cy@mary.test", "valid", "5"]]
+        with (self.d / "leads.csv").open("w") as f:
+            f.write(",".join(cols) + "\n" + "\n".join(",".join(r) for r in rows) + "\n")
+
+    def test_rank_puts_a_dated_site_and_a_buyer_first(self):
+        self._ranked_leads()
+        self.assertEqual(self.run_cli("rank", "--client", "Dana Co"), 2)  # no customer seeds, no ranking
+        self.assertEqual(self.run_cli("rank", "--client", "Dana Co", "--seeds", "durangovineyard.com"), 0)
+        first = (self.d / "leads.csv").read_text().splitlines()[1]
+        self.assertTrue(first.startswith("Old Site Church"), first)
+        plan = json.loads((self.d / "plan.json").read_text())
+        self.assertEqual(plan["targeting"]["seeds"], ["durangovineyard.com"])
+
+    def test_stress_asks_calebs_own_questions(self):
+        self.ready()
+        self._ranked_leads()
+        asked = {rule.split('":')[0]: v for v, rule, _ in gtme_solo.stress("Dana Co") if rule.startswith("Caleb asked")}
+        self.assertEqual(next(v for k, v in asked.items() if "monkey see" in k), "FAIL")
+        self.run_cli("rank", "--client", "Dana Co", "--seeds", "durangovineyard.com")
+        asked = {rule.split('":')[0]: v for v, rule, _ in gtme_solo.stress("Dana Co") if rule.startswith("Caleb asked")}
+        self.assertEqual(next(v for k, v in asked.items() if "monkey see" in k), "PASS")
+        # The fine-looking site still sits in the next 15, so "aint even that bad" fails.
+        self.assertEqual(next(v for k, v in asked.items() if "aint even that bad" in k), "FAIL")
+
+    def test_a_new_question_is_asked_on_every_run(self):
+        path = self.tmp / "challenges.json"
+        path.write_text(json.dumps({"challenges": []}))
+        real = gtme_solo.CHALLENGES
+        self.addCleanup(setattr, gtme_solo, "CHALLENGES", real)
+        gtme_solo.CHALLENGES = path
+        self.assertEqual(self.run_cli("challenge", "--text", "would a pastor forward this?"), 0)
+        self.assertEqual(json.loads(path.read_text())["challenges"][0]["asked"], "would a pastor forward this?")
+        self.ready()
+        rows = gtme_solo.stress("Dana Co")
+        self.assertIn(("NOT CHECKED", 'Caleb asked "would a pastor forward this?": no check answers this yet', rows[-1][2]),
+                      rows)
+
     def test_stress_reads_the_campaign_against_the_playbooks(self):
         self.ready()
         real = gtme_solo.email_listing

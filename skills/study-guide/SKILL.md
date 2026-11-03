@@ -34,21 +34,29 @@ chord drills were all quizzes: "idk any of the chords". When time is short, the
 items on the exam come first and in the order they're performed, and a day
 plan on the page shifts from the real start time when he's behind.
 
-The rule holds for a site that already exists too. On 2026-10-19, the night
-before the ACAD 185 midterm, he got pointed at `marketing-midterm.up.railway.app`,
-a recall-only practice set built 10/11, and wrote "It shouldn't ask me for who
-what why etc when I know NOTHING". Before sending him to any existing guide or
-site, open it and check it against this section. What held up that night:
+The same failure happened again on 2026-11-02 with the BISC Midterm 2 app
+(bio-midterm2.up.railway.app): 250+ flashcards and drills, no lessons. Caleb:
+"evaluate if the midterm 2 ux can be improved in any way for me to GET AN A I
+know literally nothing". So an exam app always ships three things in this
+order, shown on its home screen as the plan: lessons written for zero
+knowledge in study-guide order (with exam traps and a few check questions),
+then drills, then a timed mock in the real exam's format (read the syllabus for
+the question types, matching included) graded by topic, sending each weak
+topic back to its lesson. Material that isn't on this exam gets moved out of
+the main list.
 
-- Chunk by week in class order: read a week's cards, say each back from the
-  title, then that week's practice questions, then the next week. 29 cards
-  read in a row blur by the middle.
-- No walls of text ("make it not a fat wall of text"): one plain sentence for
-  what it is, then short bullets for why and how.
-- Math drills reveal the answer and formula after two misses so he never stalls.
-- His time window goes on the page as a schedule with a live on-pace or behind
-  bar, and it moves when he says the start slipped ("starting at 8pm now plz
-  adjust").
+**Read every source whole, including the videos.** "Go through the entirety of
+the semester DONT SKIM" (Caleb, 2026-11-02). That means every deck, the study
+guide, the lab manuals for the labs the exam covers, and the class animations,
+since study guides say "watch all animations". Transcribe the videos
+(`mlx_whisper` through `chewbacca jobs submit --heavy`) and check them against
+the lessons. `head`, `cut -c` and reading part of a file don't count as reading
+it. When something was only partly read, the reply says which file.
+
+A video with only music comes back from Whisper as "Thank you." or one line
+repeated over and over. On 2026-11-02, 2 of the 11 BISC animations (endo and
+exocytosis, vesicle transport) did this. Treat that output as no narration,
+say so, and cover the video from its slides. Never quote those lines as content.
 
 ## Making one
 
@@ -79,22 +87,34 @@ progress is keyed on it, so renaming it orphans the history.
   <h2>Check yourself: MESI</h2>
 
   <div class="rg-question" data-answer="c">
-    <p>A line in the Shared state is written by this core. What state does it move to?</p>
+    <p>
+      A line in the Shared state is written by this core. What state does it
+      move to?
+    </p>
     <ol class="rg-options">
-      <li>Invalid</li><li>Exclusive</li><li>Modified</li><li>It stays Shared</li>
+      <li>Invalid</li>
+      <li>Exclusive</li>
+      <li>Modified</li>
+      <li>It stays Shared</li>
     </ol>
-    <div class="rg-explain">A write needs ownership, so the other sharers are
-    invalidated and the line becomes Modified.</div>
+    <div class="rg-explain">
+      A write needs ownership, so the other sharers are invalidated and the line
+      becomes Modified.
+    </div>
   </div>
 
   <div class="rg-question" data-answer="a,c">
     <p>Which states allow a silent read hit, with no bus traffic?</p>
-    <ol class="rg-options"><li>Modified</li><li>Invalid</li><li>Shared</li></ol>
+    <ol class="rg-options">
+      <li>Modified</li>
+      <li>Invalid</li>
+      <li>Shared</li>
+    </ol>
   </div>
 
   <div class="rg-question" data-answer="write-back|writeback">
     <p>What does a Modified line do on eviction?</p>
-    <input class="rg-input" placeholder="one or two words">
+    <input class="rg-input" placeholder="one or two words" />
   </div>
 
   <button class="rg-check">Check answers</button>
@@ -111,8 +131,14 @@ they have to be able to reconstruct in an exam.
 
 ```html
 <div class="rg-steps">
-  <div class="rg-step"><h3>1. Core 0 reads X</h3><p>Miss, goes to memory. Line enters <b>Exclusive</b> in C0.</p></div>
-  <div class="rg-step"><h3>2. Core 1 reads X</h3><p>Snoop hit in C0, both now <b>Shared</b>.</p></div>
+  <div class="rg-step">
+    <h3>1. Core 0 reads X</h3>
+    <p>Miss, goes to memory. Line enters <b>Exclusive</b> in C0.</p>
+  </div>
+  <div class="rg-step">
+    <h3>2. Core 1 reads X</h3>
+    <p>Snoop hit in C0, both now <b>Shared</b>.</p>
+  </div>
 </div>
 ```
 
@@ -120,11 +146,18 @@ they have to be able to reconstruct in an exam.
 
 ```html
 <div class="rg-cards">
-  <div class="rg-card"><div class="rg-front">Write-allocate</div>
-    <div class="rg-back">On a write miss, fetch the line, then write into it.</div></div>
+  <div class="rg-card">
+    <div class="rg-front">Write-allocate</div>
+    <div class="rg-back">
+      On a write miss, fetch the line, then write into it.
+    </div>
+  </div>
 </div>
 
-<details class="rg-reveal"><summary>Show the derivation</summary><p>...</p></details>
+<details class="rg-reveal">
+  <summary>Show the derivation</summary>
+  <p>...</p>
+</details>
 ```
 
 ## Writing good questions

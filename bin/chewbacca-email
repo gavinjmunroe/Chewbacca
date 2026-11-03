@@ -62,6 +62,28 @@ whoami_in() {
     python3 -c 'import json,sys; t=sys.stdin.read(); print(json.loads(t[t.index("{"):])["emailAddress"])' 2>/dev/null
 }
 
+# Gives $2 roles/serviceusage.serviceUsageConsumer on the project behind
+# config $1 when Google refuses its calls for that reason, then waits for the
+# grant to take (it took under a minute on 2026-11-02). Quiet when not needed.
+grant_project_use() {
+  local cfg="$1" addr="$2" err project acct n=0
+  [ -n "$(whoami_in "$cfg")" ] && return 0
+  # Only the account the token actually belongs to gets the grant, read from
+  # `gws auth status`, which needs no project access. A typo'd or different
+  # address never gains a role on the project.
+  [ "$(status_user "$cfg")" = "$(printf '%s' "$addr" | tr '[:upper:]' '[:lower:]')" ] || return 0
+  err=$(GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$cfg" gws gmail users getProfile --params '{"userId":"me"}' 2>&1)
+  printf '%s' "$err" | grep -q 'serviceusage' || return 0
+  project=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print((d.get("installed") or d.get("web") or {}).get("project_id",""))' "$cfg/client_secret.json" 2>/dev/null)
+  [ -n "$project" ] && command -v gcloud >/dev/null 2>&1 || return 0
+  say "Signed in, but $addr can't use the $project Google project yet. Giving it access..."
+  for acct in $(gcloud auth list --format='value(account)' 2>/dev/null); do
+    gcloud projects add-iam-policy-binding "$project" --account "$acct" --member "user:$addr" \
+      --role roles/serviceusage.serviceUsageConsumer --condition=None --quiet >/dev/null 2>&1 && break
+  done
+  while [ -z "$(whoami_in "$cfg")" ] && [ $n -lt 20 ]; do sleep 6; n=$((n + 1)); done
+}
+
 list() {
   local any=0 a
   a=$(whoami_in "$DEFAULT_CFG")
@@ -128,6 +150,12 @@ add() {
   # token_cache.json after a new login; the fresh scope 403'd until it was
   # moved aside (2026-10-09).
   rm -f "$cfg/token_cache.json"
+  # A Workspace account that signed in fine can still be refused every call:
+  # Google bills the call to the sign-in app's project, and the account needs
+  # roles/serviceusage.serviceUsageConsumer there. caleb@firmfoundation.tech
+  # hit this on 2026-11-02 with a valid token, and the grant fixed it in under
+  # a minute. Grant it from whichever gcloud account owns the project.
+  grant_project_use "$cfg" "$addr"
   local got
   got=$(whoami_in "$cfg")
   if [ "$got" = "$addr" ]; then

@@ -341,11 +341,13 @@ class Parts(unittest.TestCase):
                 "https://a.example/,yes,Jonathan Marko,caleb,\n"
                 "https://b.example/,yes,,caleb,blocked site\n"
                 "https://c.example/,no,,caleb,\n"
-                "https://d.example/,yes,Cherie Lobb,caleb,\n")
+                "https://d.example/,yes,Cherie Lobb,caleb,\n"
+                "https://e.example/,no,?,caleb,buyer not checked\n")
         rows = [{"website": "https://www.a.example/", "icp_fit": "yes", "buyer": "Jonathan R. Marko"},
                 {"website": "https://b.example/", "icp_fit": "unread", "buyer": ""},
                 {"website": "https://c.example/", "icp_fit": "yes", "buyer": "Managing Partner Ann"},
-                {"website": "https://d.example/", "icp_fit": "yes", "buyer": "Joseph Lobb"}]
+                {"website": "https://d.example/", "icp_fit": "yes", "buyer": "Joseph Lobb"},
+                {"website": "https://e.example/", "icp_fit": "no", "buyer": "Sam Ortiz"}]
         with tempfile.TemporaryDirectory() as d:
             p = Path(d) / "gold.csv"
             p.write_text(gold)

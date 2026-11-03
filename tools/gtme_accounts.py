@@ -1595,7 +1595,7 @@ def evaluate(rows: list[dict], gold_path: Path) -> dict:
     """Score a run against hand labels, so a change that makes Dough worse shows up as a number.
 
     gold CSV columns: website, icp (yes/no), buyer (the person who signs, blank if the site names
-    nobody), checked_by, note. Built 2026-11-02 after the Michigan PIP list went from 1 buyer to 32
+    nobody, ? when only icp was checked), checked_by, note. Built 2026-11-02 after the Michigan PIP list went from 1 buyer to 32
     to 5 fake names to a dead founder, every miss caught by eye and none by a number.
     """
     with open(gold_path, newline="", encoding="utf-8-sig") as fh:
@@ -1616,6 +1616,8 @@ def evaluate(rows: list[dict], gold_path: Path) -> dict:
         tn += not want and not got
         if want != got:
             misses.append(f"{dom}: icp gold {g['icp']}, run {r.get('icp_fit') or 'blank'}")
+        if (g.get("buyer") or "").strip() == "?":
+            continue  # icp labeled, buyer not checked by hand
         gb = (g.get("buyer") or "").strip().lower().split()
         rb = (r.get("buyer") or "").strip().lower().split()
         if gb and rb:

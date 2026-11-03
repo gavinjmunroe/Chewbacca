@@ -516,3 +516,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_client_work_finish_everything: client work runs until only hands-only blockers are left, each on a BLOCKED line (Caleb, AuraPath night 11/2)
 - feedback_signal_first_church_lists: list-first church sourcing from Maps yields ~5% (76 of 1,357, 0 plants, 11/2); source by the signal and price yield on 40 rows first
 - feedback_ff_home_pop_2026_11_02: FF home must stand out vs church site builders; no default paper, text outweighs drawings, real sites in browser frames, small playable hero gizmos
+- feedback_hook_heredoc_in_command_sub: inline Python in a hook goes through read -d, never a heredoc inside $( ) (bash 3.2); new guards need a decision-evals replay

@@ -31,3 +31,12 @@ their own site. The review pack is ~/Downloads/travis-tests/AuraPath PIP list fo
 (copy/aurapath-pip-sequence.txt, 2 variants of 3) passes gtme-grade gates 2 and 3. Gates 1, 4
 and 5 wait on Travis's postal address, his do-not-contact list and the senders from the 11/3
 setup. Copy lines were hand-written per firm, and 5 firms are held in copy/aurapath-pip-leads-held.csv.
+
+After midnight 11/3: Caleb ruled Dough doesn't depend on Clay (feedback_dough_owns_its_stack), so
+sending runs through `gtme send` from the Workspace inboxes and no Clay account is needed; warmup
+is the open choice (Instantly $47 or a hand ramp). The gold set is at
+~/.chewbacca/gtm/clients/aurapath-pip/gold.csv (40 firms), and `gtme accounts --eval` scored
+tonight's run at ICP precision 1.0, recall 0.786. The 6 misses are Michigan car and truck accident
+firms whose sites never say no-fault or PIP. Whether those count as ICP is Travis's call. If yes,
+widen icp.must_show and hand-write their lines. `gtme meeting` now credits meetings, and the week
+report prints per-100 rates against a `benchmark` in the plan.

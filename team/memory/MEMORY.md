@@ -523,3 +523,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - project_ff_brand_search_2026_11_03: FF brand search, a San Diego IT shop holds "firm foundation tech", on-site SEO done, off-site left
 - reference_ff_workspace_profile_photos: FF Workspace photos are admin-set only, all 3 set to the FF mark 11/3
 - project_baptize_trial_2026_11: Baptize the World church trial for Travis, 85 of 100 churches, C at 0, emails unverified (11/3)
+- feedback_find_christian_students_via_networks: find Christian students/creators via fellowship IG followers + treg profile lookups, not web search; faith from bio OR captions (11/3)

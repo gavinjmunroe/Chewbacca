@@ -520,3 +520,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_jev_import_by_path: Dough loads Jev with gtme_jev.kit_jev(); a bare import jev can load tools/jev.py and silently hold every buyer (11/2)
 - feedback_dough_owns_its_stack: Dough never depends on Clay; Clay only for a step it does better, sending stays in gtme send (Caleb, AuraPath night 11/2)
 - feedback_red_team_the_gate_before_done: a send gate is done only after a subagent runs probes against it and every reproduced hole has a test; Dough's Jonah checks had 20 holes in 3 rounds (11/2)
+- project_ff_brand_search_2026_11_03: FF brand search, a San Diego IT shop holds "firm foundation tech", on-site SEO done, off-site left

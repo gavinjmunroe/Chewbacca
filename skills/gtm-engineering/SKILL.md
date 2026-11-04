@@ -764,6 +764,25 @@ of the ledger's `batches/` folder, rebuild, and read the greetings before
 first line with `audit_site.py <url> --browser` the same day, and give every
 line an https source, since `gtme ready` fails an http one.
 
+## FF outbound runs through Dough, and only Caleb sends it (2026-11-03)
+
+- The live FF ledger is wherever `gtme share` points the client (on 11/3
+  `~/code/ff-ledger/ops/gtme/<region>`). The firm-foundation repo's `ops/gtme`
+  copy is stale. Read `gtme_solo.cdir(client)` before reading any FF file: an
+  agent read the stale copy first and lost the first stretch of the night.
+- FF sends through Dough (`bin/dough plan|approve|ready|send --client ff-socal`
+  in a Dough checkout). A batch is approved and sent only on its approver's own
+  Mac (`dough whoami`).
+- Caleb, 11/3: "All outbound will be handled by me for now - will loop gav in
+  when the time comes". DFW is written in Gavin's voice and sends from his
+  inbox, so it waits. Never stage DFW for Caleb, and never type Gavin's name
+  into `dough approve`.
+- Caleb, 11/3: "go ham get everything done before we start outbound!" When he
+  names a build list before a send, finish the list and land it before asking
+  for the send ok. A frozen batch expires in 2 hours, so rebuild it fresh after.
+- Caleb, 11/3, "What is taking so long?": post one line on where things stand
+  before each multi-file build phase, never after twenty silent tool calls.
+
 ## Grading a campaign before it goes out
 
 Run the five gates in [the playbook's grading section](references/demand-gen-playbooks.md#grading-a-campaign-before-it-goes-out)

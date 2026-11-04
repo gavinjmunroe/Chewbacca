@@ -92,6 +92,13 @@ one call, and a lapsed session renews itself from Chrome:
 - Grades, announcements, quizzes, discussions, content for one course:
   `chewbacca api call brightspace <grades|announcements|quizzes|discussions|content> orgUnitId=<id>`
   (ids from `chewbacca api call brightspace myCourses`)
+- "Did we turn in X?" mid-task gets answered FIRST, from Brightspace itself
+  (`brightspace due --days 30` for dropboxes, `brightspace discuss <course>
+  <topic> --json` filtered to his own name for boards), never from the ledger,
+  which listed 8 WRIT items OVERDUE that were all posted. On 2026-11-03 that
+  question was skipped mid-build and he had to send "?". A name or ID speedup
+  covers EVERY Brightspace command, not only the one that was slow (Caleb,
+  2026-11-03: "Same goes for EVERY action on brighspace on EVERY type of page")
 - Every `<ou>` below takes a course name (WRIT, writ-150, "BISC 101"), every
   `<folderId>` a dropbox name and `<forum> <topic>` a topic name, resolved
   from a cache with no call: `brightspace post WRIT "Topic Ideas for WP3"

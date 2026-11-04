@@ -97,6 +97,16 @@ in hand is a different activity from reading to have read it.
 - **Cramming has a real use.** It works for tomorrow and not for the final. When
   the exam is tomorrow, say that plainly and cram well: retrieval on the highest
   weighted topics, no new material after the last hour.
+- **The night before, find out how much is left before saying "sleep now".**
+  Read the exam's scope from the ledger (`notes:` usually names the chapters)
+  and work out how much prep remains, then split the hours left between sleep
+  and study in whole 90 minute cycles. On 2026-11-04 at 1:34am a reply said to
+  sleep by 1:45 and review 7:30 to 8:30 for a 9am BISC midterm, assuming the
+  studying was done. Caleb: "Bro are we seriously learning the entire semester
+  so far from 7:30am to 8:30am that's not happening". The ledger said Ch 9-11
+  only, which changed the plan. His own pick was the right shape: asleep by 2,
+  up at 5:15 (two cycles), then three hours of study while fresh. Never
+  recommend a 45 minute nap before an exam, since it wakes you in deep sleep.
 
 ## References
 

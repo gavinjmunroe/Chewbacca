@@ -130,6 +130,14 @@ naming the links. Caleb, 2026-11-04, at the Ch 9.6 text lesson on cyclins and
 CDKs: "SHow not tell bruh." The Lock in button should open the drawn
 walkthrough before any drill or text lesson.
 
+**What works for Caleb, in his words.** A drawn walkthrough first, then a test
+on that same picture: tap the answer that names what's shown, or tap the right
+part of the drawing. Caleb, 2026-11-04: "I like mcq + clicking on the right
+thing I feel like that is a great way to brute force visually into my mind and
+connect dots" and "I rlly liked the visual walkthrough and then the testing me
+visually, putting an image to an answer". Self-graded flashcards ("say it out
+loud, got it / missed it") got "This format is doodoo buns".
+
 ## Making one
 
 ```sh

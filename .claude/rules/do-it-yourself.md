@@ -111,6 +111,17 @@ going. `scope-guard` refuses a reply that cuts without one (2026-10-09: 36 of
 
 ---
 
+## A LONG ROOT-CAUSE HUNT SAYS WHAT IT FOUND AS IT GOES
+
+When a fix needs an investigation first (capturing frames, recoloring fields,
+measuring a camera's reach), send one line the moment the cause is known,
+before tuning or testing, and one line when it lands. Twenty silent minutes of
+correct digging reads as stuck. On 2026-11-03 the FF hero diagonal took about
+25 minutes to pin down (a sand cull the turned camera could see) and Caleb
+wrote "What is taking so long?", then asked again after it had landed because
+the "it's live" line was buried in a long audit report. Lead with the state:
+"Fixed and live" or "Found it, fixing now", then the detail.
+
 ## PAUSE MEANS REPLY FIRST
 
 When he says pause, stop, save or consolidate, the next thing he sees is a

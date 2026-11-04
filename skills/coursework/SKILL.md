@@ -579,6 +579,22 @@ exists, so he can close the tab. Never-do, from 2026-10-12, exam morning: a
 7:45 to 12:00 guitar midterm plan put guitar practice straight through 9:00
 and he had to say "I hv a meeting 9-9:30 bro".
 
+## "Do my post": check whether it's already done, first call
+
+When he asks to do a discussion post or anything else that might be finished,
+the first call answers whether it already exists: the ledger row, then
+`brightspace discuss <course> <topic>` for his own post. Name the likely
+assignment from what's due, then look for his name in that topic. Say the
+blocker the moment it appears, in the same turn, and don't keep digging quietly.
+
+On 2026-11-04 he asked for a WRIT discussion post and the turn went through
+memory, class notes, old posts and forums while Brightspace was signed out. He
+wrote "Bro why isn;t this instnatn????????". The post had been up since 9:13pm
+the night before, and the ledger row found in the first minute already said so.
+Telling him to go sign in was the second miss: "The hud should give me a clean
+minimalist (resign in to brightspace) button that opens a small window no flash
+bang".
+
 ## Before handing an assignment to another session, check what already exists
 
 A ledger row that says `todo` is not proof the work hasn't started. Before a brief

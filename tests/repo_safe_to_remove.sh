@@ -26,6 +26,22 @@ echo x > "$TMP/repo/new.txt"
 expect "an untracked file" KEEP "$TMP/repo"
 rm "$TMP/repo/new.txt"
 
+printf 'secret.env\n' > "$TMP/repo/.gitignore"
+git -C "$TMP/repo" add .gitignore && git -C "$TMP/repo" commit -q -m ignore && git -C "$TMP/repo" push -q origin HEAD:main 2>/dev/null
+echo KEY=1 > "$TMP/repo/secret.env"
+expect "an ignored file that exists nowhere else" KEEP "$TMP/repo"
+rm "$TMP/repo/secret.env"
+
+git -C "$TMP/repo" checkout -q --detach
+git -C "$TMP/repo" commit -q --allow-empty -m detached
+expect "a detached HEAD commit" KEEP "$TMP/repo"
+git -C "$TMP/repo" checkout -q main 2>/dev/null || git -C "$TMP/repo" checkout -q -
+
+git -C "$TMP/repo" tag local-only "$(git -C "$TMP/repo" commit-tree HEAD^{tree} -p HEAD -m tagged)"
+expect "a tag pointing at an unpushed commit" KEEP "$TMP/repo"
+git -C "$TMP/repo" tag -d local-only >/dev/null
+expect "clean again after the probes" SAFE "$TMP/repo"
+
 git -C "$TMP/repo" checkout -q -b side
 git -C "$TMP/repo" commit -q --allow-empty -m side
 git -C "$TMP/repo" checkout -q -

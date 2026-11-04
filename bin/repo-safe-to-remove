@@ -7,29 +7,43 @@
 # refs outlived the deleted GitHub repos, and `git fetch -q` failed silently.
 # The Trash was emptied and those were the only copies.
 #
-# A repo passes when: the remote answers, the working tree is clean (untracked
-# files count), nothing is stashed, and every local branch tip is an ancestor of
-# some ref the remote advertises right now.
+# A repo passes when: the remote answers, nothing is modified, untracked or
+# ignored (an ignored .env is often the one file that exists nowhere else),
+# nothing is stashed, there are no submodules, and HEAD plus every local branch
+# and tag is an ancestor of some ref the remote advertises right now. Any git
+# command that fails counts as KEEP: this check fails closed.
 set -uo pipefail
 
+on_remote() { # dir, sha, remote shas
+  local sha
+  for sha in $3; do
+    git -C "$1" merge-base --is-ancestor "$2" "$sha" 2>/dev/null && return 0
+  done
+  return 1
+}
+
 check() {
-  local d="$1" url remote_shas tip b ok
+  local d="$1" url remote_shas out refs name tip
   [ -d "$d/.git" ] || { echo "KEEP $d: not a git repo"; return 1; }
   url=$(git -C "$d" remote get-url origin 2>/dev/null) || { echo "KEEP $d: no origin remote"; return 1; }
-  remote_shas=$(GIT_TERMINAL_PROMPT=0 git -C "$d" ls-remote origin 2>/dev/null | awk '{print $1}') \
+  out=$(GIT_TERMINAL_PROMPT=0 git -C "$d" ls-remote origin 2>/dev/null) \
     || { echo "KEEP $d: remote unreachable or gone ($url)"; return 1; }
+  remote_shas=$(printf '%s\n' "$out" | awk '{print $1}' | sort -u)
   [ -n "$remote_shas" ] || { echo "KEEP $d: remote is empty ($url)"; return 1; }
-  [ -z "$(git -C "$d" status --porcelain 2>/dev/null)" ] || { echo "KEEP $d: uncommitted changes"; return 1; }
-  [ -z "$(git -C "$d" stash list 2>/dev/null)" ] || { echo "KEEP $d: stashed work"; return 1; }
-  # Remote objects must be local to test ancestry; fetch loudly this time.
+  out=$(git -C "$d" status --porcelain --ignored 2>/dev/null) || { echo "KEEP $d: git status failed"; return 1; }
+  [ -z "$out" ] || { echo "KEEP $d: modified, untracked or ignored files: $(printf '%s\n' "$out" | head -3 | cut -c4- | tr '\n' ' ')"; return 1; }
+  out=$(git -C "$d" stash list 2>/dev/null) || { echo "KEEP $d: git stash failed"; return 1; }
+  [ -z "$out" ] || { echo "KEEP $d: stashed work"; return 1; }
+  [ ! -f "$d/.gitmodules" ] || { echo "KEEP $d: has submodules, check them by hand"; return 1; }
   GIT_TERMINAL_PROMPT=0 git -C "$d" fetch -q origin 2>/dev/null || { echo "KEEP $d: fetch failed"; return 1; }
-  while read -r b tip; do
-    ok=1
-    for sha in $remote_shas; do
-      git -C "$d" merge-base --is-ancestor "$tip" "$sha" 2>/dev/null && { ok=0; break; }
-    done
-    [ "$ok" = 0 ] || { echo "KEEP $d: branch $b ($tip) is not on the remote"; return 1; }
-  done < <(git -C "$d" for-each-ref --format='%(refname:short) %(objectname)' refs/heads)
+  tip=$(git -C "$d" rev-parse -q --verify HEAD 2>/dev/null) || { echo "KEEP $d: no HEAD commit"; return 1; }
+  on_remote "$d" "$tip" "$remote_shas" || { echo "KEEP $d: HEAD ($tip) is not on the remote"; return 1; }
+  refs=$(git -C "$d" for-each-ref --format='%(refname:short) %(objectname)' refs/heads refs/tags 2>/dev/null) \
+    || { echo "KEEP $d: could not list refs"; return 1; }
+  while read -r name tip; do
+    [ -n "$name" ] || continue
+    on_remote "$d" "$tip" "$remote_shas" || { echo "KEEP $d: $name ($tip) is not on the remote"; return 1; }
+  done <<< "$refs"
   echo "SAFE $d"
 }
 

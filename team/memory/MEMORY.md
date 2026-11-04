@@ -528,3 +528,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_ff_outbound_one_email_at_a_time: FF outbound is reviewed w Caleb one email at a time, evidence shown, never a batch ok
 - project_ff_outbound_eye_review_2026_11_03: FF 11/3 outbound list, 104 churches eye-checked from 1,297, exclusion and eye-check rules
 - project_dough_runs_ff_outbound_2026_11_03: Dough is being upgraded so FF outbound runs through it, email channel first, order of work
+- feedback_git_stash_is_shared_across_worktrees: one stash list for every worktree, so a pop in a temp worktree can apply another tab's WIP; test an old version with git show instead (11/3)

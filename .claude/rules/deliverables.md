@@ -61,3 +61,34 @@ Caleb, 2026-10-26, on the USC Codex guide: "Assume the user doesn't hv a github.
 ## Where this came from
 
 On 2026-10-09 a call prep was handed over as full sentences in a notes folder. The user's fixes, in order: "save them to downloads", ".md if I might edit, PDF if it's for someone else", "it's a fat wall of text", "it just needed more spacing", and "go through the progression of what I should say in the call". Then he said "all chewb files should be given like this".
+
+## A list of people or companies someone will work from
+
+Any CSV or sheet of people, companies or leads handed to someone (a friend, a
+teammate, a client, Dough's own lead tables) carries every useful field we hold
+and the columns to work it over time. A name, title and company is a dump.
+
+- **Rank it.** First column is `Priority` (1 hand-picked, 2 strong, 3 the rest),
+  sorted by priority, then category, then relationship. The top rows are written
+  by hand from the brain and the threads; the long tail comes from the people
+  store with honest, category-level reasons.
+- **Columns, in this order:** Priority, Name, Title, Organization, Location,
+  Category (a fixed set, so it filters), How they help <their goal>, Suggested
+  ask, How we know them, Relationship (Close, Know them, LinkedIn only), Last
+  contact, Intro path, LinkedIn, Status, Next step, Next step date, Notes,
+  Source. Status starts at `Not started` and moves through `Intro asked`,
+  `Intro made`, `Met`, `Follow-up`, `Not a fit`.
+- **Every claim has a source.** The Source column names where the why came
+  from (a call note, a thread, a LinkedIn title). A fact with no source stays
+  out, and a missing one is a `[NEED: ...]`, never a guess.
+- **No third party's phone or email.** Intros go through us, double opt-in. A
+  public LinkedIn URL is fine.
+- **Cut the noise before it ships.** Drop interns, students and members unless
+  hand-picked, dedupe by name and organization, and spot-check 25 random long-tail
+  rows. Regex tagging lies: `india` matched Indiana and `cto` matched Doctoral on
+  the first pass of the Dream list.
+- **utf-8 with BOM**, so Excel and Sheets open names with accents cleanly.
+
+Caleb, 2026-11-03, on the network list for Langston's Dream: "The csv needs to
+hv all useful data! Great columns and organization too ... this is the standard
+we operate on". The generator that produced it is `tools/people_list_csv.py`.

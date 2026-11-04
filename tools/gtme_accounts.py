@@ -475,12 +475,13 @@ SHARED_SIGNAL_HOSTS = ("churchcenter.com", "subsplash.com")
 
 
 def _get_html(url: str) -> str:
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Macintosh) gtme-accounts"})
-    try:
-        with urllib.request.urlopen(req, timeout=20) as r:
-            return r.read(400000).decode("utf-8", "replace")
-    except Exception:
-        return ""
+    """A page from a search result or a lead's site, through gtme_solo's guarded fetch: http and
+    https only, every host resolved and refused when it isn't a public address, the connection
+    pinned to that address and every redirect hop checked again. A security review on 2026-11-03
+    found this one used a bare urlopen that followed redirects anywhere, including to private
+    addresses, for URLs that come from search results and strangers' sites."""
+    import gtme_solo  # lazy: gtme_solo never imports this module, so there's no cycle
+    return gtme_solo.fetch(url, limit=400000)
 
 
 ORG_WORDS = re.compile(r"church|chapel|fellowship|ministr|assembl|tabernacle|cathedral|parish|worship center|"
@@ -546,7 +547,8 @@ def search_rows(src: dict, cache: Path, call=None, fetch=None, place=None) -> li
             host = _domain(url)
             if not host or any(host == h or host.endswith("." + h) for h in skip):
                 continue
-            shared = host.endswith(SHARED_SIGNAL_HOSTS)
+            # A label match, so evilchurchcenter.com isn't read as churchcenter.com (review, 11/3).
+            shared = any(host == h or host.endswith("." + h) for h in SHARED_SIGNAL_HOSTS)
             key = host if shared or not any(host.endswith(h) for h in SHARED_HOSTS) else host + urllib.parse.urlparse(url).path
             # crawl4ai calls it snippet; the scrapecreators fallback treg routes to calls it description
             line = " / ".join(x for x in (r.get("title"), r.get("date"), r.get("snippet") or r.get("description")) if x)

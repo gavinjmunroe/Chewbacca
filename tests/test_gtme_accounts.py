@@ -1023,5 +1023,19 @@ class ChurchMode(unittest.TestCase):
         self.assertIn("excluded: affirming", row["held_why"])
 
 
+class GuardedFetch(unittest.TestCase):
+    """Security review, 2026-11-03: _get_html used a bare urlopen on URLs from search results."""
+
+    def test_private_and_non_http_addresses_are_never_fetched(self):
+        old = os.environ.pop("GTME_FIXTURES", None)
+        try:
+            for url in ("http://127.0.0.1/", "http://169.254.169.254/latest/meta-data/", "http://10.0.0.5/",
+                        "file:///etc/passwd", "ftp://example.com/"):
+                self.assertEqual(ga._get_html(url), "", url)
+        finally:
+            if old is not None:
+                os.environ["GTME_FIXTURES"] = old
+
+
 if __name__ == "__main__":
     unittest.main()

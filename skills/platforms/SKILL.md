@@ -87,7 +87,13 @@ in `cf billing profiles get`); `-z` takes a zone id, and a domain name there bui
    then press Start authentication in the console.
 5. Check from public DNS: `chewbacca platforms sending-domain check <domain>` (that's
    `chewbacca gtme dns`). Ready means mx, spf, dkim, dmarc and site pass and the domain is past the
-   warmup minimum. Warm up 10 to 15 days before the first send.
+   warmup minimum. Clay's own warmup doc says about 3 weeks to warm fully, so a 10 to 15 day
+   promise to a client is the optimistic end; say so when you quote a first-send date.
+6. Warmup runs on a warmup network driven by API (Instantly's v2 API has accounts, warmup
+   enable/disable and warmup-analytics routes), while Dough does the sending. Clay's warmup
+   has no documented API and needs a Clay sequencer workspace, so it is not the default
+   (Caleb, 2026-11-02: "We shouldnt be dependent on clay!"). A brand's own aged domain with
+   real inboxes (FF wave 1 on firmfoundation.tech) skips warmup and uses the 5/10/15/20 ramp.
 
 ## Who uses what
 

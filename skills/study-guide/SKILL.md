@@ -45,6 +45,30 @@ the question types, matching included) graded by topic, sending each weak
 topic back to its lesson. Material that isn't on this exam gets moved out of
 the main list.
 
+**Night-before mode: lessons are skims, drills do the teaching.** On
+2026-11-03, the night before BISC Midterm 2, Caleb was 16 min behind by lesson 3
+bc he was rewriting every sentence as bullets: "not sure if read + write down it
+rlly teaching me much compared to the drills? I rlly like the drill practice I
+feel like I learn quickly w the diagrams and repetition". So the night before,
+the plan says: skim the lesson (big idea, diagram, exam traps) in 3 to 4 min with
+no notes, answer the check questions, then that chapter's drill sets, and flip
+back to the lesson only for a missed item. Never budget a lesson as close
+reading the night before, and never tell him to take notes.
+
+**Every lesson diagram is labeled.** Leader lines and part names on the lesson
+copy ("For diagrams like this plz label!", 2026-11-03, on an unlabeled membrane
+picture). Drills that ask him to name a part reuse the same SVG unlabeled, so
+add labels at the lesson call site (bio-midterm2 `tagSVG`), not inside the shared
+drawing. Check the labels rendered at desktop and phone width, since they collide
+easily.
+
+**Exam apps carry tonight's schedule and a pace bar.** He asks for both every
+time (guitar, marketing, bio): a timed schedule on the home screen that moves
+when he pushes the start, and a fixed bottom bar saying what's next, the time
+it ends, and "On pace / N min behind" based on real progress. Read the exam time
+from him, not the ledger: on 2026-11-03 the ledger parsed "10:25" out of an
+email-confirmation timestamp in the notes, and the real exam was 9am.
+
 **Read every source whole, including the videos.** "Go through the entirety of
 the semester DONT SKIM" (Caleb, 2026-11-02). That means every deck, the study
 guide, the lab manuals for the labs the exam covers, and the class animations,

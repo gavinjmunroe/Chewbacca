@@ -99,6 +99,19 @@ repeated over and over. On 2026-11-02, 2 of the 11 BISC animations (endo and
 exocytosis, vesicle transport) did this. Treat that output as no narration,
 say so, and cover the video from its slides. Never quote those lines as content.
 
+**A process is an animation, never cards.** When the topic is a sequence that
+changes something physical (mitosis, meiosis, transcription, a reaction, a
+cycle), build one drawn object that changes state step by step: Next/Back, a
+scrub slider, plain-English line first and the term second, a live counter for
+whatever the exam counts, then a no-labels "name that stage" quiz on the same
+drawing. Caleb, 2026-11-04 at 5am before BISC Midterm 2, after the mitosis
+lesson cards: "Rlly not getting this mitosis stuff can you make it an
+interactive animation that's easier to follow rather than a bunch of cards idk
+any of the terms bruh". The version that landed is
+`bisc-101/midterm2/mitosis.html`. Screenshot every stage before pushing: the
+first render had metaphase and anaphase chromosomes stacked into one bar.
+
+
 ## Making one
 
 ```sh

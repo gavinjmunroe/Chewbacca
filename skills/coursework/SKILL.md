@@ -92,6 +92,11 @@ one call, and a lapsed session renews itself from Chrome:
 - Grades, announcements, quizzes, discussions, content for one course:
   `chewbacca api call brightspace <grades|announcements|quizzes|discussions|content> orgUnitId=<id>`
   (ids from `chewbacca api call brightspace myCourses`)
+- A quiz showing NO GRADE YET in `brightspace due` isn't proof it wasn't taken.
+  Students get 403 on quiz attempts until it's graded, so ask him in one line
+  and record his answer as the done_source (BISC Quiz #8, 2026-11-03: he had
+  submitted it). A discussion post comes back with `Message.Text` empty and
+  the words in `Message.Html`, so read the Html when checking a post
 - "Did we turn in X?" mid-task gets answered FIRST, from Brightspace itself
   (`brightspace due --days 30` for dropboxes, `brightspace discuss <course>
   <topic> --json` filtered to his own name for boards), never from the ledger,

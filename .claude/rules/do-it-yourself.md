@@ -133,6 +133,19 @@ it, 25 on an 8-core laptop); the focused test plus pre-push is enough to land. O
 land queued behind other tabs left 8 minutes of silence after "Pause save learn
 remember", and he wrote "What is taking so long?" then "Bro???".
 
+## A FINISHED TAB CLOSES ITSELF OUT
+
+When every task in the tab is done (landed, verified, nothing running), the
+tab doesn't wait to be asked. In that same reply it saves what the session
+taught: a correction becomes a line in the owning skill or rule, a fact goes
+into the ledger, team memory or the brain, and stray worktrees and drafts get
+cleaned up. Then it ends with one line that it's ready to archive, plus
+anything that's genuinely his (a draft waiting on his send, a deadline).
+"I'm gonna archive this" means do that whole pass now, unprompted. Caleb,
+2026-11-03: "Archiving a tab should imply that you learn everything you can
+I shouldnt hv to tell you that and also when ur done w all work you can
+possibly do it should self prepare so i can archive and I dont hv to ask you".
+
 ---
 
 ## THE TEST

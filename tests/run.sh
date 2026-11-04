@@ -1675,6 +1675,7 @@ if group "hooks"; then
   check "a long hub folder cannot fill brain's top 5 for an unrelated question" python3 "$ROOT/tests/test_brain_hubs.py"
   check "brain ranks by fused rank with best chunk and one feedback round" python3 "$ROOT/tests/test_brain_fusion.py"
   check "brain indexes and asks with a second embedding model, and works without it" python3 "$ROOT/tests/test_brain_ensemble.py"
+  check "live code calls Ollama only for embeddings" python3 "$ROOT/tests/test_ollama_embed_only.py"
   check "router shadow log never blocks a hook or lands in a repo" bash "$ROOT/tests/route_shadow.sh"
   check "route_tune follows its written rule and refuses under 50 rows" bash "$ROOT/tests/route_tune.sh"
   check "formatter handles a broken Node runtime" python3 "$ROOT/tests/test_formatter_runtime.py"

@@ -1,0 +1,7 @@
+#!/usr/bin/env python3
+"""Run rfp-extract (RFP to a verbatim compliance matrix) from a checkout or a symlinked install."""
+from pathlib import Path
+import runpy
+
+runpy.run_path(str(Path(__file__).resolve().parent.parent / "tools" / "rfp_extract.py"),
+               run_name="__main__")

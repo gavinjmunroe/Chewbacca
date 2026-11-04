@@ -509,6 +509,7 @@ if group "gtme"; then
   check "discovery scores readiness on evidence and keeps unmeasured workflows out of ROI" python3 "$ROOT/tests/test_discovery.py"
   check "case-study refuses unsourced numbers and keeps ranges as ranges" python3 "$ROOT/tests/test_case_study.py"
   check "llms-txt gives every page a markdown twin and catches drift" python3 "$ROOT/tests/test_llms_txt.py"
+  check "rfp-extract keeps every requirement verbatim with its page and line" python3 "$ROOT/tests/test_rfp_extract.py"
   check "research library preserves source and reading status" python3 "$ROOT/tests/test_gtme_library.py"
   check "learning promotion requires paired holdouts and preserved regressions" python3 "$ROOT/tests/test_gtme_learning.py"
   check "Form D signals parse real filings, filter, and cache offline" python3 "$ROOT/tests/test_gtme_signals.py"

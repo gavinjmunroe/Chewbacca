@@ -112,6 +112,17 @@ any of the terms bruh". The version that landed is
 first render had metaphase and anaphase chromosomes stacked into one bar.
 
 
+**One screen, one sentence, then a check.** A teaching page fits the viewport
+with no scroll: the drawing on top, one short sentence under it (one new term
+bolded at a time), Back and Next, and every 3 or 4 beats a question that has to
+be answered right before Next unlocks. The checks are the flashcards. No term
+cards, rule boxes or counter grids under the drawing. Caleb, 2026-11-04, on the
+first mitosis animation: "it doesnt even fit in 1 page and its too much to
+comprehend at once, rlly walk be through it plz! This goes for every time u
+ever teach me smth - also isn't the whole point that this is going to be in
+replace of the flash cards to learn?" The shared engine is
+`bisc-101/midterm2/walk.js` + `walk.css`; reuse it.
+
 ## Making one
 
 ```sh

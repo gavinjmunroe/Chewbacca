@@ -774,9 +774,11 @@ line an https source, since `gtme ready` fails an http one.
   in a Dough checkout). A batch is approved and sent only on its approver's own
   Mac (`dough whoami`).
 - Caleb, 11/3: "All outbound will be handled by me for now - will loop gav in
-  when the time comes". DFW is written in Gavin's voice and sends from his
-  inbox, so it waits. Never stage DFW for Caleb, and never type Gavin's name
-  into `dough approve`.
+  when the time comes". So Caleb approves both regions, DFW included: it still
+  sends from gavin@firmfoundation.tech signed as Gavin, and `clients/ff-dfw.json`
+  lists Caleb as an approver. Approve as Caleb, never by typing Gavin's name.
+  Then, 11/3: "Gav's emails should go out earlier since he's 2 hrs ahead". Build
+  and send DFW first each morning, so it lands around 8:30 to 9:30 Central.
 - Caleb, 11/3: "go ham get everything done before we start outbound!" When he
   names a build list before a send, finish the list and land it before asking
   for the send ok. A frozen batch expires in 2 hours, so rebuild it fresh after.

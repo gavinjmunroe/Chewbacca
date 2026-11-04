@@ -698,6 +698,59 @@ class Solo(unittest.TestCase):
         self.assertIn("Meetings booked: 1", md)
         self.assertIn("Per 100 people emailed: 0.0 positive replies, 50.0 meetings", md)
 
+    # 2026-11-03: 16 of FF's next 32 were office@ inboxes greeted "Hi <full church name>
+    # team," on copy written for a named pastor, and variant B sat unused in plan.json.
+    def add_versions(self, role_body=None, b_body=None):
+        plan = json.loads((self.d / "plan.json").read_text())
+        one = plan["copy"][0]
+        if role_body is not None:
+            plan["copy_role_inbox"] = [dict(one, body=role_body)]
+        if b_body is not None:
+            plan["copy_variant_b"] = dict(one, body=b_body)
+        (self.d / "plan.json").write_text(json.dumps(plan))
+        return one
+
+    def test_a_role_inbox_gets_its_own_first_email(self):
+        self.ready()
+        one = self.add_versions(role_body="Hi there,\n\n" + json.loads((self.d / "plan.json").read_text())
+                                ["copy"][0]["body"].split("\n", 1)[1] + "\n\nCould you pass this along?")
+        b = self.batch()
+        role = next(m for m in b["mails"] if m["to"] == "hello@rollhouse.test")
+        named = next(m for m in b["mails"] if m["to"] == "maria@crumbcorner.test")
+        self.assertEqual(role["variant"], "role")
+        self.assertIn("Could you pass this along?", role["body"])
+        self.assertNotIn("Roll House team", role["body"])
+        self.assertEqual(named["variant"], "a")
+        self.assertNotIn("Could you pass this along?", named["body"])
+        self.assertIn("At Dana Co", one["body"])
+
+    def test_variant_b_splits_by_address_and_stays_put(self):
+        self.ready()
+        plan = json.loads((self.d / "plan.json").read_text())
+        self.add_versions(b_body=plan["copy"][0]["body"] + "\n\nVersion B here.")
+        lead = {"email": "maria@crumbcorner.test"}
+        want = "b" if int(gtme_solo.hashlib.sha256(b"maria@crumbcorner.test").hexdigest(), 16) % 2 else "a"
+        plan = json.loads((self.d / "plan.json").read_text())
+        self.assertEqual(gtme_solo.first_copy(plan, lead, "maria@crumbcorner.test")[0], want)
+        self.assertEqual(gtme_solo.first_copy(plan, lead, "MARIA@crumbcorner.test")[0], want)
+        picks = {gtme_solo.first_copy(plan, {}, f"p{i}@x.test")[0] for i in range(20)}
+        self.assertEqual(picks, {"a", "b"})
+
+    def test_a_version_that_fails_review_falls_back_to_email_1_a(self):
+        self.ready()
+        self.add_versions(role_body="Hi there,\n\nCould you pass this along?")
+        b = self.batch()
+        role = next(m for m in b["mails"] if m["to"] == "hello@rollhouse.test")
+        self.assertEqual(role["variant"], "a")
+        self.assertTrue(any("email 1 role fails Sagar's review" in w for w in b["warnings"]))
+
+    def test_the_variant_rides_into_the_send_ledger(self):
+        self.ready()
+        b = self.batch()
+        self.assertEqual(self.run_cli("send", "--client", "Dana Co", "--batch", b["id"], "--gap", "0"), 0)
+        rows = [json.loads(x) for x in (self.d / "sent.jsonl").read_text().splitlines()]
+        self.assertTrue(rows and all(r["variant"] == "a" for r in rows))
+
     def test_greeting_skips_a_title(self):
         # 2026-11-03: "Pastor Eduardo Bueno" on leads.csv became "Hi Pastor,".
         for name, want in (("Pastor Eduardo Bueno", "Hi Eduardo,"), ("Rev. Dr. Ann Lee", "Hi Ann,"),

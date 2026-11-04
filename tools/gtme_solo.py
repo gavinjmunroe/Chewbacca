@@ -579,6 +579,24 @@ def fill(text: str, lead: dict) -> str:
     return re.sub(r"\n{3,}", "\n\n", out).strip()
 
 
+def first_copy(plan: dict, lead: dict, addr: str) -> tuple[str, dict]:
+    """Which email 1 a lead gets, as (variant, copy). An office@ style inbox gets the
+    plan's copy_role_inbox when it has one: on 2026-11-03 16 of FF's next 32 were role
+    inboxes, and email 1 opened "Hi Trinity Chapel Life Center of Compton team," on copy
+    written for a named pastor. Everyone else splits A and B by a stable hash of the
+    address when the plan has copy_variant_b (Sagar: 2 variants of email 1), so a rerun
+    gives the same person the same email and replies can be credited to a variant."""
+    steps = {c["step"]: c for c in plan.get("copy") or []}
+    if lead.get("role_inbox") or ROLE.match(addr):
+        role = next((c for c in plan.get("copy_role_inbox") or [] if c.get("step") == 1), None)
+        if role:
+            return "role", role
+    b = plan.get("copy_variant_b")
+    if b and int(hashlib.sha256(addr.lower().encode()).hexdigest(), 16) % 2:
+        return "b", b
+    return "a", steps[1]
+
+
 def unsign(body: str, sign: str) -> str:
     """The draft's own sign-off line taken off the end, since the footer signs.
     Only a final line: a bare replace also ate the name inside "At Dana Co, we
@@ -721,6 +739,16 @@ def cmd_batch(a) -> int:
     if refusals:
         raise Refused("No batch. Email 1 fails Sagar's review, the same one gtme-grade runs on a campaign: "
                       + "; ".join(refusals) + ". Fix the copy with `chewbacca gtme copy`.")
+    # The other email 1 versions pass the same review or sit out: a lead whose version
+    # fails gets email 1 A, and the batch says why.
+    failed = set()
+    for name, alt in (("role", next((c for c in plan.get("copy_role_inbox") or [] if c.get("step") == 1), None)),
+                      ("b", plan.get("copy_variant_b"))):
+        if alt:
+            bad, _ = sagar_review(plan, alt)
+            if bad:
+                failed.add(name)
+                warns.append(f"email 1 {name} fails Sagar's review, so those leads get email 1 A: " + "; ".join(bad))
     room = max(0, today_cap(a.client) - sent_today(a.client))
     d = cdir(a.client)
     # No --lines: the ledger's own lines.json. On 10/12 all 252 Firm Foundation
@@ -761,9 +789,11 @@ def cmd_batch(a) -> int:
         extra = lines.get(addr, {})
         lead = {k: r.get(k, "") for k in ("company", "name", "email", "website", "role_inbox")}
         lead["line"] = (extra.get("line") or "").strip()
-        c = steps[1]
+        variant, c = first_copy(plan, lead, addr)
+        if variant in failed:
+            variant, c = "a", steps[1]
         body = unsign(fill(c["body"], lead), sign)
-        mail = {"to": addr, "step": 1, "subject": fill(c["subject"], lead), "lead": lead,
+        mail = {"to": addr, "step": 1, "variant": variant, "subject": fill(c["subject"], lead), "lead": lead,
                 "line": lead["line"], "line_source": extra.get("source") or "",
                 "body": f"{body}\n\n{footer(sender)}"}
         bad = problems(mail)
@@ -939,6 +969,7 @@ def cmd_send(a) -> int:
                                   "lead": m["lead"], "gmail_id": res.get("id"),
                                   "thread": res.get("threadId") or m.get("thread"),
                                   "message_id": mid or m.get("message_id") or "", "batch": batch["id"],
+                                  "variant": m.get("variant", "a"),
                                   "at": op.stamp()})
         sent += 1
         print(f"Sent email {m['step']} to {m['to']}.")
@@ -1442,7 +1473,9 @@ def stress(client: str) -> list[tuple[str, str, str]]:
         "GEX copy rubric; Coleman's 72", warn=n <= 100)
     add(len(copy) >= 3 and not (copy.get(2) or {}).get("subject"), "3 steps, with email 2 threaded under email 1",
         "Lieben: 3 steps, empty subject so it threads", warn=True)
-    add(False, "2 variants of email 1 rotating (gtme sends one)", "Sagar: 2 variants of 3 messages", warn=True)
+    add(bool(plan.get("copy_variant_b")), "2 variants of email 1 rotating" + (
+        "" if plan.get("copy_variant_b") else " (only one is written; add copy_variant_b)"),
+        "Sagar: 2 variants of 3 messages", warn=True)
     leads_csv = d / "leads.csv"
     rows = list(csv.DictReader(leads_csv.open())) if leads_csv.exists() else []
     off, sent = suppressed(client), {r.get("email") for r in jsonl(d / "sent.jsonl")}
@@ -1471,8 +1504,10 @@ def stress(client: str) -> list[tuple[str, str, str]]:
     weak = sum(1 for r in nxt if WEAK_TITLE.search(r.get("title") or ""))
     add(weak / k <= 0.02, f"{weak} of the next {k} have a title that rarely decides", "GEX list scorecard",
         warn=weak / k <= 0.10)
-    role = sum(1 for r in nxt if ROLE.match(r["email"]))
-    add(role == 0, f"{role} of the next {k} are role inboxes, which need their own email 1",
+    role = sum(1 for r in nxt if ROLE.match(r["email"]) or r.get("role_inbox"))
+    own = any(c.get("step") == 1 for c in plan.get("copy_role_inbox") or [])
+    add(role == 0 or own, f"{role} of the next {k} are role inboxes, " + (
+        "and they get their own email 1" if own else "which need their own email 1 (copy_role_inbox)"),
         "GEX scorecard counts role addresses apart", warn=True)
     rel = any(re.search(r"relationship|known|degree", c, re.I) for c in rows[0])
     add(rel, "the list carries a relationship column, so people we know get a text", "Sagar", warn=True)

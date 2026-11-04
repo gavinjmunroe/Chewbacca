@@ -122,6 +122,9 @@ an API summary without reading the source.
   quotas multiply into repeated clutter. Throttle rendering on a shared machine.
 - Every shot changes meaningfully every 1.5-3s and lands its action on its word within a few
   frames.
+- Keep one focal point per beat, morph existing shapes instead of adding new ones, and ease
+  every move with overshoot and settle. [Simple motion](references/simple-motion.md) has the
+  rules and the exact keyframe numbers.
 - Grow each transition out of the content: a morph, one object becoming the next, a camera
   push through an element, or particles that reform. Carry colour and momentum across the cut.
   Generic crossfades turn a film into a slideshow.
@@ -188,6 +191,7 @@ When the user asks for a reflection, follow [the reflection protocol](references
 - [video-script](../video-script/SKILL.md): write and test the script before the story step here.
 - [video-edit](../video-edit/SKILL.md): captions, sound and publishing conventions for finished footage; its caption timing script is reusable.
 - [demo](../demo/SKILL.md): a product demo is recorded, not animated.
+
 ## Credits
 
 Adapted from cstack by Charles Zheng (MIT), https://github.com/goodnight000/cstack

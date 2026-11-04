@@ -27,6 +27,7 @@ import sys
 import http.server
 import socketserver
 import threading
+import urllib.parse
 import webbrowser
 from pathlib import Path
 
@@ -224,6 +225,34 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def log_message(self, *a):
         pass
+
+    def own_host(self) -> bool:
+        port = self.server.server_address[1]
+        return self.headers.get("Host", "") in {f"127.0.0.1:{port}", f"localhost:{port}"}
+
+    # Reads get the same Host check as writes: a DNS-rebound name pointed at
+    # 127.0.0.1 could otherwise read every guide and progress file here. Dotfiles
+    # and anything that resolves outside the guide folder are refused too.
+    def safe_read(self) -> bool:
+        if not self.own_host():
+            self.send_error(403, "wrong host")
+            return False
+        # Decoded first, as the parent class will: %2eenv is .env.
+        rel = urllib.parse.unquote(self.path.split("?", 1)[0].split("#", 1)[0])
+        parts = [p for p in rel.split("/") if p]
+        target = (DIR / "/".join(parts)).resolve() if parts else DIR.resolve()
+        if any(p.startswith(".") for p in parts) or not (target == DIR.resolve() or DIR.resolve() in target.parents):
+            self.send_error(404)
+            return False
+        return True
+
+    def do_GET(self):
+        if self.safe_read():
+            super().do_GET()
+
+    def do_HEAD(self):
+        if self.safe_read():
+            super().do_HEAD()
 
     def same_origin(self) -> bool:
         port = self.server.server_address[1]

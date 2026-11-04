@@ -17,6 +17,7 @@ import os
 import shutil
 import sys
 import tempfile
+import urllib.error
 import urllib.request
 import threading
 import time
@@ -655,6 +656,29 @@ def main() -> int:
         g.sidecar(tricky_html).write_text("null")
         check("read_progress: JSON null returns None (falsy)",
               not g.read_progress(tricky_html))
+
+        # ── GET: same Host check as POST, no dotfiles, no escaping DIR ───
+        # Security review 2026-11-04: reads had no Host check, so a DNS-rebound
+        # name could read every guide; %2eenv decoded to .env past a raw check.
+        Path(os.path.join(gdir, ".env")).write_text("secret")
+        srv = socketserver.TCPServer(("127.0.0.1", 0), g.Handler)
+        port = srv.server_address[1]
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+
+        def status(path: str, host: str) -> int:
+            req = urllib.request.Request(f"http://127.0.0.1:{port}/{path}", headers={"Host": host})
+            try:
+                return urllib.request.urlopen(req, timeout=5).status
+            except urllib.error.HTTPError as e:
+                return e.code
+
+        own = f"127.0.0.1:{port}"
+        check("GET: own host reads a guide", status("tricky.html", own) == 200)
+        check("GET: foreign host refused", status("tricky.html", "evil.example") == 403)
+        check("GET: dotfile refused", status(".env", own) == 404)
+        check("GET: encoded dotfile refused", status("%2eenv", own) == 404)
+        srv.shutdown()
+        srv.server_close()
 
     if failures:
         print(f"\n  {len(failures)} FAILED:")

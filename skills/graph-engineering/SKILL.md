@@ -20,6 +20,18 @@ prompts. It has two halves:
    Read [references/task-graphs.md](references/task-graphs.md) when the request is about
    orchestrating agents rather than building memory.
 
+   **Never-do, Caleb 2026-11-03:** never work a multi-thread ask ("knock out
+   everything", "go ham", several people or projects named) one tool call at a
+   time. Turn one is the task graph and a single message dispatching every
+   independent track. That night a tab ran about 25 sequential calls across
+   Travis, Knox and Junto while a hook kept naming this skill, and he wrote "Use
+   agents resourcefullY! I should never hv to tell you to graph engineer Im tired
+   of it". If the machine-budget guard refuses subagents, queue each track with
+   `chewbacca jobs submit --net --once -- bash -c "codex exec -s danger-full-access
+-c approval_policy=never \"$(cat brief.md)\""` (or `claude -p` when its login
+   works) instead of falling back to serial work. Headless `claude -p` failed that
+   night with an expired OAuth session, and Codex ran.
+
 Core mental model: a knowledge graph is a **product with a schema**, not a pile of triples.
 Quality comes from the pipeline order, model the domain BEFORE extracting, fuse BEFORE storing,
 evaluate at every stage.

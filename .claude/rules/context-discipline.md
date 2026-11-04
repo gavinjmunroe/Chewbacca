@@ -57,6 +57,15 @@ place it would have gone (Gmail Sent, the submissions API, the thread). On
 sent", the reply repeated it, and he wrote "Shit bro why didn't we send tha?"
 It had gone out from his USC account on 10/3. One Sent search would have shown it.
 
+Two more from 2026-11-03, one night. A reply told him the three AuraPath domains
+promised to Travis weren't bought; another tab had bought them on Cloudflare an
+hour earlier, and `dig NS` would have shown it ("The cloudflare tab alr bought
+domains"). And three ledger rows said "blocked on Reed's Dripify key" for six
+days while Reed's reply with the key sat unread in the USC inbox since 10/28.
+So: before saying a purchase, setup or send hasn't happened, check the world
+(dig, the registrar, Sent, `tabs context`). Before trusting "waiting on X",
+search X's mail newer than the row's last update.
+
 ---
 
 ## VERIFY THE EDIT LANDED. YOUR SCRIPT'S SUCCESS MESSAGE IS NOT EVIDENCE.

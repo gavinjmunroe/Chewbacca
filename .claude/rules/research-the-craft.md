@@ -117,3 +117,7 @@ running it. One search found DYPER, Nest, Eco by Naty and Hevea, and it
 showed the plastic sits in the gel core and the leak barrier. That was
 the actual design problem, and it changed the advice. The fabric swap
 the call had planned would just have leaked.
+
+## A skill or career bar: measure it from the market he's aiming at
+
+When he asks what it takes to be hireable for a role (a track, a study plan, "what do startups test"), the bar comes from live postings and published loops at the companies he named, counted, never from a generic skills list. On 2026-11-03, building his engineer track, he redirected the research twice: "Go through ai swe/gtme job listings at startups/fast moving ai companies ... swe descriptions at companies that are too established are so lame", then "being an anthropic and openai level swe/fde/gtme would be awesome". So: pull 40+ postings from those boards, count each skill with the raw data saved next to the plan, and test his take against the count instead of adopting it. His "nobody needs SQL or JS" came back half right (14% say SQL by name, 60% name a SQL or JS family skill), and the plan kept both for that reason. A person named as the bar (Carlton) is measured from their own repos and site, including how much they use AI.

@@ -1001,6 +1001,8 @@ if group "installer"; then
     bash "$ROOT/tests/chewbacca_groupme.sh" "$ROOT"
   check  "chewbacca office signs in with MSAL device code, keeps the cache in the keychain, reads M365 GET-only through Graph with silent refresh, throttled, never marking read, and stops on pushback" \
     bash "$ROOT/tests/chewbacca_office.sh" "$ROOT"
+  check  "chewbacca whoop signs in through one local page, keeps secrets out of argv, spends a refresh token once across processes, and stops on pushback" \
+    python3 "$ROOT/tests/test_whoop.py"
   check  "office text extraction is bounded on a zip bomb" python3 "$ROOT/tests/test_office_text.py"
 
   check  "chewbacca google reads a Doc by URL, every Sheet tab, and refuses other files" \

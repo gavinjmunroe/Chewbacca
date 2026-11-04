@@ -17,10 +17,11 @@ user, in his voice.
 chewie brief --json
 ```
 
-Returns three reliable sources:
+Returns four sources:
 - **calendar**: today's events, from the Calendar DB directly (layer 1, fast)
 - **texts**: threads where someone spoke last and is waiting, decoded from chat.db
 - **email**: recent inbox, newest first, with unread flags (bounded AppleScript)
+- **whoop**: recovery, sleep and strain for the current cycle. `connected: false` means WHOOP was never set up, so leave it out. `connected: true` with `available: false` means say why, usually a sign-in to redo. A low recovery or short night is a reason to order the day lighter.
 
 If a source reports `available: false`, say so in the brief rather than inventing.
 

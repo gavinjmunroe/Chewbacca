@@ -10,15 +10,16 @@ preview its profile before running it.
 
 ## What the kit reads
 
-| Source            | Where it lives                                | Read by                                                 |
-| ----------------- | --------------------------------------------- | ------------------------------------------------------- |
-| iMessage history  | `~/Library/Messages/chat.db`                  | the `texts` and `people` skills, needs Full Disk Access |
-| Contacts          | the macOS Contacts store                      | the `people` skill                                      |
-| Calendar          | the macOS Calendar store, or a connector      | `mac-brief`, `life-ops`                                 |
-| Email             | an MCP connector, not a local index           | `mac-followups`, `mac-brief`                            |
-| Screen            | screenshot and accessibility tree, on request | the `mac-*` skills                                      |
-| Your files        | whatever you point it at                      | everything                                              |
-| Your context repo | `~/second-brain` or wherever you put it       | `second-brain`, every session start                     |
+| Source            | Where it lives                                 | Read by                                                 |
+| ----------------- | ---------------------------------------------- | ------------------------------------------------------- |
+| iMessage history  | `~/Library/Messages/chat.db`                   | the `texts` and `people` skills, needs Full Disk Access |
+| Contacts          | the macOS Contacts store                       | the `people` skill                                      |
+| Calendar          | the macOS Calendar store, or a connector       | `mac-brief`, `life-ops`                                 |
+| Email             | an MCP connector, not a local index            | `mac-followups`, `mac-brief`                            |
+| WHOOP             | WHOOP's API, only after `chewbacca whoop auth` | the `whoop` and `mac-brief` skills                      |
+| Screen            | screenshot and accessibility tree, on request  | the `mac-*` skills                                      |
+| Your files        | whatever you point it at                       | everything                                              |
+| Your context repo | `~/second-brain` or wherever you put it        | `second-brain`, every session start                     |
 
 ## What the kit stores, and where
 

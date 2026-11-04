@@ -11,6 +11,18 @@ requires: [chewie]
 Apple's own apps are well scripted. Reaching for the UI on one of these is doing it the
 hard way.
 
+## Apple Notes: `mac notes` first, and never fight for the formatting
+
+Read, search, list and trash through `mac notes`. It has no attachments and `add`/`edit` take plain text, so a note with dash lists or a picture can't go through them. Say that in the first update, before reaching for anything else. Caleb, 2026-11-04, mid-move: "Bro dont u hv maccli".
+
+Moving a note with a picture, in order:
+
+- Back up the HTML body with AppleScript and count `<img`.
+- `make new note` with that body. A data URI image becomes a dead File card, so strip the `<img>` first.
+- `make new attachment` only appends to the very bottom and attached twice on 2026-11-04, so count attachments and delete the extra.
+- Background paste is refused and the Attach File panel ignores background clicks. Don't spend turns on either. Tell him the picture is at the bottom.
+- Diff the lines of the new note against the backup before `mac notes delete` on the old one.
+
 ## Is it scriptable?
 
 ```bash

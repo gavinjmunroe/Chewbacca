@@ -607,3 +607,22 @@ Andrew from our college days", "Garland and Erik know each other too").
   the derived scores in step, and raw writes silently desynchronize both
 - Never quote a score as if it means something absolute. It is a ranking signal
   built from tunable guesses, and `people dims` shows every one of them
+
+## A network list someone else will work from
+
+When Caleb asks for "a list of everyone in my network who could help X", the
+sources are every place he knows people, not just the people store's titles:
+
+- LinkedIn and Contacts (already in the store)
+- every Gmail inbox's sent mail and every calendar's attendees. Use `gws`
+  per inbox, and fall back to the default `~/.config/gws` login when an
+  inbox's own token has expired (the personal Gmail one had on 2026-11-03)
+- his texts, through `people texts search "<topic>"` per topic. Only the
+  topic words go into a file meant for someone else, never their messages
+
+Build it with `tools/people_list_csv.py` (`--mail` for the inbox and calendar
+harvest) to the column standard in `.claude/rules/deliverables.md`. Never hand
+over a list that only looked at titles. Caleb, 2026-11-03: "The csv needs to
+hv all useful data!", then "Go through everyone on my linkedin, contacts,
+etc.", then "And anyone i've ever had a meeting or email with", then "Scan
+all ppl I've texted too". Each of those was a source the first pass skipped.

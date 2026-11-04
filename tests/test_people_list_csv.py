@@ -86,6 +86,13 @@ class Build(unittest.TestCase):
         self.assertEqual(rows[1]["Group"], "Founders and operators Caleb knows")
         self.assertEqual(rows[1]["Status"], "Not started")
 
+    def test_pick_without_store_record(self):
+        picks = [{"store_name": None, "name": "Org X", "title": "", "organization": "X", "location": "",
+                  "category": "Pilot org (global)", "help": "h", "ask": "a", "how_known": "k",
+                  "intro_path": "i", "source": "s", "relationship": "Via TTS"}]
+        cols, rows = plc.build("Dream", picks, [person("Founder", "Tiny", name="Org X")])
+        self.assertEqual([r["Name"] for r in rows], ["Org X"])  # tail twin skipped
+
     def test_bad_pick_category_refused(self):
         picks = [{"store_name": "", "name": "X", "title": "", "organization": "", "location": "",
                   "category": "Growth", "help": "", "ask": "", "how_known": "", "intro_path": "",

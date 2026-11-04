@@ -181,7 +181,7 @@ def build(goal, picks, people, exclude=()):
                      "Intro path": pk["intro_path"], "LinkedIn": p.get("linkedin") or "",
                      "Status": "Not started", "Next step": "", "Next step date": "",
                      "Notes": "", "Source": pk["source"]})
-    picked = {pk.get("store_name", "").lower() for pk in picks} | {pk["name"].lower() for pk in picks}
+    picked = ({(pk.get("store_name") or "").lower() for pk in picks} | {pk["name"].lower() for pk in picks}) - {""}
     tail = {}
     for p in people:
         if p["id"] in seen or p["name"].lower() in picked or any(x in p["name"].lower() for x in exclude):

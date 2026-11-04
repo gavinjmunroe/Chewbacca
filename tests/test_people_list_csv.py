@@ -33,6 +33,13 @@ class Categorize(unittest.TestCase):
         self.assertIsNone(plc.categorize(p))
 
 
+class Seniority(unittest.TestCase):
+    def test_levels(self):
+        self.assertEqual(plc.seniority("President & CEO"), "Senior leader")
+        self.assertEqual(plc.seniority("Investment Banking Analyst"), "Early career")
+        self.assertEqual(plc.seniority("Founder"), "Mid / founder")
+
+
 class Cell(unittest.TestCase):
     def test_formula_neutralized(self):
         self.assertEqual(plc.cell("=HYPERLINK(1)"), "'=HYPERLINK(1)")
@@ -54,6 +61,8 @@ class Build(unittest.TestCase):
         self.assertIn("Source", cols)
         self.assertEqual([r["Name"] for r in rows], ["Zed", "Amy"])  # pick first, dupe dropped
         self.assertEqual(rows[0]["Priority"], "1")
+        self.assertEqual(rows[0]["Group"], "Hand-picked")
+        self.assertEqual(rows[1]["Group"], "Founders and operators Caleb knows")
         self.assertEqual(rows[1]["Status"], "Not started")
 
     def test_bad_pick_category_refused(self):

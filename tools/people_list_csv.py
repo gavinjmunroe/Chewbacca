@@ -14,11 +14,11 @@ or companies someone will work from").
 import argparse, collections, csv, json, os, re, sqlite3
 
 DB = os.path.expanduser("~/.chewbacca/people/people.db")
-COLS = ["Priority", "Name", "Title", "Organization", "Location", "Category",
+COLS = ["Priority", "Group", "Name", "Title", "Organization", "Location", "Category", "Seniority",
         "How they help {goal}", "Suggested ask", "How Caleb knows them",
         "Relationship to Caleb", "Last contact", "Intro path", "LinkedIn",
         "Status", "Next step", "Next step date", "Notes", "Source"]
-CATEGORIES = ["Advisor", "Investor", "Funder", "Pilot org (university)",
+CATEGORIES = ["Mentor", "Advisor", "Investor", "Funder", "Pilot org (university)",
               "Pilot org (nonprofit)", "Pilot org (global)", "Connector",
               "Workforce / talent", "Accelerator / program", "Peer founder",
               "Operator at top company"]
@@ -48,6 +48,33 @@ HELP = {
     "Peer founder": ("Founder in Caleb's network. Peer advice, early users or partners.", "Ask for 15 min of feedback on {goal} and who they'd want to reach through it"),
     "Operator at top company": ("Works at a top company, the kind of person {goal} users want to reach.", "Ask if they'd be an early helper on {goal}, taking one intro a month"),
 }
+# Seniority from the title alone. Langston (2026-11-03) wants to learn under
+# people with decades of experience, so the sheet has to sort those to the top.
+SENIOR = r"\b(president|ceo|chief|dean|provost|professor|managing partner|general partner|partner|executive director|founder & executive|vice president|vp\b|svp|evp|head of|managing director|principal)\b"
+EARLY = r"\b(associate|analyst|coordinator|junior|assistant|specialist|engineer|designer|representative)\b"
+
+
+def seniority(title):
+    t = (title or "").lower()
+    if re.search(SENIOR, t):
+        return "Senior leader"
+    if re.search(EARLY, t):
+        return "Early career"
+    return "Mid / founder"
+
+
+# The long tail is grouped by who the reader can learn from first: senior
+# people Caleb actually talks to, then senior people he only has on LinkedIn.
+TAIL_GROUPS = ["Senior leaders Caleb knows", "Senior leaders, LinkedIn only",
+               "Founders and operators Caleb knows", "Everyone else"]
+
+
+def tail_group(sen, rel):
+    if sen == "Senior leader":
+        return TAIL_GROUPS[0] if rel != "LinkedIn only" else TAIL_GROUPS[1]
+    return TAIL_GROUPS[2] if rel != "LinkedIn only" else TAIL_GROUPS[3]
+
+
 REL_ORDER = {"Close": 0, "Know them": 1, "Via TTS": 1, "LinkedIn only": 2}
 
 
@@ -98,15 +125,22 @@ def build(goal, picks, people, exclude=()):
     help_col = f"How they help {goal}"
     by_name = {p["name"]: p for p in people}
     rows, seen = [], set()
+    groups = []
+    for pk in picks:
+        g = pk.get("group") or "Hand-picked"
+        if g not in groups:
+            groups.append(g)
+    picks = sorted(picks, key=lambda pk: groups.index(pk.get("group") or "Hand-picked"))
     for pk in picks:
         if pk["category"] not in CATEGORIES:
             raise SystemExit(f"pick {pk['name']}: category {pk['category']!r} is not one of {CATEGORIES}")
         p = by_name.get(pk.get("store_name") or "") or {}
         if p:
             seen.add(p["id"])
-        rows.append({"Priority": "1", "Name": pk["name"], "Title": pk["title"],
+        g = pk.get("group") or "Hand-picked"
+        rows.append({"Priority": str(groups.index(g) + 1), "Group": g, "Name": pk["name"], "Title": pk["title"],
                      "Organization": pk["organization"], "Location": pk["location"],
-                     "Category": pk["category"], help_col: pk["help"],
+                     "Category": pk["category"], "Seniority": pk.get("seniority") or seniority(pk["title"]), help_col: pk["help"],
                      "Suggested ask": pk["ask"], "How Caleb knows them": pk["how_known"],
                      "Relationship to Caleb": pk["relationship"],
                      "Last contact": (p.get("last") or "")[:10],
@@ -121,13 +155,14 @@ def build(goal, picks, people, exclude=()):
         if not cat:
             continue
         rel = relationship(p)
-        high = cat not in ("Peer founder", "Operator at top company")
         h, a = HELP[cat]
         name = p["name"].strip("'\" ")
-        row = {"Priority": "2" if (rel != "LinkedIn only" or high) else "3",
+        sen = seniority(p.get("role"))
+        group = tail_group(sen, rel)
+        row = {"Priority": str(len(groups) + TAIL_GROUPS.index(group) + 1), "Group": group,
                "Name": name, "Title": p.get("role") or "",
                "Organization": p.get("company") or "", "Location": p.get("location") or "",
-               "Category": cat, help_col: h.format(goal=goal),
+               "Category": cat, "Seniority": seniority(p.get("role")), help_col: h.format(goal=goal),
                "Suggested ask": a.format(goal=goal),
                "How Caleb knows them": p.get("how_we_met") or ("LinkedIn connection" if p.get("li_connected_on") else "Caleb's contacts"),
                "Relationship to Caleb": rel, "Last contact": (p.get("last") or "")[:10],
@@ -135,7 +170,7 @@ def build(goal, picks, people, exclude=()):
                "Status": "Not started", "Next step": "", "Next step date": "", "Notes": "",
                "Source": "Caleb's people store (LinkedIn title)"}
         tail.setdefault((name.lower(), row["Organization"].lower()), row)
-    rest = sorted(tail.values(), key=lambda r: (r["Priority"], CATEGORIES.index(r["Category"]),
+    rest = sorted(tail.values(), key=lambda r: (int(r["Priority"]), CATEGORIES.index(r["Category"]),
                                                  REL_ORDER.get(r["Relationship to Caleb"], 3), r["Name"]))
     return [c.format(goal=goal) for c in COLS], rows + rest
 

@@ -123,6 +123,13 @@ ever teach me smth - also isn't the whole point that this is going to be in
 replace of the flash cards to learn?" The shared engine is
 `bisc-101/midterm2/walk.js` + `walk.css`; reuse it.
 
+**Show, don't tell, for every lesson, not just the processes.** A lesson that
+is a chain of cause and effect (a signal, a receptor, an enzyme switching on)
+gets drawn as that chain with each beat moving one piece, never a paragraph
+naming the links. Caleb, 2026-11-04, at the Ch 9.6 text lesson on cyclins and
+CDKs: "SHow not tell bruh." The Lock in button should open the drawn
+walkthrough before any drill or text lesson.
+
 ## Making one
 
 ```sh

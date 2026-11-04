@@ -34,7 +34,6 @@ import os
 import re
 import sys
 import unicodedata
-import urllib.request
 from pathlib import Path
 
 KIT = Path(__file__).resolve().parent.parent
@@ -875,6 +874,19 @@ def about_urls(raw, domain, limit=2):
     return out[:limit]
 
 
+SITE_BYTES = 2_000_000
+
+
+def fetch_page(u):
+    """One page of a brand's site, through gtme_solo's guarded fetch: http and https only,
+    public addresses only, the connection pinned to the checked address, every redirect
+    re-checked. A bare urlopen followed a redirect anywhere, so a domain from a lead list
+    could point this at a private or link-local address (security review, 2026-11-03).
+    Anything blocked or unreachable reads as an empty page."""
+    import gtme_solo  # lazy: gtme_operator imports this module, and gtme_solo imports gtme_operator
+    return gtme_solo.fetch(u, limit=SITE_BYTES)
+
+
 def read_site(domain, fetch=None):
     """The brand's homepage and about page as text, plus the hosts their anchors link.
 
@@ -884,11 +896,7 @@ def read_site(domain, fetch=None):
     Those hosts go in asset_hosts for the record and never reach a hop.
     """
     url = f"https://{registrable(domain)}/"
-    if fetch is None:
-        def fetch(u):
-            req = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0 (chewbacca next-move)"})
-            with urllib.request.urlopen(req, timeout=15) as r:
-                return r.read(2_000_000).decode("utf-8", "ignore")
+    fetch = fetch or fetch_page
     raw = fetch(url)
     pages, about = [raw], []
     for u in about_urls(raw, domain):

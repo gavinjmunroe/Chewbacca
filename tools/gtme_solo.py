@@ -75,6 +75,9 @@ FETCH_BYTES = 400_000
 # What a page may grow to once decompressed. A gzip bomb turns 400 KB into
 # gigabytes; a real homepage was 52 KB unpacked (python.org, 2026-10-11).
 PAGE_CHARS = 2_000_000
+# op.safe cuts at 2,000 characters for one-line fields; a whole email body or a
+# held reason list prints in full, so nothing the approver signs is cut short.
+PRINT_MAX = 100_000
 PAGES = ("", "/contact", "/contact-us", "/about")
 MAX_WORDS = 125
 ROLE = re.compile(r"^(info|contact|hello|hi|office|admin|sales|team|support|help|mail|enquiries|inquiries|"
@@ -568,7 +571,19 @@ TITLES = {"pastor", "ps", "rev", "reverend", "dr", "fr", "father", "elder", "bis
           "deacon", "mr", "mrs", "ms", "miss", "sister", "brother"}
 
 
+# What a lead field can't carry into an email: ESC sequences, C0 controls but tab and
+# newline, DEL, C1 and the bidi overrides. A scraped company name or a staff page's
+# name is written by a stranger, and an escape in it reached the approver's terminal
+# and the sent email alike (security review, 2026-11-03). Ordinary text is untouched.
+LEAD_CONTROL = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]")
+
+
+def clean_field(value) -> str:
+    return LEAD_CONTROL.sub("", op.ESC_SEQ.sub("", str(value or "")))
+
+
 def fill(text: str, lead: dict) -> str:
+    lead = {**lead, **{k: clean_field(lead.get(k)) for k in ("name", "company", "line") if lead.get(k)}}
     words = (lead.get("name") or "").split()
     while len(words) > 1 and words[0].rstrip(".").lower() in TITLES:
         words = words[1:]
@@ -788,7 +803,8 @@ def cmd_batch(a) -> int:
             in_batch.add(acct)
         extra = lines.get(addr, {})
         lead = {k: r.get(k, "") for k in ("company", "name", "email", "website", "role_inbox")}
-        lead["line"] = (extra.get("line") or "").strip()
+        lead.update({k: clean_field(lead[k]) for k in ("company", "name")})
+        lead["line"] = clean_field(extra.get("line") or "").strip()
         variant, c = first_copy(plan, lead, addr)
         if variant in failed:
             variant, c = "a", steps[1]
@@ -834,14 +850,18 @@ def cmd_batch(a) -> int:
           f"{sent_today(a.client)} already went out today.")
     if not mails:
         print("Nothing to send today." + (f" {len(held)} held, below." if held else ""))
+    # Everything printed here can hold a stranger's text (the address, a scraped company,
+    # the personal line). op.safe drops escape sequences that could rewrite or hide a line
+    # of what the approver reads, and leaves ordinary text alone; the batch itself is unchanged.
     for n, m in enumerate(mails, 1):
-        print(f"\n--- {n}. To {m['to']} ({m['lead'].get('company')}), email {m['step']} of {len(steps)}")
-        print(f"Subject: {m['subject']}\n")
-        print(m["body"])
+        print(f"\n--- {n}. To {op.safe(m['to'])} ({op.safe(m['lead'].get('company'))}), "
+              f"email {m['step']} of {len(steps)}")
+        print(f"Subject: {op.safe(m['subject'])}\n")
+        print(op.safe(m["body"], PRINT_MAX))
     for m in held:
-        print(f"\nHeld, not in the batch: {m['to']}: {'; '.join(m['held_for'])}")
+        print(f"\nHeld, not in the batch: {op.safe(m['to'])}: {op.safe('; '.join(m['held_for']), PRINT_MAX)}")
     for w in warns:
-        print(f"\nWarning: {w}")
+        print(f"\nWarning: {op.safe(w, PRINT_MAX)}")
     if mails:
         print(f"\nBatch {bid}: {len(mails)} emails, exactly as above. Nothing has been sent. "
               f"Say ok and this batch goes out from your Gmail, spaced a minute or so apart. "
@@ -1029,7 +1049,7 @@ def cmd_inbox(a) -> int:
             th = gws(["gmail", "users", "threads", "get", "--params",
                       json.dumps({"userId": "me", "id": tid, "format": "full"})], a.inbox or "")
         except (RuntimeError, OSError, subprocess.SubprocessError, ValueError) as err:
-            print(f"Couldn't read the thread with {first['email']}: {err}")
+            print(f"Couldn't read the thread with {op.safe(first['email'])}: {op.safe(err)}")
             continue
         for msg in th.get("messages") or []:
             heads = {h.get("name", "").lower(): h.get("value", "") for h in (msg.get("payload") or {}).get("headers", [])}
@@ -1061,12 +1081,14 @@ def cmd_inbox(a) -> int:
     print(f"{auto} replies handled on their own (opt-outs and bounces are never emailed again; anyone who "
           f"replied gets no more follow-ups).")
     for r in answered:
-        print(f"Answered on its own: {r['from']} said they're interested, and got your booking reply.")
+        print(f"Answered on its own: {op.safe(r['from'])} said they're interested, and got your booking reply.")
     if not needs:
         print("Nobody's waiting on you.")
     for r in needs:
-        print(f"\n{r['label']}: {r['from']} ({r['email']})\n  \"{gtme_reply.readable_reply(r['text'], 400)}\"\n"
-              f"  Next: {r['next']}")
+        # A reply is written by a stranger: escapes in it could repaint what's above.
+        print(f"\n{op.safe(r['label'])}: {op.safe(r['from'])} ({op.safe(r['email'])})\n"
+              f"  \"{op.safe(gtme_reply.readable_reply(r['text'], 400))}\"\n"
+              f"  Next: {op.safe(r['next'])}")
     return 0
 
 
@@ -1360,14 +1382,14 @@ def cmd_week(a) -> int:
     lines = [f"# {a.client}, the week ending {day}", "",
              f"- First emails sent: {n['first']}, to {n['accounts']} organizations",
              f"- Follow-ups sent: {n['followups']}", f"- Replies: {n['replies']} ({rate} of first emails)"]
-    lines += [f"  - {k}: {v}" for k, v in sorted(n["kinds"].items(), key=lambda kv: -kv[1])]
+    lines += [f"  - {op.safe(k)}: {v}" for k, v in sorted(n["kinds"].items(), key=lambda kv: -kv[1])]
     lines += [f"- Answered on their own with the booking reply: {n['auto']}",
               f"- Held by the checks before sending: {n['held']} of {n['checked']}",
               f"- Never emailing again: {n['suppressed']}",
               f"- Meetings booked: {n['meetings']}"]
     lines += per_100(n, plan_of(a.client) if (cdir(a.client) / "plan.json").exists() else {})
     if n["people"]:
-        lines += ["", "## Interested or asked something", ""] + [f"- {p}" for p in n["people"]]
+        lines += ["", "## Interested or asked something", ""] + [f"- {op.safe(p)}" for p in n["people"]]
     out = Path(a.out or Path.home() / "Downloads") / f"{a.client} week {day}.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(lines) + "\n")
@@ -1638,14 +1660,14 @@ def cmd_rank(a) -> int:
                          "at": op.utc_now().isoformat(), "looked_at": sum(1 for r in rows if r.get("dated_score"))}
     op.write_json(d / "plan.json", plan)
     for r in rows[:a.show]:
-        print(f"{r['rank_score']:>5}  {r.get('company', '')[:34]:34}  {r['rank_why']}")
+        print(f"{r['rank_score']:>5}  {op.safe(r.get('company', ''))[:34]:34}  {op.safe(r['rank_why'])}")
     return 0
 
 
 def cmd_stress(a) -> int:
     rows = stress(a.client)
     for verdict, rule, src in rows:
-        print(f"{verdict:12} {rule}  [{src}]")
+        print(f"{verdict:12} {op.safe(rule)}  [{op.safe(src)}]")
     count = {v: sum(1 for x, _, _ in rows if x == v) for v in ("FAIL", "WARN", "NOT CHECKED")}
     print(f"\n{count['FAIL']} fail, {count['WARN']} warn, {count['NOT CHECKED']} not checked.")
     return 1 if count["FAIL"] else 0

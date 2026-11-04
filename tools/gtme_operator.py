@@ -868,33 +868,67 @@ def own_decisions(client: str):
     return None
 
 
+# Ruling ids a gate reads as a waiver: gtme_grade turns a missing postal address
+# into a warning on "no-postal-address" and lets young senders launch on
+# "accepted-warmup-risk". A ruling carrying "waives" counts too.
+GATE_WAIVERS = frozenset({"no-postal-address", "accepted-warmup-risk"})
+
+
+def waives_gate(ruling: dict) -> bool:
+    return ruling.get("id") in GATE_WAIVERS or bool(ruling.get("waives"))
+
+
+def ruling_files(client: str) -> list[Path]:
+    """The DECISIONS.json files that belong to this client, and only those: the
+    rulings_path on its clients.json entry, then the DECISIONS.json at the root
+    of the repo its ledger is shared in (`gtme share`).
+
+    Until 2026-11-03 rulings_for globbed every ~/code/work/*/DECISIONS.json and
+    matched by client name or alias, so any repo that named a client could hand
+    it rulings, a gate waiver included (security review of the vendored engine)."""
+    files = []
+    cfg = read_json(config_path(), {"clients": []})
+    for c in cfg.get("clients") or [] if isinstance(cfg, dict) else []:
+        if isinstance(c, dict) and _same(c.get("name", ""), client) and c.get("rulings_path"):
+            files.append(Path(os.path.expanduser(c["rulings_path"])))
+    own = own_decisions(client)
+    if own:
+        files.append(own)
+    out, seen = [], set()
+    for f in files:
+        try:
+            key = f.resolve()
+        except OSError:
+            continue
+        if f.exists() and key not in seen:
+            seen.add(key)
+            out.append(f)
+    return out
+
+
 def rulings_for(client: str) -> list[dict]:
-    """Every active ruling for a client: its clients.json entry, then any
-    client repo DECISIONS.json naming it (by client name or alias)."""
+    """Every active ruling for a client: its clients.json entry, then the
+    client's own DECISIONS.json files (ruling_files). A configured rulings_path
+    loads when it names the client by name or alias; the shared ledger repo's
+    file always does. A ruling that waives or relaxes a gate loads only from a
+    source whose client name is this client's exactly, never by alias: one
+    DECISIONS.json listing "ff" as an alias can't waive a gate for every FF client."""
     out = []
     cfg = read_json(config_path(), {"clients": []})
     for c in cfg.get("clients") or [] if isinstance(cfg, dict) else []:
         if isinstance(c, dict) and _same(c.get("name", ""), client):
             out += [dict(r, where=str(config_path())) for r in c.get("rulings") or [] if isinstance(r, dict)]
-    try:
-        files = sorted(client_repos().glob("*/DECISIONS.json"))
-    except OSError:
-        files = []
     own = own_decisions(client)
-    if own and own.resolve() not in {f.resolve() for f in files}:
-        files.append(own)
-    for c in cfg.get("clients") or [] if isinstance(cfg, dict) else []:
-        if isinstance(c, dict) and _same(c.get("name", ""), client) and c.get("rulings_path"):
-            named = Path(os.path.expanduser(c["rulings_path"]))
-            if named.exists() and named.resolve() not in {f.resolve() for f in files}:
-                files.append(named)
-    for path in files:
+    for path in ruling_files(client):
         d = read_json(path, {})
         if not isinstance(d, dict):
             continue
-        names = [d.get("client") or ""] + [a for a in d.get("aliases") or [] if isinstance(a, str)]
-        if path == own or any(_same(n, client) for n in names):
-            out += [dict(r, where=str(path)) for r in d.get("rulings") or [] if isinstance(r, dict)]
+        exact = _same(d.get("client") or "", client)
+        alias = any(_same(a, client) for a in d.get("aliases") or [] if isinstance(a, str))
+        if not (exact or alias or path == own):
+            continue
+        out += [dict(r, where=str(path)) for r in d.get("rulings") or []
+                if isinstance(r, dict) and (exact or not waives_gate(r))]
     seen, active = set(), []
     for r in out:
         key = " ".join(str(r.get("rule") or "").lower().split())
@@ -902,6 +936,12 @@ def rulings_for(client: str) -> list[dict]:
             seen.add(key)
             active.append(r)
     return active
+
+
+def ruling_inputs(client: str) -> list[str]:
+    """Every file a gate-waiving ruling for this client was read from, for a
+    receipt's hashed inputs: editing or revoking the waiver invalidates the pass."""
+    return sorted({r["where"] for r in rulings_for(client) if waives_gate(r) and r.get("where")})
 
 
 # What a ruling is about, read off its words, and what crosses it. Volume is

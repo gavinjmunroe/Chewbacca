@@ -1301,10 +1301,10 @@ def grade(args):
     client = load_client(args.client)
     if args.client:
         import gtme_operator
-        # Revoking the decision invalidates the same signed receipt as editing
-        # a send list. An approval is never copied into a forged grade.
-        inputs.extend(r["where"] for r in gtme_operator.rulings_for(args.client)
-                      if r.get("id") == "accepted-warmup-risk" and r.get("where"))
+        # Revoking or editing any gate waiver (accepted-warmup-risk, no-postal-address)
+        # invalidates the same signed receipt as editing a send list. An approval is
+        # never copied into a forged grade.
+        inputs.extend(gtme_operator.ruling_inputs(args.client))
 
     gates = [Gate(1, "list"), Gate(2, "copy"), Gate(3, "recipient read"), Gate(4, "rendered output"),
              Gate(5, "infrastructure and start")]

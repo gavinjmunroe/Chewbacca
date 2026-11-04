@@ -5,6 +5,7 @@ Jev is stubbed here so the suite is hermetic. The live-Jev replay numbers are
 measured with `chewbacca gtme next-move replay tests/fixtures/next_move/replays`.
 """
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -194,6 +195,36 @@ class JunkHops(unittest.TestCase):
             self.assertTrue(N.infrastructure(d, set()), d)
         for d in ("static.com", "pixel.com", "hoka.com", "nutrabolt.com", "deckers.com"):
             self.assertFalse(N.infrastructure(d, set()), d)
+
+
+class GuardedSiteRead(unittest.TestCase):
+    """Security review, 2026-11-03: read_site's default fetch was a bare urlopen that followed
+    any redirect. It now goes through gtme_solo.fetch, so these never reach a socket."""
+
+    def setUp(self):
+        self._fx = os.environ.pop("GTME_FIXTURES", None)
+
+    def tearDown(self):
+        if self._fx is not None:
+            os.environ["GTME_FIXTURES"] = self._fx
+
+    def test_private_link_local_and_non_http_urls_read_nothing(self):
+        for url in ("http://127.0.0.1/", "http://localhost/", "http://10.0.0.5/", "http://192.168.1.1/",
+                    "http://169.254.169.254/latest/meta-data/", "http://[::1]/", "http://[fe80::1]/",
+                    "file:///etc/passwd", "ftp://example.com/", "gopher://example.com/"):
+            self.assertEqual(N.fetch_page(url), "", url)
+
+    def test_default_fetch_is_the_guarded_one(self):
+        import gtme_solo
+        seen = []
+        real = gtme_solo.fetch
+        gtme_solo.fetch = lambda u, limit=0: seen.append((u, limit)) or ""
+        try:
+            ev = N.read_site("example.com")
+        finally:
+            gtme_solo.fetch = real
+        self.assertEqual(seen, [("https://example.com/", N.SITE_BYTES)])
+        self.assertEqual(ev["links"], [])
 
 
 class Barebells(unittest.TestCase):

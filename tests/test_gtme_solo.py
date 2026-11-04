@@ -762,6 +762,51 @@ class Solo(unittest.TestCase):
                            ("Pastor", "Hi Pastor,")):
             self.assertEqual(gtme_solo.fill("Hi {{first_name}},", {"name": name}), want, name)
 
+    # Security review, 2026-11-03: a scraped company name or a reply can carry
+    # terminal escapes that repaint what the approver reads, or ride into the email.
+    def test_lead_fields_lose_control_and_escape_characters_in_the_email(self):
+        lead = {"name": "Ann\x1b[2J Lee", "company": "Crumb\x1b]8;;http://evil.example\x1b\\ Corner\x07\u202e",
+                "line": "Your hours\r page\x9b is out of date.\x00"}
+        out = gtme_solo.fill("Hi {{first_name}},\n\t{{company}}: {{signal_line}}", lead)
+        self.assertEqual(out, "Hi Ann,\n\tCrumb Corner: Your hours page is out of date.")
+
+    def test_ordinary_lead_text_fills_exactly_as_before(self):
+        lead = {"name": "Pastor José Núñez", "company": "Iglesia Cristiana \"La Roca\" — Downey (Español)",
+                "line": "Your homepage still says 'in this pandemic' with 'your mask on'.\tIt's one of 7 fixes."}
+        self.assertEqual(gtme_solo.fill("Hi {{first_name}},\n\n{{signal_line}}\n\n{{company}}", lead),
+                         f"Hi José,\n\n{lead['line']}\n\n{lead['company']}")
+
+    def test_the_printed_batch_carries_no_escape_from_a_lead(self):
+        import contextlib
+        import io
+        self.ready()
+        leads = self.d / "leads.csv"
+        leads.write_text(leads.read_text().replace("Crumb Corner", "Crumb\x1b[2J\x1b]0;pwned\x07 Corner"))
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            self.assertEqual(self.run_cli("batch", "--client", "Dana Co"), 0)
+        out = buf.getvalue()
+        self.assertNotIn("\x1b", out)
+        self.assertNotIn("\x07", out)
+        self.assertIn("Crumb Corner", out)
+
+    def test_an_inbox_reply_prints_without_its_escapes(self):
+        import contextlib
+        import io
+        self.ready()
+        b = self.batch()
+        self.run_cli("send", "--client", "Dana Co", "--batch", b["id"], "--gap", "0")
+        sent = self.sent_threads()
+        self.threads.write_text(json.dumps({sent["hello@rollhouse.test"]: [
+            ["hello@rollhouse.test", "How much\x1b[1A\x1b[2K does this cost\x1b]0;pwned\x07 per month?"]]}))
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            self.assertEqual(self.run_cli("inbox", "--client", "Dana Co"), 0)
+        out = buf.getvalue()
+        self.assertIn("hello@rollhouse.test", out)
+        self.assertNotIn("\x1b", out)
+        self.assertNotIn("\x07", out)
+
     def test_gtme_front_door_routes_here(self):
         self.ready()
         p = subprocess.run([sys.executable, str(ROOT / "tools" / "gtme_operator.py"), "batch", "--client", "Dana Co"],

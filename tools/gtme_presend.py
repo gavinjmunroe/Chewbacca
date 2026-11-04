@@ -401,9 +401,13 @@ def write_receipt(a, client, dest=None):
     a run without the MX floor still pass the gate for a dry run, but cannot
     unlock a launch: a client with prior sends never has "nobody was emailed
     before" true. Every input file is hashed so the verify refuses if a list,
-    suppression, sender or verification file changed after the pass."""
+    suppression, sender, verification or gate-waiving rulings file changed after the pass."""
     inputs = list(a.files) + list(a.suppress)
     inputs += [p for p in (a.senders, a.verification) if p]
+    # The client's gate waivers ride along, so editing or revoking one (or a
+    # stranger's file trying to add one) invalidates this pass like a list edit.
+    import gtme_operator  # lazy: gtme_operator is the heavier module and this runs standalone too
+    inputs += [p for p in gtme_operator.ruling_inputs(client) if p not in inputs]
     full_but_lines = (bool(a.senders) and bool(a.suppress) and bool(a.verification) and a.mx
                       and not a.no_title_check and not a.allow_catch_all)
     # full_but_lines: every check on, for a campaign that sends one story and no

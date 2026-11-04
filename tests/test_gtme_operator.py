@@ -297,6 +297,13 @@ class GraphCommands(unittest.TestCase):
                          "date": "2026-03-05", "status": "active"},
                         {"id": "old", "rule": "Cut the list to 50", "who": "X", "status": "retired"}]}))
         env = dict(self.env, CHEWBACCA_CLIENT_REPOS=str(self.tmp / "repos"))
+        # Security review, 2026-11-03: a DECISIONS.json the client's entry doesn't name
+        # is somebody else's file, and naming the client in it loads nothing.
+        items = json.loads(run(env, "next", "--json").stdout)
+        floor = next(x for x in items if x["kind"] == "floor")
+        self.assertIsNone(floor.get("held_by"), "an unconfigured repo's rulings never load")
+        (self.tmp / "gtm" / "clients.json").write_text(json.dumps({"clients": [
+            {"name": "Northwind Test Co", "workspaces": [], "rulings_path": str(repos / "DECISIONS.json")}]}))
         items = json.loads(run(env, "next", "--json").stdout)
         floor = next(x for x in items if x["kind"] == "floor")
         self.assertEqual(floor["held_by"]["who"], "Sagar")
@@ -698,6 +705,70 @@ class ReplyTextThroughGtmeReply(unittest.TestCase):
         db.execute("INSERT INTO edges VALUES ('c1', 'ENROLLED', 'p1', ?)",
                    (json.dumps({"email": "pat.rivera@fund.example", "name": "Pat Riverae"}),))
         self.assertEqual(g.lead_names(db, ["c1"]), {"pat.rivera@fund.example": "Pat Rivera"})
+
+
+class RulingSources(unittest.TestCase):
+    """Security review, 2026-11-03: rulings came from every ~/code/work/*/DECISIONS.json that
+    named a client or one of its aliases, so a stranger's repo could waive a gate."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.saved = {k: os.environ.get(k) for k in ("GTM_CONFIG", "GTME_HOME", "CHEWBACCA_CLIENT_REPOS")}
+        os.environ.update({"GTM_CONFIG": str(self.tmp / "gtm" / "clients.json"), "GTME_HOME": str(self.tmp / "gtm"),
+                           "CHEWBACCA_CLIENT_REPOS": str(self.tmp / "work")})
+        (self.tmp / "gtm").mkdir()
+        import gtme_operator
+        self.op = gtme_operator
+
+    def tearDown(self):
+        for k, v in self.saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+    def decisions(self, where, client, aliases, rulings):
+        where.mkdir(parents=True, exist_ok=True)
+        f = where / "DECISIONS.json"
+        f.write_text(json.dumps({"client": client, "aliases": aliases, "rulings": rulings}))
+        return f
+
+    def config(self, **entry):
+        (self.tmp / "gtm" / "clients.json").write_text(json.dumps({"clients": [dict(name="Acme West", **entry)]}))
+
+    WAIVER = {"id": "no-postal-address", "rule": "Send without a postal address.", "who": "Pat", "date": "2026-10-01"}
+    PLAIN = {"id": "volume", "rule": "Max volume.", "who": "Pat", "date": "2026-10-01"}
+
+    def test_a_stranger_repo_naming_the_client_loads_nothing(self):
+        self.decisions(self.tmp / "work" / "evil", "Acme West", ["acme west"], [self.WAIVER, self.PLAIN])
+        self.config(workspaces=[])
+        self.assertEqual(self.op.rulings_for("Acme West"), [])
+        self.assertEqual(self.op.ruling_inputs("Acme West"), [])
+
+    def test_the_configured_file_loads_and_its_waiver_is_a_signed_input(self):
+        f = self.decisions(self.tmp / "work" / "acme", "Acme West", [], [self.WAIVER, self.PLAIN])
+        self.config(workspaces=[], rulings_path=str(f))
+        self.assertEqual([r["id"] for r in self.op.rulings_for("Acme West")], ["no-postal-address", "volume"])
+        self.assertEqual(self.op.ruling_inputs("Acme West"), [str(f)])
+
+    def test_an_alias_match_loads_plain_rulings_but_never_a_waiver(self):
+        f = self.decisions(self.tmp / "work" / "acme", "Acme", ["acme west"], [self.WAIVER, self.PLAIN])
+        self.config(workspaces=[], rulings_path=str(f))
+        self.assertEqual([r["id"] for r in self.op.rulings_for("Acme West")], ["volume"])
+        self.assertEqual(self.op.ruling_inputs("Acme West"), [])
+
+    def test_a_shared_ledger_repo_file_loads_without_naming_the_client(self):
+        """Firm Foundation's ff-ledger DECISIONS.json names "Firm Foundation" for both regions."""
+        repo = self.tmp / "team"
+        (repo / ".git").mkdir(parents=True)
+        (repo / "ops" / "west").mkdir(parents=True)
+        self.decisions(repo, "Acme", ["acme west"], [self.WAIVER, self.PLAIN])
+        self.config(workspaces=[], state_dir=str(repo / "ops" / "west"))
+        self.assertEqual([r["id"] for r in self.op.rulings_for("Acme West")], ["volume"])
+
+    def test_a_clients_json_waiver_is_hashed_from_clients_json(self):
+        self.config(workspaces=[], rulings=[self.WAIVER])
+        self.assertEqual(self.op.ruling_inputs("Acme West"), [str(self.tmp / "gtm" / "clients.json")])
 
 
 class FridayNumbersRuling(unittest.TestCase):

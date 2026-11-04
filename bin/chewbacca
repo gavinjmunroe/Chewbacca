@@ -73,6 +73,9 @@ COMMANDS=(
   "context|measure what the kit costs you before you type"
   "evals|run the skill evals"
   "gtme-math|compute offline cost, funnel, and heldout metrics"
+  "discovery|score AI readiness on evidence, baseline workflows, ROI ranges and build order"
+  "case-study|build a client case study where every number has a source and the change is computed"
+  "llms-txt|write llms.txt and a markdown twin of every page so AI agents read a site right"
   "gtme-graph|track GTM dependencies, budgets, and evidence"
   "gtme-learning|compare paired workflow experiments offline"
   "gtme-library|index and search a local source corpus"
@@ -153,7 +156,7 @@ repo_version() { cat "$ROOT/VERSION" 2>/dev/null || echo "unknown"; }
 installed_version() { cat "$STATE/version" 2>/dev/null || echo "unrecorded"; }
 
 case "${1:-}" in
-task-graph|graph-fuse|review-gate|break-it|work-ledger|tabs|ux-learning|jev|decision-lab|ux-decision|ux-policy|clay-review|gtme-math|gtme-graph|gtme-learning|gtme-library|gtme-signals|gtme-investors|gtme-grade|gtme-reply|gtme-rules|gtme-dnc|gtme-score|gtme-interview|resolve|name-check|gtm|gtm-memory|gtme|clay-fixture-check|oss-apps)
+task-graph|graph-fuse|review-gate|break-it|work-ledger|tabs|ux-learning|jev|decision-lab|ux-decision|ux-policy|clay-review|gtme-math|discovery|case-study|llms-txt|gtme-graph|gtme-learning|gtme-library|gtme-signals|gtme-investors|gtme-grade|gtme-reply|gtme-rules|gtme-dnc|gtme-score|gtme-interview|resolve|name-check|gtm|gtm-memory|gtme|clay-fixture-check|oss-apps)
   tool="$1"
   shift
   exec python3 "$ROOT/bin/$tool" "$@"

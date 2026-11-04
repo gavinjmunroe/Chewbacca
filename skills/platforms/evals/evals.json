@@ -1,0 +1,28 @@
+{
+  "skill": "platforms",
+  "cases": [
+    {
+      "prompt": "Am I logged into Railway and Supabase on this Mac?",
+      "expect_tools": ["chewbacca platforms"],
+      "why": "one status call answers it; guessing or asking him is the failure"
+    },
+    {
+      "prompt": "Buy getaurapath.com and set it up to send cold email from Google Workspace",
+      "expect_tools": [
+        "cf registrar registrations check",
+        "chewbacca platforms sending-domain"
+      ],
+      "why": "check price, show the total and get his yes, register on Cloudflare, then plan and apply the mail records",
+      "reject": [
+        "registering before he confirms the total",
+        "porkbun checkout",
+        "adding the domain to the firmfoundation.tech Workspace"
+      ]
+    },
+    {
+      "prompt": "Make the lookalike domains redirect to the real site",
+      "expect_tools": ["chewbacca platforms sending-domain apply"],
+      "why": "--redirect writes the proxied placeholder and the 301 rule"
+    }
+  ]
+}

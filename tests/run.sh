@@ -565,6 +565,8 @@ if group "gtme"; then
     python3 "$ROOT/tests/test_resolve.py"
   check "name-check reads whois right, and silence never reads as a free domain" \
     python3 "$ROOT/tests/test_name_check.py"
+  check "platforms: status rows, and a sending domain never gets a second SPF or MX" \
+    python3 "$ROOT/tests/test_platforms.py"
   check "no code pins a model confidence at 1.0, Jev scores it" \
     python3 "$ROOT/tests/test_no_pinned_confidence.py"
   check "outbound waiting on him shows in needs-you, sent and expired batches don't" \

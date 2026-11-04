@@ -520,6 +520,8 @@ if group "gtme"; then
     python3 "$ROOT/tests/test_gtme_accounts.py"
   check "gtme list runs the registry method from config, verifies a sample, drafts outreach without sending" \
     python3 "$ROOT/tests/test_gtme_pipeline.py"
+  check "every list builder runs its named stages through gtme accounts' one runner" \
+    python3 "$ROOT/tests/test_gtme_stages.py"
   check "Clay exports match the frozen fixture by stable identity" python3 "$ROOT/tests/test_clay_fixture_check.py"
   check "clay-inbox filters by campaign and reports a refused read" python3 "$ROOT/tests/test_clay_inbox.py"
   check "gtme-dedupe merges one person across lists, never two on name alone" python3 "$ROOT/tests/test_gtme_dedupe.py"

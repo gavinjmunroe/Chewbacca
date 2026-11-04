@@ -1474,87 +1474,168 @@ def price_treg(row: dict) -> float:
     return 0.0
 
 
+# ── stages: the one list pipeline ────────────────────────────────────────
+
+# Every list builder runs as named steps through run_stages: this file's accounts, `gtme list`'s
+# registry builder (gtme_pipeline), the investor and angel lists (gtme_investors). Five builders
+# overlapped on 2026-11-02 (Dough improvement plan, item 13), each with its own copy of the same
+# steps, so a fix to one (judge each angel alone, a DNC hit is terminal) never reached the others.
+# A step is (stage, fn): fn takes the rows and returns the rows it keeps. The order is each
+# builder's own, since the investor list dedupes before it judges and this file after.
+STAGES = ("source", "fit", "buyer", "verify", "dedupe", "dnc", "tier")
+
+
+def run_stages(steps, rows=None, trace: list | None = None):
+    """Run a builder's steps in order and return the rows. With `trace`, append one
+    {stage, step, in, out} per step, so a row count that drops can be traced to the step."""
+    for stage, fn in steps:
+        if stage not in STAGES:
+            raise ValueError(f"unknown stage {stage!r}: a step is one of {', '.join(STAGES)}")
+        before = len(rows) if rows is not None else 0
+        rows = fn(rows)
+        if trace is not None:
+            trace.append({"stage": stage, "step": getattr(fn, "__name__", stage), "in": before,
+                          "out": len(rows) if rows is not None else 0})
+    return rows
+
+
+def jev_judge_rows(states: list[dict], question: str, decision: str, batch: int) -> list[float | None]:
+    """The same yes/no question asked of each row, `batch` rows to a Jev call; None where Jev
+    gave no answer or isn't installed. The registry list and the fund list share this; the angel
+    pass calls it one row at a time (batch rows mixed up, see gtme_investors.build_angels)."""
+    sys.path.insert(0, str(ROOT / "bin" / "lib"))
+    import gtme_jev  # the kit's Jev by path, never tools/jev.py (11/2)
+    jev = gtme_jev.kit_jev()
+    if jev is None:
+        return [None] * len(states)
+    out: list[float | None] = []
+    for i in range(0, len(states), batch):
+        chunk = states[i:i + batch]
+        qs = {f"row:{j}": {"type": "noul", "instructions": f"Look only at row {j}. {question}"}
+              for j in range(len(chunk))}
+        answers = jev.ask({"rows": chunk}, qs, decision=decision) or {}
+        for j in range(len(chunk)):
+            a = answers.get(f"row:{j}")
+            out.append(jev.probability(a.get("noul")) if isinstance(a, dict) else None)
+    return out
+
+
 # ── run ──────────────────────────────────────────────────────────────────
 
 
 def build(client: str, acc: dict, work: Path, *, limit: int | None = None, workers: int = 4,
           refresh: bool = False, tools=None, ask=jev_ask, about=None, today: dt.date | None = None,
-          refresh_signals: bool = False, refresh_empty: str | bool = False) -> tuple[list[dict], dict]:
+          refresh_signals: bool = False, refresh_empty: str | bool = False,
+          trace: list | None = None) -> tuple[list[dict], dict]:
     today = today or dt.date.today()
     work.mkdir(parents=True, exist_ok=True)
-    accounts = SOURCES[acc["source"]["kind"]](acc["source"], work / "source")
-    if limit:
-        accounts = accounts[:limit]  # a test run, and the summary says so
-    words = re.compile(acc.get("news_words") or NEWS_WORDS, re.I)
-    growth = re.compile(acc.get("growth_words") or GROWTH_WORDS, re.I)
-    tools = tools or site_audit()
-    titles = acc.get("titles") or []
-    must_show = (acc.get("icp") or {}).get("must_show") or ""
-    if len(accounts) > SAMPLE and not acc.get("allow_low_buyer_fill"):
-        sample = enrich(accounts[:SAMPLE], work, tools, words, growth, workers, refresh, titles, must_show, acc)
-        read = [r for r in sample if r.get("site_status") == "ok"]
-        found = sum(1 for r in read if r.get("leaders"))
-        if read and found / len(read) < MIN_BUYER_FILL:
-            raise Refused(f"the site reader found a buyer at {found} of {len(read)} sample sites, so it's blind to "
-                          f"this market. Add the titles these orgs really use to the accounts block's `titles` "
-                          f"(now: {', '.join(titles) or 'none'}), check one site by hand, then rerun. Set "
-                          f"allow_low_buyer_fill: true only if buyers really aren't on these sites.")
-        refresh = False  # the sample is read; the full run reuses it
-    recs = enrich(accounts, work, tools, words, growth, workers, refresh, titles, must_show, acc, refresh_signals,
-                  refresh_empty)
-    recs = [r for r in recs if r.get("website") and same_org(r["name"], r.get("maps_name"))]
-    hiring_cfg = (acc.get("why_now") or {}).get("linkedin_jobs")
-    if hiring_cfg:
-        posts = linkedin_hiring(hiring_cfg)
-        for r in recs:
-            r["jobs"] = (r.get("jobs") or []) + posts.get(name_key(r.get("maps_name") or r["name"]), [])
-    job_words = (acc.get("why_now") or {}).get("job_words")
-    if job_words:
-        # a hire only counts when it's the work the client sells into: Ben Hall Law hiring a
-        # criminal defense attorney came back as a PIP why-now on 2026-11-02
-        jw = re.compile(job_words, re.I)
-        for r in recs:
-            r["jobs"] = [j for j in r.get("jobs") or [] if jw.search(j.get("title", ""))]
-    org_jev = 0
-    global JEV_CACHE, JEV_CACHE_PATH
-    JEV_CACHE_PATH = work / "jev-cache.json"
-    JEV_CACHE = json.loads(JEV_CACHE_PATH.read_text()) if JEV_CACHE_PATH.exists() else {}
-    if acc.get("checks"):
-        for r in recs:
-            r["_probs"] = org_checks(r, acc, client, ask)
-            org_jev += 1
-    JEV_CACHE_PATH.write_text(json.dumps(JEV_CACHE))
-    if acc.get("per_person"):
-        recs = per_person(recs)
-    rows = []
-    for rec in recs:
-        row = score(rec, acc, words, today, about)
-        jev_check(row, acc, client, ask)
-        if acc.get("checks") or acc.get("page_signals"):
-            church_fields(row, rec, rec.get("_probs") or {}, acc)
-        rows.append(row)
-    jev_calls = sum(1 for r in rows if r.pop("_jev_called", False)) + org_jev
-    if acc.get("per_person"):
-        # a person Jev held is dropped when someone else at that org kept their row
-        kept = {r["org"] for r in rows if r["buyer"]}
-        rows = [r for r in rows if r["buyer"] or r["org"] not in kept]
-    rows = dedupe(rows, by_person=bool(acc.get("per_person")))
-    if acc.get("per_person") and acc.get("one_per_org_except"):
-        rows = one_per_org(rows, acc)
-    entries, where = dnc_entries(acc)
-    db = people_db()
-    treg_total = 0.0
-    for r in rows:
-        apply_dnc(r, entries, where)
-        relationship(r, db)
-        treg_total += price_treg(r)
-        for k in ("_page_emails", "_suppressed"):
-            r.pop(k, None)
-    if acc.get("segments"):
-        # segmented rows first, by segment, then the held ones with their reason
-        rows.sort(key=lambda r: (not r.get("segment"), r.get("segment") or "", r["org"] or "", r["buyer"] or ""))
-    else:
-        rows.sort(key=lambda r: (r["tier"], -int(r["why_now_score"]), -int(r["fit"]), r["org"] or ""))
+    run: dict = {"org_jev": 0}
+
+    def source(_):
+        accounts = SOURCES[acc["source"]["kind"]](acc["source"], work / "source")
+        if limit:
+            accounts = accounts[:limit]  # a test run, and the summary says so
+        run["accounts"] = accounts
+        return accounts
+
+    def read_sites(accounts):
+        nonlocal tools, refresh
+        words = re.compile(acc.get("news_words") or NEWS_WORDS, re.I)
+        growth = re.compile(acc.get("growth_words") or GROWTH_WORDS, re.I)
+        run["words"] = words
+        tools = tools or site_audit()
+        titles = acc.get("titles") or []
+        must_show = (acc.get("icp") or {}).get("must_show") or ""
+        if len(accounts) > SAMPLE and not acc.get("allow_low_buyer_fill"):
+            sample = enrich(accounts[:SAMPLE], work, tools, words, growth, workers, refresh, titles, must_show, acc)
+            read = [r for r in sample if r.get("site_status") == "ok"]
+            found = sum(1 for r in read if r.get("leaders"))
+            if read and found / len(read) < MIN_BUYER_FILL:
+                raise Refused(f"the site reader found a buyer at {found} of {len(read)} sample sites, so it's blind to "
+                              f"this market. Add the titles these orgs really use to the accounts block's `titles` "
+                              f"(now: {', '.join(titles) or 'none'}), check one site by hand, then rerun. Set "
+                              f"allow_low_buyer_fill: true only if buyers really aren't on these sites.")
+            refresh = False  # the sample is read; the full run reuses it
+        recs = enrich(accounts, work, tools, words, growth, workers, refresh, titles, must_show, acc, refresh_signals,
+                      refresh_empty)
+        return [r for r in recs if r.get("website") and same_org(r["name"], r.get("maps_name"))]
+
+    def why_now_jobs(recs):
+        hiring_cfg = (acc.get("why_now") or {}).get("linkedin_jobs")
+        if hiring_cfg:
+            posts = linkedin_hiring(hiring_cfg)
+            for r in recs:
+                r["jobs"] = (r.get("jobs") or []) + posts.get(name_key(r.get("maps_name") or r["name"]), [])
+        job_words = (acc.get("why_now") or {}).get("job_words")
+        if job_words:
+            # a hire only counts when it's the work the client sells into: Ben Hall Law hiring a
+            # criminal defense attorney came back as a PIP why-now on 2026-11-02
+            jw = re.compile(job_words, re.I)
+            for r in recs:
+                r["jobs"] = [j for j in r.get("jobs") or [] if jw.search(j.get("title", ""))]
+        return recs
+
+    def checks(recs):
+        global JEV_CACHE, JEV_CACHE_PATH
+        JEV_CACHE_PATH = work / "jev-cache.json"
+        JEV_CACHE = json.loads(JEV_CACHE_PATH.read_text()) if JEV_CACHE_PATH.exists() else {}
+        if acc.get("checks"):
+            for r in recs:
+                r["_probs"] = org_checks(r, acc, client, ask)
+                run["org_jev"] += 1
+        JEV_CACHE_PATH.write_text(json.dumps(JEV_CACHE))
+        if acc.get("per_person"):
+            recs = per_person(recs)
+        run["by_row"] = recs
+        return recs
+
+    def pick_buyer(recs):
+        return [score(rec, acc, run["words"], today, about) for rec in recs]
+
+    def confirm_buyer(rows):
+        for row, rec in zip(rows, run["by_row"]):
+            jev_check(row, acc, client, ask)
+            if acc.get("checks") or acc.get("page_signals"):
+                church_fields(row, rec, rec.get("_probs") or {}, acc)
+        run["jev_calls"] = sum(1 for r in rows if r.pop("_jev_called", False)) + run["org_jev"]
+        if acc.get("per_person"):
+            # a person Jev held is dropped when someone else at that org kept their row
+            kept = {r["org"] for r in rows if r["buyer"]}
+            rows = [r for r in rows if r["buyer"] or r["org"] not in kept]
+        return rows
+
+    def one_row_each(rows):
+        rows = dedupe(rows, by_person=bool(acc.get("per_person")))
+        if acc.get("per_person") and acc.get("one_per_org_except"):
+            rows = one_per_org(rows, acc)
+        return rows
+
+    def dnc_people_treg(rows):
+        entries, where = dnc_entries(acc)
+        run["dnc"] = where
+        db = people_db()
+        treg_total = 0.0
+        for r in rows:
+            apply_dnc(r, entries, where)
+            relationship(r, db)
+            treg_total += price_treg(r)
+            for k in ("_page_emails", "_suppressed"):
+                r.pop(k, None)
+        run["treg_total"] = treg_total
+        return rows
+
+    def order(rows):
+        if acc.get("segments"):
+            # segmented rows first, by segment, then the held ones with their reason
+            rows.sort(key=lambda r: (not r.get("segment"), r.get("segment") or "", r["org"] or "", r["buyer"] or ""))
+        else:
+            rows.sort(key=lambda r: (r["tier"], -int(r["why_now_score"]), -int(r["fit"]), r["org"] or ""))
+        return rows
+
+    rows = run_stages([("source", source), ("fit", read_sites), ("fit", why_now_jobs), ("fit", checks),
+                       ("buyer", pick_buyer), ("verify", confirm_buyer), ("dedupe", one_row_each),
+                       ("dnc", dnc_people_treg), ("tier", order)], trace=trace)
+    accounts, recs, where, treg_total = run["accounts"], run["by_row"], run["dnc"], run["treg_total"]
     fill = {c: sum(1 for r in rows if str(r.get(c) or "").strip()) for c in
             ("website", "buyer", "buyer_email", "why_now", "relationship")}
     summary = {"client": client, "accounts_sourced": len(accounts), "rows": len(rows),
@@ -1562,7 +1643,7 @@ def build(client: str, acc: dict, work: Path, *, limit: int | None = None, worke
                "jev_confirmed": sum(1 for r in rows if r["buyer_check"].startswith("Jev") and "held" not in r["buyer_check"]),
                "jev_held": [r["org"] for r in rows if "held" in r["buyer_check"]],
                "tiers": {t: sum(1 for r in rows if r["tier"] == t) for t in (1, 2, 3)},
-               "jev_calls": jev_calls, "dropped_no_site": len(accounts) - len({r["key"].split("#")[0] for r in recs}),
+               "jev_calls": run["jev_calls"], "dropped_no_site": len(accounts) - len({r["key"].split("#")[0] for r in recs}),
                "icp_unread": [r["org"] for r in rows if r.get("icp_fit") == "unread"],
                "dnc": where, "treg_priced_rows": sum(1 for r in rows if r["treg_find"]),
                "treg_priced_usd": round(treg_total, 2), "treg_budget_usd": acc.get("treg_budget_usd")}

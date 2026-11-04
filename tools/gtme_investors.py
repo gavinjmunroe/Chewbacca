@@ -74,6 +74,7 @@ ROOT = Path(__file__).resolve().parent.parent
 # path, not tools/: the judge's import of gtme_pipeline failed that way on
 # 11 of 13 founder lists (2026-10-26) while every in-process test passed.
 sys.path.insert(0, str(ROOT / "tools"))
+import gtme_accounts  # noqa: E402  the stage runner every list builder shares
 
 # Role inboxes are not people. 984 of 52,350 in the original file, attached to
 # a real person's name so they pass a spreadsheet eyeball check.
@@ -286,21 +287,7 @@ LENDER_YES = 0.6
 
 
 def jev_judge(states: list[dict], question: str) -> list[float | None]:
-    sys.path.insert(0, str(ROOT / "bin" / "lib"))
-    import gtme_jev  # the kit's Jev by path, never tools/jev.py (11/2)
-    jev = gtme_jev.kit_jev()
-    if jev is None:
-        return [None] * len(states)
-    out: list[float | None] = []
-    for i in range(0, len(states), JUDGE_BATCH):
-        chunk = states[i:i + JUDGE_BATCH]
-        qs = {f"row:{j}": {"type": "noul", "instructions": f"Look only at row {j}. {question}"}
-              for j in range(len(chunk))}
-        answers = jev.ask({"rows": chunk}, qs, decision="gtme-investors-judge") or {}
-        for j in range(len(chunk)):
-            a = answers.get(f"row:{j}")
-            out.append(jev.probability(a.get("noul")) if isinstance(a, dict) else None)
-    return out
+    return gtme_accounts.jev_judge_rows(states, question, "gtme-investors-judge", JUDGE_BATCH)
 
 
 # What the firm's own homepage says about itself, for the judge. Measured
@@ -353,7 +340,7 @@ def firm_keys(row: dict) -> set[str]:
 
 
 def build(con: sqlite3.Connection, block: dict, ask=jev_judge, says=None, match=None,
-          read_portfolio=None, lender_ask=None) -> tuple[list[dict], dict]:
+          read_portfolio=None, lender_ask=None, trace: list | None = None) -> tuple[list[dict], dict]:
     thesis = word_re(block.get("thesis", []) + block.get("thesis_text", []))
     thesis_text = word_re(block.get("thesis_text", []))
     stage = word_re(block.get("stage", []))
@@ -387,136 +374,152 @@ def build(con: sqlite3.Connection, block: dict, ask=jev_judge, says=None, match=
     def drop(reason):
         stats["dropped"][reason] = stats["dropped"].get(reason, 0) + 1
 
-    rows = []
-    for r in con.execute(sql):
-        stats["pool"] += 1
-        rec = dict(zip(["record_id", "full_name", "title", "organization", "org_type", "email",
-                        "website", "linkedin", "city", "state", "country", "region", "sectors",
-                        "check_size", "grade", "grade_score", "seniority"] + flags, r))
-        email = (rec["email"] or "").strip().lower()
-        sectors = (rec["sectors"] or "").lower()
-        org = (rec["organization"] or "").strip()
-        if org_types and (rec["org_type"] or "").lower() not in org_types:
-            drop("org_type"); continue
-        if countries or regions:
-            c = (rec["country"] or "").strip().lower()
-            g = (rec["region"] or "").strip().lower()
-            if not (c in countries or (not c and g in regions)):
-                drop("geography"); continue
-        if seniority and rec["seniority"] not in seniority:
-            drop("seniority"); continue
-        if not EMAIL_RE.match(email):
-            drop("malformed email"); continue
-        if is_role(email):
-            drop("role inbox"); continue
-        if any(rec.get(f) for f in flags) or not company_ok(org) or not first_name(rec["full_name"]):
-            drop("junk company or name"); continue
-        if any(gate.NAN_STRIP.search(str(v or "")) for v in rec.values()):
-            drop("NaN-strip corruption"); continue
-        if rec["title"] and gate.is_junior(rec["title"]):
-            drop("too junior to decide"); continue
-        if any(o in org.lower() for o in excl_orgs):
-            drop("excluded firm"); continue
-        if excl and excl.search(sectors):
-            drop("excluded sector"); continue
-        if email in suppress:
-            drop("suppressed"); continue
-        text = f"{org} {rec['title'] or ''}".lower()
-        sector_hit = thesis.search(sectors) if thesis and sectors and sectors != "unknown" else None
-        text_hit = thesis_text.search(text) if thesis_text else None
-        known_sector = bool(sectors) and sectors != "unknown"
-        if not (sector_hit or text_hit):
-            if known_sector or not keep_unknown:
-                drop("off thesis"); continue
-        rng = check_range(rec["check_size"])
-        check_text = (rec["check_size"] or "").lower()
-        stage_word = stage and (stage.search(check_text) or stage.search(sectors) or stage.search(text))
-        stage_why = f"stage: {stage_word.group(1)}" if stage_word else ""
-        if not stage_why and (rec["org_type"] or "").lower() == "angel":
-            stage_why = "stage: angel"
-        # A range is read as the checks they write. Their smallest over what
-        # this round takes means they don't write a check this size; their
-        # largest under min_check_musd means too small to be worth a slot.
-        if rng and max_check is not None and rng[0] > max_check:
-            drop("check too large"); continue
-        if rng and min_check is not None and rng[1] < min_check:
-            drop("check too small"); continue
-        check_why = ""
-        if rng:
-            span = fmt_musd(rng[1]) if rng[0] == rng[1] else f"{fmt_musd(rng[0])} to {fmt_musd(rng[1])}"
-            fits = max_check is None or rng[1] <= max_check
-            check_why = f"checks {span}" + (f", inside the {fmt_musd(max_check)} round" if max_check and fits
-                                             else f", overlaps the {fmt_musd(max_check)} round" if max_check else "")
-            if fits and max_check is not None and not stage_why:
-                stage_why = "stage: check size fits the round"
-        stage_hit = bool(stage_why)
-        if require_stage and not stage_hit:
-            drop("no early-stage evidence"); continue
-        hit = sector_hit or text_hit
-        score = ((3 if hit else 0) + (2 if stage_hit else 0)
-                 + SENIORITY_RANK.get(rec["seniority"], 0) + GRADE_RANK.get(rec["grade"], 0))
-        why = []
-        if hit:
-            why.append(f"thesis: {hit.group(1)}" + (" (sector)" if sector_hit else " (firm or title)"))
+    def source(_):
+        records = list(con.execute(sql))
+        stats["pool"] += len(records)
+        return records
+
+    def fit(records):
+        rows = []
+        for r in records:
+            rec = dict(zip(["record_id", "full_name", "title", "organization", "org_type", "email",
+                            "website", "linkedin", "city", "state", "country", "region", "sectors",
+                            "check_size", "grade", "grade_score", "seniority"] + flags, r))
+            email = (rec["email"] or "").strip().lower()
+            sectors = (rec["sectors"] or "").lower()
+            org = (rec["organization"] or "").strip()
+            if org_types and (rec["org_type"] or "").lower() not in org_types:
+                drop("org_type"); continue
+            if countries or regions:
+                c = (rec["country"] or "").strip().lower()
+                g = (rec["region"] or "").strip().lower()
+                if not (c in countries or (not c and g in regions)):
+                    drop("geography"); continue
+            if seniority and rec["seniority"] not in seniority:
+                drop("seniority"); continue
+            if not EMAIL_RE.match(email):
+                drop("malformed email"); continue
+            if is_role(email):
+                drop("role inbox"); continue
+            if any(rec.get(f) for f in flags) or not company_ok(org) or not first_name(rec["full_name"]):
+                drop("junk company or name"); continue
+            if any(gate.NAN_STRIP.search(str(v or "")) for v in rec.values()):
+                drop("NaN-strip corruption"); continue
+            if rec["title"] and gate.is_junior(rec["title"]):
+                drop("too junior to decide"); continue
+            if any(o in org.lower() for o in excl_orgs):
+                drop("excluded firm"); continue
+            if excl and excl.search(sectors):
+                drop("excluded sector"); continue
+            if email in suppress:
+                drop("suppressed"); continue
+            text = f"{org} {rec['title'] or ''}".lower()
+            sector_hit = thesis.search(sectors) if thesis and sectors and sectors != "unknown" else None
+            text_hit = thesis_text.search(text) if thesis_text else None
+            known_sector = bool(sectors) and sectors != "unknown"
+            if not (sector_hit or text_hit):
+                if known_sector or not keep_unknown:
+                    drop("off thesis"); continue
+            rng = check_range(rec["check_size"])
+            check_text = (rec["check_size"] or "").lower()
+            stage_word = stage and (stage.search(check_text) or stage.search(sectors) or stage.search(text))
+            stage_why = f"stage: {stage_word.group(1)}" if stage_word else ""
+            if not stage_why and (rec["org_type"] or "").lower() == "angel":
+                stage_why = "stage: angel"
+            # A range is read as the checks they write. Their smallest over what
+            # this round takes means they don't write a check this size; their
+            # largest under min_check_musd means too small to be worth a slot.
+            if rng and max_check is not None and rng[0] > max_check:
+                drop("check too large"); continue
+            if rng and min_check is not None and rng[1] < min_check:
+                drop("check too small"); continue
+            check_why = ""
+            if rng:
+                span = fmt_musd(rng[1]) if rng[0] == rng[1] else f"{fmt_musd(rng[0])} to {fmt_musd(rng[1])}"
+                fits = max_check is None or rng[1] <= max_check
+                check_why = f"checks {span}" + (f", inside the {fmt_musd(max_check)} round" if max_check and fits
+                                                 else f", overlaps the {fmt_musd(max_check)} round" if max_check else "")
+                if fits and max_check is not None and not stage_why:
+                    stage_why = "stage: check size fits the round"
+            stage_hit = bool(stage_why)
+            if require_stage and not stage_hit:
+                drop("no early-stage evidence"); continue
+            hit = sector_hit or text_hit
+            score = ((3 if hit else 0) + (2 if stage_hit else 0)
+                     + SENIORITY_RANK.get(rec["seniority"], 0) + GRADE_RANK.get(rec["grade"], 0))
+            why = []
+            if hit:
+                why.append(f"thesis: {hit.group(1)}" + (" (sector)" if sector_hit else " (firm or title)"))
+            else:
+                why.append("generalist, sector not on file")
+            if stage_why:
+                why.append(stage_why)
+            if check_why:
+                why.append(check_why)
+            elif rec["check_size"]:
+                why.append(f"check {rec['check_size']}")
+            slug = rec["linkedin"] or ""
+            rows.append({
+                "first_name": first_name(rec["full_name"]),
+                "full_name": (rec["full_name"] or "").strip(),
+                "title": (rec["title"] or "").strip(),
+                "organization": clean_company(org),
+                "org_type": rec["org_type"] or "",
+                "email": email,
+                "website": rec["website"] or "",
+                "linkedin": slug if linkedin_matches(rec["full_name"], slug) else "",
+                "city": rec["city"] or "", "state": rec["state"] or "", "country": rec["country"] or "",
+                "sectors": rec["sectors"] or "", "check_size": rec["check_size"] or "",
+                "grade": rec["grade"] or "",
+                "thesis_match": "yes" if hit else "no",
+                "stage_match": "yes" if stage_hit else "no",
+                "fit_score": score,
+                "why": "; ".join(why),
+                "record_id": rec["record_id"],
+                "_rank": (score, float(rec["grade_score"] or 0), 1 if slug else 0),
+            })
+        rows.sort(key=lambda x: x["_rank"], reverse=True)
+        return rows
+
+    def one_per_firm(rows):
+        per_firm = int(block.get("per_firm", 1))
+        seen_email, seen_person, firms, out = set(), set(), {}, []
+        for row in rows:
+            person = (row["full_name"].lower(), row["organization"].lower())
+            if row["email"] in seen_email or person in seen_person:
+                drop("duplicate"); continue
+            # One contact per firm, the best fit, the same firm_key list-gate
+            # counts with: on 10/26 every list failed it (Stonepeak 7 on one).
+            # A firm is also its domain: "Khosla Impact" and "Khosla Ventures"
+            # are two firm_keys and one khoslaventures.com, and both made one
+            # founder's list on 10/26. The site wins, then a work email domain.
+            keys = firm_keys(row)
+            if per_firm and any(firms.get(k, 0) >= per_firm for k in keys):
+                drop("another contact at the same firm"); continue
+            seen_email.add(row["email"]); seen_person.add(person)
+            for k in keys:
+                firms[k] = firms.get(k, 0) + 1
+            row.pop("_rank")
+            out.append(row)
+        return out
+
+    def judged(out):
+        stats.update(thesis_rows=sum(1 for r in out if r["thesis_match"] == "yes"),
+                     unknown_pool=sum(1 for r in out if r["thesis_match"] != "yes"), judged=0, judged_in=0, unscored=0,
+                     keyword_only=False)
+        if judge_mode == "keyword" or (unknown_mode == "drop" and judge_mode != "all"):
+            out = [r for r in out if r["thesis_match"] == "yes" or unknown_mode == "keep"]
         else:
-            why.append("generalist, sector not on file")
-        if stage_why:
-            why.append(stage_why)
-        if check_why:
-            why.append(check_why)
-        elif rec["check_size"]:
-            why.append(f"check {rec['check_size']}")
-        slug = rec["linkedin"] or ""
-        rows.append({
-            "first_name": first_name(rec["full_name"]),
-            "full_name": (rec["full_name"] or "").strip(),
-            "title": (rec["title"] or "").strip(),
-            "organization": clean_company(org),
-            "org_type": rec["org_type"] or "",
-            "email": email,
-            "website": rec["website"] or "",
-            "linkedin": slug if linkedin_matches(rec["full_name"], slug) else "",
-            "city": rec["city"] or "", "state": rec["state"] or "", "country": rec["country"] or "",
-            "sectors": rec["sectors"] or "", "check_size": rec["check_size"] or "",
-            "grade": rec["grade"] or "",
-            "thesis_match": "yes" if hit else "no",
-            "stage_match": "yes" if stage_hit else "no",
-            "fit_score": score,
-            "why": "; ".join(why),
-            "record_id": rec["record_id"],
-            "_rank": (score, float(rec["grade_score"] or 0), 1 if slug else 0),
-        })
-    rows.sort(key=lambda x: x["_rank"], reverse=True)
-    per_firm = int(block.get("per_firm", 1))
-    seen_email, seen_person, firms, out = set(), set(), {}, []
-    for row in rows:
-        person = (row["full_name"].lower(), row["organization"].lower())
-        if row["email"] in seen_email or person in seen_person:
-            drop("duplicate"); continue
-        # One contact per firm, the best fit, the same firm_key list-gate
-        # counts with: on 10/26 every list failed it (Stonepeak 7 on one).
-        # A firm is also its domain: "Khosla Impact" and "Khosla Ventures"
-        # are two firm_keys and one khoslaventures.com, and both made one
-        # founder's list on 10/26. The site wins, then a work email domain.
-        keys = firm_keys(row)
-        if per_firm and any(firms.get(k, 0) >= per_firm for k in keys):
-            drop("another contact at the same firm"); continue
-        seen_email.add(row["email"]); seen_person.add(person)
-        for k in keys:
-            firms[k] = firms.get(k, 0) + 1
-        row.pop("_rank")
-        out.append(row)
-    limit = int(block.get("limit") or 0)
-    stats.update(thesis_rows=sum(1 for r in out if r["thesis_match"] == "yes"),
-                 unknown_pool=sum(1 for r in out if r["thesis_match"] != "yes"), judged=0, judged_in=0, unscored=0,
-                 keyword_only=False)
-    if judge_mode == "keyword" or (unknown_mode == "drop" and judge_mode != "all"):
-        out = [r for r in out if r["thesis_match"] == "yes" or unknown_mode == "keep"]
-    else:
-        out = judge_all(out, block, ask, says, stats, judge_mode, match, read_portfolio, lender_ask)
-    stats["matched"] = len(out)
-    if limit:
-        out = out[:limit]
+            out = judge_all(out, block, ask, says, stats, judge_mode, match, read_portfolio, lender_ask)
+        stats["matched"] = len(out)
+        return out
+
+    def capped(out):
+        limit = int(block.get("limit") or 0)
+        return out[:limit] if limit else out
+
+    out = gtme_accounts.run_stages([("source", source), ("fit", fit), ("dedupe", one_per_firm),
+                                    ("verify", judged), ("tier", capped)], trace=trace)
     return out, stats
 
 
@@ -669,7 +672,8 @@ def has_mx(domain: str) -> Optional[bool]:
     return any(ln.split()[-1] != "." for ln in lines)
 
 
-def build_angels(con: sqlite3.Connection, block: dict, ask=jev_judge, mx=has_mx) -> tuple[list[dict], dict]:
+def build_angels(con: sqlite3.Connection, block: dict, ask=jev_judge, mx=has_mx,
+                 trace: list | None = None) -> tuple[list[dict], dict]:
     """The angel pass: individual angels judged on what's on file, with the
     company taken from their mail domain. Run beside the fund list, not
     instead of it.
@@ -701,129 +705,153 @@ def build_angels(con: sqlite3.Connection, block: dict, ask=jev_judge, mx=has_mx)
     def drop(reason):
         stats["dropped"][reason] = stats["dropped"].get(reason, 0) + 1
 
-    rows = []
-    for r in con.execute(sql):
-        stats["pool"] += 1
-        rec = dict(zip(["record_id", "full_name", "title", "organization", "org_type", "email",
-                        "website", "linkedin", "city", "state", "country", "region", "sectors",
-                        "check_size", "grade", "grade_score"] + flags, r))
-        email = (rec["email"] or "").strip().lower()
-        sectors = (rec["sectors"] or "").strip()
-        org = (rec["organization"] or "").strip()
-        if countries or regions:
-            c = (rec["country"] or "").strip().lower()
-            g = (rec["region"] or "").strip().lower()
-            if not (c in countries or (c in ("", "unknown") and g in regions)):
-                drop("geography"); continue
-        if not EMAIL_RE.match(email):
-            drop("malformed email"); continue
-        if is_role(email):
-            drop("role inbox"); continue
-        if any(rec.get(f) for f in flags) or not first_name(rec["full_name"]):
-            drop("junk name"); continue
-        if any(gate.NAN_STRIP.search(str(v or "")) for v in rec.values()):
-            drop("NaN-strip corruption"); continue
-        if rec["title"] and gate.is_junior(rec["title"]):
-            drop("too junior to decide"); continue
-        if not sectors or sectors.lower() == "unknown":
-            drop("no sector on file to judge"); continue
-        if excl and excl.search(sectors.lower()):
-            drop("excluded sector"); continue
-        if any(o in org.lower() for o in excl_orgs):
-            drop("excluded firm"); continue
-        if email in suppress:
-            drop("suppressed"); continue
-        rng = check_range(rec["check_size"])
-        if rng and max_check is not None and rng[0] > max_check:
-            drop("check too large"); continue
-        if rng and min_check is not None and rng[1] < min_check:
-            drop("check too small"); continue
-        domain = email.rsplit("@", 1)[1]
-        if domain.endswith(NO_MAIL_COMPANY):
-            drop("government address"); continue
-        company = clean_company(org) if company_ok(org) else ""
-        if not company:
-            if domain in FREE_MAIL:
-                drop("free mailbox, no company"); continue
-            company = domain
-        hit = thesis.search(sectors.lower()) if thesis else None
-        slug = rec["linkedin"] or ""
-        rows.append({
-            "first_name": first_name(rec["full_name"]),
-            "full_name": (rec["full_name"] or "").strip(),
-            "title": (rec["title"] or "").strip(),
-            "organization": company,
-            "org_type": rec["org_type"] or "",
-            "email": email,
-            "website": rec["website"] or "",
-            "linkedin": slug if linkedin_matches(rec["full_name"], slug) else "",
-            "city": rec["city"] or "", "state": rec["state"] or "", "country": rec["country"] or "",
-            "sectors": sectors, "check_size": rec["check_size"] or "",
-            "grade": rec["grade"] or "",
-            "thesis_match": "yes" if hit else "no",
-            "stage_match": "yes",
-            "fit_score": (3 if hit else 0) + 2 + GRADE_RANK.get(rec["grade"], 0),
-            "why": f"angel; sectors on file: {sectors}",
-            "record_id": rec["record_id"],
-        })
+    def source(_):
+        records = list(con.execute(sql))
+        stats["pool"] += len(records)
+        return records
 
-    q = angel_question(block)
+    def fit(records):
+        rows = []
+        for r in records:
+            rec = dict(zip(["record_id", "full_name", "title", "organization", "org_type", "email",
+                            "website", "linkedin", "city", "state", "country", "region", "sectors",
+                            "check_size", "grade", "grade_score"] + flags, r))
+            email = (rec["email"] or "").strip().lower()
+            sectors = (rec["sectors"] or "").strip()
+            org = (rec["organization"] or "").strip()
+            if countries or regions:
+                c = (rec["country"] or "").strip().lower()
+                g = (rec["region"] or "").strip().lower()
+                if not (c in countries or (c in ("", "unknown") and g in regions)):
+                    drop("geography"); continue
+            if not EMAIL_RE.match(email):
+                drop("malformed email"); continue
+            if is_role(email):
+                drop("role inbox"); continue
+            if any(rec.get(f) for f in flags) or not first_name(rec["full_name"]):
+                drop("junk name"); continue
+            if any(gate.NAN_STRIP.search(str(v or "")) for v in rec.values()):
+                drop("NaN-strip corruption"); continue
+            if rec["title"] and gate.is_junior(rec["title"]):
+                drop("too junior to decide"); continue
+            if not sectors or sectors.lower() == "unknown":
+                drop("no sector on file to judge"); continue
+            if excl and excl.search(sectors.lower()):
+                drop("excluded sector"); continue
+            if any(o in org.lower() for o in excl_orgs):
+                drop("excluded firm"); continue
+            if email in suppress:
+                drop("suppressed"); continue
+            rng = check_range(rec["check_size"])
+            if rng and max_check is not None and rng[0] > max_check:
+                drop("check too large"); continue
+            if rng and min_check is not None and rng[1] < min_check:
+                drop("check too small"); continue
+            domain = email.rsplit("@", 1)[1]
+            if domain.endswith(NO_MAIL_COMPANY):
+                drop("government address"); continue
+            company = clean_company(org) if company_ok(org) else ""
+            if not company:
+                if domain in FREE_MAIL:
+                    drop("free mailbox, no company"); continue
+                company = domain
+            hit = thesis.search(sectors.lower()) if thesis else None
+            slug = rec["linkedin"] or ""
+            rows.append({
+                "first_name": first_name(rec["full_name"]),
+                "full_name": (rec["full_name"] or "").strip(),
+                "title": (rec["title"] or "").strip(),
+                "organization": company,
+                "org_type": rec["org_type"] or "",
+                "email": email,
+                "website": rec["website"] or "",
+                "linkedin": slug if linkedin_matches(rec["full_name"], slug) else "",
+                "city": rec["city"] or "", "state": rec["state"] or "", "country": rec["country"] or "",
+                "sectors": sectors, "check_size": rec["check_size"] or "",
+                "grade": rec["grade"] or "",
+                "thesis_match": "yes" if hit else "no",
+                "stage_match": "yes",
+                "fit_score": (3 if hit else 0) + 2 + GRADE_RANK.get(rec["grade"], 0),
+                "why": f"angel; sectors on file: {sectors}",
+                "record_id": rec["record_id"],
+            })
 
-    def judge(r):
-        st = {"title": r["title"], "company": r["organization"], "sectors": r["sectors"],
-              "check_size": r["check_size"]}
-        got = ask([st], q)
-        return r, (got[0] if got else None)
+        return rows
 
-    stats.update(judged=0, unscored=0, mx_unchecked=0, keyword_only=False)
-    kept = []
-    with concurrent.futures.ThreadPoolExecutor(8) as ex:
-        for r, p in ex.map(judge, rows):
-            stats["judged"] += 1
-            if p is None:
-                stats["unscored"] += 1
-                continue
-            if p < ANGEL_YES:
-                drop("Jev: not a fit for the pitch"); continue
-            r["judge_p"] = f"{p:.2f}"
-            r["why"] = f"angel, Jev {p:.2f} on title, company and sectors; sectors on file: {r['sectors']}"
-            kept.append(r)
-    if stats["unscored"]:
-        stats["dropped"]["no Jev answer"] = stats["unscored"]
-    kept.sort(key=lambda r: (-float(r["judge_p"]), -r["fit_score"]))
+    def judged_alone(rows):
+        q = angel_question(block)
 
-    # One angel per mail domain and per company, the best fit first: two
-    # angels at one family office read as a blast to whoever sorts its mail.
-    seen_email, seen_keys, out = set(), set(), []
-    for r in kept:
-        domain = r["email"].rsplit("@", 1)[1]
-        keys = {"name:" + gate.firm_key(r["organization"])}
-        if domain not in FREE_MAIL:
-            keys.add("domain:" + domain)
-        if r["email"] in seen_email or keys & seen_keys:
-            drop("another angel at the same domain"); continue
-        seen_email.add(r["email"]); seen_keys |= keys
-        out.append(r)
+        def judge(r):
+            st = {"title": r["title"], "company": r["organization"], "sectors": r["sectors"],
+                  "check_size": r["check_size"]}
+            got = ask([st], q)
+            return r, (got[0] if got else None)
 
-    # A dead mail domain is a hard bounce, and bounces cost the sending
-    # domain. One lookup per domain, after the cut, so the judge's no's
-    # never cost a lookup.
-    verdicts: dict = {}
-    sendable = []
-    for r in out:
-        domain = r["email"].rsplit("@", 1)[1]
-        if domain not in verdicts:
-            verdicts[domain] = mx(domain)
-        if verdicts[domain] is False:
-            drop("mail domain has no MX"); continue
-        if verdicts[domain] is None:
-            stats["mx_unchecked"] += 1
-        sendable.append(r)
+        stats.update(judged=0, unscored=0, mx_unchecked=0, keyword_only=False)
+        kept = []
+        with concurrent.futures.ThreadPoolExecutor(8) as ex:
+            for r, p in ex.map(judge, rows):
+                stats["judged"] += 1
+                if p is None:
+                    stats["unscored"] += 1
+                    continue
+                if p < ANGEL_YES:
+                    drop("Jev: not a fit for the pitch"); continue
+                r["judge_p"] = f"{p:.2f}"
+                r["why"] = f"angel, Jev {p:.2f} on title, company and sectors; sectors on file: {r['sectors']}"
+                kept.append(r)
+        if stats["unscored"]:
+            stats["dropped"]["no Jev answer"] = stats["unscored"]
+        kept.sort(key=lambda r: (-float(r["judge_p"]), -r["fit_score"]))
 
-    stats.update(thesis_rows=sum(1 for r in sendable if r["thesis_match"] == "yes"), unknown_pool=0,
-                 judged_in=len(kept), matched=len(sendable))
-    limit = int(block.get("limit") or 0)
-    return (sendable[:limit] if limit else sendable), stats
+        run["judged_in"] = len(kept)
+        return kept
+
+    def one_per_domain(kept):
+        # One angel per mail domain and per company, the best fit first: two
+        # angels at one family office read as a blast to whoever sorts its mail.
+        seen_email, seen_keys, out = set(), set(), []
+        for r in kept:
+            domain = r["email"].rsplit("@", 1)[1]
+            keys = {"name:" + gate.firm_key(r["organization"])}
+            if domain not in FREE_MAIL:
+                keys.add("domain:" + domain)
+            if r["email"] in seen_email or keys & seen_keys:
+                drop("another angel at the same domain"); continue
+            seen_email.add(r["email"]); seen_keys |= keys
+            out.append(r)
+
+        return out
+
+    def mail_domain(out):
+        # A dead mail domain is a hard bounce, and bounces cost the sending
+        # domain. One lookup per domain, after the cut, so the judge's no's
+        # never cost a lookup.
+        verdicts: dict = {}
+        sendable = []
+        for r in out:
+            domain = r["email"].rsplit("@", 1)[1]
+            if domain not in verdicts:
+                verdicts[domain] = mx(domain)
+            if verdicts[domain] is False:
+                drop("mail domain has no MX"); continue
+            if verdicts[domain] is None:
+                stats["mx_unchecked"] += 1
+            sendable.append(r)
+
+        return sendable
+
+    def capped(sendable):
+        stats.update(thesis_rows=sum(1 for r in sendable if r["thesis_match"] == "yes"), unknown_pool=0,
+                     judged_in=run["judged_in"], matched=len(sendable))
+        limit = int(block.get("limit") or 0)
+        return sendable[:limit] if limit else sendable
+
+    run: dict = {}
+    out = gtme_accounts.run_stages([("source", source), ("fit", fit), ("verify", judged_alone),
+                                    ("dedupe", one_per_domain), ("verify", mail_domain), ("tier", capped)],
+                                   trace=trace)
+    return out, stats
 
 
 def write_csv(rows: list[dict], path: Path) -> None:

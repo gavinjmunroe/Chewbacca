@@ -69,6 +69,7 @@ import urllib.parse
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import gtme_accounts as ga  # noqa: E402
 import gtme_investors as gi  # noqa: E402
 import gtme_operator as op  # noqa: E402
 import gtme_solo as solo  # noqa: E402
@@ -480,21 +481,7 @@ def fill(template: str, rec: dict, extra: dict | None = None) -> str:
 
 def jev_judge(states: list[dict], question: str) -> list[float | None]:
     """One Jev call per JUDGE_BATCH rows: the same yes/no question, asked of each row."""
-    sys.path.insert(0, str(ROOT / "bin" / "lib"))
-    import gtme_jev  # the kit's Jev by path, never tools/jev.py (11/2)
-    jev = gtme_jev.kit_jev()
-    if jev is None:
-        return [None] * len(states)
-    out: list[float | None] = []
-    for i in range(0, len(states), JUDGE_BATCH):
-        chunk = states[i:i + JUDGE_BATCH]
-        qs = {f"row:{j}": {"type": "noul", "instructions": f"Look only at row {j}. {question}"}
-              for j in range(len(chunk))}
-        answers = jev.ask({"rows": chunk}, qs, decision="gtme-list-judge") or {}
-        for j in range(len(chunk)):
-            a = answers.get(f"row:{j}")
-            out.append(jev.probability(a.get("noul")) if isinstance(a, dict) else None)
-    return out
+    return ga.jev_judge_rows(states, question, "gtme-list-judge", JUDGE_BATCH)
 
 
 def judge(rows: list[dict], block: dict, ask=jev_judge) -> None:
@@ -550,31 +537,50 @@ def why_of(r: dict) -> str:
     return "; ".join(out)
 
 
-def build(block: dict, limit: int = 0, added: list[dict] | None = None, ask=jev_judge) -> tuple[list[dict], dict]:
-    rows, report = seed(block)
-    report["registry_rows"] = len(rows)
-    if limit:
-        rows = rows[:limit]
-        report["test_limit"] = limit
-    with concurrent.futures.ThreadPoolExecutor(WORKERS) as ex:
-        rows = list(ex.map(lambda r: confirm(r, block), rows))
-    have = {op.slug(r["company"]) for r in rows}
-    for extra in added or []:
-        if extra.get("company") and op.slug(extra["company"]) not in have:
-            rows.append(extra)
-    judge(rows, block, ask)
-    no = [r for r in rows if r["judge"] == "no"]
-    rows = [r for r in rows if r["judge"] != "no"]
-    report["judged_no"] = len(no)
-    tier(rows, block)
-    for r in rows:
-        r["why"] = why_of(r)
-    rows.sort(key=rank_key)
-    report["tiers"] = {t: sum(1 for r in rows if r["tier"] == t) for t in sorted({r["tier"] for r in rows})}
-    report["gaps"] = {}
-    for r in rows:
-        for g in filter(None, (r.get("gaps") or "").split("; ")):
-            report["gaps"][g] = report["gaps"].get(g, 0) + 1
+def build(block: dict, limit: int = 0, added: list[dict] | None = None, ask=jev_judge,
+          trace: list | None = None) -> tuple[list[dict], dict]:
+    """The registry list as gtme_accounts stages: source the registry, confirm each row on the
+    firm's own site, judge it, tier it."""
+    report: dict = {}
+
+    def registry(_):
+        rows, found = seed(block)
+        report.update(found)
+        report["registry_rows"] = len(rows)
+        if limit:
+            rows = rows[:limit]
+            report["test_limit"] = limit
+        return rows
+
+    def own_site(rows):
+        with concurrent.futures.ThreadPoolExecutor(WORKERS) as ex:
+            rows = list(ex.map(lambda r: confirm(r, block), rows))
+        have = {op.slug(r["company"]) for r in rows}
+        for extra in added or []:
+            if extra.get("company") and op.slug(extra["company"]) not in have:
+                rows.append(extra)
+        return rows
+
+    def judged(rows):
+        judge(rows, block, ask)
+        no = [r for r in rows if r["judge"] == "no"]
+        report["judged_no"] = len(no)
+        return [r for r in rows if r["judge"] != "no"]
+
+    def tiered(rows):
+        tier(rows, block)
+        for r in rows:
+            r["why"] = why_of(r)
+        rows.sort(key=rank_key)
+        report["tiers"] = {t: sum(1 for r in rows if r["tier"] == t) for t in sorted({r["tier"] for r in rows})}
+        report["gaps"] = {}
+        for r in rows:
+            for g in filter(None, (r.get("gaps") or "").split("; ")):
+                report["gaps"][g] = report["gaps"].get(g, 0) + 1
+        return rows
+
+    rows = ga.run_stages([("source", registry), ("verify", own_site), ("fit", judged), ("tier", tiered)],
+                         trace=trace)
     return rows, report
 
 

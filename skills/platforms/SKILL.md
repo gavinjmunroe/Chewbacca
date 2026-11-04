@@ -1,6 +1,6 @@
 ---
 name: platforms
-description: "Reach Cloudflare, Railway, Vercel, Supabase, GitHub, Google Workspace, Porkbun, Clay, Twilio and WhatsApp from one place: who's signed in, the fix, common jobs. Also buy a domain and set up a cold-email sending domain."
+description: "Every outside account (Cloudflare, Railway, Vercel, Supabase, GitHub, Google, Porkbun, Twilio, WhatsApp): who is signed in, the fix, common jobs. Also buy domains and set up cold-email sending domains."
 triggers: >-
   Use for anything that touches an outside platform account: is X connected, sign in to X, which account am I on, deploy or check a Railway or Vercel app, Supabase projects, Cloudflare DNS, buy or register a domain, domain price or availability, redirect a domain, set up a new sending domain or lookalike domain for cold email, MX SPF DKIM DMARC records, Google Workspace inboxes for outbound, Porkbun, Twilio keys, WhatsApp link. Replaces agent-scripts' cloudflare-registrar and domain-dns-ops, which are set up for another person's account.
 license: MIT

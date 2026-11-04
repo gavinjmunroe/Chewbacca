@@ -62,6 +62,8 @@ EXTERNAL = {
     "agent-desktop": "setup.sh: npm install -g agent-desktop",
     "claude": "setup.sh: installs Claude Code to ~/.local/bin/claude",
     "gh": "setup.sh: required for GitHub work, checked by doctor.sh",
+    "cf": "Cloudflare's CLI, npm install -g cf; chewbacca platforms reports it missing with the fix",
+    "wrangler": "Cloudflare Workers CLI, npm install -g wrangler; chewbacca platforms reports it",
     "uv": "setup.sh: uv is the Python env manager the kit installs with",
     "uvx": "ships with uv, which setup.sh installs",
     "ollama": "setup.sh and doctor.sh: local embedding and model backend",

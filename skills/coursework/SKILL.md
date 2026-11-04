@@ -559,6 +559,17 @@ exists, so he can close the tab. Never-do, from 2026-10-12, exam morning: a
 7:45 to 12:00 guitar midterm plan put guitar practice straight through 9:00
 and he had to say "I hv a meeting 9-9:30 bro".
 
+## Before handing an assignment to another session, check what already exists
+
+A ledger row that says `todo` is not proof the work hasn't started. Before a brief
+says "build", "deploy" or "draft", look for the artifact: grep `~/code` and
+`~/Downloads` for the assignment and course name, check Railway and Vercel for a
+live URL, and read the row's notes. If something exists, the brief says "find
+it, check it against the rubric, upgrade it in place", never "build". Never-do,
+from 2026-11-03: a brief told a session to build and deploy the ACAD 185 A22
+landing page, it was already live at kyber-landing.up.railway.app, and he wrote
+"bro we alr deployed the site???".
+
 ## Answering questions about the semester
 
 - **"What's due?"** `coursework due`. Do not editorialize the list into a plan

@@ -40,6 +40,27 @@ class Seniority(unittest.TestCase):
         self.assertEqual(plc.seniority("Founder"), "Mid / founder")
 
 
+class Mail(unittest.TestCase):
+    def test_merge_and_new_rows(self):
+        people = [person("Founder", "Tiny", pid="1", name="Amy Lee")]
+        mail = {"amy@tiny.co": {"name": "Amy Lee", "emails": 4, "meetings": 1, "last": "2026-10-01"},
+                "bob@acme.org": {"name": "Bob Stone", "emails": 2, "meetings": 0, "last": "2026-09-01"},
+                "info@acme.org": {"name": "", "emails": 9, "meetings": 0, "last": "2026-09-01"},
+                "leave@usc.edu": {"name": "Health Leave Team", "emails": 1, "meetings": 0, "last": "2026-06-24"}}
+        out = plc.merge_mail(people, mail)
+        self.assertEqual(out[0]["msgs"], 5)
+        self.assertEqual([p["name"] for p in out], ["Amy Lee", "Bob Stone"])
+        cols, rows = plc.build("Dream", [], out)
+        bob = next(r for r in rows if r["Name"] == "Bob Stone")
+        self.assertEqual(bob["Category"], "Contact")
+        self.assertEqual(bob["Organization"], "acme.org")
+        self.assertEqual(bob["Group"], "Emailed or met with Caleb, no title on file")
+
+    def test_linkedin_only_founder_is_everyone_else(self):
+        cols, rows = plc.build("Dream", [], [person("Founder", "Tiny", name="Cy Dee")])
+        self.assertEqual(rows[0]["Group"], "Everyone else")
+
+
 class Cell(unittest.TestCase):
     def test_formula_neutralized(self):
         self.assertEqual(plc.cell("=HYPERLINK(1)"), "'=HYPERLINK(1)")

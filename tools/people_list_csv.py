@@ -21,7 +21,7 @@ COLS = ["Priority", "Group", "Name", "Title", "Organization", "Location", "Categ
 CATEGORIES = ["Mentor", "Advisor", "Investor", "Funder", "Pilot org (university)",
               "Pilot org (nonprofit)", "Pilot org (global)", "Connector",
               "Workforce / talent", "Accelerator / program", "Peer founder",
-              "Operator at top company"]
+              "Operator at top company", "Contact"]
 # Interns, students and members were most of the noise on the first pass of
 # the Dream list (2026-11-03): a club member is not a pilot org.
 NOISE = r"(intern|student|scholar|undergrad|class of|candidate|member\b|volunteer|work study|fellow\b|participant|cadet|midshipman|tutor|research assistant|ambassador|seasonal)"
@@ -46,6 +46,7 @@ HELP = {
     "Workforce / talent": ("Works in recruiting or talent, the other side of the people {goal} helps get seen.", "Ask what makes a candidate stand out to them and if they'd be a helper on {goal}"),
     "Accelerator / program": ("Runs programs for founders or students, a channel to many {goal} users at once.", "Ask if {goal} could plug into their program"),
     "Peer founder": ("Founder in Caleb's network. Peer advice, early users or partners.", "Ask for 15 min of feedback on {goal} and who they'd want to reach through it"),
+    "Contact": ("Someone Caleb has emailed or met with. No title on file, so check who they are before reaching out.", "Ask Caleb who they are first"),
     "Operator at top company": ("Works at a top company, the kind of person {goal} users want to reach.", "Ask if they'd be an early helper on {goal}, taking one intro a month"),
 }
 # Seniority from the title alone. Langston (2026-11-03) wants to learn under
@@ -66,13 +67,14 @@ def seniority(title):
 # The long tail is grouped by who the reader can learn from first: senior
 # people Caleb actually talks to, then senior people he only has on LinkedIn.
 TAIL_GROUPS = ["Senior leaders Caleb knows", "Senior leaders, LinkedIn only",
-               "Founders and operators Caleb knows", "Everyone else"]
+               "Founders and operators Caleb knows",
+               "Emailed or met with Caleb, no title on file", "Everyone else"]
 
 
 def tail_group(sen, rel):
     if sen == "Senior leader":
         return TAIL_GROUPS[0] if rel != "LinkedIn only" else TAIL_GROUPS[1]
-    return TAIL_GROUPS[2] if rel != "LinkedIn only" else TAIL_GROUPS[3]
+    return TAIL_GROUPS[2] if rel != "LinkedIn only" else TAIL_GROUPS[4]
 
 
 REL_ORDER = {"Close": 0, "Know them": 1, "Via TTS": 1, "LinkedIn only": 2}
@@ -95,6 +97,38 @@ def load_people():
       from people p left join person_scores s on s.person_id = p.id
       where p.deleted_at is null""").fetchall()
     return [dict(r) for r in rows]
+
+
+# Role inboxes that came through Caleb's sent mail on 2026-11-03: "Health
+# Leave Team", "USC Club-Baseball", "USG Chief Financial Officer".
+ROLE_INBOX = r"\b(team|club|office|officer|committee|department|dept|center|support|admissions|help|desk|usg|usc|ucla|council|board|staff|vice president|president|info)\b"
+
+
+def merge_mail(people, mail):
+    """Fold Gmail and Calendar correspondents into the people list.
+
+    A correspondent already in the store (same email, or same full name) adds
+    their counts to that record; anyone else becomes a new row with what the
+    headers carry: name, the address's domain as the organization, counts."""
+    by_email = {(p.get("email") or "").lower(): p for p in people if p.get("email")}
+    by_name = {p["name"].lower(): p for p in people}
+    for addr, m in mail.items():
+        name = (m.get("name") or "").strip()
+        hit = by_email.get(addr) or (by_name.get(name.lower()) if " " in name else None)
+        touches = (m.get("emails") or 0) + (m.get("meetings") or 0)
+        if hit:
+            hit["msgs"] = (hit.get("msgs") or 0) + touches
+            hit["last"] = max(hit.get("last") or "", m.get("last") or "")
+            continue
+        if " " not in name or re.search(ROLE_INBOX, name.lower()):
+            continue  # a bare address, a list, a bot or a role inbox, not a person
+        domain = addr.split("@")[-1]
+        generic = domain in ("gmail.com", "yahoo.com", "icloud.com", "hotmail.com", "outlook.com", "me.com", "aol.com")
+        people.append({"id": "mail:" + addr, "name": name, "company": "" if generic else domain,
+                       "role": "", "location": "", "linkedin": "", "li_connected_on": "",
+                       "how_we_met": f"Emailed {m.get('emails', 0)}x, met {m.get('meetings', 0)}x",
+                       "warmth": 0, "msgs": touches, "last": m.get("last") or "", "touches": touches})
+    return people
 
 
 def relationship(p):
@@ -147,18 +181,21 @@ def build(goal, picks, people, exclude=()):
                      "Intro path": pk["intro_path"], "LinkedIn": p.get("linkedin") or "",
                      "Status": "Not started", "Next step": "", "Next step date": "",
                      "Notes": "", "Source": pk["source"]})
+    picked = {pk.get("store_name", "").lower() for pk in picks} | {pk["name"].lower() for pk in picks}
     tail = {}
     for p in people:
-        if p["id"] in seen or any(x in p["name"].lower() for x in exclude):
+        if p["id"] in seen or p["name"].lower() in picked or any(x in p["name"].lower() for x in exclude):
             continue
         cat = categorize(p)
+        if not cat and p.get("touches"):
+            cat = "Contact"
         if not cat:
             continue
         rel = relationship(p)
         h, a = HELP[cat]
         name = p["name"].strip("'\" ")
         sen = seniority(p.get("role"))
-        group = tail_group(sen, rel)
+        group = TAIL_GROUPS[3] if cat == "Contact" else tail_group(sen, rel)
         row = {"Priority": str(len(groups) + TAIL_GROUPS.index(group) + 1), "Group": group,
                "Name": name, "Title": p.get("role") or "",
                "Organization": p.get("company") or "", "Location": p.get("location") or "",
@@ -180,9 +217,13 @@ def main():
     ap.add_argument("--goal", required=True)
     ap.add_argument("--picks", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--mail", help="JSON of everyone emailed or met with: {address: {name, emails, meetings, last}}")
     ap.add_argument("--exclude", action="append", default=[], help="drop names containing this (lowercase)")
     a = ap.parse_args()
-    cols, rows = build(a.goal, json.load(open(a.picks)), load_people(), tuple(a.exclude))
+    people = load_people()
+    if a.mail:
+        people = merge_mail(people, json.load(open(a.mail)))
+    cols, rows = build(a.goal, json.load(open(a.picks)), people, tuple(a.exclude))
     with open(os.path.expanduser(a.out), "w", newline="", encoding="utf-8-sig") as f:
         w = csv.DictWriter(f, fieldnames=cols)
         w.writeheader()

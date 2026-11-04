@@ -140,8 +140,9 @@ elif tool == "Bash":
         norm = lambda t: _re.sub(r"[^a-z0-9]", "", str(t).lower())
         q = norm(pos[0])
         try:
-            cmap = json.load(open(os.environ.get("BRIGHTSPACE_MAP")
-                                  or os.path.expanduser("~/.chewbacca/brightspace/map.json"))).get("courses") or {}
+            cmap = json.load(open(os.environ.get("BRIGHTSPACE_MAP") or os.path.join(
+                os.environ.get("BRIGHTSPACE_STATE") or os.path.expanduser("~/.chewbacca/brightspace"),
+                "map.json"))).get("courses") or {}
         except (OSError, ValueError):
             cmap = {}
         hits = {tuple(u) for c, u in cmap.items() if q and norm(c) and (norm(c).startswith(q) or q.startswith(norm(c)))}

@@ -958,7 +958,10 @@ def cmd_discuss(client, ou, forum, topic, as_json):
 
 
 
-MAP_PATH = Path(os.environ.get("BRIGHTSPACE_MAP") or Path.home() / ".chewbacca/brightspace/map.json")
+# Beside brightspace-sync's state, so Hall's launcher (BRIGHTSPACE_STATE=~/.hall/
+# brightspace) keeps a student's cache in ~/.hall and never makes a ~/.chewbacca.
+MAP_PATH = Path(os.environ.get("BRIGHTSPACE_MAP")
+                or Path(os.environ.get("BRIGHTSPACE_STATE") or Path.home() / ".chewbacca/brightspace") / "map.json")
 
 
 def load_map():

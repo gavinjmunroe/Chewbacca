@@ -9,6 +9,9 @@ assignments the coursework ledger never heard of.
                                      no ledger item matches it
   brightspace grades [--json]        every released grade, every current course
   brightspace news [--days 7]        announcements from every current course
+  brightspace instructions <ou> <folder> [--json]
+                                     what one assignment actually asks: the
+                                     dropbox's instructions and attachment names
   brightspace get <api path>         raw JSON, e.g. /le/1.99/900106/news/
   brightspace submit <ou> <folder> <file>... [--dry-run]
                                      upload to a dropbox, group or individual,
@@ -515,6 +518,8 @@ def cmd_due(client, days, ledger_dir, as_json):
                     "course": course, "name": folder["Name"], "due": due, "ou": ou,
                     "id": folder["Id"], "submitted": submitted,
                     "in_ledger": in_ledger(folder["Name"], ledger_items_for(course, names)),
+                    "instructions": instructions_of(folder),
+                    "attachments": [a.get("FileName") for a in folder.get("Attachments") or []],
                 })
             rows += quiz_rows(client, course, ou, lo, hi, names)
     rows.sort(key=lambda r: r["due"])
@@ -918,6 +923,36 @@ def cmd_feedback(client, ou, folder, out_dir):
     return 0
 
 
+def instructions_of(folder):
+    """A dropbox's instructions as plain text. The folder list already carries
+    them, and no command showed them, so "what does the assignment actually
+    ask" meant opening Brightspace (USC week walk, 2026-10-13, item 7)."""
+    ci = folder.get("CustomInstructions") or {}
+    return clean_text(ci.get("Text") or plain(ci.get("Html") or "")).strip()
+
+
+def cmd_instructions(client, ou, folder, as_json):
+    """One dropbox's instructions and attachment names. Reads only."""
+    meta = client.get(f"/le/1.75/{ou}/dropbox/folders/{folder}")
+    row = {"name": meta.get("Name"), "due": meta.get("DueDate"), "instructions": instructions_of(meta),
+           "attachments": [a.get("FileName") for a in meta.get("Attachments") or []]}
+    if as_json:
+        print(json.dumps(row, indent=1))
+        return 0
+    when = ""
+    if row["due"]:
+        when = "  due " + f"{dt.datetime.fromisoformat(row['due'].replace('Z', '+00:00')).astimezone():%a %b %d %H:%M}"
+    print(clean_text(row["name"] or "") + when)
+    print()
+    print(row["instructions"] or "No written instructions on this dropbox.")
+    if row["attachments"]:
+        print()
+        for name in row["attachments"]:
+            print(f"  attached: {clean_text(name)}")
+        print(f"  brightspace files {ou} {folder} downloads them")
+    return 0
+
+
 def cmd_classlist(client, ou, as_json):
     try:
         rows = client.get(f"/le/1.75/{ou}/classlist/")
@@ -1255,6 +1290,8 @@ def main():
     ct.add_argument("course"); ct.add_argument("--out", default=None); ct.add_argument("--dry-run", action="store_true")
     fb = sub.add_parser("feedback", help="grade, written feedback and feedback files for a dropbox")
     fb.add_argument("course"); fb.add_argument("folder"); fb.add_argument("--out", default="~/Downloads/brightspace")
+    ins = sub.add_parser("instructions", help="what one assignment asks: its instructions and attachments")
+    ins.add_argument("course"); ins.add_argument("folder"); ins.add_argument("--json", action="store_true")
     cl = sub.add_parser("classlist", help="everyone in a course, with emails")
     cl.add_argument("course"); cl.add_argument("--json", action="store_true")
     ds = sub.add_parser("discuss", help="list forums and topics, or read one topic's posts")
@@ -1285,6 +1322,9 @@ def main():
     elif args.cmd == "feedback":
         ou, folder = where_folder(client, args.course, args.folder)
         sys.exit(cmd_feedback(client, ou, folder, args.out))
+    elif args.cmd == "instructions":
+        ou, folder = where_folder(client, args.course, args.folder)
+        sys.exit(cmd_instructions(client, ou, folder, args.json))
     elif args.cmd == "classlist":
         sys.exit(cmd_classlist(client, one_unit(resolve_course(client, args.course), args.course), args.json))
     elif args.cmd == "discuss":

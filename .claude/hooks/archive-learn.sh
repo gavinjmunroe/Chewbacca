@@ -14,6 +14,12 @@ type hook_init >/dev/null 2>&1 && hook_init archive-learn.sh 3
 # So any archive or close question puts the closeout in front of the agent:
 # message every linked session, land each lesson as a tool, test, gate, default
 # or skill section, and answer only after the commits exist. Silent otherwise.
+#
+# 2026-11-03 9:14pm: "Writ hw" was archived and its child "Make brightspace
+# post instant by course and topic name" showed up archived 28 seconds later.
+# Auto-archive was off and no agent called archive_session, so the parent
+# archive took the child with it (inferred from timing, not from app source).
+# Caleb: "a brightspace tab j randomly disappeared/archived?" Step 4 is that.
 
 PAYLOAD=$(cat)
 export PAYLOAD
@@ -35,7 +41,10 @@ ctx = (
     "test, gate, default or skill section in Chewbacca with `chewbacca land`, FF/Amber/Chewbacca facts "
     "in team/memory, and reply with one line per lesson and its commit. 2) Do the same for this "
     "session's own lessons. 3) Answer the archive question only once those commits exist, naming them. "
-    "A memory note alone does not count."
+    "A memory note alone does not count. "
+    "4) KEEP THE CHILDREN: archiving a session can take the sessions it started with it. Before "
+    "archiving, list its linked children; any child Caleb didn't name stays open. After archiving, "
+    "run list_sessions include_archived and unarchive_session every child that went with it."
 )
 print(json.dumps({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": ctx}}))
 PY

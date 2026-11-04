@@ -18,4 +18,6 @@ probe "close these tabs" "ok close these tabs" fires
 probe "safe to close" "is it safe to close?" fires
 probe "plain work stays silent" "fix the css on the site" silent
 probe "an email archive folder is not a tab" "move that email out of the inbox" silent
+out=$(jq -cn '{prompt:"archive this tab"}' | bash "$HOOK" 2>/dev/null)
+echo "$out" | grep -q "KEEP THE CHILDREN" && echo "  ok    archive names the child-session check" || { echo "  FAIL  no child check"; fail=$((fail+1)); }
 [ "$fail" = 0 ] && echo "archive-learn ok" || exit 1

@@ -1,6 +1,6 @@
 bdcc9cb9e2c7374d15edcd51f53ade53c7985b6e9c7a9ed09e0350816aba3bae  .claude/hooks/agent-claim-guard.sh
 b9b8f16866a8894bc088331065eb4cc6aa80fe0df2c86c915f10e95833e59f1a  .claude/hooks/api-grow.sh
-7ce3bed889172806faac2198e59b218f4054430b7de46d0e03281aafaea5cce6  .claude/hooks/archive-learn.sh
+ac90828475fb19c66c788bdf96576f5af9314a1ee0936f405a9b67cca3ba656e  .claude/hooks/archive-learn.sh
 7a04ea9d057329ba1e009db591f70f22155551ac8f3b1fd6306af0fa2a760ba3  .claude/hooks/artifact-guard.sh
 665a17f7cfc8cf1d56802662126bf25cd03b75f4790addc73ca99d3edc7242fa  .claude/hooks/ask-capture.sh
 e4c2ec8bf4c43e9c1245650f68618caf7fc62ef45ce239d5f454cdd1cec19d22  .claude/hooks/ask-lookup-guard.sh

@@ -529,3 +529,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - project_ff_outbound_eye_review_2026_11_03: FF 11/3 outbound list, 104 churches eye-checked from 1,297, exclusion and eye-check rules
 - project_dough_runs_ff_outbound_2026_11_03: Dough is being upgraded so FF outbound runs through it, email channel first, order of work
 - feedback_git_stash_is_shared_across_worktrees: one stash list for every worktree, so a pop in a temp worktree can apply another tab's WIP; test an old version with git show instead (11/3)
+- feedback_archive_keeps_children: archiving a session can archive its child sessions; check linked children, unarchive any Caleb didn't name (Brightspace tab, 11/3)

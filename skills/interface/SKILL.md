@@ -682,6 +682,28 @@ isn't the best visually" at twelve uniform text cards on a navy band.
 - Copy about a founder on a professional site never says student or school, and
   never abbreviates.
 
+## An iMessage mock matches the iOS that ships now, with real icons and faces
+
+Kyber landing, 2026-11-03, one night of corrections:
+
+- The + button opens the iOS 18 list: a frosted sheet over the thread, one row
+  per app, a round icon and its name. The 4x2 grid of rounded squares is iOS
+  16 ("This isn't how it actually looks on apple"). Apple's own entries are
+  circles; third-party apps (GamePigeon, ours) keep a rounded-square icon.
+- Icons are the real ones: the third-party icon from the App Store
+  (`itunes.apple.com/search?entity=software`, artworkUrl), Apple's entries as
+  SF Symbols rendered on their color with a short Swift script, Photos from
+  the macOS app icon. Drawn look-alikes read fake ("Use the actual images
+  bruh").
+- Contacts and receipt tags show faces, never letter discs ("fix the pfps").
+  Made-up friends get generated faces cropped from ONE group shot so every
+  chat shows the same people, and they get made-up names: a generated face
+  beside a real teammate's name reads as a photo of them.
+- A rotating word that sits next to fixed text is drawn as a sent bubble that
+  hugs its word and is anchored on the side away from the fixed text, so it
+  grows away from it ("I don't want the text split to keep moving left and
+  right"). Measure the fixed word's x across every case before shipping.
+
 ## A photo never ends on a hard line, and no band is left empty
 
 Kyber landing, 2026-11-03: a generated group photo sat in a rounded box under a

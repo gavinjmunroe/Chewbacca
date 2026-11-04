@@ -43,6 +43,17 @@ where the data comes from. All four of those are written down here, once.
    Verify list, Refuse list and countable checks in
    `references/craft-floor.md` against the same render.
 
+   A page built by another session gets the same bar in its brief: a named
+   reference (an apple.com product page unless the user names one), the
+   simple-motion rules, `design-gate`, and before and after screenshots. A
+   demo whose tests pass is not done until it looks like the real product it
+   imitates: a fake text thread looks like the real iMessage or WhatsApp. On
+   2026-11-03 the Kyber page, briefed this way, came back good, while the
+   Baptize text-signup demo, briefed only on function, came back as a gray
+   form in a box with a 5-line subhead and an empty side panel. Caleb: "The
+   demo is so slop bro", then "I thought we had fixed chwebs to not produce
+   slop???"
+
    For a narrative page, review the whole journey before polishing individual
    sections. At each handoff, name what persists, what changes, and what the
    change tells the viewer. Reference studies must produce a concrete change
@@ -234,6 +245,7 @@ YouTubeBanner|YouTubeThumb`). On 2026-11-02 Caleb said all of these to one tab:
 photoshop in the image I gave you", then "U HAVE THE SOURCE CODE".
 
 Per platform, checked that night:
+
 - LinkedIn's page logo covers the banner's bottom left, and the name sits right under it.
   Leave the lockup off the banner, keep the art clear of the logo, and center the main
   thing so phones, which crop the sides, still show it.
@@ -686,7 +698,6 @@ overwhelming bc of how monotone it is".
   where it can never overlap the diagram at any viewport ("Overlap is doodoo if
   unintentional"). Problems get their own colour, never the brand colour.
 
-
 ## A page for one person is built from that person, then turned all the way up
 
 2026-10-26, a hype page for Caleb's roommate walking in from a late night of
@@ -758,7 +769,7 @@ long???????" then "BRO?".
   unintentional"). Give the photo its own column or band, size hero type by
   min(vw, svh), and screenshot at a short window (1000x560) before pushing.
 - No novelty widget where a plain fact block works. Same site, same night: a
-  split-flap scoreboard (one dark tile per letter, "E V E R Y  Y E A R"), an
+  split-flap scoreboard (one dark tile per letter, "E V E R Y Y E A R"), an
   empty "video coming soon" board half a screen tall, and a 6rem two-tone
   headline at 0.86 leading whose comma hit the next line drew "Slop design
   bro". What held up: a box score of four big values with small labels under

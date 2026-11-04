@@ -1252,6 +1252,10 @@ if group "installer"; then
   check  "every hook is registered by setup.sh" \
     bash "$ROOT/tests/hooks_registered.sh"
 
+  # Caleb, 2026-11-03: "ai is too much of a yes man by default".
+  check  "method-guard flags a take for the agent's own read" \
+    bash "$ROOT/tests/method_guard_take.sh"
+
   # A router line that gets skipped twice is a log line. For enforced skills
   # the gate refuses once, clears on load, and never loops.
   check  "skill-gate enforces graph-engineering once per prompt" \

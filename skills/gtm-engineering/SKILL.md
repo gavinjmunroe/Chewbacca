@@ -300,6 +300,19 @@ and no interest that isn't in the reply text.
 When a new ruling arrives in a text, call or Slack, add it to `DECISIONS.json`
 in the same turn, with its source.
 
+A passing take is not a ruling. "Some churches we might wanna wait til we hv more
+credibility" is a hypothesis to test, from Caleb, a client or anyone. Before it
+changes a list, an order, a price or a copy line, give your own read: agree or
+disagree, the strongest case against, and the number that would settle it (reply
+rate by church size, say). Record it as a ruling only when the person decides it
+after hearing that read. Even a standing ruling gets the counter-case once, in one
+line, when fresh evidence cuts against it, and then it's still theirs to change.
+On 2026-11-03 an agent moved every church with 20+ staff to the back of FF's wave 1
+on one line of Caleb's, and he wrote "Bro don't take my word as Bible maybe that
+isn't the best strat!" The better order kept those mid-size churches in (they're
+the ones who can pay, and wave 1 is how we learn who buys) and moved back only
+the mild sites.
+
 ## Read these first, every time (2026-10-06: skipping them cost a day)
 
 Before building anything for a client, load what already exists, in this order:

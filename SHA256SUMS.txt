@@ -54,7 +54,7 @@ b3440da719850b24ed1036d0967244df4f4c039bae4e2e5a755ac0ffbc513439  .claude/hooks/
 71ff8d4021dbd31f5e9d9262a6a3449fe95e787b81b311f9da7b4e119d329e30  .claude/hooks/load-guard.sh
 a77c840e13c3234a3c6f183f666f647bff1b6b58c1ca2b67c7444ec359b5401e  .claude/hooks/machine-budget.sh
 5c72bd9391f1e5001a29e751f76de3e703ac108ac5819915aa04f36df05cb4ba  .claude/hooks/mail-app-guard.sh
-c7594c3df7370c62ba76e046daf1e17843dbf24972438206496b28098c4128ee  .claude/hooks/method-guard.sh
+4b6fc362aee20015ec73742c3af4c551e4c778d05a666714e12c6685a0a3638f  .claude/hooks/method-guard.sh
 48f568e95b9586ca22d0d740143fd90af1834b66808c2ac36a519bd3b83df7e1  .claude/hooks/model-route.sh
 9dc442b0a64fb01d33916ed45446203677a6a76e1abfdfcca304f2fec947c29a  .claude/hooks/open-work-guard.sh
 947c12be640049719a5767cf42c11f532aa77eb0456bb787eaa0487c5e910ce3  .claude/hooks/orphan-reap.sh

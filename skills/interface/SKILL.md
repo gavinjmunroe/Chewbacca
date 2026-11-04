@@ -649,6 +649,25 @@ isn't the best visually" at twelve uniform text cards on a navy band.
 - Copy about a founder on a professional site never says student or school, and
   never abbreviates.
 
+## A photo never ends on a hard line, and no band is left empty
+
+Kyber landing, 2026-11-03: a generated group photo sat in a rounded box under a
+headline, the box's top edge cut straight across the restaurant lights, and a
+160px dark band sat under it before the light pricing section. Caleb: "Fix
+chewbs to never make disgusting hard line cutoffs like this", then
+"unintentional ahh blank space".
+
+- A photo placed on a page (not a card the reader taps) feathers into the
+  ground on every edge: a CSS mask of two linear gradients (top/bottom and
+  left/right) composited with `mask-composite: intersect`. No box, no radius.
+- Where a dark section meets a light one under a photo, the photo's fade and a
+  ground fade (transparent, canvas, then the next ground over about 22 to 30vh,
+  pulled up under the photo with a negative margin) are one continuous move.
+- After the last element in a section, the padding is the gap to the next
+  section's first element, never a band of plain ground. Screenshot the seam
+  at 1280 and 375; on a phone a wide photo gets cropped taller
+  (`object-cover`) so it doesn't leave the fade hanging under empty dark.
+
 ## Neighbouring sections differ in ground and in shape
 
 Firm Foundation Home, 2026-10-30: a night app window, then a night "Work we've

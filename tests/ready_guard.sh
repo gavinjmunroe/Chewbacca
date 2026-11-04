@@ -135,6 +135,7 @@ DOUGH_T=$(transcript "upgrade dough for junto" "bin/dough plan --client junto --
 probe "a Dough claim with no dough repo on the machine" 2 "Dough is good to go for the pilot." "$DOUGH_T"
 grep -q "dough ready" "$TMP/err" && echo "  ok    the refusal names dough ready" \
   || { echo "  FAIL  dough refusal text"; cat "$TMP/err"; fail=$((fail+1)); }
+probe "a non-Dough sentence in a reply about the Dough pitch" 0 "The edits match main, so they'll clear once that checkout catches up. The Dough pitch has no reply rate yet, and that's the line that sells the list." "$DOUGH_T"
 if [ -f "${DOUGH_TEST_REPO:-/nonexistent}/dough/ready.py" ]; then
   export DOUGH_REPO="$DOUGH_TEST_REPO" DOUGH_STATE="$TMP/dough-state"
   probe "a Dough claim with no dough ready on file" 2 "Junto is good to go." "$DOUGH_T"

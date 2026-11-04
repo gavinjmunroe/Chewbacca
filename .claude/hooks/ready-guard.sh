@@ -186,6 +186,7 @@ NOT_OUTBOUND = re.compile(r"\b(site|page|app|deploy\w*|render\w*|build|preview|v
 CLIENT_CTX = re.compile(r"\b(copy|drafts?|footer|lists?|sends?|wave|emails?|leads?|mailbox(es)?|inbox(es)?)\b")
 strong_about = REPLY_GTM.search(low) or (LAUNCH_WORD.search(low) and not NOT_OUTBOUND.search(low)) or dough_about
 about = strong_about or (mentioned(low) and CLIENT_CTX.search(low))
+dough_only = dough_about and not REPLY_GTM.search(low) and not (LAUNCH_WORD.search(low) and not NOT_OUTBOUND.search(low))
 if not about:
     print("ok"); raise SystemExit
 
@@ -199,6 +200,12 @@ for m in re.finditer(r"[^.!?\n]+[.!?]?", low):
     # 2026-10-28, a rent-odds reply: "Gavin's lead" put Firm Foundation in
     # context and "- Nothing else recurring" (abt income) was refused.
     if not strong_about and not LAUNCH.search(sent):
+        continue
+    # When Dough is the only thing making the reply about outbound, the claim
+    # sentence has to be about Dough too. 2026-11-03, a reply that mentioned
+    # the Dough pitch also said two memory files "will clear once that
+    # checkout catches up", and "clear once" was refused as a Dough claim.
+    if dough_only and not (re.search(r"\bdough\b", sent) or dmention(sent) or DOUGH_CTX.search(sent)):
         continue
     pats = STRONG + (WEAK if LAUNCH.search(sent) else [])
     for p in pats:

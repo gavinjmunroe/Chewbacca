@@ -33,3 +33,9 @@ build with AI (a friend, a teammate, his dad), this is the bar.
   catch the AI being wrong. His private engineer-track picks up from there
   toward the Carlton bar, and each piece of it moves into the playbook only
   once he's done it himself.
+- **The setup we hand out is already top tier.** Same night: "chewebs/the ai
+  setup we give out should alr be at that level of goatedness". The person
+  climbs the levels, but the kit they install ships at the Carlton bar from day
+  one: guards, reviewers, verification and hook tests at full strength. Where
+  that pulls against the agency spine, the kit does checking and catching, and
+  the person still does the predicting, deciding and explaining.

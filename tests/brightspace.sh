@@ -94,6 +94,24 @@ echo "$out" | grep "Quiz #5" | grep -q "NO GRADE YET" || fail "open quiz not lis
 echo "$out" | grep "Quiz# 4" | grep -q "100 %" || fail "quiz grade not read: $out"
 echo "$out" | grep -q "Old draft" && fail "inactive quiz listed: $out"
 
+# A link in the instructions and a file on an announcement both have to show.
+# A22's spec and a lab's presentation date were each hidden that way (2026-11-04).
+python3 - "$T/fixture4.json" <<'PY'
+import json, sys, datetime as dt
+when = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+json.dump({
+  "/lp/1.43/enrollments/myenrollments/?orgUnitTypeId=3&pageSize=100": {"Items": [{"OrgUnit": {"Id": 7, "Name": "20263_1 BISC-101: Cells", "Code": "20263_1"}, "Access": {"IsActive": True, "CanAccess": True}}], "PagingInfo": {"HasMoreItems": False}},
+  "/le/1.75/7/dropbox/folders/9": {"Name": "A22", "DueDate": None, "Attachments": [],
+    "CustomInstructions": {"Text": "Follow this spec.", "Html": '<p>Follow <a href="https://x.test/spec?a=1&amp;b=2">this <b>spec</b></a>.</p>'}},
+  "/le/1.99/7/news/": [{"Id": 5, "Title": "Presentation Dates", "StartDate": when, "Body": {"Text": "See the snapshot."},
+    "Attachments": [{"FileId": 11, "FileName": "present.png"}]}],
+}, open(sys.argv[1], "w"))
+PY
+out=$(BRIGHTSPACE_FIXTURE="$T/fixture4.json" COURSEWORK_DIR="$T" python3 "$ROOT/bin/brightspace" instructions 7 9) || fail "instructions: $out"
+echo "$out" | grep -q "linked: this spec: https://x.test/spec?a=1&b=2" || fail "instruction link hidden: $out"
+out=$(BRIGHTSPACE_FIXTURE="$T/fixture4.json" COURSEWORK_DIR="$T" python3 "$ROOT/bin/brightspace" news --days 3) || fail "news: $out"
+echo "$out" | grep -q "attached: present.png (/le/1.99/7/news/5/attachments/11)" || fail "news attachment hidden: $out"
+
 # Never a window, signed out or not: the read that used to open Chrome ran
 # inside keepalives and MCP calls nobody was watching.
 grep -n '"open"' "$ROOT/bin/brightspace" && fail "bin/brightspace opens something"

@@ -610,6 +610,18 @@ landing page, it was already live at kyber-landing.up.railway.app, and he wrote
 
 - **"What's due?"** `coursework due`. Do not editorialize the list into a plan
   unless asked; the list is usually the answer.
+  The ledger only knows what got copied into it, so "any more hw this week" also
+  gets `brightspace due` and `brightspace news --days 30`, including every
+  attachment, and the newest class slides. On 2026-11-04 the ledger and the
+  calendar both said Friday was clear; Caleb's 20-point lab talk was that Friday,
+  its date in an image on a 10/23 announcement, and his own question "is there a
+  bio lab this week?" is what surfaced it. Never say "clear" off the ledger alone.
+- **"Get this assignment ready."** Read `brightspace instructions <course> <folder>`
+  and open every `linked:` line first, before judging the work against notes.
+  A22's bar sat in a linked Google Doc that refused a single email field.
+  A team text dropbox has no API route (`submissions/group` answers 404): type
+  into the "Text Submission" editor on `folder_submit_files.d2l` headless, press
+  Submit, then read the submission back.
 - **"What should I work on?"** Rank by deadline distance times weight, then say
   the one thing to start now. Not a schedule for the whole week: the next block.
 - **"Can I skip Wednesday?"** `coursework attendance <course>` and quote the

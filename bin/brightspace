@@ -75,6 +75,7 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+from html import unescape
 from pathlib import Path
 
 HOST = "https://brightspace.usc.edu"
@@ -603,7 +604,13 @@ def cmd_news(client, days, as_json):
                     continue
                 body = n.get("Body") or {}
                 rows.append({"course": course, "when": when, "title": clean_text(n.get("Title")).strip(),
-                             "text": clean_text((body.get("Text") or "").strip() or plain(body.get("Html"))), "ou": ou})
+                             "text": clean_text((body.get("Text") or "").strip() or plain(body.get("Html"))), "ou": ou,
+                             "id": n.get("Id"),
+                             # A lab's presentation dates lived only in an image
+                             # attached here, and a 20-point talk two days out
+                             # was nearly missed (2026-11-04).
+                             "attachments": [{"name": a.get("FileName"), "file": a.get("FileId")}
+                                             for a in n.get("Attachments") or []]})
     rows.sort(key=lambda r: r["when"], reverse=True)
     if as_json:
         print(json.dumps(rows, indent=1))
@@ -615,6 +622,8 @@ def cmd_news(client, days, as_json):
         print(f"{r['course']:<12} {local:%a %b %d}  {clean_text(r['title'])}")
         if r["text"]:
             print(f"  {clean_text(r['text'])[:400]}")
+        for a in r["attachments"]:
+            print(f"  attached: {clean_text(a['name'])} (/le/1.99/{r['ou']}/news/{r['id']}/attachments/{a['file']})")
     return 0
 
 
@@ -931,11 +940,22 @@ def instructions_of(folder):
     return clean_text(ci.get("Text") or plain(ci.get("Html") or "")).strip()
 
 
+def links_of(html):
+    """Every link in a body of HTML as (label, url). Stripping the tags to text
+    dropped the targets: A22's instructions said "following this spec", the
+    spec was a linked Google Doc that refused a single email field, and the
+    page was nearly handed in on one (2026-11-04)."""
+    found = re.findall(r'<a\b[^>]*href="([^"]+)"[^>]*>(.*?)</a>', html or "", re.S)
+    return [(plain(label) or url, unescape(url)) for url, label in found]
+
+
 def cmd_instructions(client, ou, folder, as_json):
     """One dropbox's instructions and attachment names. Reads only."""
     meta = client.get(f"/le/1.75/{ou}/dropbox/folders/{folder}")
     row = {"name": meta.get("Name"), "due": meta.get("DueDate"), "instructions": instructions_of(meta),
-           "attachments": [a.get("FileName") for a in meta.get("Attachments") or []]}
+           "attachments": [a.get("FileName") for a in meta.get("Attachments") or []],
+           "links": [{"label": label, "url": url} for label, url in
+                     links_of((meta.get("CustomInstructions") or {}).get("Html"))]}
     if as_json:
         print(json.dumps(row, indent=1))
         return 0
@@ -945,6 +965,10 @@ def cmd_instructions(client, ou, folder, as_json):
     print(clean_text(row["name"] or "") + when)
     print()
     print(row["instructions"] or "No written instructions on this dropbox.")
+    if row["links"]:
+        print()
+        for link in row["links"]:
+            print(f"  linked: {clean_text(link['label'])}: {link['url']}")
     if row["attachments"]:
         print()
         for name in row["attachments"]:

@@ -1999,6 +1999,9 @@ _register("PreToolUse", hooks_dir + "/machine-budget.sh", timeout=5,
 # fine" and Caleb: "I SHOULD NEVER HAVE TO SAY THIS ... IT SHOULD BE BUILT IN".
 _register("PreToolUse", hooks_dir + "/dough-brief-gate.sh", timeout=5,
           matcher="Agent|Task|Workflow")
+# A file texted over iMessage goes through send-file (an osascript-sent PDF did not
+# open for Gavin, 2026-11-03).
+_register("PreToolUse", hooks_dir + "/attachment-guard.sh", timeout=5, matcher="Bash")
 
 # Layer 6. A browser hands you an addressable model of its own contents, and
 # reading it as an image throws that away. On 2026-09-21 a form the user had

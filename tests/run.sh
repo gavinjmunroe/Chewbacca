@@ -1183,6 +1183,10 @@ if group "installer"; then
   check  "every hook is registered by setup.sh" \
     bash "$ROOT/tests/hooks_registered.sh"
 
+  # 2026-11-03: an osascript-sent PDF did not open for Gavin.
+  check  "attachment-guard sends files through send-file only" \
+    bash "$ROOT/tests/attachment_guard.sh"
+
   # Caleb, 2026-11-03: "ai is too much of a yes man by default".
   check  "method-guard flags a take for the agent's own read" \
     bash "$ROOT/tests/method_guard_take.sh"

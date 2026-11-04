@@ -81,6 +81,50 @@ def test_passes_a_page_with_a_sticky_rail():
         "design-gate refused a correct sticky sidebar.\n\n" + out)
 
 
+# A phone mock whose chat thread scrolls inside its own overflow:auto box,
+# under a static header, the shape of the Anchored Baptize The World demo the
+# gate refused twice on 2026-11-03. Bubbles that scrolled up have bounding
+# rects running under the header, but the thread clips them: nothing visible
+# overlaps. scrollTop 752 leaves bubble 10 (top at 12 + 70*10) with 40 of
+# its 60px above the thread's edge, a 67% overlap with the header by raw rect.
+CHAT = """<!doctype html><meta charset=utf-8>
+<style>body{margin:0;background:#e9e6df;font:15px system-ui;padding:100px 0 0 200px}
+.phone{width:375px;height:700px;display:flex;flex-direction:column;background:#efeae2;
+  border-radius:28px;overflow:hidden;border:1px solid #c9c4ba}
+.waBar{height:64px;flex:none;background:#075e54;color:#fff;display:flex;align-items:center;padding:0 16px}
+.thread{flex:1;overflow-y:auto;padding:12px}
+.msg{background:#fff;color:#111;border-radius:10px;padding:8px 12px;margin:0 40px 10px 0;line-height:1.4;
+  height:60px;box-sizing:border-box;overflow:hidden}
+.msg.me{background:#d9fdd3;margin:0 0 10px 40px}</style>
+<div class=phone><div class=waBar><b>Baptize The World</b></div>
+<div class=thread id=t>%s</div></div>
+<script>const t=document.getElementById('t');t.scrollTop=752;</script>"""
+
+
+def test_passes_a_chat_thread_scrolled_under_its_header():
+    bubbles = "".join(
+        f'<div class="msg{" me" if i % 2 else ""}">Message {i}: see you at the '
+        f'baptism on Sunday, bring a towel.</div>' for i in range(40))
+    code, out = run_gate(CHAT % bubbles)
+    assert code == 0, (
+        "design-gate refused chat bubbles that the thread's overflow clips "
+        "under the header. Clipped-away parts are not painted and cannot "
+        "collide.\n\n" + out)
+
+
+def test_still_refuses_a_real_overlap_inside_a_scroll_container():
+    """The positive case for the clip: two bubbles that visibly sit on top of
+    each other inside the scrolling thread must still be refused, or the
+    clip has turned into a blind spot."""
+    bubbles = ('<div class=msg style="height:60px;width:220px">first</div>'
+               '<div class="msg me" style="height:60px;width:220px;'
+               'margin-top:-55px;margin-left:60px">second sits on the first</div>')
+    code, out = run_gate(CHAT % bubbles)
+    assert code == 2 and "collides" in out, (
+        "design-gate PASSED two bubbles that visibly overlap inside a scroll "
+        "container. The clipping went too far.\n\n" + out)
+
+
 def test_still_refuses_genuinely_unreadable_text():
     """The positive case, kept beside the negative ones on purpose.
 

@@ -79,6 +79,37 @@ INK_LO, INK_HI, INK_MAX = 0.03, 0.12, 0.15
 DOM_JS = """() => {
   const painted = [];
   const texts = [];
+  /* The part of an element that is actually on screen, after every ancestor
+     that clips it. On 2026-11-03 the Anchored Baptize The World demo (a phone
+     mock with a scrolling WhatsApp thread) was refused twice for
+     "div.btw_waBar collides with div.btw_msg over 86%": chat bubbles that had
+     scrolled up inside the thread's overflow:auto box. Their bounding rects
+     ran up under the chat header, but the thread clipped them and the frames
+     showed nothing overlapping. A raw bounding rect describes layout, not
+     paint, so every chat or scroll-region mock tripped the gate.
+     Only ancestors on the containing-block chain clip: an absolutely
+     positioned child escapes an overflow:hidden parent that is static, and a
+     fixed one escapes them all (transformed ancestors are ignored, which
+     errs toward reporting). The clip edge is the padding box. */
+  const visibleRect = (el, r) => {
+    let x0 = r.left, y0 = r.top, x1 = r.right, y1 = r.bottom;
+    let pos = getComputedStyle(el).position;
+    for (let n = el.parentElement; n && n !== document.body &&
+         n !== document.documentElement; n = n.parentElement) {
+      if (pos === "fixed") break;
+      const s = getComputedStyle(n);
+      if (pos === "absolute" && s.position === "static" &&
+          s.transform === "none") continue;
+      const b = n.getBoundingClientRect();
+      const left = b.left + n.clientLeft, top = b.top + n.clientTop;
+      if (s.overflowX !== "visible") {
+        x0 = Math.max(x0, left); x1 = Math.min(x1, left + n.clientWidth); }
+      if (s.overflowY !== "visible") {
+        y0 = Math.max(y0, top); y1 = Math.min(y1, top + n.clientHeight); }
+      pos = s.position;
+    }
+    return { x: x0, y: y0, w: Math.max(0, x1 - x0), h: Math.max(0, y1 - y0) };
+  };
   for (const el of document.querySelectorAll("body *")) {
     const r = el.getBoundingClientRect();
     if (r.width < 2 || r.height < 2) continue;
@@ -86,6 +117,11 @@ DOM_JS = """() => {
     const st = getComputedStyle(el);
     if (st.visibility === "hidden" || st.opacity === "0" ||
         st.display === "none") continue;
+    const vis = visibleRect(el, r);
+    // Clipped away entirely: nothing of it is painted, so it can neither
+    // collide with anything nor be judged for legibility against the pixels
+    // of whatever really sits there.
+    if (vis.w < 2 || vis.h < 2) continue;
     const box = {
       /* A fixed or sticky element is SUPPOSED to sit over the content
          scrolling beneath it. Counting that as a collision made the gate
@@ -117,6 +153,10 @@ DOM_JS = """() => {
     };
     // A text LEAF: has text of its own and no element children.
     const own = el.children.length === 0 && el.textContent.trim().length > 0;
+    /* Legibility reads the pixels behind the visible part only. The raw rect
+       stays in x/y/w/h for texts, since pinned_and_clipped follows it across
+       shots to find type the viewport cuts. */
+    box.vis = vis;
     if (own) { box.text = el.textContent.trim().slice(0, 48); texts.push(box); }
     /* A shape or <text> inside an <svg> is part of that svg's drawing, so it
        "overlapped" its own parent: on 2026-10-29 the Firm Foundation footer
@@ -129,7 +169,8 @@ DOM_JS = """() => {
     const paints = (st.backgroundColor && st.backgroundColor !== "rgba(0, 0, 0, 0)")
       || (st.borderTopWidth !== "0px" && st.borderTopStyle !== "none")
       || el.tagName === "svg" || el.tagName === "IMG" || own;
-    if (paints) painted.push(box);
+    // Collisions compare what is painted, so the box is the visible rect.
+    if (paints) painted.push(Object.assign({}, box, vis));
   }
   return { painted, texts, h: document.documentElement.scrollHeight,
            vh: window.innerHeight, vw: window.innerWidth };
@@ -250,7 +291,7 @@ def analyse(png, dom):
     # LEGIBILITY.
     bad = []
     for t in dom["texts"]:
-        p = bg_purity(lum, t, vw, vh)
+        p = bg_purity(lum, t.get("vis") or t, vw, vh)
         if p is not None and p < BG_PURITY_MIN:
             bad.append({"text": t["text"], "purity": round(p, 3),
                         "at": [int(t["x"]), int(t["y"])]})

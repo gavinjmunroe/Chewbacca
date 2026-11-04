@@ -284,6 +284,10 @@ the user had to say "the transcript is there". It was one message, found in one
 `people texts search`. In raw chat.db a long message has a null `text` column
 and lives only in `attributedBody`, so a query on `text` alone misses it.
 
+## Building something for a person: read their whole thread first
+
+A page, kit or doc made for someone starts with `people texts <name> --limit 20000`, read end to end, before the first design decision. On 2026-11-04, asked for a page to park things for Langston, the first build worked from notes. Caleb wrote "Read all texts ever w him". The thread's last 30 lines changed the design: Langston had said he won't have time to look through a lot, wants the top thing, isn't an audio fan and won't look at repos. Notes had a plan for a voice memo he'd have ignored.
+
 ## Answering from it
 
 When they ask what someone said, read the thread and answer in your own words.

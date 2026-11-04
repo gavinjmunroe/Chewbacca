@@ -195,3 +195,7 @@ When the user asks for a reflection, follow [the reflection protocol](references
 ## Credits
 
 Adapted from cstack by Charles Zheng (MIT), https://github.com/goodnight000/cstack
+
+## Grep before you rewatch a reference
+
+A video someone sent may already be studied. Before downloading anything, grep for its id, title and creator: `grep -rIl "<id or creator>" ~/second-brain/memory ~/code/chewbacca/skills ~/code/chewbacca/team/memory`. If notes exist, build from them. On 2026-11-04 a tab downloaded and tiled the jayd3nfx simple edits video, already distilled in `references/simple-motion.md` the day before. Caleb: "Bro we've watched that before - didn't we learn everything?"

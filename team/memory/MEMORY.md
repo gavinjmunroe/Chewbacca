@@ -9,6 +9,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - project_dough_name_2026_10_28: GTM OS is now Dough (calebnewtonusc/dough), the whole founder product w outbound first; 2 live USPTO DOUGH filings (Dough, Inc. 35/42, tastylive 9/36/42) need a lawyer's read before it goes public
 - feedback_dough_is_the_built_engine: Dough IS the GTM/CRM/data engine already in Chewbacca (gtme, gtm graph, people, scoring, gates); never say "nothing built", the dough README is the stale part (Caleb, 10/29)
 - project_dough_direction_2026_10_29: Dough's end state is usage-based software anyone pays for to run GTM w/o learning GTM or seeing the Clay UI; done-for-you until then (Caleb, 10/29)
+- project_aurapath_sending_domains_2026_11_03: AuraPath's 3 lookalike domains bought on Cloudflare (FF account) 11/03, mail DNS + 301 to aurapathai.com done, new Workspace tenant still Caleb's step
 - project_travis_aurapath_call_2026_10_29: 10/29 call w Travis Johnson (AuraPath AI): win his outreach from his current agency w a 50 vs 50 test, agency-to-agency help, FaithTech mentorship; full transcript pending
 - project_dough_page_2026_10_29: Dough brand page = dark proofing room, dough rises, bakes into sourdough, knife cuts it; branch feat/dough-page, not deployed, cut clip splits the wrong way and needs treg credit to redo
 - project_amber_architecture_study: What Karthik is actually building in amber-id, what Chewbacca should take from...

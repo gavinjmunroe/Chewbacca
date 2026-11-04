@@ -18,7 +18,7 @@ type hook_init >/dev/null 2>&1 && hook_init archive-learn.sh 3
 # 2026-11-03 9:14pm: "Writ hw" was archived and its child "Make brightspace
 # post instant by course and topic name" showed up archived 28 seconds later.
 # Auto-archive was off and no agent called archive_session, so the parent
-# archive took the child with it (inferred from timing, not from app source).
+# archive took the child with it (archive_session docs: finished side sessions go with the parent).
 # Caleb: "a brightspace tab j randomly disappeared/archived?" Step 4 is that.
 
 PAYLOAD=$(cat)

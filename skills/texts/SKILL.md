@@ -66,6 +66,19 @@ calls from the Mac's call history land on the person card (`people calls`).
 `sync` runs on its own at session start, so the log is usually current. Run it by
 hand when the user says something just came in.
 
+## Finding someone's number to text
+
+His contacts are saved by first name plus where he knows them ("Gabriel
+Christian Bro USC"), almost never by last name. So search the first name and
+its long form (`mac contacts find Gabriel`, then `Gabe`), read each match's
+thread with `people texts "<contact name>"`, and pick the one whose thread
+fits what he said about the person. Never stop at a last-name miss. On
+2026-11-04 "Gabe Oliveri" missed in Contacts and `people`, the agent asked
+him which of two wrong Gabes, and he had to type the contact name himself.
+`mac contacts find Gabriel` had it, and its thread mentioned the apply-kit
+repo he'd used, which settled it. When you find the match, `people note` the
+handle (GitHub, LinkedIn) onto that person so the next lookup is one call.
+
 The first sync takes a 90-day window and later ones take 30. Neither is the
 whole history: `--days 3650` on a sync pulls years, and on a real library that
 is hundreds of thousands of rows, so only do it if they ask.

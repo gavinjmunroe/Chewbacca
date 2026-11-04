@@ -127,6 +127,27 @@ consistently not just once". Every one was knowable from the deck on minute one.
   (developer docs, read 2026-10-26); found an hour in, it forced a second
   data path (catalog-search quick picks, export upload).
 
+## A product demo plays itself on one real device
+
+Anchored's Baptize The World sign-up demo, 2026-11-03: a 5-line subhead, a
+generic rounded phone with gray "starter" cards labeled by language, a fake
++1 555 number in the header, a half-empty "what the team sees" card ("Waiting
+for a first text / None yet") and two paragraphs of disclaimers. Caleb: "The
+demo is so slop bro." What replaced it (anchored d411ffc):
+
+- One device, centered, in the real app's chrome: iOS status bar and Dynamic
+  Island, the iMessage blue/gray bubbles with tails or WhatsApp's wallpaper,
+  white and light-green bubbles, time and ticks. Pickers (channel, language)
+  sit under the device as small words, never as cards inside the thread.
+- It autoplays on load through the real engine: text types into the compose
+  field, sends, typing dots grow into the reply (one bubble morphing, not a
+  second one popping in). Touching the field hands control to the visitor.
+- A second panel appears only once it has data and fills row by row. A panel
+  that reads "none yet" on load is dead space.
+- One line of honesty at the bottom ("Demo with test data. Nothing is sent.").
+  Build caveats (who wrote the translations) go in the repo docs.
+- Never show a placeholder phone number in a demo's UI.
+
 ## A tool someone practises with is a session, never a page of cards
 
 2026-10-11, a guitar midterm study app the night before the exam: five tabs

@@ -25,3 +25,11 @@ build with AI (a friend, a teammate, his dad), this is the bar.
 - **Build it general when others will use it.** "This could be useful for a
   ton of ppl including my Dad": a playbook for one person gets a thin personal
   front page over a general body, not their name on every page.
+- **Two tiers, one ladder.** Caleb, 2026-11-03: "The ai playbook should get
+  someone to be at my level, and the stuff I'm making for myself will be added
+  to get to the carlton level once I'm there". So the public playbook
+  (calebnewtonusc/ai-playbook) tops out at what Caleb does today: ship a
+  product like Anchored in a day, run his own setup and parallel agents, and
+  catch the AI being wrong. His private engineer-track picks up from there
+  toward the Carlton bar, and each piece of it moves into the playbook only
+  once he's done it himself.

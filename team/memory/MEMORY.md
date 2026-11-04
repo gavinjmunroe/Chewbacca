@@ -436,6 +436,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_launch_guard_reading_clay_files: launch-guard refuses shell reads that mention Clay plus echo, xargs or python -c; read those files with the Read tool or one plain grep
 - project_lock_in_for_everyone_2026_10_17: colin-kit lock-in moves (one block per session, loop dump, capacity math, rough cuts to a coach, coach not ghostwriter) become the default for every user (10/17)
 - feedback_ff_site_is_for_church_staff: FF site is for church staff, not Instagram; cool only if an exec pastor still trusts it
+- feedback_ff_send_volume_claims: FF cold email ramp is 5, 10, 15, max 20 a day per inbox (40 total for Caleb and Gavin); 200 a day needs ~10 more inboxes; advisor docs group churches by issue, 3 pages not 8
 - feedback_firm_foundation_preflight_2026_10_18: before a FF send day, check the sending Gmail answers (10/18 it 401d) and re-audit hooks (Warehouse's was false)
 - feedback_ff_work_lives_in_ff_repo: FF work goes in gavinjmunroe/firm-foundation, never a founder's side repo; a handoff is done when a fresh clone as the recipient builds, and an invite isn't access (10/18 video)
 - feedback_outbound_numbers_from_own_list: recount every stat in a region's sequence from its own audit CSV; SoCal step 2 cited 15 Dallas sites (10/18)

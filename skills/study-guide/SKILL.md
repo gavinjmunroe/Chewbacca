@@ -62,6 +62,14 @@ add labels at the lesson call site (bio-midterm2 `tagSVG`), not inside the share
 drawing. Check the labels rendered at desktop and phone width, since they collide
 easily.
 
+**Lessons are one idea per card, and every process card has a picture.** A
+lesson page of paragraphs got "a fat wall of texts isn't teaching me much", then
+a text-only calcium pump card got "Plz plz plz add diagrams stuff like this is
+so hard to comprehend bro" (2026-11-03). Build lessons as a card stepper with a
+diagram mapped to each card (bio-midterm2 `FIGS`): steps drawn as a strip
+(pump, endocytosis), gradients with arrows, Punnett squares built from the
+gametes, cell-cycle wheels, phase pictures. Write the pictures before the text.
+
 **Exam apps carry tonight's schedule and a pace bar.** He asks for both every
 time (guitar, marketing, bio): a timed schedule on the home screen that moves
 when he pushes the start, and a fixed bottom bar saying what's next, the time

@@ -536,6 +536,7 @@ if group "gtme"; then
     python3 "$ROOT/tests/test_spend_allowance.py"
   # Every case from the upstream TypeScript tests; offline, nothing sends.
   check "gtme-reply labels real replies, cleans HTML, refuses risky auto-sends" python3 "$ROOT/tests/test_gtme_reply.py"
+  check "gtme reply-eval prints precision, recall and confusion pairs from a gold file" python3 "$ROOT/tests/test_gtme_reply_eval.py"
   check "gtme-reply dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-reply intent --help
   check "gtme-rules audits rulings and refuses client text a ruling forbids" python3 "$ROOT/tests/test_gtme_rules.py"
   # Oracle reject cases, the sealed held-out retrieval cases and the real ledger's audit; offline.

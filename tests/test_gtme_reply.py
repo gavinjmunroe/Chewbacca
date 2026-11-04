@@ -204,6 +204,21 @@ class CleanReplyText(unittest.TestCase):
         for empty in ("", None):
             self.assertEqual(reply.clean_reply_text(empty), "")
 
+    def test_empty_blockquote_is_indentation_not_the_thread(self):
+        # Made-up equivalent of a real autoresponder in the reply-eval gold set
+        # (2026-11-03): two empty indent blockquotes opened the HTML, the tail
+        # cut took everything, and the empty text read as "unclear".
+        html = ('<div dir="ltr"><blockquote style="margin:0px 0px 0px 40px"></blockquote>'
+                '<blockquote style="margin:0px 0px 0px 40px"> <br></blockquote><div><p>Hi there! '
+                'This is an automated message. I read email in batches, so I may not reply '
+                'directly.</p></div><div><blockquote>On Mon, Pat wrote: our pitch</blockquote></div></div>')
+        out = reply.clean_reply_text(html)
+        self.assertIn("This is an automated message.", out)
+        self.assertNotIn("our pitch", out)
+        intent = reply.reply_intent(out)
+        self.assertEqual((intent["kind"], intent["label"]), ("later", "Out of office"))
+        self.assertIn(intent["kind"], reply.AUTO_HANDLED)
+
 
 class StripEmDashes(unittest.TestCase):
     def test_punctuating_dash_becomes_comma(self):

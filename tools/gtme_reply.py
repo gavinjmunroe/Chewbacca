@@ -594,6 +594,12 @@ LOOKS_HTML = js_regex(r"<(html|body|div|p|br|table|span|blockquote|a|meta)\b[^<>
 NOISE_TAGS = tuple((tag, js_regex(fr"<{tag}\b[^<>]*>[\s\S]*?<\/{tag}>", "i"))
                    for tag in ("style", "script", "head"))
 BLOCKQUOTE_TAIL = js_regex(r"<blockquote\b[\s\S]*$", "i")
+# An empty <blockquote> is indentation, not a quoted thread. One investor's
+# autoresponder opened with two (Gmail's indent button, 2026-10-07), the tail
+# cut took the whole message, and the reply-eval gold set (2026-11-03) showed
+# the empty text reading as "unclear", so an automated message would reach the
+# client as work. Removed before the tail cut.
+EMPTY_BLOCKQUOTE = js_regex(r"<blockquote\b[^<>]*>(?:\s|&nbsp;|<br\b[^<>]*>)*<\/blockquote\s*>", "gi")
 BR = js_regex(r"<br\b[^<>]*>", "gi")
 CLOSE_BLOCK = js_regex(r"<\/(p|div|tr|li|h[1-6]|blockquote)\s*>", "gi")
 OPEN_BLOCK = js_regex(r"<(p|div|tr|li|h[1-6])\b[^<>]*>", "gi")
@@ -671,6 +677,8 @@ def clean_reply_text(raw):
         for tag, pattern in NOISE_TAGS:
             if f"</{tag}" in lowered:
                 text = pattern.sub(" ", text)
+        if "</blockquote" in lowered:
+            text = EMPTY_BLOCKQUOTE.sub(" ", text)
         # A quoted thread inside a <blockquote> is the common Apple Mail shape.
         text = BLOCKQUOTE_TAIL.sub(" ", text, count=1)
         # Structural tags become line breaks so paragraphs survive.

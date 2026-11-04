@@ -25,6 +25,8 @@
                              gtme lesson add/record/audit keep the experiment ledger
     gtme next-move plan FILE  a step came back empty or blocked: every move the evidence supports,
                              boundaries applied, Jev-ranked; replay DIR measures it on old blockers
+    gtme reply-eval --gold FILE   the reply classifier measured on hand-labeled real replies:
+                             precision and recall per label and every confusion pair
     gtme sync                refresh the graph (chewbacca gtm sync) and record credit balances
     gtme creator CLIENT "Name" [--brands F] [--instagram H] [--live]
                              one creator's brands found, buyers and emails found, spend ranked and
@@ -2463,6 +2465,9 @@ def main(argv=None) -> int:
     if argv and argv[0] == "accounts":
         import gtme_accounts
         return gtme_accounts.main(argv[1:])
+    if argv and argv[0] == "reply-eval":
+        import gtme_reply_eval
+        return gtme_reply_eval.main(argv[1:])
     if argv and argv[0] == "dns":
         import gtme_dns
         return gtme_dns.main(argv[1:])

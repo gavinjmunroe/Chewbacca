@@ -51,6 +51,13 @@ HELP = {
 REL_ORDER = {"Close": 0, "Know them": 1, "Via TTS": 1, "LinkedIn only": 2}
 
 
+def cell(value):
+    """A cell a spreadsheet won't run. Names and titles come from LinkedIn, which
+    anyone can set to =HYPERLINK(...), so a leading = + - @ tab or CR gets a quote."""
+    text = "" if value is None else str(value)
+    return "'" + text if text[:1] in ("=", "+", "-", "@", "\t", "\r") else text
+
+
 def load_people():
     con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
     con.row_factory = sqlite3.Row
@@ -144,7 +151,7 @@ def main():
     with open(os.path.expanduser(a.out), "w", newline="", encoding="utf-8-sig") as f:
         w = csv.DictWriter(f, fieldnames=cols)
         w.writeheader()
-        w.writerows(rows)
+        w.writerows({k: cell(v) for k, v in r.items()} for r in rows)
     print(len(rows), dict(collections.Counter(r["Priority"] for r in rows)))
 
 

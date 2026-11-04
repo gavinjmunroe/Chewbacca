@@ -33,6 +33,13 @@ class Categorize(unittest.TestCase):
         self.assertIsNone(plc.categorize(p))
 
 
+class Cell(unittest.TestCase):
+    def test_formula_neutralized(self):
+        self.assertEqual(plc.cell("=HYPERLINK(1)"), "'=HYPERLINK(1)")
+        self.assertEqual(plc.cell("@x"), "'@x")
+        self.assertEqual(plc.cell("Founder"), "Founder")
+
+
 class Build(unittest.TestCase):
     def test_columns_and_order(self):
         people = [person("Managing Partner", "Dorm Room Fund", pid="1", name="Zed"),

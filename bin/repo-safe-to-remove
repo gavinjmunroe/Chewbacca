@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# repo-safe-to-remove <dir>...  Exit 0 only when every repo's work lives on its remote right now.
+#
+# Asks the remote itself (git ls-remote), never the local origin/* refs. On
+# 2026-11-04 a storage cleanup trashed echo, grader and visualide as "fully
+# pushed": `git log --branches --not --remotes` read 0 because stale origin/*
+# refs outlived the deleted GitHub repos, and `git fetch -q` failed silently.
+# The Trash was emptied and those were the only copies.
+#
+# A repo passes when: the remote answers, the working tree is clean (untracked
+# files count), nothing is stashed, and every local branch tip is an ancestor of
+# some ref the remote advertises right now.
+set -uo pipefail
+
+check() {
+  local d="$1" url remote_shas tip b ok
+  [ -d "$d/.git" ] || { echo "KEEP $d: not a git repo"; return 1; }
+  url=$(git -C "$d" remote get-url origin 2>/dev/null) || { echo "KEEP $d: no origin remote"; return 1; }
+  remote_shas=$(GIT_TERMINAL_PROMPT=0 git -C "$d" ls-remote origin 2>/dev/null | awk '{print $1}') \
+    || { echo "KEEP $d: remote unreachable or gone ($url)"; return 1; }
+  [ -n "$remote_shas" ] || { echo "KEEP $d: remote is empty ($url)"; return 1; }
+  [ -z "$(git -C "$d" status --porcelain 2>/dev/null)" ] || { echo "KEEP $d: uncommitted changes"; return 1; }
+  [ -z "$(git -C "$d" stash list 2>/dev/null)" ] || { echo "KEEP $d: stashed work"; return 1; }
+  # Remote objects must be local to test ancestry; fetch loudly this time.
+  GIT_TERMINAL_PROMPT=0 git -C "$d" fetch -q origin 2>/dev/null || { echo "KEEP $d: fetch failed"; return 1; }
+  while read -r b tip; do
+    ok=1
+    for sha in $remote_shas; do
+      git -C "$d" merge-base --is-ancestor "$tip" "$sha" 2>/dev/null && { ok=0; break; }
+    done
+    [ "$ok" = 0 ] || { echo "KEEP $d: branch $b ($tip) is not on the remote"; return 1; }
+  done < <(git -C "$d" for-each-ref --format='%(refname:short) %(objectname)' refs/heads)
+  echo "SAFE $d"
+}
+
+[ $# -gt 0 ] || { echo "usage: repo-safe-to-remove <repo-dir>..." >&2; exit 2; }
+status=0
+for d in "$@"; do check "$d" || status=1; done
+exit "$status"

@@ -650,6 +650,7 @@ if group "tools"; then
   check  "product sync: landed changes move, firewall holds personal files, red product tests push nothing" bash "$ROOT/tests/product_sync.sh"
   check  "chewie app: background driver refuses Return without --yes, Jev picks map back" python3 "$ROOT/tests/test_appctl.py"
   check "counts handles conflict stages and whitespace paths" python3 "$ROOT/tests/test_counts.py"
+  check  "repo-safe-to-remove refuses a deleted remote with stale origin refs" bash "$ROOT/tests/repo_safe_to_remove.sh"
   check  "counts --check passes on a clean tree" python3 "$ROOT/tools/counts.py" --check
   check  "counts --json is valid" bash -c "python3 '$ROOT/tools/counts.py' --json | python3 -m json.tool"
   check  "evals structure pass" python3 "$ROOT/tools/evals.py"

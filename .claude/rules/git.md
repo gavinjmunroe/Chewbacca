@@ -126,3 +126,13 @@ every file byte for byte (`git show HEAD:<f> | cmp - <dir>/<f>`), and archive
 the old repo only after that. Never rebase a branch that holds a subtree add:
 the same day a rebase started replaying the imported commits at the repo root.
 Merge main into it instead.
+
+## Removing a local repo: ask the remote, not origin/*
+
+Before trashing, deleting or "cleaning up" any local checkout, run
+`bin/repo-safe-to-remove <dir>...` and remove only the ones it prints SAFE.
+It asks the remote with `git ls-remote`, then checks the tree, stash and every
+branch tip against what the remote has right now. On 2026-11-04 a storage
+cleanup trashed echo, grader and visualide as fully pushed: stale origin/*
+refs outlived the deleted GitHub repos, `git fetch -q` failed silently, the
+Trash got emptied, and those were the only copies.

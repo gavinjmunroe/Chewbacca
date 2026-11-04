@@ -433,7 +433,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - reference_clay_cli_one_workspace: the clay CLI has one current workspace for every tab; chewbacca clay pins each call via a private CLAY_CONFIG_HOME, so pass ws= and never switch it (10/17)
 - feedback_help_flag_can_run_the_tool: `people distill --help` ran a real distill (10/16); check a tool parses --help before sending it blind
 - project_semyon_onramp_2026_10_17: Semyon (backend, installer and guard tasks) onboarding one pager to Chewbacca and the Clay bridge, in Downloads; written 10/17, not sent
-- feedback_launch_guard_reading_clay_files: launch-guard refuses shell reads that mention Clay plus echo, xargs or python -c; read those files with the Read tool or one plain grep
+- feedback_launch_guard_reading_clay_files: launch-guard refuses shell reads that mention Clay plus echo, xargs or python -c; read those files with the Read tool or one plain grep, and commit such a path with lone git -C add/commit/push calls (11/3)
 - project_lock_in_for_everyone_2026_10_17: colin-kit lock-in moves (one block per session, loop dump, capacity math, rough cuts to a coach, coach not ghostwriter) become the default for every user (10/17)
 - feedback_ff_site_is_for_church_staff: FF site is for church staff, not Instagram; cool only if an exec pastor still trusts it
 - feedback_ff_send_volume_claims: FF cold email ramp is 5, 10, 15, max 20 a day per inbox (40 total for Caleb and Gavin); 200 a day needs ~10 more inboxes; advisor docs group churches by issue, 3 pages not 8
@@ -444,7 +444,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_guard_fix_replays_real_commands: replay a guard change over the 800 real commands in tests/fixtures/hookd-replay before landing; the 10/19 destructive-guard fix first refused npm cache clean --force
 - reference_landed_branches_look_unlanded: chewbacca land rebuilds commits, so git cherry calls landed branches unlanded; match subject and touched files before deleting or chasing one (10/19)
 - project_semyon_onramp_2026_10_17: Semyon (backend, installer and guard tasks) onboarding one pager to Chewbacca and the Clay bridge, in Downloads; written 10/17, not sent
-- feedback_launch_guard_reading_clay_files: launch-guard refuses shell reads that mention Clay plus echo, xargs or python -c; read those files with the Read tool or one plain grep
+- feedback_launch_guard_reading_clay_files: launch-guard refuses shell reads that mention Clay plus echo, xargs or python -c; read those files with the Read tool or one plain grep, and commit such a path with lone git -C add/commit/push calls (11/3)
 - project_firm_foundation_site_motion_split: FF site what-we-do panels are scroll, click and timed; Monday is the only Apple-style part (2026-10-17 call)
 - feedback_precommit_hangs_on_bulk_imports: pre-commit greps the write-log once per staged file; a 5,217-file import hung 40+ min (10/20); bulk imports commit --no-verify in a clean worktree, land the sha
 - project_amber_code_lives_in_chewbacca: Every Amber repo is in chewbacca/amber; Karthik 10/20: features move both ways, no credit exchanged, upstream pointers only

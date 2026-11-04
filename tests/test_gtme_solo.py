@@ -508,7 +508,11 @@ class Solo(unittest.TestCase):
         self.assertIsNone(self.batch())
         # a second inbox read doesn't log the same reply twice
         self.run_cli("inbox", "--client", "Dana Co", "--json")
-        self.assertEqual(len((self.d / "replies.jsonl").read_text().splitlines()), 2)
+        rows = [json.loads(x) for x in (self.d / "replies.jsonl").read_text().splitlines()]
+        self.assertEqual(len(rows), 2)
+        # Each reply carries its Gmail thread, so a reader keys conversations by thread (11/3).
+        self.assertEqual({r["thread"] for r in rows}, {sent["maria@crumbcorner.test"], sent["hello@rollhouse.test"]})
+        self.assertTrue(all("internalDate" in r for r in rows))
 
     def test_a_form_reply_names_this_clients_sender_never_jonah(self):
         # Until 2026-10-13 every own-inbox client's form reply read "Fill out

@@ -1039,7 +1039,11 @@ def cmd_inbox(a) -> int:
             text = gtme_reply.clean_reply_text(plain_text(msg.get("payload") or {}) or msg.get("snippet") or "")
             v = gtme_reply.reply_intent(text, first["email"], me, first["lead"].get("company"), client=facts)
             row = {"email": first["email"], "from": frm, "gmail_id": msg.get("id"), "kind": v["kind"],
-                   "label": v["label"], "next": v["nextStep"], "text": text[:2000], "at": op.stamp()}
+                   "label": v["label"], "next": v["nextStep"], "text": text[:2000], "at": op.stamp(),
+                   # When Gmail received it, apart from when we pulled it: on 11/3 Dough's reply
+                   # port found "at" alone made a 30-hour-old reply read as fresh, so an owed
+                   # answer could sit a day before anyone saw it was late.
+                   "thread": tid, "internalDate": msg.get("internalDate")}
             append(d / "replies.jsonl", row)
             if v["kind"] in ("unsubscribe", "bounce"):
                 suppress(a.client, first["email"], v["label"])

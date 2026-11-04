@@ -30,6 +30,16 @@ platform's own whoami with a 20 s timeout, and nothing it prints is a secret.
   shown to him and his yes on that number before it runs. A domain registration can't be refunded.
 - A send under his name (email, WhatsApp, SMS) needs his ok every time.
 
+## Never
+
+- Never spend ten minutes reading before the first useful action. On 2026-11-03 this skill
+  didn't exist yet, a session read three repos silently before touching DNS, and Caleb asked
+  "What's taking so long?" and then "How much longer?". Run `chewbacca platforms`, do the job,
+  and say where it stands in one line within the first minute, with an honest estimate.
+- Never leave a lookalike sending domain pointing nowhere. Every one 301s to the client's real
+  site from the start (Caleb, 2026-11-03: "Also make them all redirect to the actual aurapath
+  site"), so `--redirect` is part of step 2, not an extra.
+
 ## Buying a domain
 
 Buy new domains on Cloudflare (account caleb@firmfoundation.tech). Porkbun refused new orders on

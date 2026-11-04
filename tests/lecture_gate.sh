@@ -58,5 +58,9 @@ LECTURE_GATE_SPEC_DIRS="$tmp/nospecs" t "a dry-run submit"  0 "$(sub "brightspac
 LECTURE_GATE_SPEC_DIRS="$tmp/nospecs" t "--dry-run outside the submit argv" 2 "$(sub "brightspace submit 298850 647598 \"$tmp/A20.pdf\" && echo --dry-run")"
 LECTURE_GATE_SPEC_DIRS="$tmp/nospecs" t "submit by full path"  2 "$(sub "/Users/x/.local/bin/brightspace submit 298850 647598 \"$tmp/A20.pdf\"")"
 LECTURE_GATE_SPEC_DIRS="$tmp/nospecs" t "another course's ou" 0 "$(sub "brightspace submit 999 1 \"$tmp/A20.pdf\"")"
+# A course name instead of the ou is gated the same (names landed 2026-11-03).
+echo '{"courses": {"ACAD 185": [298850], "ACAD 324": [299120]}}' > "$tmp/map.json"
+BRIGHTSPACE_MAP="$tmp/map.json" LECTURE_GATE_SPEC_DIRS="$tmp/nospecs" t "submit by course name" 2 "$(sub "brightspace submit acad-185 \"A20 Hero\" \"$tmp/Kyber - A20 Hero's Journey v1.pdf\"")"
+BRIGHTSPACE_MAP="$tmp/map.json" LECTURE_GATE_SPEC_DIRS="$tmp/nospecs" t "submit by an unknown name" 2 "$(sub "brightspace submit ZZZZ x \"$tmp/A20.pdf\"")"
 echo "lecture-gate: $pass passed, $fail failed"
 [ "$fail" = 0 ]

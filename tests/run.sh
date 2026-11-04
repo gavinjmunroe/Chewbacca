@@ -965,6 +965,12 @@ if group "installer"; then
   check  "brightspace submit routes groups and downloads write real bytes" \
     bash "$ROOT/tests/brightspace_write.sh" "$ROOT"
 
+  # A WRIT 150 post on 2026-11-03 spent most of its time finding three ids.
+  # Every command takes names, resolved from a cache with no call, and post
+  # reads its post back before reporting it.
+  check  "brightspace takes course and item names and reads posts back" \
+    bash "$ROOT/tests/brightspace_names.sh" "$ROOT"
+
   # brightspace submit said BLOCKED minutes after a deadline on 2026-10-26
   # while a background-tab sign-in existed only inside chewbacca usc.
   check  "a signed-out brightspace signs itself back in, Duo only when asked" \

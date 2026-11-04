@@ -130,12 +130,26 @@ elif tool == "Bash":
     if "--dry-run" in args:
         raise SystemExit
     pos = [a for a in args if not a.startswith("-")]
-    if len(pos) < 3 or not pos[0].isdigit():
+    if len(pos) < 3:
         raise SystemExit
+    if not pos[0].isdigit():
+        # `brightspace submit WRIT ...` takes a course name since 2026-11-03.
+        # Map it to an ou through the same cache brightspace reads, so a name
+        # never walks past this gate; an unknown name is still gated, with no code.
+        import re as _re
+        norm = lambda t: _re.sub(r"[^a-z0-9]", "", str(t).lower())
+        q = norm(pos[0])
+        try:
+            cmap = json.load(open(os.environ.get("BRIGHTSPACE_MAP")
+                                  or os.path.expanduser("~/.chewbacca/brightspace/map.json"))).get("courses") or {}
+        except (OSError, ValueError):
+            cmap = {}
+        hits = {tuple(u) for c, u in cmap.items() if q and norm(c) and (norm(c).startswith(q) or q.startswith(norm(c)))}
+        pos[0] = str(next(iter(hits))[0]) if len(hits) == 1 and next(iter(hits)) else ""
     m = (None, pos[0], " ".join(pos[2:]))
     try:
-        code = json.load(open(os.path.join(slides, "courses.json"))).get(m[1])
-        if code is None:
+        code = json.load(open(os.path.join(slides, "courses.json"))).get(m[1]) if m[1] else None
+        if code is None and m[1]:
             raise SystemExit  # an ou outside this term's courses
     except (OSError, ValueError):
         code = None

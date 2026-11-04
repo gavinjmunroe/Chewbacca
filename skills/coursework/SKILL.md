@@ -92,6 +92,12 @@ one call, and a lapsed session renews itself from Chrome:
 - Grades, announcements, quizzes, discussions, content for one course:
   `chewbacca api call brightspace <grades|announcements|quizzes|discussions|content> orgUnitId=<id>`
   (ids from `chewbacca api call brightspace myCourses`)
+- Every `<ou>` below takes a course name (WRIT, writ-150, "BISC 101"), every
+  `<folderId>` a dropbox name and `<forum> <topic>` a topic name, resolved
+  from a cache with no call: `brightspace post WRIT "Topic Ideas for WP3"
+  --subject S --body-file F`. Two matches stop with both listed. Never look ids
+  up by hand first; `brightspace map` refreshes the cache and writes each
+  course's `org_unit_id` into its ledger yml
 - Hand something in: `brightspace submit <ou> <folderId> <file>...`. It finds
   the student's own group for a group dropbox, uploads headless, and proves it
   from the submission list (name and byte size). `--dry-run` says where it
@@ -109,7 +115,9 @@ one call, and a lapsed session renews itself from Chrome:
   (grade, comments, feedback files)
 - Discussions: `brightspace discuss <ou>` lists forums and topics,
   `brightspace discuss <ou> <forum> <topic>` reads the posts, and
-  `brightspace post <ou> <forum> <topic> --subject S --body-file F` posts
+  `brightspace post <ou> <forum> <topic> --subject S --body-file F` posts,
+  then reads the post back from Brightspace and prints it (`--dry-run` only
+  resolves and stops). Never post to a real topic as a test
 - Anything else: `brightspace get /le/1.75/<ou>/<path>`
 - An assignment brief (the dropbox instructions, with its Google Doc template
   links and attachments): `brightspace get /le/1.99/<ou>/dropbox/folders/<folderId>`,

@@ -22,7 +22,24 @@ assignments the coursework ledger never heard of.
   brightspace classlist <ou>         everyone in the course, with emails
   brightspace discuss <ou> [<forum> <topic>]
                                      forums and topics, or one topic's posts
-  brightspace post <ou> <forum> <topic> --subject S --body-file F [--reply-to ID]
+  brightspace post <ou> <forum> <topic> --subject S --body-file F [--reply-to ID] [--dry-run]
+                                     posts, then reads the post back and prints it
+  brightspace map [--json]           refresh the name cache (courses, topics,
+                                     dropboxes) and write each course's
+                                     org_unit_id into its coursework ledger yml
+
+Every <ou> takes a course name instead (WRIT, writ-150, "BISC 101"), every
+<folder> a dropbox name, and <forum> <topic> a topic name:
+
+  brightspace post WRIT "Topic Ideas for WP3" --subject S --body-file F
+  brightspace submit ACAD "A22 Landing Page" site.pdf
+
+Names resolve from a cache (~/.chewbacca/brightspace/map.json, or
+BRIGHTSPACE_MAP), so a hit makes no network call. A miss rereads that course
+from Brightspace once and saves it. Two matches stop with both listed, never a
+guess. On 2026-11-03 a WRIT 150 post spent most of its time finding three ids
+(the ou wasn't in the ledger, the topic came from a separate `discuss`), while
+the API calls themselves took 412ms.
 
 The ledger is built from syllabi, and some assignments only ever exist as a
 Brightspace dropbox. "Presentation Topics" in the BISC lab (due 2026-10-02,
@@ -692,7 +709,13 @@ def _send(req, timeout):
 
 
 def _post(client, url, data, content_type):
-    ck = "; ".join(f"{k}={v}" for k, v in _session_cookies(client).items())
+    if client.fixture is not None:
+        # Tests answer writes from the fixture too: "POST <url>" -> response.
+        key = "POST " + url
+        if key not in client.fixture:
+            raise KeyError(f"fixture has no {key}")
+        return 200, json.dumps(client.fixture[key]).encode()
+    ck ="; ".join(f"{k}={v}" for k, v in _session_cookies(client).items())
     _, body = _send(urllib.request.Request(HOST + "/d2l/lp/auth/xsrf-tokens", headers={"Cookie": ck}), 25)
     xsrf = json.loads(body)["referrerToken"]
     req = urllib.request.Request(HOST + url, data=data, method="POST", headers={
@@ -934,14 +957,272 @@ def cmd_discuss(client, ou, forum, topic, as_json):
     return 0
 
 
-def cmd_post(client, ou, forum, topic, subject, body_file, parent):
+
+MAP_PATH = Path(os.environ.get("BRIGHTSPACE_MAP") or Path.home() / ".chewbacca/brightspace/map.json")
+
+
+def load_map():
+    try:
+        m = json.loads(MAP_PATH.read_text())
+        return m if isinstance(m, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_map(m):
+    MAP_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp = MAP_PATH.with_name(MAP_PATH.name + ".tmp")
+    tmp.write_text(json.dumps(m, indent=1))
+    tmp.replace(MAP_PATH)
+
+
+def ledger_units(ledger_dir):
+    """course code -> [org unit ids], from each ledger yml's org_unit_id line."""
+    out = {}
+    for path in sorted(Path(ledger_dir).glob("*.yml")):
+        text = path.read_text()
+        code = re.search(r'^code:\s*"?([^"\n]+)"?', text, re.M)
+        ou = re.search(r"^org_unit_id:\s*(.+)$", text, re.M)
+        if code and ou:
+            out[code.group(1).strip()] = [int(x) for x in re.findall(r"\d+", ou.group(1))]
+    return out
+
+
+def write_ledger_units(ledger_dir, courses):
+    """Put each enrolled course's org unit ids into its ledger yml. Returns lines changed."""
+    changed = []
+    for path in sorted(Path(ledger_dir).glob("*.yml")):
+        text = path.read_text()
+        code = re.search(r'^code:\s*"?([^"\n]+)"?.*$', text, re.M)
+        if not code:
+            continue
+        have = norm_code(code.group(1).strip())
+        ous = sorted({ou for c, units in courses.items() for ou in units
+                      if norm_code(c) and (have.startswith(norm_code(c)) or norm_code(c).startswith(have))})
+        if not ous:
+            continue
+        line = f"org_unit_id: {ous[0]}" if len(ous) == 1 else f"org_unit_id: [{', '.join(map(str, ous))}]"
+        old = re.search(r"^org_unit_id:.*$", text, re.M)
+        if old and old.group(0) == line:
+            continue
+        text = (text[:old.start()] + line + text[old.end():]) if old else \
+            (text[:code.end()] + "\n" + line + text[code.end():])
+        path.write_text(text)
+        changed.append(f"{path.name}: {line}")
+    return changed
+
+
+def words(text):
+    return re.findall(r"[a-z0-9]+", clean_text(str(text)).lower())
+
+
+def name_matches(query, items):
+    """Items whose name is the query, else whose name holds every query word.
+
+    An exact name wins over a longer one holding the same words, so a topic
+    called "WP2 Rough Draft" is still reachable next to "WP2 Revised Draft
+    (and Peer Response)"; word order and punctuation don't matter.
+    """
+    q = words(query)
+    if not q:
+        return []
+    exact = [i for i in items if words(i["name"]) == q]
+    if exact:
+        return exact
+    return [i for i in items if all(w in words(i["name"]) for w in q)]
+
+
+def course_label(m, ou):
+    for code, units in (m.get("courses") or {}).items():
+        if ou in units:
+            return code
+    return str(ou)
+
+
+def resolve_course(client, said, ledger_dir=None):
+    """"WRIT", "writ-150", "BISC 101" or a bare id -> [org unit ids].
+
+    Cache first, then the ledger's org_unit_id, and the network only when
+    neither knows the name.
+    """
+    said = str(said).strip()
+    if said.isdigit():
+        return [int(said)]
+    q = norm_code(said)
+    if not q:
+        sys.exit("brightspace: empty course name")
+
+    def match(courses):
+        hits = {}
+        for code, units in courses.items():
+            have = norm_code(code)
+            if have and (have.startswith(q) or q.startswith(have)):
+                hits.setdefault(tuple(sorted(units)), code)
+        return hits
+
+    m = load_map()
+    # The cache comes from enrollments, so it beats a ledger line for the same
+    # course ("BISC 101" there, "BISC 101Lxg" in the ledger); the ledger only
+    # fills courses the cache hasn't seen.
+    cached = m.get("courses") or {}
+    known = {c: u for c, u in ledger_units(ledger_dir or LEDGER).items()
+             if not any(norm_code(c).startswith(norm_code(k)) or norm_code(k).startswith(norm_code(c))
+                        for k in cached if norm_code(k))}
+    known.update(cached)
+    hits = match(known)
+    if not hits:
+        courses = enrolled_courses(client)
+        m["courses"] = courses
+        save_map(m)
+        hits = match(courses)
+    if not hits:
+        sys.exit(f"brightspace: no current course matches {said!r}. Courses: "
+                 + ", ".join(sorted(known or m.get("courses") or {})))
+    # The ledger says "BISC 101Lxg" where enrollments say "BISC 101": the same
+    # ids under two names are one course, not two.
+    if len(hits) > 1:
+        sys.exit(f"brightspace: {said!r} matches more than one course: "
+                 + ", ".join(f"{c} ({', '.join(map(str, u))})" for u, c in sorted(hits.items(), key=lambda x: x[1]))
+                 + ". Say which.")
+    return list(next(iter(hits)))
+
+
+def one_unit(units, said):
+    if len(units) == 1:
+        return units[0]
+    sys.exit(f"brightspace: {said!r} has {len(units)} org units ({', '.join(map(str, units))}), "
+             "name the item too or pass the id")
+
+
+def fetch_topics(client, ou):
+    rows = []
+    for f in client.get(f"/le/1.75/{ou}/discussions/forums/"):
+        for t in client.get(f"/le/1.75/{ou}/discussions/forums/{f['ForumId']}/topics/"):
+            rows.append({"ou": ou, "forum": f["ForumId"], "forum_name": clean_text(f.get("Name")),
+                         "topic": t["TopicId"], "name": clean_text(t.get("Name")), "due": t.get("EndDate")})
+    return rows
+
+
+def fetch_folders(client, ou):
+    return [{"ou": ou, "id": f["Id"], "name": clean_text(f.get("Name"))}
+            for f in client.get(f"/le/1.75/{ou}/dropbox/folders/")]
+
+
+FETCHERS = {"topics": fetch_topics, "folders": fetch_folders}
+
+
+def resolve_item(client, units, said, kind, course_said):
+    """A topic or dropbox name inside the course -> its cached row.
+
+    A cache hit makes no call. A miss rereads only this course's units once,
+    so a topic posted today is found without a full refresh.
+    """
+    m = load_map()
+    store = m.setdefault(kind, {})
+
+    def hits():
+        pool = [row for ou in units for row in store.get(str(ou), [])]
+        return name_matches(said, pool)
+
+    found = hits()
+    if not found:
+        for ou in units:
+            store[str(ou)] = FETCHERS[kind](client, ou)
+        save_map(m)
+        found = hits()
+    label = course_label(m, units[0]) if units else course_said
+    noun = "topic" if kind == "topics" else "dropbox"
+    if not found:
+        names = sorted({row["name"] for ou in units for row in store.get(str(ou), [])})
+        sys.exit(f"brightspace: no {noun} in {label} matches {said!r}. {noun.title()}s: " + "; ".join(names))
+    if len(found) > 1:
+        sys.exit(f"brightspace: {said!r} matches {len(found)} {noun}s in {label}: "
+                 + "; ".join(f"{r['name']} ({r.get('topic', r.get('id'))})" for r in found)
+                 + ". Use more of the name.")
+    return found[0]
+
+
+def where_topic(client, where):
+    """[ou forum topic] ids, or [course, topic words...] -> (ou, forum, topic, row)."""
+    if len(where) == 3 and all(w.isdigit() for w in where):
+        return int(where[0]), int(where[1]), int(where[2]), None
+    if len(where) < 2:
+        sys.exit("brightspace: say the course and the topic, e.g. WRIT \"Topic Ideas for WP3\"")
+    units = resolve_course(client, where[0])
+    row = resolve_item(client, units, " ".join(where[1:]), "topics", where[0])
+    return row["ou"], row["forum"], row["topic"], row
+
+
+def where_folder(client, course, folder):
+    units = resolve_course(client, course)
+    if str(folder).isdigit():
+        return one_unit(units, course), int(folder)
+    row = resolve_item(client, units, folder, "folders", course)
+    return row["ou"], row["id"]
+
+
+def cmd_map(client, ledger_dir, as_json):
+    courses = enrolled_courses(client)
+    m = {"courses": courses, "topics": {}, "folders": {}, "updated": dt.datetime.now(dt.timezone.utc).isoformat()}
+    for units in courses.values():
+        for ou in units:
+            m["topics"][str(ou)] = optional_list(client, fetch_topics, ou)
+            m["folders"][str(ou)] = optional_list(client, fetch_folders, ou)
+    save_map(m)
+    changed = write_ledger_units(ledger_dir, courses)
+    if as_json:
+        print(json.dumps(m, indent=1))
+        return 0
+    for code, units in sorted(courses.items()):
+        n_t = sum(len(m["topics"][str(u)]) for u in units)
+        n_f = sum(len(m["folders"][str(u)]) for u in units)
+        print(f"{code:<12} {', '.join(map(str, units)):<16} {n_t} topics, {n_f} dropboxes")
+    for line in changed:
+        print(f"  ledger {line}")
+    print(f"saved {MAP_PATH}")
+    return 0
+
+
+def optional_list(client, fetcher, ou):
+    try:
+        return fetcher(client, ou)
+    except (Forbidden, KeyError):
+        return []
+
+
+def cmd_post(client, where, subject, body_file, parent, dry_run):
     text = Path(body_file).expanduser().read_text()
+    if not text.strip():
+        sys.exit(f"brightspace: {body_file} is empty")
+    ou, forum, topic, row = where_topic(client, where)
+    m = load_map()
+    name = f"{course_label(m, ou)} / {row['forum_name']} / {row['name']}" if row else f"topic {topic}"
+    print(f"{name}  ({ou}/{forum}/{topic})")
+    if dry_run:
+        print(f"would post {subject!r}, {len(text)} chars{', reply to ' + str(parent) if parent else ''}")
+        return 0
     payload = {"ParentPostId": int(parent) if parent else None, "Subject": subject,
                "Message": {"Content": text, "Type": "Text"}, "IsAnonymous": False}
-    status, body = _post(client, f"/d2l/api/le/1.75/{ou}/discussions/forums/{forum}/topics/{topic}/posts/",
-                         json.dumps(payload).encode(), "application/json")
-    post = json.loads(body)
-    print(f"posted {post.get('PostId')} in topic {topic}: {subject}")
+    base = f"/le/1.75/{ou}/discussions/forums/{forum}/topics/{topic}/posts/"
+    _, body = _post(client, "/d2l/api" + base, json.dumps(payload).encode(), "application/json")
+    pid = json.loads(body).get("PostId")
+    if not pid:
+        sys.exit(f"brightspace: Brightspace answered without a PostId: {body[:200]!r}")
+    # Proof is the post as Brightspace now serves it, never the POST's answer.
+    back = client.get(f"{base}{pid}")
+    msg = back.get("Message") or {}
+    # USC serves a Text post back with Text empty and the words in Html
+    # (post 1267122, 2026-11-03), so the Html is what gets compared.
+    import html as _html
+    got = (msg.get("Text") or _html.unescape(plain(msg.get("Html") or ""))).strip()
+    print(f"posted {pid} by {clean_text(back.get('PostingUserDisplayName'))} at {back.get('DatePosted')}")
+    print(f"  {clean_text(back.get('Subject'))}")
+    print("  " + clean_text(got).replace("\n", "\n  "))
+    if " ".join(got.split()) != " ".join(text.split()):
+        # It IS posted. Say so loudly, so a retry never makes a second post.
+        print(f"brightspace: post {pid} is up but reads back different from {body_file}. "
+              "Do NOT post again; compare the text above and edit it in Brightspace.", file=sys.stderr)
+        return 3
     return 0
 
 
@@ -959,25 +1240,27 @@ def main():
     nw.add_argument("--json", action="store_true")
     g = sub.add_parser("get")
     g.add_argument("path")
+    mp = sub.add_parser("map", help="refresh the course/topic/dropbox name cache and the ledger's org_unit_id")
+    mp.add_argument("--json", action="store_true")
     sm = sub.add_parser("submit", help="upload files to a dropbox, group or individual, headless")
-    sm.add_argument("ou"); sm.add_argument("folder"); sm.add_argument("files", nargs="+")
+    sm.add_argument("course"); sm.add_argument("folder"); sm.add_argument("files", nargs="+")
     sm.add_argument("--dry-run", action="store_true")
     fl = sub.add_parser("files", help="download a dropbox's attachments and submitted files")
-    fl.add_argument("ou"); fl.add_argument("folder")
+    fl.add_argument("course"); fl.add_argument("folder")
     fl.add_argument("--out", default="~/Downloads/brightspace")
     ct = sub.add_parser("content", help="download every file in a course's Content, by module")
-    ct.add_argument("ou"); ct.add_argument("--out", default=None); ct.add_argument("--dry-run", action="store_true")
+    ct.add_argument("course"); ct.add_argument("--out", default=None); ct.add_argument("--dry-run", action="store_true")
     fb = sub.add_parser("feedback", help="grade, written feedback and feedback files for a dropbox")
-    fb.add_argument("ou"); fb.add_argument("folder"); fb.add_argument("--out", default="~/Downloads/brightspace")
+    fb.add_argument("course"); fb.add_argument("folder"); fb.add_argument("--out", default="~/Downloads/brightspace")
     cl = sub.add_parser("classlist", help="everyone in a course, with emails")
-    cl.add_argument("ou"); cl.add_argument("--json", action="store_true")
+    cl.add_argument("course"); cl.add_argument("--json", action="store_true")
     ds = sub.add_parser("discuss", help="list forums and topics, or read one topic's posts")
-    ds.add_argument("ou"); ds.add_argument("forum", nargs="?"); ds.add_argument("topic", nargs="?")
+    ds.add_argument("where", nargs="+", help="course [topic name], or ou forum topic")
     ds.add_argument("--json", action="store_true")
-    ps = sub.add_parser("post", help="post to a discussion topic, text from a file")
-    ps.add_argument("ou"); ps.add_argument("forum"); ps.add_argument("topic")
+    ps = sub.add_parser("post", help="post to a discussion topic, text from a file, then read it back")
+    ps.add_argument("where", nargs="+", help="course topic name, or ou forum topic")
     ps.add_argument("--subject", required=True); ps.add_argument("--body-file", required=True)
-    ps.add_argument("--reply-to", default=None)
+    ps.add_argument("--reply-to", default=None); ps.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
     client = Client()
     if args.cmd == "whoami":
@@ -985,20 +1268,31 @@ def main():
         print(me.get("FirstName"), me.get("LastName"))
     elif args.cmd == "get":
         print(json.dumps(client.get(args.path), indent=1))
+    elif args.cmd == "map":
+        sys.exit(cmd_map(client, LEDGER, args.json))
     elif args.cmd == "submit":
-        sys.exit(cmd_submit(client, args.ou, args.folder, args.files, args.dry_run))
+        ou, folder = where_folder(client, args.course, args.folder)
+        sys.exit(cmd_submit(client, ou, folder, args.files, args.dry_run))
     elif args.cmd == "files":
-        sys.exit(cmd_files(client, args.ou, args.folder, args.out))
+        ou, folder = where_folder(client, args.course, args.folder)
+        sys.exit(cmd_files(client, ou, folder, args.out))
     elif args.cmd == "content":
-        sys.exit(cmd_content(client, args.ou, args.out or f"~/Downloads/brightspace/{args.ou}", args.dry_run))
+        ou = one_unit(resolve_course(client, args.course), args.course)
+        sys.exit(cmd_content(client, ou, args.out or f"~/Downloads/brightspace/{ou}", args.dry_run))
     elif args.cmd == "feedback":
-        sys.exit(cmd_feedback(client, args.ou, args.folder, args.out))
+        ou, folder = where_folder(client, args.course, args.folder)
+        sys.exit(cmd_feedback(client, ou, folder, args.out))
     elif args.cmd == "classlist":
-        sys.exit(cmd_classlist(client, args.ou, args.json))
+        sys.exit(cmd_classlist(client, one_unit(resolve_course(client, args.course), args.course), args.json))
     elif args.cmd == "discuss":
-        sys.exit(cmd_discuss(client, args.ou, args.forum, args.topic, args.json))
+        if len(args.where) == 1:
+            for ou in resolve_course(client, args.where[0]):
+                cmd_discuss(client, ou, None, None, args.json)
+            sys.exit(0)
+        ou, forum, topic, _ = where_topic(client, args.where)
+        sys.exit(cmd_discuss(client, ou, forum, topic, args.json))
     elif args.cmd == "post":
-        sys.exit(cmd_post(client, args.ou, args.forum, args.topic, args.subject, args.body_file, args.reply_to))
+        sys.exit(cmd_post(client, args.where, args.subject, args.body_file, args.reply_to, args.dry_run))
     elif args.cmd == "grades":
         sys.exit(cmd_grades(client, args.json))
     elif args.cmd == "news":

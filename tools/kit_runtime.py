@@ -27,6 +27,18 @@ Gitignored state that lives in the source checkout (node_modules, hud/build,
 superassistant/questions.jsonl) is symlinked into each snapshot, so a tool that
 reads or appends to a path beside itself reaches the same file it always did.
 
+`dough-update` does the same for Dough (calebnewtonusc/dough), which owns the gtme
+engine the kit's gtme front doors run (tools/dough_home.py):
+
+  ~/.chewbacca/dough/
+    repo/                           the kit's own clone, cloned on first use
+    current -> snapshots/<sha>      what every gtme front door runs
+    snapshots/<sha>/                a detached worktree of Dough's origin/main
+
+`update` runs it too, after the kit's own swap, so a kit that moved to front doors
+gets a Dough in the same run. A Dough failure is reported and never fails the kit
+update; `chewbacca doctor` names a missing or stale Dough.
+
 `status` reports the runtime's commit against origin/main. `install-timer`
 writes the launchd job that runs `update` between sessions. Runs on the stock
 /usr/bin/python3 (3.9), which is what launchd and the hooks have.
@@ -59,6 +71,72 @@ KEEP = 3
 # linked in, because a build output or a log beside a tool is the tool's.
 SKIP_PREFIXES = (".claude/", ".worktrees/", ".git/", ".pytest_cache/", ".playwright-mcp/", "tests/")
 SKIP_PARTS = ("__pycache__", ".DS_Store")
+
+
+DOUGH_URL = "https://github.com/calebnewtonusc/dough.git"
+
+
+def dough_base() -> Path:
+    return Path(os.environ.get("CHEWBACCA_DOUGH_RUNTIME") or Path.home() / ".chewbacca" / "dough")
+
+
+def dough_source(base: Path, clone: bool) -> Optional[Path]:
+    """Dough's clone the snapshots come from: $DOUGH_SOURCE, else the kit's own clone
+    under base/repo, cloned on first use. Never ~/code/dough: snapshots add worktrees to
+    their source, and that checkout is where people edit."""
+    given = os.environ.get("DOUGH_SOURCE")
+    if given:
+        p = Path(os.path.expanduser(given))
+        return p if (p / ".git").exists() or (p / "HEAD").exists() else None
+    repo = base / "repo"
+    if (repo / ".git").exists():
+        return repo
+    if not clone:
+        return None
+    base.mkdir(parents=True, exist_ok=True)
+    r = subprocess.run(["git", "-c", "core.hooksPath=/dev/null", "clone", "--quiet",
+                        os.environ.get("DOUGH_URL") or DOUGH_URL, str(repo)],
+                       capture_output=True, text=True, timeout=300)
+    if r.returncode:
+        shutil.rmtree(repo, ignore_errors=True)
+        raise RuntimeError("couldn't clone Dough: " + (r.stderr.strip().splitlines() or ["?"])[-1])
+    return repo
+
+
+def dough_update(do_fetch: bool, max_age: int, clone: bool = True) -> dict:
+    """Point ~/.chewbacca/dough/current at a snapshot of Dough's origin/main."""
+    base = dough_base()
+    out = {"runtime": str(base / "current")}
+    source = dough_source(base, clone)
+    if source is None:
+        out.update({"result": "no Dough clone", "error": True, "sha": current_sha(base)})
+        return out
+    with Lock(base / ".lock") as got:
+        if not got:
+            out.update({"result": "busy: another update holds the lock", "sha": current_sha(base)})
+            return out
+        if do_fetch:
+            out["fetch"] = fetch(source, base, max_age)
+        sha = ref_sha(source, REF)
+        if not sha:
+            out.update({"result": "no {} in {}".format(REF, source), "error": True, "sha": current_sha(base)})
+            return out
+        before = current_sha(base)
+        build_snapshot(source, base, sha)
+        if before != sha:
+            swap_current(base, sha)
+        out["removed"] = prune(source, base, sha)
+        out.update({"sha": sha, "previous": before, "result": "updated" if before != sha else "current"})
+    return out
+
+
+def dough_status() -> dict:
+    base = dough_base()
+    source = dough_source(base, clone=False)
+    sha = current_sha(base)
+    origin = ref_sha(source, REF) if source else None
+    return {"runtime": str(base / "current"), "sha": sha, "origin_main": origin, "installed": bool(sha),
+            "equal": bool(sha and sha == origin)}
 
 
 def runtime_base() -> Path:
@@ -400,7 +478,7 @@ def install_timer(source: Path, base: Path, live: str, interval: int) -> str:
 
 def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser(prog="kit_runtime", description=__doc__.splitlines()[0])
-    ap.add_argument("action", choices=("update", "status", "install-timer", "path"))
+    ap.add_argument("action", choices=("update", "status", "install-timer", "path", "dough-update", "dough-status"))
     ap.add_argument("--repo", help="source checkout (default: d1-config, then the install manifest)")
     ap.add_argument("--fetch", action="store_true", help="git fetch origin main first")
     ap.add_argument("--max-age", type=int, default=0, help="skip the fetch if one ran this many seconds ago")
@@ -409,6 +487,23 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--interval", type=int, default=900)
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
+
+    if a.action in ("dough-update", "dough-status"):
+        if a.action == "dough-status":
+            res = dough_status()
+            ok = res["equal"]
+        else:
+            try:
+                res = dough_update(a.fetch, a.max_age)
+            except (RuntimeError, OSError, subprocess.SubprocessError) as e:
+                res = {"result": "failed: {}".format(e), "error": True, "sha": current_sha(dough_base())}
+            ok = not res.get("error")
+        if a.json:
+            print(json.dumps(res))
+        else:
+            print("dough {} {}".format((res.get("sha") or "none")[:12], res.get("result") or
+                                       ("current" if res.get("equal") else "behind or missing")))
+        return 0 if ok else 1
 
     base = runtime_base()
     if a.action == "path":
@@ -424,6 +519,13 @@ def main(argv: Optional[List[str]] = None) -> int:
             res = update(source, base, a.fetch, a.max_age, a.link_bin, a.adopt)
         except (RuntimeError, OSError, subprocess.SubprocessError) as e:
             res = {"result": "failed: {}".format(e), "error": True, "sha": current_sha(base)}
+        # The kit's gtme front doors run Dough, so a kit update brings Dough along.
+        # CHEWBACCA_NO_DOUGH=1 skips it (the hermetic tests' scratch HOMEs).
+        if os.environ.get("CHEWBACCA_NO_DOUGH") != "1":
+            try:
+                res["dough"] = dough_update(a.fetch, a.max_age)
+            except (RuntimeError, OSError, subprocess.SubprocessError) as e:
+                res["dough"] = {"result": "failed: {}".format(e), "error": True}
         if a.json:
             print(json.dumps(res))
         else:
@@ -433,6 +535,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                 line += " (was {})".format(res["previous"][:12])
             if res.get("tools"):
                 line += "; tools: " + res["tools"]
+            if res.get("dough"):
+                line += "; dough {} {}".format((res["dough"].get("sha") or "none")[:12], res["dough"].get("result"))
             print(line)
         return 1 if res.get("error") else 0
 

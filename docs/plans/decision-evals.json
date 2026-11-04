@@ -33,7 +33,7 @@
     },
     "tools/gtme_reply.py": {
       "type": "replay",
-      "test": "tests/test_gtme_reply.py",
+      "test": "tests/test_gtme_reply_front_door.py",
       "corpus": "tests/fixtures/gtme-reply/reply_intent_cases.json"
     },
     ".claude/hooks/brain-recall.sh": {

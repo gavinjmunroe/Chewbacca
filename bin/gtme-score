@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
-"""Togari's lead, affiliation, primary-contact and tier rubrics, from a checkout or a symlinked installation."""
-from pathlib import Path
-import runpy
+"""Front door: runs Dough's engine/bin/gtme-score. The gtme engine lives in Dough.
 
-runpy.run_path(str(Path(__file__).resolve().parent.parent / "tools" / "gtme_score.py"),
-               run_name="__main__")
+gtme-front-door. tools/dough_home.py finds Dough.
+"""
+import importlib.util as _u
+import os as _o
+
+_p = _u.spec_from_file_location("chewbacca_dough_home", _o.path.join(_o.path.dirname(_o.path.realpath(__file__)), "..", "tools", "dough_home.py"))
+_m = _u.module_from_spec(_p)
+_p.loader.exec_module(_m)
+_m.exec_bin('gtme-score')

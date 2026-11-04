@@ -503,36 +503,20 @@ fi
 
 # ── GTM engineering ───────────────────────────────────────────────────────────
 if group "gtme"; then
-  check "workflow graph validates evidence and bounds execution" python3 "$ROOT/tests/test_gtme_graph.py"
-  check "gtme dns reads MX, SPF, DKIM, DMARC, RDAP age and the site before a domain sends" python3 "$ROOT/tests/test_gtme_dns.py"
-  check "GTM arithmetic validates assumptions and heldout labels" python3 "$ROOT/tests/test_gtme_math.py"
+  # The engine and its own tests live in Dough (its engine/run_tests.py); here are
+  # the front doors that run it and the Mac-layer pieces it calls back into.
+  check "gtme front doors run Dough's engine, hold none of it, and the kit installs Dough" \
+    python3 "$ROOT/tests/test_dough_home.py"
+  check "the kit's reply classifier front door replays the 27 real investor replies" \
+    python3 "$ROOT/tests/test_gtme_reply_front_door.py"
   check "discovery scores readiness on evidence and keeps unmeasured workflows out of ROI" python3 "$ROOT/tests/test_discovery.py"
   check "case-study refuses unsourced numbers and keeps ranges as ranges" python3 "$ROOT/tests/test_case_study.py"
   check "llms-txt gives every page a markdown twin and catches drift" python3 "$ROOT/tests/test_llms_txt.py"
   check "rfp-extract keeps every requirement verbatim with its page and line" python3 "$ROOT/tests/test_rfp_extract.py"
-  check "research library preserves source and reading status" python3 "$ROOT/tests/test_gtme_library.py"
-  check "learning promotion requires paired holdouts and preserved regressions" python3 "$ROOT/tests/test_gtme_learning.py"
-  check "Form D signals parse real filings, filter, and cache offline" python3 "$ROOT/tests/test_gtme_signals.py"
-  # A synthetic contacts db; nothing reads the real Prometheus file. 2026-10-23:
-  # one investor step for every raising founder, no client name in the code.
-  check "gtme-investors drops role inboxes and junk firms, ranks thesis first, audits clean" \
-    python3 "$ROOT/tests/test_gtme_investors.py"
   check "gtme-investors dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-investors --help
-  check "gtme-portfolio proves every invested_in edge on its page and caches fits per pitch" \
-    python3 "$ROOT/tests/test_gtme_portfolio.py"
-  check "gtme accounts refuses an unconfirmed ICP and runs Jev, dedupe, DNC, people and treg pricing on every row" \
-    python3 "$ROOT/tests/test_gtme_accounts.py"
-  check "gtme list runs the registry method from config, verifies a sample, drafts outreach without sending" \
-    python3 "$ROOT/tests/test_gtme_pipeline.py"
-  check "every list builder runs its named stages through gtme accounts' one runner" \
-    python3 "$ROOT/tests/test_gtme_stages.py"
   check "Clay exports match the frozen fixture by stable identity" python3 "$ROOT/tests/test_clay_fixture_check.py"
   check "clay-inbox filters by campaign and reports a refused read" python3 "$ROOT/tests/test_clay_inbox.py"
-  check "gtme-dedupe merges one person across lists, never two on name alone" python3 "$ROOT/tests/test_gtme_dedupe.py"
   check "gtme-dedupe dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-dedupe --help
-  # Synthetic campaigns; nothing reads Clay. Each gate is made to fail on purpose.
-  check "gtme-grade refuses on every gate and passes only a clean campaign" \
-    python3 "$ROOT/tests/test_gtme_grade.py"
   check "gtme-grade dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-grade --help
   check "launch-guard refuses a launch without the pre-send gate" python3 "$ROOT/tests/launch-guard-test.py"
   check "only Caleb's explicit chat ok approves Clay work, and a no revokes it" bash "$ROOT/tests/chat_approval.sh"
@@ -540,24 +524,10 @@ if group "gtme"; then
     python3 "$ROOT/tests/test_launch_guard_grade.py"
   check "a paid Clay run inside the standing credit allowance runs unasked, one over it refuses" \
     python3 "$ROOT/tests/test_spend_allowance.py"
-  # Every case from the upstream TypeScript tests; offline, nothing sends.
-  check "gtme-reply labels real replies, cleans HTML, refuses risky auto-sends" python3 "$ROOT/tests/test_gtme_reply.py"
-  check "gtme reply-eval prints precision, recall and confusion pairs from a gold file" python3 "$ROOT/tests/test_gtme_reply_eval.py"
   check "gtme-reply dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-reply intent --help
-  check "gtme-rules audits rulings and refuses client text a ruling forbids" python3 "$ROOT/tests/test_gtme_rules.py"
-  # Oracle reject cases, the sealed held-out retrieval cases and the real ledger's audit; offline.
-  check "gtme lesson oracles refuse unsupported claims and retrieval passes the sealed cases" python3 "$ROOT/tests/test_gtme_lessons.py"
   check "gtme lesson ledger in git audits clean" python3 "$ROOT/tools/gtme_lessons.py" audit
-  # Moves from evidence, boundaries as data, Barebells with no parents table; Jev stubbed, offline.
-  check "gtme next-move derives moves from evidence and never runs one a boundary drops" python3 "$ROOT/tests/test_next_move.py"
   check "gtme next-move dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme next-move --help
-  check "every blocked creator GTM path emits a blocker record and asks next-move, for a second client" python3 "$ROOT/tests/test_next_move_wiring.py"
   expect "gtme-reply appears in help" "chewbacca gtme-reply" bash "$ROOT/bin/chewbacca" --help
-  # Ported from togari-platform's dnc and scoring modules with their TypeScript cases; offline.
-  check "gtme-dnc matches Togari's DNC check and calls an unreadable list unknown, never allowed" \
-    python3 "$ROOT/tests/test_gtme_dnc.py"
-  check "gtme-score carries Togari's lead, affiliation, primary-contact and tier cases" \
-    python3 "$ROOT/tests/test_gtme_score.py"
   check "gtme-dnc dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-dnc --help
   check "gtme-score dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-score --help
   # A local fake plays ZoomInfo and Fireflies; a temp file plays the keychain.
@@ -577,51 +547,6 @@ if group "gtme"; then
   # Synthetic graph, Clay answers and people.db; nothing reads a real store.
   check "gtm-memory keeps clients apart, never merges on a name, keeps job and fact history, answers under 100 ms" \
     python3 "$ROOT/tests/test_gtm_memory.py"
-  # A stranger with no Clay reaches an approved plan and a deduped list, every
-  # term explained; brief, next and report rank and render a synthetic graph.
-  check "gtme onboards a stranger, ranks the brief, renders the report, strips escapes" \
-    python3 "$ROOT/tests/test_gtme_operator.py"
-  # One person, one Gmail, no Clay: find on their sites, frozen batches, threaded
-  # follow-ups, replies sorted. A fake gws; nothing reaches Gmail or the network.
-  check "gtme own-inbox path finds, freezes, sends only an approved batch, sorts replies" \
-    python3 "$ROOT/tests/test_gtme_solo.py"
-  # 2026-10-11: decks a client sent sat unread a day, deck asks waited two, and
-  # the inbox read dragged a Clay tab onto his screen every run.
-  check "gtme done names every owed reply and unread client message, from data" \
-    python3 "$ROOT/tests/test_gtme_done.py"
-  # 2026-10-12: a launch was called good "until Jonah responds" with gates NOT
-  # CHECKED, an expired pre-send receipt and "L.P." in the firm names.
-  check "gtme ready says READY only when every campaign passes every gate" \
-    python3 "$ROOT/tests/test_gtme_ready.py"
-  # 2026-10-13: one pre-send receipt served every client, and the gate lived in
-  # one client's repo with that client's refused senders as constants.
-  check "gtme presend reads the client's config and writes that client's receipt only" \
-    python3 "$ROOT/tests/test_gtme_presend.py"
-  # 2026-10-16: the Sabo brand-buyer chain lived in a Downloads folder with one client's
-  # field ids as constants; a client file and columns found by name make it a product.
-  check "brand buyer: parent fallback, ranking, one retry, catch-all never Ready, any client by file" \
-    python3 "$ROOT/tests/test_brand_buyer.py"
-  # 2026-10-16: Archer Meat Snacks, the seed's only email was a live inbox at the brand they
-  # left, and the people search missed them; the seed is picked first and an old-brand email
-  # never counts as verified.
-  check "follow past buyers: moved seed gets a warm row, seed picked first, old-brand email never verified" \
-    python3 "$ROOT/tests/test_follow_buyers.py"
-  # 2026-10-16: Caleb, "removing clay from the equation is def the play after this phase". The
-  # chain runs on a fake provider with clay() as a tripwire, so the swap is an adapter, not a rewrite.
-  check "gtm provider: brand buyer end to end with no Clay, cost per call, record file first, treg not wired" \
-    python3 "$ROOT/tests/test_gtm_provider.py"
-  # 2026-10-16: Caleb, "Make sure everythign we do for sabo is repeatable and productizable!".
-  # A made-up second client runs brand buyer, spend_now, follow_buyers and the intro ledger end
-  # to end; fixed column names, a fixed "Ready" and a Clay-only deliver each failed it.
-  check "creator gtm second client: the whole chain runs from a different client file, no client named in tools" \
-    python3 "$ROOT/tests/test_creator_gtm_second_client.py"
-  # 2026-10-17: a creator's run took a hand-typed brand list and five tools run in order by hand.
-  check "gtme creator: one creator end to end for the second client, spending brands first, dry run prices each step" \
-    python3 "$ROOT/tests/test_gtme_creator.py"
-  # 2026-10-13: 97 executable lines hard-coded one client and its rulings had
-  # two homes; the clients.json entry is the contract a second client fills in.
-  check "gtme config checks a client entry, resolves its one workspace, keeps rulings in one file" \
-    python3 "$ROOT/tests/test_gtme_config.py"
   check "shipped code works on anyone's machine: no home paths, personal mailboxes or client ids" \
     bash "$ROOT/tests/portable_code.sh" "$ROOT"
   check "no shipped shell uses perl-mode grep, which exits 2 on macOS and passes the check it sits in" \
@@ -636,8 +561,6 @@ if group "gtme"; then
     bash "$ROOT/tests/chewbacca_call_doc.sh"
   check "chewbacca photo flags a black-and-white people photo and passes a colour one" \
     bash "$ROOT/tests/chewbacca_photo.sh"
-  check "gtme-jev holds an email Jev flags or couldn't check, in one call per email" \
-    python3 "$ROOT/tests/test_gtme_jev.py"
   check "resolve answers an address and a person's own record before anyone asks" \
     python3 "$ROOT/tests/test_resolve.py"
   check "name-check reads whois right, and silence never reads as a free domain" \
@@ -648,10 +571,6 @@ if group "gtme"; then
     python3 "$ROOT/tests/test_ingest_gtme.py"
   check "Slack DMs and @-mentions that ask him show in needs-you; bots, answered DMs and slacrawl's file don't move" \
     python3 "$ROOT/tests/test_ingest_slack.py"
-  # Paid lookups through treg: one priced first, every call tagged and capped,
-  # treg's own charge recorded, budget enforced. A fake treg on 127.0.0.1.
-  check "gtme paid lookups price one first, tag, cap and meter every call" \
-    python3 "$ROOT/tests/test_treg_client.py"
   check "gtme dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme --help
   expect "gtm appears in help" "chewbacca gtm" bash "$ROOT/bin/chewbacca" --help
   # Recorded, synthetic surface answers; nothing reads Clay, the clay CLI or Chrome.
@@ -2377,9 +2296,6 @@ if group "reasoning backends"; then
   check "ChatGPT turn boundaries" python3 "$ROOT/tests/test_chatgpt_tab.py"
   check "Perplexity turn boundaries and voice routing" python3 "$ROOT/tests/test_perplexity_tab.py"
   check "jev-browse stops at a send and reports its claim" python3 "$ROOT/tests/test_jev_browse.py"
-  check "table graph orders columns and lints client readiness" python3 "$ROOT/tests/test_table_graph.py"
-  check "spend_now scores only dated, Jev-confirmed evidence, with signals and columns from client config" python3 "$ROOT/tests/test_spend_now.py"
-  check "intro ledger is append-only, server-dated and hash-chained" python3 "$ROOT/tests/test_intro_ledger.py"
   check "target accounts match by domain then exact name, never by a model" python3 "$ROOT/tests/test_target_accounts.py"
   check "chewbacca-bridge runs only its fixed tools" python3 "$ROOT/tests/test_chewbacca_bridge.py"
   check "one Login Items row runs every background job" python3 "$ROOT/tests/test_chewbacca_daemon.py"

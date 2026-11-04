@@ -45,8 +45,21 @@ AMBER = BRAIN / "projects" / "amber-operating-workspace-2026-10"
 # second brain on 2026-10-09. resources.csv and batch-repos.txt in the Amber
 # folder repeat 06-RESOURCE-LIBRARY.md's 20 repos and are left out. CREDITS.md
 # and config/settings/toolkit.json are evidence of use, so they feed USED_BY.
+def _gtm_refs() -> Path:
+    """The gtm-engineering skill's references, which ship in Dough (tools/dough_home.py)."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("chewbacca_dough_home", KIT / "tools" / "dough_home.py")
+    home = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(home)
+    try:
+        return home.root() / "skills" / "gtm-engineering" / "references"
+    except home.DoughMissing:
+        return KIT / "skills" / "gtm-engineering" / "references"
+
+
+GTM_REFS = _gtm_refs()
 DEFAULT_LISTS = [
-    ("REPO-ATLAS", KIT / "skills/gtm-engineering/references/REPO-ATLAS.md"),
+    ("REPO-ATLAS", GTM_REFS / "REPO-ATLAS.md"),
     ("oss-apps", KIT / "config/data/oss-apps/apps.json"),
     ("amber-repos", AMBER / "research/repos.md"),
     ("STARRED-AUDIT", KIT / "docs/plans/STARRED-AUDIT.md"),
@@ -379,7 +392,7 @@ def build(lists, root, out, cache_path, refresh, network=True):
 
     exclude = {Path(p).expanduser().resolve() for _, p in lists}
     exclude |= {Path(out).resolve(), (KIT / "docs/plans/REPO-GRAPH.md").resolve(),
-                (KIT / "skills/gtm-engineering/references/repo-atlas.json").resolve()}
+                (GTM_REFS / "repo-atlas.json").resolve()}
     pair_hits, name_hits = scan_usage(root, exclude)
     for cid, n in nodes.items():
         forms = [cid] + n["aliases"]

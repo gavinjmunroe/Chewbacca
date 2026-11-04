@@ -3001,6 +3001,25 @@ else
   log "Skills linked to ~/.claude/skills/ ($_skills_have)"
 fi
 unset _sk _skn _dst _skills_want _skills_have
+# The gtm-engineering skill ships in Dough with the gtme engine (Dough SPEC section 5).
+# Linked through ~/.chewbacca/dough/current, which the kit runtime installs, so the
+# link follows every Dough update. A real directory of the same name is left alone;
+# an old link (into a checkout's skills/) is repointed, here and in the shared library.
+_dough_cur="${CHEWBACCA_DOUGH_RUNTIME:-$HOME/.chewbacca/dough}/current"
+for _sk in "$_dough_cur"/skills/*/; do
+  [ -f "$_sk/SKILL.md" ] || continue
+  _skn="$(basename "$_sk")"
+  for _dst in "$GLOBAL_CLAUDE/skills/$_skn" "$HOME/.chewbacca/skills/$_skn"; do
+    [ -d "$(dirname "$_dst")" ] || continue
+    if [ -e "$_dst" ] && [ ! -L "$_dst" ]; then
+      warn "skill '$_skn' at $_dst is not a link, leaving it alone"
+      continue
+    fi
+    ln -sfn "$_dough_cur/skills/$_skn" "$_dst"
+  done
+done
+[ -d "$_dough_cur/skills" ] && log "Dough's skills linked from $_dough_cur/skills"
+unset _sk _skn _dst _dough_cur
 log "Skills installed to ~/.claude/skills/"
 
 fi

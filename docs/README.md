@@ -83,7 +83,7 @@ relative link in here points nowhere.
 | [BACKLOG-EVIDENCE.md](plans/BACKLOG-EVIDENCE.md)         | Evidence behind the 2026-10-02 backlog reconciliation                                |
 | [ONBOARDING.md](plans/ONBOARDING.md)                     | What the best installers do and the plan for ours, 2026-09-23                        |
 | [EVERY-MAC.md](plans/EVERY-MAC.md)                       | Plan for bugs that stay silent on every Mac but the author's                         |
-| [GTME-MEMORY.md](plans/GTME-MEMORY.md)                   | Plan for lessons one outbound run leaves that the next one uses                      |
+| [GTME-MEMORY.md](https://github.com/calebnewtonusc/dough/blob/main/engine/docs/plans/GTME-MEMORY.md) (in Dough) | Plan for lessons one outbound run leaves that the next one uses                      |
 | [MD-DIET.md](plans/MD-DIET.md)                           | Cutting the markdown nothing loads, phase by phase, measured by md_usage             |
 | [reinvent-2026-10-13.md](plans/reinvent-2026-10-13.md)   | Notes on rebuilding the kit from the inside, 2026-10-13                              |
 | [LEARNING.md](plans/LEARNING.md)                         | Why the learning loop had never closed, 2026-09-21, and what closed later            |

@@ -1038,6 +1038,34 @@ print("|".join([d.get("sha") or "none", d.get("origin_main") or "none",
   fi
 fi
 
+# The gtme engine lives in Dough. Every `chewbacca gtme` and tools/gtme_*.py is a
+# front door that runs ~/.chewbacca/dough/current (tools/dough_home.py), so a
+# missing Dough breaks outbound and a stale one sends on old gate code.
+if [ "${CHEWBACCA_NO_RUNTIME:-0}" != 1 ] && [ "${CHEWBACCA_NO_DOUGH:-0}" != 1 ] && [ -f "$REPO_DIR/tools/kit_runtime.py" ]; then
+  DO_FIX="python3 -I $REPO_DIR/tools/kit_runtime.py dough-update --fetch"
+  DO_LINE="$(python3 -I "$REPO_DIR/tools/kit_runtime.py" dough-status --json 2>/dev/null | python3 -I -c '
+import json, sys
+try:
+    d = json.loads(sys.stdin.read())
+except Exception:
+    print("none|none|0"); sys.exit()
+print("|".join([d.get("sha") or "none", d.get("origin_main") or "none", "1" if d.get("equal") else "0"]))
+' 2>/dev/null)"
+  IFS='|' read -r DO_SHA DO_ORIGIN DO_EQ <<<"${DO_LINE:-none|none|0}"
+  if [ -n "${DOUGH_HOME:-}" ]; then
+    warn "DOUGH_HOME=$DOUGH_HOME: gtme front doors run that checkout, not the installed Dough"
+  fi
+  if [ "$DO_SHA" = none ]; then
+    fixable "installed Dough, which runs the gtme engine" bash -c "$DO_FIX" ||
+      bad "Dough isn't installed, so every chewbacca gtme command fails (needs read access to calebnewtonusc/dough)" "$DO_FIX" major
+  elif [ "$DO_EQ" = 1 ]; then
+    ok "gtme engine runs from Dough ${DO_SHA:0:12}, equal to its origin/main"
+  else
+    fixable "moved Dough to its origin/main" bash -c "$DO_FIX" ||
+      bad "Dough ${DO_SHA:0:12} differs from its origin/main ${DO_ORIGIN:0:12}: gtme runs old engine code" "$DO_FIX" major
+  fi
+fi
+
 # Background services run on the kit generation they started from. On
 # 2026-10-11 three processes ran from snapshots already pruned, and nothing
 # said so. `status --check` fails when a daemon service is still on an old

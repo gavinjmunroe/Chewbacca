@@ -41,7 +41,6 @@ KNOWN = {
     'mac/lib/matrix.py': 'take',
     'bin/lib/people/send.js': 'take',
     'bin/mac-db': 'take',
-    'tools/gtme_solo.py': 'CHEWBACCA_NO_SEND',
     'bin/chewbacca-clay': 'CHEWBACCA_NO_SEND',
     # kit_confirm: the six-digit code on the person's screen is the press, and
     # this is where it mints the approval `people send` then takes.
@@ -63,7 +62,6 @@ NOT_YET = {
     # Clay `reply` and gtme sends: the GTM tab was mid-launch in
     # bin/chewbacca-clay on 2026-10-12. Clay writes already need Caleb's ok.
     'bin/chewbacca-clay': 'migration step 5, GTM lane',
-    'tools/gtme_solo.py': 'migration step 6, GTM lane',
     # HUD surfaces send on a button press over hud.sock; they mint once the
     # HUD lane adopts send_approval.mint. Until then take() counts a send
     # under `kyber-surfaces run` with no agent above it as that press.
@@ -74,7 +72,9 @@ NOT_YET = {
     # No sink of its own: prompt text naming `mac messages send`.
     'bin/hud-listen': 'prompt text',
 }
-NOT_YET_COUNT = 6
+# 5: gtme_solo's send moved to Dough with the gtme engine (2026-11-03); Dough's
+# tests/test_engine_home.py holds it to CHEWBACCA_NO_SEND.
+NOT_YET_COUNT = 5
 TAKE_CALL = re.compile(r'_send_refusal\(|approval\.take\(')
 
 

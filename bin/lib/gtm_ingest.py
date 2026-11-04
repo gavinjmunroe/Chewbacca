@@ -3,7 +3,7 @@
 Caleb, 2026-10-09: Chewbacca needs "perfect memory of diff client's tables
 replies meetings and the whole gtm life cycle". Memory files went stale within a
 day on Zeutara, so client state is synced from the systems that hold it and
-answered from the graph (bin/lib/gtm_query.py), never from notes.
+answered from the graph (Dough's engine/bin/lib/gtm_query.py), never from notes.
 
 THREE SOURCES, each its own snapshot (`Graph.apply` replaces what that source
 wrote last time, so a lead that left a campaign loses its edge):
@@ -1123,6 +1123,21 @@ BOUNCE_FROM = re.compile(r"mailer-daemon|postmaster@|mail delivery (?:subsystem|
 AUTO_CLASS_LIMIT = 8_000
 
 
+def _gtm_query():
+    """The graph's read side, bin/lib/gtm_query.py in Dough's engine (it moved with the
+    gtme engine; tools/dough_home.py finds Dough). The query side never imports this module."""
+    if "gtm_query" not in sys.modules:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("chewbacca_dough_home", ROOT / "tools" / "dough_home.py")
+        home = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(home)
+        lib = str(home.engine() / "bin" / "lib")
+        if lib not in sys.path:
+            sys.path.append(lib)
+    import gtm_query  # noqa: PLC0415
+    return gtm_query
+
+
 def _gtme_reply():
     tools = str(ROOT / "tools")
     if tools not in sys.path:
@@ -1610,7 +1625,7 @@ def remember_suppressions(graph: Graph, client: str) -> int:
     and with them the proof those people were emailed, out of the graph. A
     suppression list rebuilt only from the live graph would then hand them
     back as fresh leads. The ledger keeps them."""
-    import gtm_query  # read-side helpers; the query side never imports this module
+    gtm_query = _gtm_query()
     stamp = utc_now()
     with graph.lock:
         live = gtm_query.live_suppressions(graph.db, client)

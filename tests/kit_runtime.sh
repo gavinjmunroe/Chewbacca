@@ -13,6 +13,8 @@ trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
 mkdir -p "$HOME/.local/bin"
 export CHEWBACCA_KIT_RUNTIME="$HOME/.chewbacca/kit"
+# Dough has its own check (tests/test_dough_home.py); no clone from GitHub here.
+export CHEWBACCA_NO_DOUGH=1
 export CHEWBACCA_BIN_DIR="$HOME/.local/bin"
 export CHEWBACCA_HOOKS_DIR="$HOME/.claude/hooks"
 export CHEWBACCA_LOG_DIR="$TMP/logs"

@@ -24,6 +24,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "bin" / "lib"))
+# gtm_query and tools/gtm.py moved to Dough with the gtme engine; tools/gtm.py here is
+# the front door that runs Dough's. The ingest side stays here, in the Mac layer.
+sys.path.append(str(Path(os.popen(f"python3 {ROOT / 'tools' / 'dough_home.py'} path").read().strip())
+                    / "engine" / "bin" / "lib"))
 sys.dont_write_bytecode = True
 import gtm_ingest as gi  # noqa: E402
 import gtm_query as gq  # noqa: E402

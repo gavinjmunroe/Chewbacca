@@ -633,6 +633,10 @@ def problems(mail: dict) -> list[str]:
     body, out = mail["body"], []
     if "{{" in body or "{{" in mail["subject"]:
         out.append("a {{blank}} is still in it")
+    # A company cell with a line break filled into the subject makes EmailMessage refuse the
+    # header, which stopped a send partway; held here instead (security review, 2026-11-03).
+    if re.search(r"[\r\n]", mail["subject"]) or re.search(r"[\r\n]", mail.get("to") or ""):
+        out.append("the subject or address has a line break in it")
     if DASH.search(body + mail["subject"]):
         out.append("it has a long dash")
     if OPT_OUT not in body:

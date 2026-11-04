@@ -755,6 +755,14 @@ class Solo(unittest.TestCase):
         rows = [json.loads(x) for x in (self.d / "sent.jsonl").read_text().splitlines()]
         self.assertTrue(rows and all(r["variant"] == "a" for r in rows))
 
+    def test_a_line_break_in_the_subject_is_held(self):
+        # Security review, 2026-11-03: a company cell with a newline filled into the subject.
+        mail = {"to": "a@b.test", "step": 1, "subject": "A fix for Grace\nBcc: x@y.test",
+                "body": "Hi.\n\n" + gtme_solo.OPT_OUT}
+        self.assertIn("the subject or address has a line break in it", gtme_solo.problems(mail))
+        mail["subject"] = "A fix for Grace's website"
+        self.assertNotIn("the subject or address has a line break in it", gtme_solo.problems(mail))
+
     def test_greeting_skips_a_title(self):
         # 2026-11-03: "Pastor Eduardo Bueno" on leads.csv became "Hi Pastor,".
         for name, want in (("Pastor Eduardo Bueno", "Hi Eduardo,"), ("Rev. Dr. Ann Lee", "Hi Ann,"),

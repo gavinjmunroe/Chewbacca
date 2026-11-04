@@ -64,6 +64,20 @@ class Diff(unittest.TestCase):
         self.assertTrue(v[("A", D, "192.0.2.")].startswith("refused"))
 
 
+class Size(unittest.TestCase):
+    def test_ff_first_wave_needs_one_domain_not_two(self):
+        # 2026-11-04: two FF lookalikes bought for a wave of 2 inboxes at 5 a day.
+        s = platforms.size(10)
+        self.assertEqual((s["inboxes"], s["domains"]), (1, 1))
+
+    def test_aurapath_two_domains_already_cover_fifty_firms(self):
+        s = platforms.size(150, have_domains=2, have_inboxes=4)
+        self.assertEqual((s["domains"], s["buy_domains"], s["add_inboxes"]), (2, 0, 1))
+
+    def test_volume_past_one_domain_asks_for_another(self):
+        self.assertEqual(platforms.size(91)["domains"], 2)
+
+
 class Status(unittest.TestCase):
     def test_missing_cli_says_install(self):
         with mock.patch.object(platforms, "run", return_value=(127, "cf not installed")):

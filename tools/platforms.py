@@ -446,6 +446,34 @@ def cmd_sending_domain(args) -> int:
         return 2
 
 
+# Sizing comes before any purchase. On 2026-11-04 two FF lookalikes were bought
+# when one covered the volume: at 3 inboxes a domain, one domain carries 90 cold
+# sends a day, and FF's first wave was 5 a day per inbox. Caleb: "we cant be
+# wasteful!". 30 a day per warmed inbox is the cold-email skill's ceiling and 3
+# inboxes a domain is what the AuraPath tenant runs; both are the kit's rule of
+# thumb, never measured on our own sends yet.
+SENDS_PER_INBOX = 30
+INBOXES_PER_DOMAIN = 3
+
+
+def size(sends_per_day: int, have_domains: int = 0, have_inboxes: int = 0) -> dict:
+    """How many inboxes and domains a daily cold-send volume needs, and how many more to buy."""
+    sends_per_day = max(1, int(sends_per_day))
+    inboxes = -(-sends_per_day // SENDS_PER_INBOX)
+    domains = -(-inboxes // INBOXES_PER_DOMAIN)
+    return {"sends_per_day": sends_per_day, "inboxes": inboxes, "domains": domains,
+            "buy_domains": max(0, domains - have_domains), "add_inboxes": max(0, inboxes - have_inboxes)}
+
+
+def cmd_size(args) -> int:
+    s = size(args.sends_per_day, args.have_domains, args.have_inboxes)
+    print(f"{s['sends_per_day']} sends a day needs {s['inboxes']} inbox(es) on {s['domains']} domain(s)"
+          f" ({SENDS_PER_INBOX} a day per warmed inbox, {INBOXES_PER_DOMAIN} inboxes a domain).")
+    print(f"Buy {s['buy_domains']} more domain(s), add {s['add_inboxes']} more inbox(es)."
+          + ("" if s["buy_domains"] else " Nothing to buy."))
+    return 0
+
+
 def cmd_set_key(name: str) -> int:
     service = KEY_SERVICES.get(name)
     if not service:
@@ -497,7 +525,13 @@ def main(argv: list[str] | None = None) -> int:
     d.add_argument("--verify", default="", help="Workspace's google-site-verification token")
     d.add_argument("--dmarc-rua", default="", help="mailbox for DMARC aggregate reports")
     d.add_argument("--yes", action="store_true", help="write (apply only)")
+    z = sub.add_parser("sending-size", help="how many inboxes and domains a send volume needs, before buying any")
+    z.add_argument("--sends-per-day", type=int, required=True)
+    z.add_argument("--have-domains", type=int, default=0)
+    z.add_argument("--have-inboxes", type=int, default=0)
     args = ap.parse_args(argv)
+    if args.cmd == "sending-size":
+        return cmd_size(args)
     if args.cmd == "show":
         return cmd_show(args.platform)
     if args.cmd == "set-key":

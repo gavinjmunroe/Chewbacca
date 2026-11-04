@@ -40,6 +40,12 @@ platform's own whoami with a 20 s timeout, and nothing it prints is a secret.
   site from the start (Caleb, 2026-11-03: "Also make them all redirect to the actual aurapath
   site"), so `--redirect` is part of step 2, not an extra.
 
+- Never buy more sending domains than the volume needs. Run
+  `chewbacca platforms sending-size --sends-per-day N --have-domains K` first and buy only
+  the number it prints, with that number in the total he approves. On 2026-11-04 two FF
+  lookalikes were bought when one covered the volume, and Caleb said "we cant be wasteful!".
+  Add inboxes on a domain you already own (up to 3) before you buy another domain.
+
 ## Buying a domain
 
 Buy new domains on Cloudflare (account caleb@firmfoundation.tech). Porkbun refused new orders on

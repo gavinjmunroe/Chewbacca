@@ -69,7 +69,10 @@ in `cf billing profiles get`); `-z` takes a zone id, and a domain name there bui
    A rerun reports `exists` and writes nothing. It refuses to add a second SPF or MX, or to replace
    another redirect rule.
 3. Google Workspace: a NEW tenant per client, never inside firmfoundation.tech, so a spam
-   suspension can't take FF's real mail down. Sign-up and card are his
+   suspension can't take FF's real mail down. One tenant holds all of a client's domains
+   (first one primary, the rest secondary), and every user is a paid seat, the admin
+   included: make the first sending inbox the admin, or the bill is one seat over what the
+   client was quoted (2026-11-04, AuraPath was quoted 6 seats). Sign-up and card are his
    (https://workspace.google.com/business/signup/welcome). The first domain is primary, the
    others are secondary domains. Workspace hands over a `google-site-verification=` token:
    `apply <domain> --verify <token> --yes`.

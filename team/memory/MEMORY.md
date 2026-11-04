@@ -360,7 +360,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_no_hard_cutoffs: No bright-edged photo on a dark section (cut it out or use a dark-edged asset); site-gate check fails it (10/10)
 - feedback_no_unintentional_animation: Text never fades up beat after beat or replays an entrance on change; one rise per page; site-gate research fails it (10/10)
 - feedback_phone_is_never_lesser: Phone version as rich as desktop, never flashes; site-gate parity + flash enforce it (FF site, 10/10)
-- project_firm_foundation_outbound: FF outbound 10/11 night, gtme ledger in the FF repo ops/, 261 DFW and 252 SoCal churches loaded, copy 86-95, nothing sent yet; next is Gavin's Gmail and Caleb's ok
+- project_firm_foundation_outbound: FF outbound; live ledger ~/code/ff-ledger, 11/3 both regions pass every gtme check w 25 LA + 26 DFW verified churches, 0 ever sent, waiting on the first ok
 - project_firm_foundation_site: FF site, one story; firmfoundation.tech on Caleb's Railway from repo calebnewtonusc/firm-foundation since 10/29, Gavin's repo and Vercel retired
 - project_medrano_partners_2026_10_27: FF x John Knox (Medrano) 10/27; FF takes 250-1,000 churches, he takes 1,000+; he wants our lead gen; his AI firm guild; follow-up Thu 10/29 3:30 PT
 - feedback_fix_the_default_path: every fix also makes the right move the easy default (a tool or first step), not only a refusal; chewbacca resolve is the example (10/11)

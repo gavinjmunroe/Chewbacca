@@ -760,6 +760,9 @@ class Solo(unittest.TestCase):
         mail = {"to": "a@b.test", "step": 1, "subject": "A fix for Grace\nBcc: x@y.test",
                 "body": "Hi.\n\n" + gtme_solo.OPT_OUT}
         self.assertIn("the subject or address has a line break in it", gtme_solo.problems(mail))
+        for brk in ("\r", "\x0b", "\x0c", "\x1c", "\x85", " ", " "):
+            mail["subject"] = f"A fix for Grace{brk}Bcc: x@y.test"
+            self.assertIn("the subject or address has a line break in it", gtme_solo.problems(mail), repr(brk))
         mail["subject"] = "A fix for Grace's website"
         self.assertNotIn("the subject or address has a line break in it", gtme_solo.problems(mail))
 

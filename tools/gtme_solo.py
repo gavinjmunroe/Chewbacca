@@ -635,7 +635,9 @@ def problems(mail: dict) -> list[str]:
         out.append("a {{blank}} is still in it")
     # A company cell with a line break filled into the subject makes EmailMessage refuse the
     # header, which stopped a send partway; held here instead (security review, 2026-11-03).
-    if re.search(r"[\r\n]", mail["subject"]) or re.search(r"[\r\n]", mail.get("to") or ""):
+    # splitlines(), the same split the email header parser uses, so \v, \f, \x1c-\x1e, \x85,
+    # U+2028 and U+2029 count too, not only \r and \n (second review, 11/3).
+    if len(mail["subject"].splitlines()) > 1 or len((mail.get("to") or "").splitlines()) > 1:
         out.append("the subject or address has a line break in it")
     if DASH.search(body + mail["subject"]):
         out.append("it has a long dash")
@@ -975,8 +977,14 @@ def cmd_send(a) -> int:
             print(f"Would send email {m['step']} to {m['to']}: {m['subject']}")
             continue
         try:
+            raw = mime(m, sender)
+        except ValueError as err:
+            # One malformed header skips that email; it never stops the rest (review, 11/3).
+            print(f"Skipped {m['to']}: its headers can't be built ({err}).")
+            continue
+        try:
             res = gws(["gmail", "users", "messages", "send", "--params", json.dumps({"userId": "me"}),
-                       "--json", json.dumps(mime(m, sender))], batch.get("inbox") or "")
+                       "--json", json.dumps(raw)], batch.get("inbox") or "")
         except (RuntimeError, OSError, subprocess.SubprocessError, ValueError) as err:
             print(f"Stopped at {m['to']}: Gmail said {err}. {sent} went out before it; the rest did not.")
             break

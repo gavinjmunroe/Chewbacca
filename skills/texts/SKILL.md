@@ -288,6 +288,10 @@ and lives only in `attributedBody`, so a query on `text` alone misses it.
 
 A page, kit or doc made for someone starts with `people texts <name> --limit 20000`, read end to end, before the first design decision. On 2026-11-04, asked for a page to park things for Langston, the first build worked from notes. Caleb wrote "Read all texts ever w him". The thread's last 30 lines changed the design: Langston had said he won't have time to look through a lot, wants the top thing, isn't an audio fan and won't look at repos. Notes had a plan for a voice memo he'd have ignored.
 
+## "Every text ever" includes voice memos and what's still open
+
+`people texts` leaves out attachments, so reading it isn't reading the thread. When he says all texts, also pull every audio row for that person (the "A text is often a voice memo" steps) and transcribe them through `chewbacca jobs submit --heavy`. Then list what's still open: asks with no answer, things he owes, plans they made. On 2026-11-04 a page for Langston was built from the text alone. Caleb: "Bro I thought you were going through all texts ever...", then "include any asks for him that he hasn't gotten to yet! Like wanting an opal". One memo held a Dream question Langston never answered. A voice message that expired without Keep can vanish from chat.db, so an empty search isn't proof it wasn't sent: say so and ask for the file.
+
 ## Answering from it
 
 When they ask what someone said, read the thread and answer in your own words.

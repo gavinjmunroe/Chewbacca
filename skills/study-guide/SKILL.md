@@ -138,6 +138,29 @@ connect dots" and "I rlly liked the visual walkthrough and then the testing me
 visually, putting an image to an answer". Self-graded flashcards ("say it out
 loud, got it / missed it") got "This format is doodoo buns".
 
+**The rest of what the 11/4 cram taught, each from a correction.**
+- Teach before you drill. Every drill question maps to a walkthrough beat he
+  has already seen; Lock in opens the walkthrough first ("U still didn't teach
+  me some stuff ur drilling me on bro").
+- Exactly one defensible answer. Audit every check and practice picture by
+  asking whether a careful student could defend another option; two pictures
+  failed this and drew "Bruh". Shuffle option order every time, since the
+  right answer was option 1 in most checks.
+- No fact-deck MCQ with paragraph options that can be matched by keyword
+  ("garbage for learning"). Short options or a picture.
+- Home is one numbered path: each time block's walkthroughs then its drills,
+  Done / Now / Next, with the pace line on every page ("the whole thing should
+  be sequential!", "Keep the pace stuff on each page!").
+- Save state on every action. A mock kept in memory could not survive a reload.
+  Give a mock a "Learn it" button per question and review misses after.
+- Draw the real shape: duplicated chromosomes as X's, not two parallel bars.
+- List-style FRQs get a drill too. On the real exam he wrote the 3 sources of
+  genetic diversity as blurred paragraphs, so practice writing them as 3
+  labeled parts.
+- Verify with a headless walk of every beat at 390, 375 and 1440 that answers
+  each check and tap and finishes practice, plus a separate content audit for
+  wrong facts and ambiguous questions.
+
 ## Making one
 
 ```sh

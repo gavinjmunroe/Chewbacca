@@ -70,6 +70,15 @@ diagram mapped to each card (bio-midterm2 `FIGS`): steps drawn as a strip
 (pump, endocytosis), gradients with arrows, Punnett squares built from the
 gametes, cell-cycle wheels, phase pictures. Write the pictures before the text.
 
+**Assume zero vocabulary, short answers, one Lock in button.** Same night:
+"Assume I know NO terms", a flashcard answer of 30 words got "too dense to
+remember", and "we need a streamlined lock in". So every bolded lesson term is
+tappable for a plain definition of 18 words or fewer (`GLOSS`), every flashcard
+shows 1 to 4 short lines with the full answer behind a tap (`SHORTQ`), and the
+home screen and pace bar carry one button that opens the exact next thing
+(`nextUp`: unread lesson, then that chapter's weak drill sets, then the mock
+once, then the weakest set). He chose one mock plus drill spam over two mocks.
+
 **Exam apps carry tonight's schedule and a pace bar.** He asks for both every
 time (guitar, marketing, bio): a timed schedule on the home screen that moves
 when he pushes the start, and a fixed bottom bar saying what's next, the time

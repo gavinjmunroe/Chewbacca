@@ -1129,6 +1129,8 @@ if group "installer"; then
     bash "$ROOT/tests/chewbacca_x.sh"
   check  "people texts sync runs one at a time" \
     bash "$ROOT/tests/texts_sync_lock.sh"
+  check  "new iMessages reach the store inside the sync cooldown" \
+    bash "$ROOT/tests/texts_catch_up.sh"
   check  "scope-guard refuses a self-chosen cut of scope he set as all" \
     bash "$ROOT/tests/scope_guard.sh"
   check  "skim-guard refuses a read-everything claim after a truncated read" \

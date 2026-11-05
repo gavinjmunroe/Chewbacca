@@ -74,6 +74,8 @@ function textPartner(d, needle) {
 }
 
 function textsReader(file = "texts.py") {
+  if (file === "texts.py" && process.env.PEOPLE_TEXTS_READER)
+    return process.env.PEOPLE_TEXTS_READER;
   const here = path.dirname(fs.realpathSync(process.argv[1]));
   for (const cand of [
     path.join(here, "..", "mac", "lib", file),
@@ -405,6 +407,43 @@ function ingestRows(d, rows, source, seen) {
   return { added, maxId, unlinked };
 }
 
+// Pull only new iMessages into the store, when chat.db has any. Costs one
+// ROWID read when there is nothing new, so every read can afford it.
+// On 2026-11-05 the sync cooldown answered "nothing to do" for ten minutes
+// while 15 new texts with Caleb's dad sat in chat.db, and a read told him his
+// dad had not replied. He wrote "bro fix chewbs theres a bunch of new texts?"
+// Other apps stay on the cooldown: they are the slow part it was added for.
+function catchUpIMessage(d) {
+  try {
+    const seen = Number(syncState("messages_max_id") || 0);
+    const py = textsReader();
+    if (!seen || !py) return 0;
+    const newest = Number(
+      execFileSync("python3", [py, "--max-id"], {
+        encoding: "utf8",
+        timeout: 5000,
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim(),
+    );
+    if (!(newest > seen) || !syncLock()) return 0;
+    const raw = execFileSync(
+      "python3",
+      [py, "--json", "--days", "1", "--limit", "0"],
+      {
+        encoding: "utf8",
+        timeout: 20000,
+        maxBuffer: 1024 * 1024 * 256,
+        stdio: ["ignore", "pipe", "ignore"],
+      },
+    );
+    const got = ingestRows(d, JSON.parse(raw), "imessage", seen);
+    syncState("messages_max_id", got.maxId);
+    return got.added;
+  } catch {
+    return 0; // a stale read beats no read; the next full sync catches up
+  }
+}
+
 function cmdTexts(argv) {
   // `people texts help` read "help" as a person and printed "nothing in the
   // last 3 days with help" (2026-10-09), so the one call meant to explain the
@@ -457,6 +496,11 @@ function cmdTexts(argv) {
       ? (Date.now() - Date.parse(last.replace(" ", "T") + "Z")) / 60000
       : Infinity;
     if (!flags.force && flags.days === undefined && ageMin < 10) {
+      const caught = catchUpIMessage(d);
+      if (caught) {
+        say(`${c.grn("synced")} ${caught} new iMessages`);
+        return;
+      }
       say(
         c.dim(
           `  synced ${Math.max(0, Math.round(ageMin))} min ago, nothing to do (--force to run anyway)`,
@@ -740,6 +784,7 @@ function cmdTexts(argv) {
   // email handles are almost all campaigns, pharmacies and 2FA, so they are
   // counted on one line instead of printed; --all prints them too.
   if (sub === "owed") {
+    catchUpIMessage(d);
     const days = Number(flags.days || 7);
     const ctx = Number(flags.context || 4);
     // One indexed range read of the window, then grouping in JS. The first
@@ -1074,6 +1119,7 @@ function cmdTexts(argv) {
   }
 
   if (sub === "search") {
+    catchUpIMessage(d);
     const q = rest.join(" ");
     if (!q) die('Try: people texts search "the trip"');
     const rows = d
@@ -1105,6 +1151,7 @@ function cmdTexts(argv) {
   //   1,400-character proposal, so the reader fell back to raw chat.db.
   // One person now means their messages only, newest kept, printed whole, and
   // with no --days the window is their whole history rather than three days.
+  catchUpIMessage(d);
   const who = flags.who || rest.join(" ") || null;
   const person = who ? textPartner(d, who) : null;
   const days = Number(flags.days || (person ? 36500 : 3));

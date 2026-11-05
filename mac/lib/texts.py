@@ -160,7 +160,14 @@ def main():
     p.add_argument("--direct", action="store_true",
                    help="one-on-one threads only, no group chats")
     p.add_argument("--json", action="store_true")
+    p.add_argument("--max-id", action="store_true",
+                   help="print the newest message ROWID and stop, a cheap freshness check")
     a = p.parse_args()
+
+    if a.max_id:
+        db = sqlite3.connect(f"file:{CHAT_DB}?mode=ro", uri=True)
+        print(db.execute("SELECT coalesce(max(ROWID), 0) FROM message").fetchone()[0])
+        return
 
     msgs = read(days=a.days, limit=a.limit, who=a.who,
                 unanswered=a.unanswered, direct=a.direct)

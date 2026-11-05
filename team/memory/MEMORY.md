@@ -538,3 +538,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - project_partner_status_2026_11_05: partner threads checked 11/5: Travis silent, 11/13 send date dead, Reed reply unsent, OPTRA no, Knox first walkthrough today, draft fixes in USC Gmail
 - feedback_ff_push_to_main_not_pr: Firm Foundation site work goes straight to main, never a PR; Gavin always says push to main (Caleb 11/5)
 - feedback_stat_needs_felt_problem: FF copy and outbound never state a stat alone; say what it costs the reader, or they answer "it's in the footer, isn't that ok?" (Caleb 11/5)
+- project_gavin_call_followups_2026_11_05: after the 11/5 Gavin call: Andrew OK as lead advisor, Firebox call being set w an NDA, footers need Chase and Reagan asked, gtme ready wants a recorded read

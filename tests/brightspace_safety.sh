@@ -2,7 +2,8 @@
 # What a hostile or careless Brightspace response must never do to a student
 # (security review, 2026-10-28): carry their session cookie to another host on
 # a redirect, or put terminal escape sequences from course text on their screen.
-set -uo pipefail
+# No pipefail: `printf | grep -q` fails at random under it when grep quits before printf finishes.
+set -u
 ROOT="${1:-$(cd "$(dirname "$0")/.." && pwd)}"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 fail=0; ok() { echo "  ok   $1"; }; no() { echo "  FAIL $1"; fail=1; }

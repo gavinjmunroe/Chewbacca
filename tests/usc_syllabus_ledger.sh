@@ -10,7 +10,8 @@
 # section list, a lab manager's address, a percent column that adds to 105,
 # a labor-based contract, a scanned PDF, and an AI policy paragraph that
 # must never reach the ledger.
-set -uo pipefail
+# No pipefail: `printf | grep -q` fails at random under it when grep quits before printf finishes.
+set -u
 ROOT="${1:-$(cd "$(dirname "$0")/.." && pwd)}"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 fail=0; ok() { echo "  ok   $1"; }; no() { echo "  FAIL $1"; fail=1; }

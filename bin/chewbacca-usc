@@ -253,6 +253,29 @@ def clean(text):
     return re.sub(r'["\\\n\r]+', " ", str(text)).strip()
 
 
+# A calendar row is either work to hand in or a place to be. On the 2026-10-13
+# USC week walk a workshop landed in the ledger as a deliverable and Due first
+# mixed it with exams. Hiding real work costs far more than showing an extra
+# row, so "event" needs an event word and no sign of a hand-in. "review" alone
+# isn't one: the real ledgers hold "Weekly review quiz" and "Peer Review response".
+EVENT = re.compile(r"(?i)\b(workshops?|office hours?|lectures?|review sessions?|info(rmation)? sessions?"
+                   r"|screenings?|guest speakers?|webinars?|orientation)\b")
+HAND_IN = re.compile(r"(?i)\b(due|submit|submission|draft|upload|turn in|report|response|reflection"
+                     r"|paper|essay|quiz|exam|assignment|homework|hw)\b")
+# Written work first: "Final Essay" and "Midterm Paper" aren't exams to study for.
+KINDS = (("assignment", r"\b(paper|essay|project|portfolio|draft)\b"), ("exam", r"\b(exam|midterm|final)\b"), ("quiz", r"\bquiz(zes)?\b"), ("lab", r"\b(lab|pre-?lab|post-?lab)\b"),
+         ("reading", r"\b(read|reading|chapter)\b"))
+
+
+def item_kind(title):
+    if EVENT.search(title) and not HAND_IN.search(title):
+        return "event"
+    for kind, pattern in KINDS:
+        if re.search(pattern, title, re.I):
+            return kind
+    return "assignment"
+
+
 def course_yaml(code, title, term, ids, items, today):
     lines = [
         f"# Seeded by `{PROG} lockin` on {today} from your own Brightspace enrollment.",
@@ -265,6 +288,8 @@ def course_yaml(code, title, term, ids, items, today):
         f"brightspace_ids: [{', '.join(str(i) for i in ids)}]",
         "deliverables:",
     ]
+    events = [it for it in items if item_kind(it["title"]) == "event"]
+    items = [it for it in items if item_kind(it["title"]) != "event"]
     if not items:
         lines[-1] = "deliverables: []"
     for it in items:
@@ -273,7 +298,14 @@ def course_yaml(code, title, term, ids, items, today):
                   f"    due: {due[:10]}"]
         if len(due) >= 16 and due[11:16] != "00:00":
             lines.append(f'    at: "{due[11:16]}"')
-        lines += ["    status: todo",
+        lines += [f"    type: {item_kind(it['title'])}",
+                  "    status: todo",
+                  f'    source: "Brightspace calendar, read {today}"']
+    if events:
+        lines.append("calendar_events:")
+    for it in events:
+        lines += [f'  - name: "{clean(it["title"])}"',
+                  f"    date: {it['due'][:10]}",
                   f'    source: "Brightspace calendar, read {today}"']
     return "\n".join(lines) + "\n"
 
@@ -418,9 +450,16 @@ def lockin(apply, out, days, retried=False):
     for code, e in by_code.items():
         print(f"  {code:<10} {e['title']}")
     print()
-    soon = [r for r in due if r["due"][:10] <= (dt.date.today() + dt.timedelta(days=14)).isoformat()]
+    window = [r for r in due if r["due"][:10] <= (dt.date.today() + dt.timedelta(days=14)).isoformat()]
+    soon = [r for r in window if item_kind(r["title"]) != "event"]
     print("Due first" + ("" if soon else ": nothing in the next 14 days"))
     for r in soon[:12]:
+        when = dt.datetime.fromisoformat(r["due"])
+        print(f"  {when:%a %b %d %H:%M}  {r['course']:<10} {item_kind(r['title']):<10} {r['title']}")
+    events = [r for r in window if item_kind(r["title"]) == "event"]
+    if events:
+        print("On your calendar, nothing to hand in")
+    for r in events[:12]:
         when = dt.datetime.fromisoformat(r["due"])
         print(f"  {when:%a %b %d %H:%M}  {r['course']:<10} {r['title']}")
     if soon:

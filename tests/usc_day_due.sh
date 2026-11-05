@@ -3,7 +3,8 @@
 # the Chrome session lockin uses, and a signed-out student gets one plain
 # line. On the 2026-10-13 USC week walk it went through the api engine and
 # printed "HTTP 403 with no login or challenge markers: { Errors: ... }".
-set -uo pipefail
+# No pipefail: `printf | grep -q` fails at random under it when grep quits before printf finishes.
+set -u
 ROOT="${1:-$(cd "$(dirname "$0")/.." && pwd)}"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 fail=0; ok() { echo "  ok   $1"; }; no() { echo "  FAIL $1"; fail=1; }

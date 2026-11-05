@@ -44,6 +44,18 @@ Both fail the same way, by reading the transcript alone and stopping there.
   text covers, say "this looks partial" first and write nothing that depends
   on the ending.
 
+- Never call a name unconfirmed off `people texts` alone. It matches one
+  thread, and Contacts can hold the right person under an org suffix. Run
+  `mac contacts find "<org>"` too. On 2026-11-05 a Gavin call's notes said the
+  Circuit Riders singer's name was unconfirmed because `people texts "Josh
+Brennan"` hit a startup guy. Contacts had "Josh Brennan Circuit Riders", and
+  that thread showed Caleb had already texted him the site on 11/3.
+- Never start from zero, or stop at the first pass, when the call was already
+  saved. Grep the ledger for `<person>-call-<date>` and read the note first,
+  then read the transcript against them and add only what's missing. On
+  2026-11-05 a second read of a saved call found 6 missing rows, including
+  tickets that depended on an unpaid invoice.
+
 ## Do
 
 1. Read the whole transcript once for who's who. "Them" is often several

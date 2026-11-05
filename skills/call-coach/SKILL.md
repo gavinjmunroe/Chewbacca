@@ -106,6 +106,17 @@ Jonah with "GIVE ME MEETING NOTES TO NOT LOOK STUPID PHONY PLZ", then
   (that call: Jonah's footer address, holding 14 drafts).
 - Flag what the recording will keep: remarks about teammates, and repo
   access granted live. Check `gh api repos/<repo>/collaborators` after.
+- Every reply during the call is dash bullets, one screen max, from the first
+  one. Paragraphs can't be read while someone is talking. On 2026-11-05 he got
+  paragraphs on a Zeutara call and wrote "GIVE ME BULLET POINTS".
+- A scripted line has to be true when he says it, in words he'd use. The same
+  call's card said "until counsel has reviewed it" with no lawyer hired, and he
+  asked "Who is counsel?" seconds before joining. "I need to review my
+  obligations" was true and needed no explaining.
+- When a question is pending, read his short answer as the answer to it. "I read
+  them" after "Want me to read the PDFs?" meant read them. The reply took it as
+  him having read them, and lost a minute before he wrote "Read them", with the
+  call 9 minutes out. If it could go either way, do the read-only thing.
 - After the call: log it in the project memory, then the follow-ups in
   `work-ledger --scope ~`.
 

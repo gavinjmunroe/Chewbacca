@@ -534,6 +534,16 @@ the work owns sending to that person. Any other tab writes "sending X to
 <name>" in the shared notes file and checks it first, and decides what already
 went out from that log, never from the thread.
 
+### Show him the words, never the queue number
+
+When a text needs his yes, print the whole text next to the person's name and let him answer in plain words ("send the John one"). A queue number means nothing to him. On 2026-11-05 a plan said "Say send 108 111 114", and he wrote "1. Huh?", then "why 108 111 114 what are those numbers". Map the name to the number yourself when you send.
+
+### Before saying a partner's thread is open, read their unnamed groups
+
+An intro usually lands in a new unnamed group, and `people texts <name>` can file the other person's message under the 1:1 and drop Caleb's reply. On 2026-11-05 Garland's "Ben. Meet my adopted little bro Caleb" showed under Garland's 1:1 with nothing after it, so the map said Caleb never replied. His reply sat in a group that seconds of checking found, and he had asked for times. Take the message's time, find the group active just after it in `mac messages chats --limit 400 --json`, then read it with `mac messages history <chat id> --json`.
+
+Who belongs on the thread is his call too. For a partner Gav also works with, ask or check whether it goes in a gc with Gav before drafting a 1:1. That same day the John and Noah texts came back as "do it in a gc with me and gav". Check that the gc exists before assuming it does: `people send --room` only reaches a named group, and neither gc existed.
+
 ## Sending
 
 To send, use `people send`, and only when the user asked for a specific

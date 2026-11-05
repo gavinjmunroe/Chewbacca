@@ -207,4 +207,23 @@ out=$(python3 -I "$LAND" --paths "five.txt six.txt" -m "feat: two in one arg" 2>
 git clone -q "$T/origin.git" "$T/zshcheck"
 [ "$(cat "$T/zshcheck/five.txt" 2>/dev/null)" = five ] && [ "$(cat "$T/zshcheck/six.txt" 2>/dev/null)" = six ] || fail "both paths in one argument should land: $out"
 
+# --add-line appends to main's copy of a shared index. This checkout's copy is
+# behind and holds another tab's line; neither may reach main (2026-11-05: a
+# hand-built commit in zsh replaced a 536 line index with 1).
+git clone -q "$T/origin.git" "$T/idx" && cd "$T/idx"
+printf -- '- first\n- second\n' > index.md; git add index.md; git commit -qm idx; git push -q origin main
+git clone -q "$T/origin.git" "$T/stale" && cd "$T/idx"
+printf -- '- third\n' >> index.md; git commit -qam more; git push -q origin main
+cd "$T/stale"
+printf -- '- another tab, uncommitted\n' >> index.md
+echo note > note.md
+out=$(python3 -I "$LAND" --paths note.md --add-line index.md "- note: hook" -m "chore: note" 2>&1) || fail "--add-line failed: $out"
+git clone -q "$T/origin.git" "$T/idxcheck"
+[ "$(cat "$T/idxcheck/index.md")" = "$(printf -- '- first\n- second\n- third\n- note: hook')" ] || fail "--add-line wrong index: $(cat "$T/idxcheck/index.md")"
+[ "$(cat "$T/idxcheck/note.md")" = note ] || fail "--add-line lost the note"
+grep -q 'another tab' index.md || fail "--add-line touched the disk copy"
+# Run twice, the line isn't doubled.
+python3 -I "$LAND" --paths note.md --add-line index.md "- note: hook" -m "chore: note" >/dev/null 2>&1
+cd "$T/idxcheck" && git pull -q; [ "$(grep -c 'note: hook' index.md)" = 1 ] || fail "--add-line doubled the line"
+
 echo ok

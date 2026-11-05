@@ -4,6 +4,8 @@
     chewbacca land --paths bin/x tests/x.sh -m "fix: ..."   # files as they are on disk now
     chewbacca land <sha> [<sha>...]                          # commits you already made
     chewbacca land --dry-run ...                             # everything but the push
+    chewbacca land --paths team/memory/note.md --add-line team/memory/MEMORY.md "- note: hook" -m "..."
+                                                             # one new line on main's copy of a shared file
 
 It builds the change on a fresh detached worktree of origin/main, so other
 tabs' uncommitted files, half-merged state and unpushed commits in the shared
@@ -258,6 +260,13 @@ def main():
     ap.add_argument("commits", nargs="*", help="commits to land, oldest first")
     ap.add_argument("--paths", nargs="+", help="land these files as they are on disk now")
     ap.add_argument("-m", "--message", help="commit message for --paths")
+    # A shared index on disk holds other tabs' lines, and this checkout may be far
+    # behind main. On 2026-11-05 a hand-built commit for one index line, in zsh,
+    # read `$BASE:team/...` as the :t modifier, got nothing from git show and
+    # replaced 536 lines with 1. Pre-push refused it. This appends to main's copy,
+    # never reads the disk's, and needs no shell.
+    ap.add_argument("--add-line", nargs=2, action="append", default=[], metavar=("FILE", "LINE"),
+                    help="with --paths: append LINE to FILE as it is on main, ignoring the disk copy")
     ap.add_argument("--remote", default="origin")
     ap.add_argument("--branch", default="main")
     ap.add_argument("--dry-run", action="store_true", help="build and check, never push")
@@ -279,6 +288,8 @@ def main():
         a.paths = split
     if a.paths and not a.message:
         ap.error("--paths needs -m")
+    if a.add_line and not a.paths:
+        ap.error("--add-line goes with --paths: the note the line points at")
 
     src = repo_root(os.getcwd())
     target = f"{a.remote}/{a.branch}"
@@ -348,6 +359,16 @@ def main():
                 if clashes:
                     raise SystemExit(f"land: {', '.join(clashes)} changed on {target} in the same lines as your copy; "
                                      f"pull those lines in and run land again")
+                for f, line in a.add_line:
+                    d = os.path.join(wt, f)
+                    if not os.path.exists(d):
+                        raise SystemExit(f"land: --add-line: {f} isn't on {target}")
+                    with open(d) as fh:
+                        have = fh.read()
+                    if line not in have.splitlines():
+                        with open(d, "w") as fh:
+                            fh.write(have + ("" if have.endswith("\n") or not have else "\n") + line + "\n")
+                    a.paths.append(f)
                 run(["git", "add", "-A", "--", *a.paths], wt)
                 if not run(["git", "diff", "--cached", "--name-only"], wt).stdout.strip():
                     print("land: nothing to land, origin already has these files")

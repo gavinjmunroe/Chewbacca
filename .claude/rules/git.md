@@ -66,10 +66,11 @@ path as it sits on disk. In a file several tabs append to (`team/memory/MEMORY.m
 an index, a changelog), that means another tab's uncommitted lines ride along.
 On 2026-10-17 a one-line index add carried two other tabs' lines for files that
 weren't committed, and pre-push refused the land ("index names a missing file").
-For a shared file, write the commit from the last committed version plus only
-your line: `git show HEAD:<path>`, add the line, then `git hash-object -w` and
-`git update-index --cacheinfo` into a temporary `GIT_INDEX_FILE`, so the shared
-working tree and the real index stay untouched. The team memory index format is
+For a shared file, use `chewbacca land --paths <note> --add-line <file> "<line>" -m "<msg>"`:
+it appends to main's copy and never reads the disk's. In a repo without land, build it from
+`git show "${REV}:<path>"`, quoted with braces, because zsh reads `$REV:t...` as a modifier
+(2026-11-05: that replaced a 536 line index with 1, and pre-push caught it).
+The team memory index format is
 `- <slug>: <hook>`, where the slug is the file name.
 
 ## One task, one worktree

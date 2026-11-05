@@ -542,7 +542,9 @@ When a text needs his yes, print the whole text next to the person's name and le
 
 An intro usually lands in a new unnamed group, and `people texts <name>` can file the other person's message under the 1:1 and drop Caleb's reply. On 2026-11-05 Garland's "Ben. Meet my adopted little bro Caleb" showed under Garland's 1:1 with nothing after it, so the map said Caleb never replied. His reply sat in a group that seconds of checking found, and he had asked for times. Take the message's time, find the group active just after it in `mac messages chats --limit 400 --json`, then read it with `mac messages history <chat id> --json`.
 
-Who belongs on the thread is his call too. For a partner Gav also works with, ask or check whether it goes in a gc with Gav before drafting a 1:1. That same day the John and Noah texts came back as "do it in a gc with me and gav". Check that the gc exists before assuming it does: `people send --room` only reaches a named group, and neither gc existed.
+Who belongs on the thread is his call too. For a partner Gav also works with, ask or check whether it goes in a gc with Gav before drafting a 1:1. That same day the John and Noah texts came back as "do it in a gc with me and gav". Check that the gc exists before assuming it does: `people send --room` only reaches a named group, and neither gc existed. Start a new one with `text-group +1555...,+1666... "text"`, which reads the recipients back and never takes the screen.
+
+Never open Messages in front of him or run screen captures on it. That same day it "flash banged" him, and a popup asking to control Messages drew "why are you asking for permission". And when the kit lacks a capability, build it instead of offering a workaround: "Why would you do a workaround when you could just build the solution?"
 
 ## Sending
 

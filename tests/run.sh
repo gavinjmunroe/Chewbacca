@@ -300,6 +300,8 @@ if group "people"; then
 
     check "send resolves strictly and replies in the thread's own app" \
       bash "$ROOT/tests/people_send.sh" "${P[@]}"
+    check "text-group refuses bad recipients before it touches Messages" \
+      bash "$ROOT/tests/text_group.sh" "$ROOT/bin/text-group"
     # 2026-10-10: one inbox for every network. Bridged rows land one person
     # per address, reply in their own room, and nothing leaves in a test.
     check "a WAL store with no -wal or -shm still reads, and only reads" /usr/bin/python3 "$ROOT/tests/test_sqlite_ro.py"

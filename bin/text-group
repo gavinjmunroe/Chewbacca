@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# text-group: start a new iMessage group from the background and confirm it went.
+#
+#   text-group +16265551234,+12135550100 "text"          # sends
+#   text-group --check +16265551234,+12135550100 "text"  # fills and reads back, no send
+#
+# Messages' AppleScript dictionary can't make a chat (error -1728 on macOS 15.6.1), and
+# `people send --room` only reaches a group that already exists. On 2026-11-05 Caleb asked for
+# gcs w John and Noah, and a foreground compose plus screen captures took over his screen. He
+# wrote "Why did you flash bang me?" and "Why would you do a workaround when you could just build
+# the solution?". This never activates Messages, and it refuses unless the recipients it reads
+# back are exactly the ones asked for.
+#
+# Exits 0 only when chat.db holds a new group whose latest message is this text from me.
+set -uo pipefail
+
+ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+CHECK=""
+if [ "${1:-}" = "--check" ]; then CHECK="--check"; shift; fi
+[ "${CHEWBACCA_NO_SEND:-}" = "1" ] && CHECK="--check"
+if [ $# -ne 2 ] || [ -z "$2" ]; then
+  echo "usage: text-group [--check] +15551234567,+15557654321 \"text\"" >&2
+  exit 64
+fi
+ADDRS="$1" TEXT="$2"
+if ! printf '%s' "$ADDRS" | grep -Eq '^\+[0-9]{7,15}(,\+[0-9]{7,15})+$'; then
+  echo "text-group: needs 2 or more numbers like +15551234567, comma separated. For one person use people send." >&2
+  exit 64
+fi
+
+# Validation stops here in a test run, so tests never touch Messages.
+[ "${TEXT_GROUP_VALIDATE_ONLY:-}" = "1" ] && { echo "valid"; exit 0; }
+
+BIN="$HOME/.chewbacca/cache/text-group"
+SRC="$ROOT/mac/lib/text_group.swift"
+mkdir -p "$(dirname "$BIN")"
+if [ ! -x "$BIN" ] || [ "$SRC" -nt "$BIN" ]; then
+  nice -n 10 swiftc -O "$SRC" -o "$BIN" || { echo "text-group: couldn't compile" >&2; exit 2; }
+fi
+
+newest_group() {
+  mac messages chats --limit 5 --json | python3 -I -c '
+import json, sys
+g = [c for c in json.load(sys.stdin) if c["isGroup"]]
+print(g[0]["id"] if g else "")'
+}
+
+BEFORE="$(newest_group)"
+"$BIN" $CHECK "$ADDRS" "$TEXT"
+RC=$?
+# Exit 3: Messages reports no windows to accessibility. On 2026-11-05 a 6-day-old process had 390
+# leftover windows and showed none. A hidden restart fixed it and took no focus. One retry only.
+if [ "$RC" -eq 3 ]; then
+  echo "Messages shows no windows, restarting it hidden"
+  osascript -e 'tell application "Messages" to quit' >/dev/null 2>&1
+  sleep 2
+  open -g -j -a Messages
+  sleep 4
+  "$BIN" $CHECK "$ADDRS" "$TEXT"
+  RC=$?
+fi
+[ "$RC" -eq 0 ] || exit "$RC"
+[ -n "$CHECK" ] && { echo "checked, nothing sent"; exit 0; }
+
+latest_is_mine() {
+  mac messages history "$1" --limit 1 --json | TEXT="$TEXT" python3 -I -c '
+import json, os, sys
+m = json.load(sys.stdin)
+sys.exit(0 if m and m[-1].get("isFromMe") and m[-1].get("text") == os.environ["TEXT"] else 1)'
+}
+
+for _ in 1 2 3 4 5 6 7 8; do
+  sleep 1
+  CHAT="$(newest_group)"
+  if [ -n "$CHAT" ] && latest_is_mine "$CHAT"; then
+    echo "sent to group $CHAT"
+    exit 0
+  fi
+done
+echo "text-group: the text did NOT show up in chat.db, check Messages before retrying" >&2
+exit 1

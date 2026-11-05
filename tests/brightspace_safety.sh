@@ -85,4 +85,25 @@ printf '%s' "$nw" | grep -q "Room change" && printf '%s' "$nw" | grep -q "SGM 12
 du="$(BRIGHTSPACE_FIXTURE="$T/fx.json" $PY "$ROOT/bin/brightspace" due --days 7 2>&1)"
 printf '%s' "$du" | grep -q "Essay 2" && ! printf '%s' "$du" | LC_ALL=C grep -q $'\x1b' \
   && ok "a dropbox name prints with its escape sequences stripped" || no "due output: $(printf '%s' "$du" | od -c | head -4)"
+
+# Links in an instructor's HTML: entities decode before control bytes come off,
+# both quote styles parse, and a hostile body can't hang the parser.
+out="$($PY - "$ROOT/bin/brightspace" <<'PY' 2>&1
+import importlib.machinery, importlib.util, sys, time
+sys.dont_write_bytecode = True
+l = importlib.machinery.SourceFileLoader("bs", sys.argv[1])
+m = importlib.util.module_from_spec(importlib.util.spec_from_loader("bs", l)); l.exec_module(m)
+assert m.links_of('<a href="https://x.test/a">Spec</a>') == [("Spec", "https://x.test/a")]
+assert m.links_of("<a class='c' href='https://x.test/b'>B <b>doc</b></a>") == [("B doc", "https://x.test/b")]
+assert m.links_of('<a href="https://x.test/a?x=1&amp;y=2"></a>') == [("https://x.test/a?x=1&y=2", "https://x.test/a?x=1&y=2")]
+hostile = m.links_of('<a href="https://x.test/&#27;]52;c;AA&#7;">Sp&#27;[2Jec</a>')
+assert "\x1b" not in repr(hostile) and "\\x1b" not in repr(hostile) and "\\x07" not in repr(hostile), hostile
+assert m.links_of("") == [] and m.links_of(None) == []
+start = time.time()
+m.links_of("<a " * 200000 + 'href="x" ' * 200000 + "<a href=x>" * 100000)
+assert time.time() - start < 20, time.time() - start
+print("fine")
+PY
+)"
+[ "$out" = fine ] && ok "links parse both quote styles, drop control bytes after decoding, and can't hang" || no "links_of: $out"
 exit "$fail"

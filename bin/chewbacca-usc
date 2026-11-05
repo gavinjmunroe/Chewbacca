@@ -250,7 +250,8 @@ def in_ledger(code, have):
 
 
 def clean(text):
-    return re.sub(r'["\\\n\r]+', " ", str(text)).strip()
+    text = re.sub(r'["\\\n\r]+', " ", str(text))
+    return re.sub(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]", "", text).strip()
 
 
 # A calendar row is either work to hand in or a place to be. On the 2026-10-13
@@ -438,7 +439,7 @@ def lockin(apply, out, days, retried=False):
     term = term_name(courses[0].get("term", ""))
     by_code = {}
     for c in courses:
-        entry = by_code.setdefault(c["code"], {"ids": [], "title": c["name"].split(": ", 1)[-1]})
+        entry = by_code.setdefault(c["code"], {"ids": [], "title": clean(c["name"].split(": ", 1)[-1])})
         entry["ids"].append(c["id"])
     try:
         due = bs.due_items(client, days)

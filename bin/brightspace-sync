@@ -239,6 +239,10 @@ def local(iso):
     return dt.datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone(TZ)
 
 
+# Calendar titles are instructor text, and they reach the terminal and the ledger.
+CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
+
+
 def due_items(client, days):
     now = dt.datetime.now(dt.timezone.utc)
     start = now.strftime("%Y-%m-%dT%H:%M:%S.000Z")
@@ -252,7 +256,7 @@ def due_items(client, days):
             if e["Title"] in seen:
                 continue
             seen.add(e["Title"])
-            rows.append({"course": c["code"], "courseId": c["id"], "title": e["Title"],
+            rows.append({"course": c["code"], "courseId": c["id"], "title": CONTROL.sub("", e["Title"]),
                          "due": local(e["StartDateTime"]).isoformat(timespec="minutes")})
     return sorted(rows, key=lambda r: r["due"])
 

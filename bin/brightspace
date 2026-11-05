@@ -623,7 +623,7 @@ def cmd_news(client, days, as_json):
         if r["text"]:
             print(f"  {clean_text(r['text'])[:400]}")
         for a in r["attachments"]:
-            print(f"  attached: {clean_text(a['name'])} (/le/1.99/{r['ou']}/news/{r['id']}/attachments/{a['file']})")
+            print(f"  attached: {clean_text(a['name'])} " + clean_text(f"(/le/1.99/{r['ou']}/news/{r['id']}/attachments/{a['file']})"))
     return 0
 
 
@@ -848,7 +848,7 @@ def cmd_files(client, ou, folder, out_dir):
         dest.write_bytes(data)
         print(f"  {kind}: {dest} ({len(data)} bytes)")
     if not got:
-        print(f"{meta.get('Name')}: no attachments and nothing submitted")
+        print(clean_text(f"{meta.get('Name')}: no attachments and nothing submitted"))
     return 0
 
 
@@ -940,13 +940,44 @@ def instructions_of(folder):
     return clean_text(ci.get("Text") or plain(ci.get("Html") or "")).strip()
 
 
+LINK_HTML_MAX = 2_000_000
+
+
 def links_of(html):
     """Every link in a body of HTML as (label, url). Stripping the tags to text
     dropped the targets: A22's instructions said "following this spec", the
     spec was a linked Google Doc that refused a single email field, and the
     page was nearly handed in on one (2026-11-04)."""
-    found = re.findall(r'<a\b[^>]*href="([^"]+)"[^>]*>(.*?)</a>', html or "", re.S)
-    return [(plain(label) or url, unescape(url)) for url, label in found]
+    # A parser, not a regex: [^>]* around a lazy .*? backtracks badly on a hostile
+    # body, and a regex misses single-quoted hrefs. Entities decode here, so the
+    # control bytes come off after that: &#27; is an escape byte once decoded.
+    from html.parser import HTMLParser
+
+    class Links(HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=True)
+            self.found, self.url, self.label = [], None, []
+
+        def handle_starttag(self, tag, attrs):
+            if tag == "a":
+                self.url, self.label = dict(attrs).get("href"), []
+
+        def handle_data(self, data):
+            if self.url is not None:
+                self.label.append(data)
+
+        def handle_endtag(self, tag):
+            if tag == "a" and self.url:
+                url = clean_text(self.url)
+                label = re.sub(r"\s+", " ", clean_text("".join(self.label))).strip()
+                self.found.append((label or url, url))
+            if tag == "a":
+                self.url = None
+
+    links = Links()
+    # Guessed, never measured: a course page this size isn't instructions.
+    links.feed((html or "")[:LINK_HTML_MAX])
+    return links.found
 
 
 def cmd_instructions(client, ou, folder, as_json):

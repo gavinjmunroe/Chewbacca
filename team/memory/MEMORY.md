@@ -535,3 +535,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_text_channels_include_imessage: church text-a-number flows and demos offer iMessage next to WhatsApp and SMS (Caleb 2026-11-03, Photon or Linq)
 - feedback_hooks_strip_system_reminders: Hooks reading the user prompt from a transcript must strip system-reminder blocks first; real transcripts embed them in the prompt string, hand-written fixtures do not
 - project_ff_search_2026_11_05: FF Google state 11/5: team@ owns Search Console, /audit indexing requested, keyword volumes, 1,297 church audit is the unused study asset
+- project_partner_status_2026_11_05: partner threads checked 11/5: Travis silent, 11/13 send date dead, Reed reply unsent, OPTRA no, Knox first walkthrough today, draft fixes in USC Gmail

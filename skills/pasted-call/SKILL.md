@@ -92,6 +92,15 @@ Brennan"` hit a startup guy. Contacts had "Josh Brennan Circuit Riders", and
    not done here (Roy call, 2026-10-29: "Add Roy to the FF site btw tell
    the other tab that's doin it").
 
+- Never trust the room capture's rows as they stand. A call the Mac recorded is
+  already in the ledger as `meeting:rc-<stamp>:a<n>` and `reflect:rc-<stamp>:*`,
+  with a model's read in `~/.chewbacca/meetings/reflections/rc-<stamp>.md`. Grep
+  for those before adding anything, then check each against the transcript and
+  texts. On 2026-11-05 a counselor call came in with "Call back Luke" (nobody
+  owed a call, they run into each other at church), "Call back Diego" (tacos
+  were already set by text for that night) and "Make something right" (no person
+  named), while gym, tacos and a moved 9am meeting from the texts had no rows.
+
 ## A class lecture is a call too
 
 A pasted lecture has one name on it (Caleb) and a professor talking to a

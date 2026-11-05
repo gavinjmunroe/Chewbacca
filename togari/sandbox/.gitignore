@@ -1,8 +1,0 @@
-node_modules
-dist
-.env
-.env.local
-.netlify
-*.log
-.DS_Store
-.superpowers/

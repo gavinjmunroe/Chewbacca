@@ -1,1 +1,0 @@
-# peoplerank scoring library

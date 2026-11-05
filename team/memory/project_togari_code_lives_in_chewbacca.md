@@ -4,6 +4,8 @@ description: All Togari code lives in chewbacca/togari; Chewbacca clients never 
 type: project
 ---
 
+**Update 2026-11-05:** `togari/` was removed from main. Its copy stays in git history at ab2e3f13. Nothing in Chewbacca loads it at runtime.
+
 Every Togari repo was copied into `togari/` in this repo on 2026-10-19, with Karthik's
 OK, so Chewbacca clients never depend on a Togari repo and Chewbacca can deploy its own
 copy later. Caleb: "For chewbs clients we will not be using the togari repo to keep

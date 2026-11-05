@@ -5,6 +5,8 @@ metadata:
   type: project
 ---
 
+**Update 2026-11-05:** `amber/` was removed from main. Its copy stays in git history at ab2e3f13. Nothing in Chewbacca loads it at runtime.
+
 Karthik, relayed by Caleb on 2026-10-20: Amber and Chewbacca build very similarly, so
 when features are shared no credit is exchanged, since both would have built the same
 thing anyway. Caleb: "Funnel all things Amber into chewbs".

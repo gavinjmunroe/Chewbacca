@@ -234,7 +234,7 @@ practitioner. The rule that forced this is
 
 Amber and Chewbacca build the same things, so features move between them with
 no credit exchanged (Karthik, 2026-10-20). Every Amber repo is copied into
-[`amber/`](amber/README.md), and the `people` layer started from amber-id's
+`amber/` (removed from main on 2026-11-05, still in git history), and the `people` layer started from amber-id's
 design. Upstream pointers there are for resyncing only.
 
 `skill-scan`'s rubric weights started from a public review of 100 Claude skills

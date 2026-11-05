@@ -1,3 +1,0 @@
-# Drop unprocessed material here. The synthesis cron reads and
-# organizes it weekly. Nothing in this directory is ever edited by
-# the agent — only read.

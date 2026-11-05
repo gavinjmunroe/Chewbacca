@@ -1,4 +1,0 @@
-# PeopleRank — Python test/runtime artifacts only.
-__pycache__/
-*.py[cod]
-.pytest_cache/

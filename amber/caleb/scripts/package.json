@@ -1,6 +1,0 @@
-{
-  "name": "amber-agent-scripts",
-  "private": true,
-  "type": "module",
-  "description": "Local ES-module scripts for amber-agent (e.g. vision/ synthesis). Isolated from root so Newton/* (CommonJS-era) keeps working."
-}

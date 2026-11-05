@@ -389,6 +389,12 @@ interactions hold what happened, and neither has anywhere for "I said I'd send
 him the book". When the user says they will do something for a named person, that is
 a `people task add`, not a note.
 
+**Saving or updating a contact in the Mac's Contacts app:** the last name field
+holds the real last name, then the app or company. `mac contacts add --name "Noah
+Kruse Firebox" --phone <number> --org "Firebox"` gives first name "Noah", last name
+"Kruse Firebox". Caleb, 2026-11-05: "this is the standard for any time chewbs
+saves/updates a contact". Read the name back after saving.
+
 `people rel maggie mother declan` writes both directions, so you never have to
 add the inverse yourself.
 

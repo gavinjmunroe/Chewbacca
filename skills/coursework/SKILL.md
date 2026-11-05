@@ -187,6 +187,21 @@ Never-dos, in his words (2026-10-11, mid quiz):
   When they're silent on something he could have heard in lab or in person
   (a topic, a presenting week, a makeup slot), ask him in one line first.
   Never offer to email the instructor to find it out.
+- "OK bro don't tell me to ever operate smth in brightspace bruh u cand do
+  that urself" (2026-11-05): an attachment is yours to fetch, never his to
+  open. Never write "send me the rubric" or "open that announcement".
+
+**An attachment is readable and `get` cannot read it.** The announcements op
+returns body text only, and `brightspace get <...>/attachments/<id>` dies on
+binary ("'utf-8' codec can't decode byte 0x93"), which is what made an agent
+hand the chore back. The file ids are in
+`brightspace get /le/1.75/<ou>/news/<newsId>` under `Attachments`, and the
+bytes come down by navigating Chrome to
+`/d2l/le/news/widget/<ou>/FileProvider?newsId=<id>&fileId=<fid>`, which saves
+straight to `~/Downloads`. Then `pdftotext` it or Read the image. On
+2026-11-05 that recovered the 20-point presentation rubric and the section
+schedule for a talk the next morning, both of which existed only as
+attachments.
 - "No bio lab tmr?" then "No other school stuff?" (2026-10-29, a "what do I
   knock out today" list): a today list covers tonight's prep for tomorrow's
   first classes too. Run `coursework week` next to `coursework today`, list

@@ -982,3 +982,21 @@ And the audit that found all of this: render every beat, tile them into one
 contact sheet, and look at the sheet. Four near-empty frames were obvious at
 300px wide and invisible one frame at a time. ImageMagick is not on this Mac;
 a grid of `file://` images in a headless page screenshots just as well.
+
+## A logo mark: cut it for real, and try to carry the letter
+
+Kyber, 2026-11-05. Round 1 drew a crystal and a bill with a straight line laid over them, and
+each option sat in its own lane: one kept the idea, another kept the K. Caleb's note: "make it
+diagnol", move the parts "1 up and 1 down so they're misaligned and more clearly cut apart like
+you had sliced it down the mdidle", then "think through ways to make the other ones tuffer too"
+and "If we could somehow cleanly make a K in there, maybe w the diagnol line, that could be SICK".
+
+- **A cut moves the pieces.** Clip the shape along the line, leave a small gap, and slide both
+  sides along that same line. A line drawn on top of a whole shape reads as a stroke.
+- **When a note lands on one option, apply it to all of them.** Then show what survived.
+- **Try the first letter inside the idea** before accepting a letter option and an idea option
+  side by side. On Kyber the arm of the K became the slice.
+- **Judge at 29 px, on dark, light and brand.** Tonal facets blur there, so the silhouette has to
+  carry it. Cut the variants that clutter (a K carved into the crystal, a slipped K in the bill).
+- **Draw the slice with a clip path per side**, so any mark can be cut without redrawing it.
+

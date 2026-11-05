@@ -534,3 +534,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_archive_keeps_children: archiving a session can archive its child sessions; check linked children, unarchive any Caleb didn't name (Brightspace tab, 11/3)
 - feedback_text_channels_include_imessage: church text-a-number flows and demos offer iMessage next to WhatsApp and SMS (Caleb 2026-11-03, Photon or Linq)
 - feedback_hooks_strip_system_reminders: Hooks reading the user prompt from a transcript must strip system-reminder blocks first; real transcripts embed them in the prompt string, hand-written fixtures do not
+- project_ff_search_2026_11_05: FF Google state 11/5: team@ owns Search Console, /audit indexing requested, keyword volumes, 1,297 church audit is the unused study asset

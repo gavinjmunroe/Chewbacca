@@ -536,3 +536,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_hooks_strip_system_reminders: Hooks reading the user prompt from a transcript must strip system-reminder blocks first; real transcripts embed them in the prompt string, hand-written fixtures do not
 - project_ff_search_2026_11_05: FF Google state 11/5: team@ owns Search Console, /audit indexing requested, keyword volumes, 1,297 church audit is the unused study asset
 - project_partner_status_2026_11_05: partner threads checked 11/5: Travis silent, 11/13 send date dead, Reed reply unsent, OPTRA no, Knox first walkthrough today, draft fixes in USC Gmail
+- feedback_ff_push_to_main_not_pr: Firm Foundation site work goes straight to main, never a PR; Gavin always says push to main (Caleb 11/5)

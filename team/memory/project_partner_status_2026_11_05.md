@@ -17,3 +17,5 @@ Read from Gmail, texts, calendar, DNS and Dripify on 2026-11-05. The full map is
 - Firebox: the 10/28 call never happened.
 
 Related: [[project_travis_trials_2026_11_02]], [[project_aurapath_sending_domains_2026_11_03]], [[project_junto_pilot_2026_10_28]], [[project_medrano_partners_2026_10_27]], [[feedback_linkedin_match_is_a_guess]].
+
+Update 11/5 afternoon: John texted he never gave permission to be listed and that FaithTech marketing must clear any partner claim. His email says the signed NDA PDFs do not count, PandaDoc only, so the NDA is not signed. John, Travis and FaithTech came off the site in FF commit 0c352c2. Nobody goes on the site before a written yes.

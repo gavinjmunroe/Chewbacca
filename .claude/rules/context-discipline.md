@@ -114,6 +114,14 @@ themselves. Old documents, prior drafts, uploads, the repo's own history.
 Asking someone for a story that is sitting in their own notes tells them you are
 not reading, and they are right. Skimming filenames is not reading.
 
+A one-word message from him is a name until proven otherwise. Search before
+replying: `grep -ri "<word>" ~/second-brain`, `gh repo list`, `ls ~/code`. On
+2026-11-05 he sent "Hall" and got "I think ur message got cut off", then wrote
+"bro ru stupid? Hall is one of our main projects!" The repo and its notes turned
+up on the first search. The note sat under its old name, usc_os, with no line in
+MEMORY.md, so recall hadn't surfaced it either: a rename that skips the index
+hides the project.
+
 The same goes before building. On 2026-10-17 he floated a Needledrop scrape
 plus the Spotify API ("idek what I'm thinking lol"). The agent ran a 7k-video
 scrape and wrote a Spotify client without looking, and he'd already built

@@ -43,6 +43,17 @@ where the data comes from. All four of those are written down here, once.
    Verify list, Refuse list and countable checks in
    `references/craft-floor.md` against the same render.
 
+   A page built by another session gets the same bar in its brief: a named
+   reference (an apple.com product page unless the user names one), the
+   simple-motion rules, `design-gate`, and before and after screenshots. A
+   demo whose tests pass is not done until it looks like the real product it
+   imitates: a fake text thread looks like the real iMessage or WhatsApp. On
+   2026-11-03 the Kyber page, briefed this way, came back good, while the
+   Baptize text-signup demo, briefed only on function, came back as a gray
+   form in a box with a 5-line subhead and an empty side panel. Caleb: "The
+   demo is so slop bro", then "I thought we had fixed chwebs to not produce
+   slop???"
+
    For a narrative page, review the whole journey before polishing individual
    sections. At each handoff, name what persists, what changes, and what the
    change tells the viewer. Reference studies must produce a concrete change
@@ -115,6 +126,27 @@ consistently not just once". Every one was knowable from the deck on minute one.
   signed-in accounts and Extended Quota needs a business with 250k MAU
   (developer docs, read 2026-10-26); found an hour in, it forced a second
   data path (catalog-search quick picks, export upload).
+
+## A product demo plays itself on one real device
+
+Anchored's Baptize The World sign-up demo, 2026-11-03: a 5-line subhead, a
+generic rounded phone with gray "starter" cards labeled by language, a fake
++1 555 number in the header, a half-empty "what the team sees" card ("Waiting
+for a first text / None yet") and two paragraphs of disclaimers. Caleb: "The
+demo is so slop bro." What replaced it (anchored d411ffc):
+
+- One device, centered, in the real app's chrome: iOS status bar and Dynamic
+  Island, the iMessage blue/gray bubbles with tails or WhatsApp's wallpaper,
+  white and light-green bubbles, time and ticks. Pickers (channel, language)
+  sit under the device as small words, never as cards inside the thread.
+- It autoplays on load through the real engine: text types into the compose
+  field, sends, typing dots grow into the reply (one bubble morphing, not a
+  second one popping in). Touching the field hands control to the visitor.
+- A second panel appears only once it has data and fills row by row. A panel
+  that reads "none yet" on load is dead space.
+- One line of honesty at the bottom ("Demo with test data. Nothing is sent.").
+  Build caveats (who wrote the translations) go in the repo docs.
+- Never show a placeholder phone number in a demo's UI.
 
 ## A tool someone practises with is a session, never a page of cards
 
@@ -234,6 +266,7 @@ YouTubeBanner|YouTubeThumb`). On 2026-11-02 Caleb said all of these to one tab:
 photoshop in the image I gave you", then "U HAVE THE SOURCE CODE".
 
 Per platform, checked that night:
+
 - LinkedIn's page logo covers the banner's bottom left, and the name sits right under it.
   Leave the lockup off the banner, keep the art clear of the logo, and center the main
   thing so phones, which crop the sides, still show it.
@@ -649,6 +682,47 @@ isn't the best visually" at twelve uniform text cards on a navy band.
 - Copy about a founder on a professional site never says student or school, and
   never abbreviates.
 
+## An iMessage mock matches the iOS that ships now, with real icons and faces
+
+Kyber landing, 2026-11-03, one night of corrections:
+
+- The + button opens the iOS 18 list: a frosted sheet over the thread, one row
+  per app, a round icon and its name. The 4x2 grid of rounded squares is iOS
+  16 ("This isn't how it actually looks on apple"). Apple's own entries are
+  circles; third-party apps (GamePigeon, ours) keep a rounded-square icon.
+- Icons are the real ones: the third-party icon from the App Store
+  (`itunes.apple.com/search?entity=software`, artworkUrl), Apple's entries as
+  SF Symbols rendered on their color with a short Swift script, Photos from
+  the macOS app icon. Drawn look-alikes read fake ("Use the actual images
+  bruh").
+- Contacts and receipt tags show faces, never letter discs ("fix the pfps").
+  Made-up friends get generated faces cropped from ONE group shot so every
+  chat shows the same people, and they get made-up names: a generated face
+  beside a real teammate's name reads as a photo of them.
+- A rotating word that sits next to fixed text is drawn as a sent bubble that
+  hugs its word and is anchored on the side away from the fixed text, so it
+  grows away from it ("I don't want the text split to keep moving left and
+  right"). Measure the fixed word's x across every case before shipping.
+
+## A photo never ends on a hard line, and no band is left empty
+
+Kyber landing, 2026-11-03: a generated group photo sat in a rounded box under a
+headline, the box's top edge cut straight across the restaurant lights, and a
+160px dark band sat under it before the light pricing section. Caleb: "Fix
+chewbs to never make disgusting hard line cutoffs like this", then
+"unintentional ahh blank space".
+
+- A photo placed on a page (not a card the reader taps) feathers into the
+  ground on every edge: a CSS mask of two linear gradients (top/bottom and
+  left/right) composited with `mask-composite: intersect`. No box, no radius.
+- Where a dark section meets a light one under a photo, the photo's fade and a
+  ground fade (transparent, canvas, then the next ground over about 22 to 30vh,
+  pulled up under the photo with a negative margin) are one continuous move.
+- After the last element in a section, the padding is the gap to the next
+  section's first element, never a band of plain ground. Screenshot the seam
+  at 1280 and 375; on a phone a wide photo gets cropped taller
+  (`object-cover`) so it doesn't leave the fade hanging under empty dark.
+
 ## Neighbouring sections differ in ground and in shape
 
 Firm Foundation Home, 2026-10-30: a night app window, then a night "Work we've
@@ -666,7 +740,6 @@ overwhelming bc of how monotone it is".
   kind left of the label at about half the item's height, and a key. The key sits
   where it can never overlap the diagram at any viewport ("Overlap is doodoo if
   unintentional"). Problems get their own colour, never the brand colour.
-
 
 ## A page for one person is built from that person, then turned all the way up
 
@@ -739,7 +812,7 @@ long???????" then "BRO?".
   unintentional"). Give the photo its own column or band, size hero type by
   min(vw, svh), and screenshot at a short window (1000x560) before pushing.
 - No novelty widget where a plain fact block works. Same site, same night: a
-  split-flap scoreboard (one dark tile per letter, "E V E R Y  Y E A R"), an
+  split-flap scoreboard (one dark tile per letter, "E V E R Y Y E A R"), an
   empty "video coming soon" board half a screen tall, and a 6rem two-tone
   headline at 0.86 leading whose comma hit the next line drew "Slop design
   bro". What held up: a box score of four big values with small labels under
@@ -856,3 +929,18 @@ Two things that are specific to a projected page:
   a beat every 90ms found a crash that a 650ms walk never did: the animation
   loop kept running after the last animated beat and dereferenced a slide
   that has no scene. Run the whole deck forwards and backwards at both speeds.
+
+## Appending to a shared skill file from a stale checkout deletes other work
+
+Thirty minutes after the entry above, that same lesson went in by appending to
+the copy of `SKILL.md` sitting in the shared `~/code/chewbacca` checkout, which
+was behind origin. The commit read `1 file changed, 33 insertions(+), 75
+deletions(-)`: it silently reverted another session's demo-and-iMessage
+sections. The git rule already says a shared file commits whole; the part that
+is easy to miss is that **appending is not safe either**, because the base you
+appended to is the stale part.
+
+Before editing any file in the shared checkout, `git fetch` and diff the path
+against `origin/main`. Build the new version from `git show origin/main:<path>`
+plus your block, never from what is on disk, and read the insert/delete counts
+in the commit output: a pure addition that reports deletions is a revert.

@@ -944,3 +944,41 @@ Before editing any file in the shared checkout, `git fetch` and diff the path
 against `origin/main`. Build the new version from `git show origin/main:<path>`
 plus your block, never from what is on disk, and read the insert/delete counts
 in the commit output: a pure addition that reports deletions is a revert.
+
+## A figure on a dark stage needs its own ink, measured
+
+Caleb, 2026-11-05, on the BISC talk after it was rebuilt on Linear's tokens:
+"A ton of this looks bad or barely visible". The DNA, the repair arms and the
+connector lines were drawn in `--surface-3`, `--hairline` and
+`--hairline-strong`, which measured **1.19:1, 1.36:1 and 1.69:1** against the
+`#010102` canvas. Those tokens are chrome for a lit panel, and used as marks
+on a near-black stage they are invisible on a projector.
+
+Keep the system's tokens for chrome and give the drawing its own ramp, then
+check it rather than trusting the eye on a bright laptop:
+
+- Any mark that carries meaning clears **3:1** against its ground; any text
+  that must be read clears **4.5:1**. Compute it, do not judge it.
+- Eight of seventeen tokens in use were below floor, and every one of them
+  was a neutral. Accent and semantic colours passed easily, so the failure
+  hides in exactly the colours nobody thinks to check.
+
+## Frame each beat, not the union of all of them
+
+Same deck. Every scene rendered into one box sized to the union of its beats,
+so the first beat of a scene was one small mark in a wide black field; the
+contact sheet had four frames that read as empty. The fix is a viewBox per
+beat, interpolated on the same value that drives the drawing, so the camera
+opens out as elements arrive.
+
+Two things that make this work:
+
+- `getBBox()` counts elements that are fully transparent, so measuring a beat
+  straight returns the same box every time and the camera never moves. Union
+  only the marks whose cumulative opacity is above about 0.06.
+- Floor the box (520x190 here) or a single bar zooms to fill the wall.
+
+And the audit that found all of this: render every beat, tile them into one
+contact sheet, and look at the sheet. Four near-empty frames were obvious at
+300px wide and invisible one frame at a time. ImageMagick is not on this Mac;
+a grid of `file://` images in a headless page screenshots just as well.

@@ -212,9 +212,9 @@ git clone -q "$T/origin.git" "$T/zshcheck"
 # hand-built commit in zsh replaced a 536 line index with 1).
 git clone -q "$T/origin.git" "$T/idx" && cd "$T/idx"
 printf -- '- first\n- second\n' > index.md; git add index.md; git commit -qm idx; git push -q origin main
-git clone -q "$T/origin.git" "$T/stale" && cd "$T/idx"
+git clone -q "$T/origin.git" "$T/idxstale" && cd "$T/idx"
 printf -- '- third\n' >> index.md; git commit -qam more; git push -q origin main
-cd "$T/stale"
+cd "$T/idxstale"
 printf -- '- another tab, uncommitted\n' >> index.md
 echo note > note.md
 out=$(python3 -I "$LAND" --paths note.md --add-line index.md "- note: hook" -m "chore: note" 2>&1) || fail "--add-line failed: $out"

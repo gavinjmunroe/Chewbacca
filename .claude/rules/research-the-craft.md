@@ -41,6 +41,12 @@ For anything on the machine, prefer sources already installed: `yt-transcript`
 for a video, `summarize` for a page. Never WebFetch a YouTube URL, it returns no
 transcript.
 
+## Your best version, before anyone sees it
+
+Anything going in front of Caleb or out under his name gets an expert read first, without him asking. Ask what the people who do this for a living would change, fix it, and only then show it. For a message or page, run `best-pass <kind> <file> --for "<who reads it, what's going on>"` and fix what it names. Dough's `approve-copy` runs the same read and refuses copy that fails it unless someone records why. A failed read means rewrite: don't show him the weak draft with a note about what's wrong, and don't call it a pass if it couldn't run. It judges the writing, so facts still get checked at their source.
+
+On 2026-11-05 a Junto email and LinkedIn sequence reached him accurate and weak. The rules that would have fixed them were already in the kit, and they got used only after he asked "Is this as good as possible". He wrote: "fix dough to systematically eliminate this from ever being the case on anything we ever do - same w chewbs".
+
 ## When the brief contradicts the craft
 
 The person asking is usually not a practitioner of the genre either, and their

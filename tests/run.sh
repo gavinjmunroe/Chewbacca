@@ -300,6 +300,7 @@ if group "people"; then
 
     check "send resolves strictly and replies in the thread's own app" \
       bash "$ROOT/tests/people_send.sh" "${P[@]}"
+    check "best-pass fails weak drafts and never calls a read that couldn't run a pass" /usr/bin/python3 "$ROOT/tests/test_best_pass.py"
     check "text-group refuses bad recipients before it touches Messages" \
       bash "$ROOT/tests/text_group.sh" "$ROOT/bin/text-group"
     # 2026-10-10: one inbox for every network. Bridged rows land one person

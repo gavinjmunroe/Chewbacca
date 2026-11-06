@@ -1,0 +1,107 @@
+#!/usr/bin/env python3
+"""best-pass: an expert read on anything about to go in front of Caleb or out under his name.
+
+  best-pass email draft.md --for "a founder waiting 8 days on our reply"
+  best-pass text --for "a client who just called out our site" < draft.txt
+  kinds: email, text, linkedin, one-pager, pitch
+
+On 2026-11-05 a Junto email and LinkedIn sequence reached Caleb accurate and still weak. The rules
+that would have improved them were already in the kit, and they only got used when he asked "Is
+this as good as possible". He wrote: "fix dough to systematically eliminate this from ever being
+the case on anything we ever do - same w chewbs".
+
+Jev judges the words against what a practitioner would ask, so it reads meaning and never matches
+a word list. Exit 0 passes, 1 lists what to fix, 2 means the read couldn't run. Nothing here sends,
+and passing it says the writing holds up, never that a fact is true.
+"""
+import argparse
+import importlib.util
+import os
+import sys
+
+# Guessed, never measured: the 0.8 bar Dough's expert read and opener check use. On the real Junto
+# copy the weak draft scored 0.01 and 0.11 on the rules it broke.
+PASS_AT = 0.8
+
+ALL = {
+    "only says what it needs":
+        "Could anything be cut from this draft without losing what the reader needs in order to act?"
+        " Answer yes only if nothing could be cut.",
+    "clear next step":
+        "Would the reader know exactly what they're being asked to do or decide after one read?",
+    "fits this reader now":
+        "Given who this is for and the situation described, does this draft fit what they care about "
+        "right now, instead of what the sender wants to say?",
+}
+KINDS = {
+    "email": {
+        "readable on a phone": "Could this reader get the point of this email in under 20 seconds on a phone?",
+    },
+    "text": {
+        "reads like a text": "Does this read like one person texting someone they know, instead of a formal message?",
+    },
+    "linkedin": {
+        "note has no pitch": "Does any connection note here give a specific reason to connect without selling?",
+        "first message has no pitch": "Is the first message after accepting free of a product claim or offer?",
+    },
+    "one-pager": {
+        "proof they can check": "Does it give the reader specific work or facts they could check for themselves?",
+        "says what it hasn't done": "Is it straight about what's unproven, without hiding it or overclaiming?",
+    },
+    "pitch": {
+        "end state first": "Does it lead with what this becomes and for whom, before the current wedge?",
+        "survives the first objection": "Would it hold up against the first hard question this reader would ask?",
+    },
+}
+
+
+def jev_ask(state, questions):
+    path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "lib", "jev.py")
+    spec = importlib.util.spec_from_file_location("kit_jev", path)
+    jev = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(jev)
+    return jev.ask(state, questions, decision="best-pass"), jev.probability
+
+
+def review(kind, text, audience, ask=jev_ask):
+    """Every way the draft falls short. None means the read couldn't run."""
+    rules = {**ALL, **KINDS[kind]}
+    qs = {name: {"type": "noul", "instructions": q} for name, q in rules.items()}
+    answers, prob = ask({"kind": kind, "for": audience, "draft": text[:6000]}, qs)
+    if not answers:
+        return None
+    out = []
+    for name in rules:
+        a = answers.get(name)
+        p = prob(a.get("noul")) if isinstance(a, dict) else None
+        if p is None:
+            out.append(f"{name}: no answer")
+        elif p < PASS_AT:
+            out.append(f"{name} ({p:.2f})")
+    return out
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description="An expert read on a draft before anyone sees it. Never sends.")
+    ap.add_argument("kind", choices=sorted(KINDS))
+    ap.add_argument("file", nargs="?", help="the draft, or stdin")
+    ap.add_argument("--for", dest="audience", required=True, help="who reads it and what's going on with them")
+    args = ap.parse_args(argv)
+    text = open(args.file).read() if args.file else sys.stdin.read()
+    if not text.strip():
+        ap.error("the draft is empty")
+    weak = review(args.kind, text, args.audience)
+    if weak is None:
+        print("best-pass: the read couldn't run, so nothing was judged. Read it against the kit's craft rules yourself.")
+        return 2
+    if weak:
+        print("Fix before showing it:")
+        for w in weak:
+            print(f"  - {w}")
+        return 1
+    print("Passed the expert read. That covers the writing, never whether the facts are true.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

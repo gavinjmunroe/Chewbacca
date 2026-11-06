@@ -86,7 +86,7 @@ def check(text):
             problems.append(f"missing section: ## {name.title()}")
 
     status = (s.get("status") or "").strip()
-    state = status.split()[0].strip(".:").upper() if status else ""
+    state = status.split()[0].strip(".:,;").upper() if status else ""
     if status and state not in ("DRAFT", "COMMITTED"):
         problems.append("Status has to start with DRAFT or COMMITTED")
 

@@ -136,6 +136,8 @@ without "effort with no source fails" 't.replace("Effort: 2 days, from the refer
 without "confidence with no reason fails" 't.replace("Confidence: low because nobody has used it","Confidence: high")' "Confidence has to read"
 without "phase 1 has to test something" 't.replace("Tests: assumption 1\n","")' "has to say what it Tests"
 without "adapting has to say what forces a replan" 't.replace("Replan when: a Stop if fires\n","")' "Adapting missing Replan when"
+python3 -c 'import sys; t=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(t.replace("DRAFT","DRAFT, made on 2026-11-05 and not committed"))' "$T/good.md" "$T/bad.md"
+out="$(check "$T/bad.md")"; [ $? = 0 ] && has "status DRAFT" && ok "a status can carry a note after it" || no "status note: $out"
 without "a bad status fails" 't.replace("DRAFT","MAYBE")' "Status has to start"
 
 # Later phases stay rough on purpose.

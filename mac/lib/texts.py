@@ -108,7 +108,13 @@ def read(days=7, limit=2000, who=None, unanswered=False, direct=False,
             # people that nothing else here records, and it is the difference
             # between "I do not know this number" and "this is whoever keeps
             # posting in the family thread".
-            "room": chat_name or None,
+            #
+            # A group nobody named has no display_name, only an id like
+            # chat2150. Without it his side of the thread filed under the id
+            # and everyone else's as if they'd texted him alone. On 2026-11-05
+            # that listed John Knox and Noah as waiting on a reply he had
+            # already sent them in the group.
+            "room": chat_name or (chat_id if str(chat_id or "").startswith("chat") else None),
             "handle": handle or chat_id,
             "from_me": bool(from_me),
             "text": body or "[attachment]",

@@ -317,6 +317,8 @@ if group "people"; then
       bash "$ROOT/tests/people_merge_undo.sh"
     check "people who reads area codes only for US numbers and whole-word places" \
       node --test "$ROOT/tests/test_people_area_codes.mjs"
+    check "a group nobody named keeps its id as the room" \
+      python3 "$ROOT/tests/test_texts_room.py"
     check "WhatsApp rows come out in the texts reader's shape" \
       python3 "$ROOT/tests/test_whatsapp_reader.py"
     check "Slack rows come out in the texts reader's shape" \

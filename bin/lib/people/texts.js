@@ -407,6 +407,18 @@ function ingestRows(d, rows, source, seen) {
   return { added, maxId, unlinked };
 }
 
+// A group nobody named has only an id like chat2150, so show who's in it.
+function roomLabel(d, room) {
+  if (!/^chat\d+$/.test(room || "")) return room;
+  const names = d
+    .prepare(
+      "SELECT DISTINCT who FROM messages WHERE room = ? AND from_me = 0 AND who <> room LIMIT 4",
+    )
+    .all(room)
+    .map((r) => r.who);
+  return names.length ? `group w ${names.join(", ")}` : room;
+}
+
 // Pull only new iMessages into the store, when chat.db has any. Costs one
 // ROWID read when there is nothing new, so every read can afford it.
 // On 2026-11-05 the sync cooldown answered "nothing to do" for ten minutes
@@ -908,7 +920,7 @@ function cmdTexts(argv) {
     say("");
     for (const r of shown) {
       say(
-        `${c.cyn(printable(r.thread))} ${c.dim(`${r.room ? "group " : ""}${r.source !== "imessage" ? r.source + " " : ""}${r.last_at.slice(5, 16)}`)}`,
+        `${c.cyn(printable(roomLabel(d, r.thread)))} ${c.dim(`${r.room ? "group " : ""}${r.source !== "imessage" ? r.source + " " : ""}${r.last_at.slice(5, 16)}`)}`,
       );
       for (const m of r.msgs.slice().reverse()) {
         const name =
@@ -1161,8 +1173,11 @@ function cmdTexts(argv) {
               WHERE julianday('now') - julianday(sent_at) <= ?`;
   const args = [days];
   if (person) {
-    sql += " AND person_id = ?";
-    args.push(person.id);
+    // His side of an unnamed group has no person on it, so pull it in by room,
+    // or the thread reads as if he never answered (2026-11-05, John Knox).
+    sql += ` AND (person_id = ? OR (from_me = 1 AND room GLOB 'chat[0-9]*' AND room IN
+              (SELECT room FROM messages WHERE person_id = ? AND room GLOB 'chat[0-9]*')))`;
+    args.push(person.id, person.id);
   } else if (who) {
     // A group thread is a room, and only his own rows carry the room's name
     // in `who`; everyone else's carry their own name. Matching `who` alone
@@ -1195,7 +1210,7 @@ function cmdTexts(argv) {
   for (const r of rows) {
     const thread = r.room || r.who;
     if (thread !== last) {
-      say(`\n${c.cyn(printable(thread))}`);
+      say(`\n${c.cyn(printable(roomLabel(d, thread)))}`);
       last = thread;
     }
     // In a room, every line names its sender, resolved from Contacts at

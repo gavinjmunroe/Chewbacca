@@ -165,3 +165,17 @@ grep -q "Privacy_Automation" "$PEOPLE_DIR/opened" 2>/dev/null || fail "a Message
 [ "$(wc -l < "$PEOPLE_DIR/opened")" -eq 1 ] || fail "the Automation pane opened more than once in a row"
 grep -q "Opened that page for you" <<<"$out" || fail "the drafts list did not say it opened the page"
 exit 0
+
+# An unnamed group: he answered in the group, so the person isn't waiting. On
+# 2026-11-05 John Knox and Noah were listed as owed after he'd already replied.
+"$P" add "Group Greg" >/dev/null 2>&1
+GREG="$(id 'Group Greg')"
+sqlite3 "$DB" "
+  INSERT INTO messages (msg_id, person_id, who, handle, from_me, body, sent_at, source, room) VALUES
+   (770101, '$GREG', 'Group Greg', '+15550301', 0, 'GREGASKS send the page', datetime('now','-3 hour'), 'imessage', 'chat4242'),
+   (770102, NULL, 'chat4242', 'chat4242', 1, 'GROUPANSWER sent it', datetime('now','-2 hour'), 'imessage', 'chat4242');"
+out="$("$P" texts owed --all 2>&1)"
+grep -q "GREGASKS" <<<"$out" && { echo "an unnamed group he answered is still listed as owed" >&2; exit 1; }
+out="$("$P" texts "Group Greg" 2>&1)"
+grep -q "GROUPANSWER" <<<"$out" || { echo "his reply in an unnamed group is missing from the person's thread" >&2; exit 1; }
+grep -q "group w Group Greg" <<<"$out" || { echo "an unnamed group should show who's in it" >&2; exit 1; }

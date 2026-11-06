@@ -106,7 +106,7 @@ class OnboardingTests(unittest.TestCase):
     def test_runtime_cli_passes_explicit_name_and_path_and_outputs_brief_result(self):
         brain = self.home / 'chosen brain'
         result = subprocess.run(['bash', str(ROOT / 'setup.sh'), '--runtime', 'codex',
-            '--brain-dir', str(brain), '--name', 'Zoë'], text=True, capture_output=True, timeout=30)
+            '--ask-permissions', '--brain-dir', str(brain), '--name', 'Zoë'], text=True, capture_output=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('Name: Zoë', (brain / 'core/identity.md').read_text())
         # The brief result plus the no-prompts line and the first-win week, which joined it later.

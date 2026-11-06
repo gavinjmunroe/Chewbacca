@@ -83,6 +83,15 @@ The first sync takes a 90-day window and later ones take 30. Neither is the
 whole history: `--days 3650` on a sync pulls years, and on a real library that
 is hundreds of thousands of rows, so only do it if they ask.
 
+**"Nothing with X" doesn't mean nothing happened.** `people texts "<name>"` misses a
+person who isn't linked yet, and a gc he's in. Before saying someone hasn't been
+texted or hasn't replied, run `people texts search "<org or topic>"`, then read any
+hit by id or number with `mac messages history <chat id or +number>`. On 2026-11-05
+`people texts "Noah Kruse"` came back empty, and a list told Caleb to text him. A
+search for "Firebox" showed the gc had gone out that morning and Noah had answered.
+The same day `people texts` showed nothing for "Jake UIUX Gavin's Friend", so a draft
+was called a maybe-wrong Jake, when `mac messages history` on his number settled it.
+
 ## Who is waiting on a reply
 
 "Clear out my texts" means respond to them, not delete them. It is two

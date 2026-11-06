@@ -190,6 +190,12 @@ them") and Caleb wrote "Ok shorter text that reads slop". Answer her question,
 correct the one wrong fact, stop. Context for him goes above the draft, never
 inside it.
 
+A long update he wrote himself gets split by topic: one text per project, three
+or four total, each under about 50 words. Never one line per sentence. On
+2026-11-05 a 243-word work update for a group chat went from one block to 13
+one-liners, and Caleb wrote "Make it less texts". Four texts held it, with the
+detail cut instead of spread out.
+
 A link message can come back from `people texts` with its words missing. On
 2026-10-10 Erik's "Check out the language of this when you can:
 Www.ChristCosmic.org" showed as a bare follow-up, "Click on the PDF", with

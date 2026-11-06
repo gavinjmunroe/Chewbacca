@@ -23,3 +23,5 @@ Update 11/5 afternoon: John texted he never gave permission to be listed and tha
 Update 11/5 evening: Dough main has the Dripify user agent fix, the aurapath-pip client and a held healthy-hip-hop client. Junto read-only plan: 120 ready, 34 held for a person, 6 no profile, 4 out. AuraPath list is 46 firms. John Knox moved the call to next week to read the one pager. The removed John, Travis and FaithTech cards sit unimported in firm-foundation site/lib/held-partners.ts.
 
 Update 11/5 night: Junto's LinkedIn copy is rewritten and on Dough main (b2408a2), and it passes the expert read. Read-only plan with the do-not-outreach list: 120 ready, 44 held. Reed's reply is a short USC Gmail draft, not sent, and the messages are in a Google Doc on the FF account. Run dough plan with --suppress: without it, the one held customer loads and the count reads 121.
+
+Update 11/5 6:56pm: Reed reply sent from USC with Caleb's yes on that exact email. It told him 120 of 164 are ready and asked for the first_line field, an empty campaign and the full HubSpot export. Waiting on him. The send hold stays on for everything else.

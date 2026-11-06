@@ -65,12 +65,17 @@ def emails(limit=20):
 def calendar_today():
     if not os.path.exists(CAL_DB):
         return {"available": False, "reason": "no calendar db", "items": []}
-    q = ("SELECT ci.summary, "
-         "datetime(ci.start_date + 978307200,'unixepoch','localtime'), "
-         "datetime(ci.end_date + 978307200,'unixepoch','localtime'), ci.all_day "
-         "FROM CalendarItem ci "
-         "WHERE date(ci.start_date + 978307200,'unixepoch','localtime') = date('now','localtime') "
-         "ORDER BY ci.start_date")
+    # OccurrenceCache, because CalendarItem holds a repeating event once, on the day
+    # it first happened. On 2026-11-06 the old query found 0 rows on a day with 4
+    # events, and the brief said "nothing on the calendar".
+    start = "coalesce(oc.occurrence_start_date, oc.occurrence_date, ci.start_date)"
+    q = (f"SELECT ci.summary, "
+         f"datetime({start} + 978307200,'unixepoch','localtime'), "
+         f"datetime(coalesce(oc.occurrence_end_date, {start} + (ci.end_date - ci.start_date)) + 978307200,"
+         "'unixepoch','localtime'), ci.all_day "
+         "FROM OccurrenceCache oc JOIN CalendarItem ci ON ci.ROWID = oc.event_id "
+         "WHERE date(oc.day + 978307200,'unixepoch','localtime') = date('now','localtime') "
+         f"ORDER BY {start}")
     r = _run(["sqlite3", f"file:{CAL_DB}?mode=ro", q], timeout=10)
     if not r or r.returncode != 0:
         return {"available": False, "reason": (r.stderr.strip() if r else "timed out"), "items": []}

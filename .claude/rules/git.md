@@ -94,6 +94,14 @@ fork's main diverged from upstream because sessions pushed whatever their
 checkout held. A worktree costs one command and makes every one of those
 impossible. Remove it when the branch lands: `git worktree remove ../wt-slug`.
 
+Commit from a worktree as `cd <worktree> && git commit ...`, with `&&`. The
+commit-deletes guard reads only that shape to find the repo, and any other falls
+back to the session's checkout. On 2026-11-06 `cd <worktree>; git commit` was
+judged against the shared checkout, whose HEAD had moved, and refused over 3 files
+the commit never touched. When main moves under a task, replay with `git checkout
+--detach origin/main` and `git cherry-pick`. A merge staged 200+ of other tabs'
+files that same day, and pre-commit's skill lint refused one of theirs.
+
 ## Pulling and pushing
 
 - `git config --global pull.ff only`, `fetch.prune true`, `rerere.enabled true`.
@@ -128,13 +136,13 @@ the old repo only after that. Never rebase a branch that holds a subtree add:
 the same day a rebase started replaying the imported commits at the repo root.
 Merge main into it instead.
 
-## Removing a local repo: ask the remote, not origin/*
+## Removing a local repo: ask the remote, not origin/\*
 
 Before trashing, deleting or "cleaning up" any local checkout, run
 `bin/repo-safe-to-remove <dir>...` and remove only the ones it prints SAFE.
 It asks the remote with `git ls-remote`, then checks the tree, stash and every
 branch tip against what the remote has right now. On 2026-11-04 a storage
-cleanup trashed echo, grader and visualide as fully pushed: stale origin/*
+cleanup trashed echo, grader and visualide as fully pushed: stale origin/\*
 refs outlived the deleted GitHub repos, `git fetch -q` failed silently, the
 Trash got emptied, and those were the only copies.
 

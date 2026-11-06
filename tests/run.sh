@@ -2104,6 +2104,8 @@ if group "hud"; then
     python3 "$ROOT/tests/test_meeting_privacy.py"
   check  "a background agent may not draw over the person's work while they use the Mac" \
     python3 "$ROOT/tests/test_live_glass.py"
+  check  "the spoken brief is off by default, quiet in a busy room, and never says a private line" \
+    python3 "$ROOT/tests/test_brief_speak.py"
   # CHW-203. Scripted Jev and a scripted model, recorded query answers: no
   # network, no display. It was never wired in before the tiers landed.
   check  "generated surfaces: tiers answer before the model, math picks components, every layout validates" \

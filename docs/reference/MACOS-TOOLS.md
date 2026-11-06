@@ -209,6 +209,27 @@ debugging case study live in
 
 ---
 
+## The spoken brief
+
+`chewie brief --speak` reads today's calendar and who's waiting on a reply, and
+`chewbacca brief` is the same command. It stays silent while any Focus is on,
+while something holds the mic, while audio is playing, or when it can't read one
+of those. A call or a Focus that starts mid sentence stops it, and so does
+`chewie brief --hush`. `--print` shows the words with no sound, and `--force`
+skips the room checks for one spoken request.
+
+Message bodies, WHOOP numbers and anything `meeting_privacy` or a health word
+flags never reach the speaker or the glass. A brief past about 60 seconds is cut
+between lines and the rest goes on the glass. To hide a name the word list can't
+know, add it to `private_words` in `~/.chewbacca/spoken-brief.json`.
+
+The morning run is off until `chewie brief --speak-auto on [--at HH:MM]`, which
+adds one daemon service. It speaks once a day, only when someone touched the Mac
+in the last 5 minutes, and gives up 3 hours after its time. `--speak-auto off`
+removes the service.
+
+---
+
 ## Maccy
 
 Clipboard history in the menu bar, so a token or URL you scrolled past is still

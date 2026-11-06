@@ -243,7 +243,7 @@ PLATFORMS: list[dict] = [
         "install": "nothing; JSON API at https://api.porkbun.com/api/json/v3",
         "auth": "API key + secret from https://porkbun.com/account/api, then `chewbacca platforms set-key porkbun` and `set-key porkbun-secret`",
         "jobs": ["POST /dns/retrieve/<domain> with apikey and secretapikey in the body"],
-        "notes": "On 2026-11-03 checkout failed with 'This account is unable to place new orders (001)'; support was emailed from calebnew@usc.edu. Buy new domains on Cloudflare.",
+        "notes": "On 2026-11-03 checkout failed with 'This account is unable to place new orders (001)'; support was emailed. Buy new domains on Cloudflare.",
     },
     {
         "key": "clay", "name": "Clay", "check": check_clay,

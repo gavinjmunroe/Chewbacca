@@ -17,6 +17,7 @@ typing, and the stack reads done afterwards.
 import json
 import os
 import subprocess
+import time
 import sys
 import tempfile
 from pathlib import Path
@@ -119,8 +120,13 @@ esac
           code == 1 and got.get("blocked") and not flag.exists(), got)
     code, got = welcome("connect", "recording", "--yes")
     check("connect recording --yes turns it on through meeting-autopilot", code == 0 and flag.exists(), got)
-    guides = [s for s in spawns() if s.startswith("recording-permissions")]
     asked = set(got.get("permissions") or [])
+    # The recorder runs detached, so a loaded Mac writes its line a moment later.
+    for _ in range(50):
+        guides = [s for s in spawns() if s.startswith("recording-permissions")]
+        if guides or not asked:
+            break
+        time.sleep(0.1)
     check("it opens the Settings walk only for the recording grants still missing",
           asked <= {"microphone", "screen-recording-and-system-audio"}
           and (not asked or (len(guides) == 1 and "guide --only" in guides[0])), (asked, guides))

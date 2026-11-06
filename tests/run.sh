@@ -786,6 +786,7 @@ if group "tools"; then
   check  "amber-redact: known and pattern values never leak, the gap is measured" python3 "$ROOT/tests/test_amber_redact.py"
   check  "agent-history: one search over Claude Code and Codex transcripts, no fake secret survives" python3 "$ROOT/tests/test_agent_history.py"
   check  "tools answer --help and a bad argument without acting or a traceback" python3 "$ROOT/tests/test_stress_tools.py"
+  check  "prayer-guard leaves a claude -p reply alone and still checks every session a person reads" bash "$ROOT/tests/test_prayer_guard_headless.sh"
   check  "the stress test's guard attacks stay refused and ordinary commands still pass" python3 "$ROOT/tests/test_stress_guards.py"
   check  "a runtime install refuses rm -rf ~ and a force push to main, and nothing a real session ran" python3 "$ROOT/tests/test_brake_guard.py"
   check  "public-scan lists personal content in a repo and its history by file and commit, and changes nothing" python3 "$ROOT/tests/test_public_scan.py"
@@ -2279,7 +2280,7 @@ if group "live"; then
     # A live check that cannot skip will report green on a machine missing the
     # very tool it exists to exercise, which is the failure mode it was written
     # to prevent. Every file must have an exit path that is not pass or fail.
-    check "$n can SKIP" bash -c "grep -qE 'need |unproven ' '$f'"
+    check "$n can SKIP" bash -c "grep -qE 'need |unproven |exit 77' '$f'"
     check "$n has a mutant" bash -c "grep -q 'mutant ' '$f'"
   done
   expect "--list describes each check" "mac" bash "$ROOT/bin/live-check" --list

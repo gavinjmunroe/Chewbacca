@@ -179,10 +179,10 @@ async function idleWatch() {
     for (;;) {
       await new Promise((r) => setTimeout(r, Math.min(30, IDLE_S) * 1000));
       if (!(await debuggerUp())) return;
-      if (idleSeconds() > IDLE_S) {
-        await closeBridgeChrome();
-        return;
-      }
+      // Keep watching after a close. A call can start a new Chrome during the close, and
+      // it finds this pid still alive and starts no watcher of its own, which left a Chrome
+      // up with nothing to close it (stress test, 2026-11-05). The next pass exits if none.
+      if (idleSeconds() > IDLE_S) await closeBridgeChrome();
     }
   } finally {
     try {
@@ -490,8 +490,34 @@ const FIND_JS = (sel) => `(() => {
   return { x: r.x + r.width / 2, y: r.y + r.height / 2, tag: el.tagName.toLowerCase() }
 })()`;
 
+// A load event can fire before anyone is listening: a data: URL or a cached page lands
+// that fast. Waiting on it alone hung `read` for 2.5 hours in the stress test of
+// 2026-11-05, with its Chrome still up. 20 s is guessed, never measured.
+async function loaded(Page, Runtime) {
+  const waits = [Page.loadEventFired(), new Promise((r) => setTimeout(r, 20000).unref())];
+  if (Runtime) {
+    waits.push(
+      (async () => {
+        for (;;) {
+          const { result } = await Runtime.evaluate({ expression: "document.readyState" });
+          if (result.value === "complete") return;
+          await new Promise((r) => setTimeout(r, 100));
+        }
+      })().catch(() => new Promise(() => {})),
+    );
+  }
+  await Promise.race(waits);
+}
+
 async function main() {
   const [cmd, ...rest] = process.argv.slice(2);
+  // No call outlives this, so a stuck one can't hold a Chrome open. Guessed, never measured.
+  if (cmd !== "idle-watch") {
+    setTimeout(
+      () => fail(`${cmd} still running after its deadline`),
+      parseInt(process.env.CHEWIE_WEB_CALL_S || "300", 10) * 1000,
+    ).unref();
+  }
   switch (cmd) {
     case "launch-args": {
       // What the bridge would start Chrome with; for tests, starts nothing.
@@ -540,7 +566,7 @@ async function main() {
     }
     case "read": {
       await withTab(async ({ Runtime, Page }) => {
-        if (rest[0]) await Page.loadEventFired();
+        if (rest[0]) await loaded(Page, Runtime);
         out(await evalInPage(Runtime, READ_JS));
       }, rest[0]);
       break;
@@ -549,7 +575,7 @@ async function main() {
       if (!rest[0]) fail("goto needs a url");
       await withTab(async ({ Page }) => {
         await Page.navigate({ url: rest[0] });
-        await Page.loadEventFired();
+        await loaded(Page);
         out("ok: " + rest[0]);
       }, rest[0]);
       break;

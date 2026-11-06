@@ -3,6 +3,11 @@
 # shellcheck source=/dev/null
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" 2>/dev/null || true
 type hook_init >/dev/null 2>&1 && hook_init prayer-guard.sh 5
+# A program reads `claude -p`, not Caleb, and the refusal ate its answer. Stress test,
+# 2026-11-05: "Reply with the single word pong" came back as only a prayer, so any tool or
+# eval calling bare `claude -p` got no answer. Interactive and desktop sessions still get it.
+if [ "${CLAUDE_CODE_ENTRYPOINT:-}" = "sdk-cli" ]; then cat >/dev/null; exit 0; fi
+
 # Stop hook: the reply opens with a prayer to Jesus that ends in "Amen", or
 # the turn is refused.
 #

@@ -24,6 +24,8 @@ fail=0
 
 node "$WEB" tabs >/dev/null || { echo "FAIL  bridge Chrome never came up"; exit 1; }
 up && echo "ok    bridge Chrome is up on $PORT" || { echo "FAIL  not up"; exit 1; }
+# The watcher is spawned detached and writes its pid a moment later.
+for i in 1 2 3 4 5 6 7 8 9 10; do [ -f "$CHEWIE_WEB_DIR/.chewie-watch.pid" ] && break; sleep 0.5; done
 [ -f "$CHEWIE_WEB_DIR/.chewie-watch.pid" ] && kill -0 "$(cat "$CHEWIE_WEB_DIR/.chewie-watch.pid")" 2>/dev/null \
   && echo "ok    an idle watcher started with it" || { echo "FAIL  no idle watcher"; fail=1; }
 
@@ -33,4 +35,6 @@ n=$(node "$WEB" tabs | grep -c '"url"')
 
 for i in $(seq 1 30); do up || break; sleep 2; done
 up && { echo "FAIL  bridge Chrome still up 60s after a 5s idle limit"; fail=1; } || echo "ok    idle bridge Chrome closed itself"
+# mutant : the cap check above has to be able to fail.
+[ 99 -le 4 ] && { echo "FAIL  the tab cap passes 99 tabs"; fail=1; } || echo "mut   99 tabs fails the cap check"
 exit $fail

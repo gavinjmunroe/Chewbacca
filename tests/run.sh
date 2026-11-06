@@ -559,6 +559,8 @@ if group "gtme"; then
     bash "$ROOT/tests/no_grep_p.sh" "$ROOT"
   check "a post tagging a client waits for a fresh, clean gtme done" \
     bash "$ROOT/tests/client_ask_guard.sh"
+  check "ratio-check fails text off a short window and passes one that fits" \
+    bash "$ROOT/tests/ratio_check.sh"
   check "a contact saved with a company keeps the real last name" \
     bash "$ROOT/tests/contact_name_guard.sh"
   check "agents never post in a client's Slack conversations as Caleb; Togari does" \

@@ -100,6 +100,10 @@ where the data comes from. All four of those are written down here, once.
 
 Steps 1 to 3 are lookups and should cost almost nothing. That is the point.
 
+## Every screen shape, every time
+
+Before calling any page, site, deck or app done, run `ratio-check <url> --out <folder>` and look at the screenshots. It walks 12 shapes, including 16:9 slides, short laptop windows, a phone on its side and ultrawide. Size type and layout from the window's height and aspect ratio too, since width breakpoints alone break a short 16:9 window. Caleb, 2026-11-06, when a pitch site passed at 1440x900 and 390x844 while his 771x558 window got a plain fallback: "All things we make should take into acct all screen ratios!" `ratio-check` needs a real browser and can't judge taste, so an exit 3 means unverified.
+
 ## A deck handed over means the product the deck promises
 
 2026-10-26, SoundCheck: Caleb dropped his team's pitch deck and said "COOK".

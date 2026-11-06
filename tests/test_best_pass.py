@@ -28,7 +28,7 @@ class BestPass(unittest.TestCase):
         self.assertIsNone(bp.review("email", "hi", "a founder", ask=lambda s, q: (None, None)))
 
     def test_a_missing_answer_is_not_a_pass(self):
-        out = bp.review("text", "hi", "a friend", ask=lambda s, q: ({}, lambda v: v))
+        out = bp.review("text", "hi", "a friend", ask=lambda s, q: ({"other": {"noul": 1.0}}, lambda v: v))
         self.assertTrue(out)
         self.assertTrue(all("no answer" in w for w in out))
 

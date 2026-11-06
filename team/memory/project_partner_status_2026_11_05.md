@@ -19,3 +19,5 @@ Read from Gmail, texts, calendar, DNS and Dripify on 2026-11-05. The full map is
 Related: [[project_travis_trials_2026_11_02]], [[project_aurapath_sending_domains_2026_11_03]], [[project_junto_pilot_2026_10_28]], [[project_medrano_partners_2026_10_27]], [[feedback_linkedin_match_is_a_guess]].
 
 Update 11/5 afternoon: John texted he never gave permission to be listed and that FaithTech marketing must clear any partner claim. His email says the signed NDA PDFs do not count, PandaDoc only, so the NDA is not signed. John, Travis and FaithTech came off the site in FF commit 0c352c2. Nobody goes on the site before a written yes.
+
+Update 11/5 evening: Dough main has the Dripify user agent fix, the aurapath-pip client and a held healthy-hip-hop client. Junto read-only plan: 120 ready, 34 held for a person, 6 no profile, 4 out. AuraPath list is 46 firms. John Knox moved the call to next week to read the one pager. The removed John, Travis and FaithTech cards sit unimported in firm-foundation site/lib/held-partners.ts.

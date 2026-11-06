@@ -88,6 +88,8 @@ ever have 1 branch: main". That day there were 28 local and 12 GitHub branches,
 every one already landed. Never push a branch to origin, and delete any local
 branch (EnterWorktree's `claude/*` included) the moment its commits land.
 
+To move to a newer main, add a fresh worktree. A `git checkout` inside your own worktree gets refused by destructive-guard, which reads the session's checkout, and on 2026-11-06 it refused one in wt-recipes as if it were the shared checkout. Don't reach for its override.
+
 On 2026-10-05 the shared `~/Chewbacca` checkout sat 18 commits behind main
 holding another session's edits, eleven stray worktrees had piled up, and a
 fork's main diverged from upstream because sessions pushed whatever their
@@ -118,6 +120,7 @@ files that same day, and pre-commit's skill lint refused one of theirs.
   other tabs' files never ride along, regenerates SHA256SUMS, lets pre-push
   run, and retries a lost race under a lock. Never push from the shared
   checkout by hand: ten tabs did on 2026-10-09/10 and broke it a new way each time.
+- A graded event freezes shipping, and `live-event-guard` can't see all of it. It reads the command's words, so `chewbacca land` and a push inside a script file pass it. On 2026-11-06 this kit landed at 11:4x inside the freeze that ended at 12:00 with no refusal. Before a land, run `coursework today`, and if an event is within its window (30 minutes before, 2 hours after) land nothing that touches a tool he's using in it.
 - Main stays green. A red check on main is fixed or quarantined the day it
   appears, because a main that is always a little red hides the next failure.
 

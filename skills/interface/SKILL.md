@@ -1000,3 +1000,67 @@ and "If we could somehow cleanly make a K in there, maybe w the diagnol line, th
   carry it. Cut the variants that clutter (a K carved into the crystal, a slipped K in the bill).
 - **Draw the slice with a clip path per side**, so any mark can be cut without redrawing it.
 
+## A figure standing for a real thing is drawn as that thing, or it is slop
+
+Caleb, 2026-11-05, three messages in a row on a biology talk: "I want it to
+look real, not like claude generated shapes bruh", "THE GRADIENTS ARE SLOP",
+and "Obv refactored and simplified to not be the ins and outs and to scale of
+an actual cell. But rn its just shapes ykwim".
+
+So the ask is not photorealism and not anatomical accuracy. It is that a
+drawing standing in for a real object has to carry that object's recognisable
+form. DNA was a row of rounded rectangles. A red blood cell was a filled
+circle. Cas9 was an ellipse parked behind the diagram. Each one is a primitive
+wearing a label, and a figure made of primitives reads as a flowchart no
+matter how good the typography around it is.
+
+What fixed it:
+
+- **Draw the form, not a box with a caption.** DNA became a real double helix:
+  two backbones a half-turn out of phase, crossing, with the rungs between
+  them foreshortening to nothing at each crossing. A red blood cell became a
+  biconcave disc, because the dimple is the thing that makes it readable as
+  one. Both are two flat fills and some line work, so this costs geometry,
+  not rendering.
+- **Set the period for legibility, not for accuracy.** The first helix used
+  10.5 base pairs per turn, which is the real figure, and at that scale gave
+  under three turns across the whole strand: it read as a lazy wave. The talk
+  is a simplified figure, so the turn is set in pixels. Accuracy that reads
+  as wrong is worse than a simplification that reads as right.
+- **Irregular reads as real, symmetrical reads as generated.** Two matching
+  domes for a protein's two lobes looked like a logo. The fix for a thing
+  with no straight edges is a fixed table of per-vertex offsets so no two
+  bumps match and it never jitters between frames.
+- **Gradients are not the answer.** Adding a light direction to every mark
+  was the first instinct and it was wrong: "THE GRADIENTS ARE SLOP". Flat
+  fills, and the quality comes from the silhouette being right.
+- **Find the reference before drawing the fourth version.** Two passes went
+  into inventing a Cas9 silhouette freehand. The actual solved structure
+  (PDB 4OO8, Nishimasu 2014) was already sitting in the PowerPoint he had
+  submitted, as a rendered image. Knocking its white page out to alpha took
+  one pass and beat everything drawn by hand. Before inventing a shape for a
+  real object, check whether a real picture of it is already in the project.
+
+## The design gates do not catch generated-looking figures, and they say so
+
+Same build, when Caleb asked why the slop guards had not fired. Three
+answers, all worth keeping:
+
+- **They were never run.** `design-gate`, `ux-lint` and `ui-proof` are all on
+  PATH and this skill's own step 6 says to run them on the rendered result. A
+  hand-rolled contact sheet was built instead and the kit's gates were
+  skipped. The one that would have blocked it, `site-stack-gate.sh`, only
+  fires on a Write inside a repo, and the first version of the page was
+  written into `~/Downloads`.
+- **Run late, they still passed.** `design-gate` returned exit 0 with "GATE
+  PASS. Nothing is broken. That is not the same as good." It measures ink,
+  balance and focus. None of those move when a figure is made of primitives.
+- **One of them was right and went unread.** `ux-lint` flagged
+  `violet-accent-hex` on `#5e6ad2`: an indigo accent as a raw hex, whose cost
+  it states as "once a viewer can name the style as generated, they have an
+  attribution". That is the exact complaint, sitting in an advisory finding.
+
+So: run the kit's gates on every UI change before reporting it done, and read
+`ux-lint`'s advisory findings rather than only its blocking one. Then still
+look at the frames yourself, because no gate scores whether a drawing
+resembles the thing it stands for.

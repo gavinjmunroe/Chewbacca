@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT / "bin" / "lib"))
 sys.path.insert(0, str(ROOT / "tests"))
 import meeting_capture as MC  # noqa: E402
 import meeting_live as ML  # noqa: E402
+import meeting_privacy as MP  # noqa: E402
 try:  # a product like Hall carries the live call with no Kyber panel
     import surface_lint  # noqa: E402
     import surfaces  # noqa: E402
@@ -212,8 +213,48 @@ def t_gates(tmp):
     check("unknown calendar: a tab gets a pointer, never the words", "start in December" not in got and "tail" in got, got)
     check("and only once", ML.for_tab(home, "u", "on this call", NOW) == "")
     check("a meeting from before the flag counts as unknown", ML.calendar_unknown({"title": "x"}))
-    home = world(tmp, title="Team sync", overlap_titles=["Team sync", "Psychiatric intake"])
-    check("any overlapping private event keeps the call private", ML.for_tab(home, "ov", "on this call", NOW) == "")
+    home = world(tmp, title="Team sync", private_overlap=True)
+    check("a private overlap keeps the call private", ML.for_tab(home, "ov", "on this call", NOW) == "")
+    span0 = {"start": (NOW - timedelta(minutes=30)).isoformat(), "end": (NOW + timedelta(hours=1)).isoformat()}
+    for label, hidden in [("title", {"title": "Therapy w Sam"}), ("calendar", {"title": "Weekly", "calendar": "Medical"}),
+                          ("attendee email", {"title": "Weekly", "attendees": [{"email": "intake@therapy-group.example"}]}),
+                          ("long title", {"title": "x " * 80 + "therapy"})]:
+        keep = MC.calendar_events, MC.attendees_of
+        MC.calendar_events = lambda day, run=None: [{"title": "Team sync", **span0}, {**span0, **hidden}]
+        MC.attendees_of = lambda ev: ev.get("attendees") or []
+        try:
+            w = MC.Watcher(Path(tmp) / f"o-{label}", transcribe=lambda p: "", run=lambda a, t: (1, "", ""), now=lambda: NOW)
+            w.heard(NOW, 15.0, "hello", {})
+            check(f"an overlapping event private by {label} hides the call", ML.is_private(w.current) and w.current["title"] == MP.OVERLAP_TITLE, w.current["title"])
+            ended = w.finish()
+            check(f"private by {label}: it stays private after the end", ended is not None and ML.is_private(ended) and ended["title"] == MP.OVERLAP_TITLE, ended and ended["title"])
+            check(f"private by {label}: no summary, no ledger", not ended.get("summary") and not ended.get("ledger") and "private event" in ended["summary_note"], ended.get("summary_note"))
+        finally:
+            MC.calendar_events, MC.attendees_of = keep
+    keep = MC.calendar_events
+    MC.calendar_events = lambda day, run=None: None
+    w = MC.Watcher(Path(tmp) / "gap", transcribe=lambda p: "", run=lambda a, t: (1, "", ""), now=lambda: NOW)
+    w.heard(NOW, 15.0, "first", {})
+    check("a failed read leaves the call unknown", ML.calendar_unknown(w.current))
+    MC.calendar_events = lambda day, run=None: [{"title": "Therapy w Sam", "start": (NOW - timedelta(minutes=5)).isoformat(), "end": (NOW + timedelta(seconds=5)).isoformat()}]
+    w.heard(NOW + timedelta(minutes=2), 15.0, "later", {})
+    check("the next good read checks the gap, so a slot that already ended still counts", ML.is_private(w.current), w.current["title"])
+    MC.calendar_events = keep
+    check("a raw attendee string counts", MP.event_is_private({"title": "x", "attendees": ["Therapy Group"]}))
+    check("a raw attendee the cleaner dropped counts", MP.event_is_private({"title": "x", "attendees": [{"email": "a@psychiatry.example"}]}, []))
+    allday = {"title": "Therapy retreat", "isAllDay": True, "start": (NOW - timedelta(hours=2)).isoformat(), "end": (NOW + timedelta(hours=8)).isoformat()}
+    check("an all-day private event counts as overlapping", MC.all_overlapping([allday], NOW, NOW + timedelta(minutes=1)) == [allday] and MP.event_is_private(allday))
+    check("an ordinary event doesn't", not MP.event_is_private({"title": "Team sync", "attendees": [{"email": "a@b.example"}]}))
+    only_at_end = {"title": "Therapy w Sam", "start": (NOW - timedelta(minutes=1)).isoformat(), "end": (NOW + timedelta(hours=1)).isoformat()}
+    keep = MC.calendar_events
+    MC.calendar_events = lambda day, run=None: []
+    w = MC.Watcher(Path(tmp) / "late", transcribe=lambda p: "", run=lambda a, t: (1, "", ""), now=lambda: NOW)
+    w.heard(NOW, 15.0, "hello", {})
+    w._calendar_at -= MC.CALENDAR_TTL_S + 1
+    MC.calendar_events = lambda day, run=None: [only_at_end]
+    ended = w.finish()
+    check("an invite first seen at the end still locks it, with no summary", ended["title"] == MP.OVERLAP_TITLE and not ended.get("summary"), ended["title"])
+    MC.calendar_events = keep
     home = world(tmp, calendar_read=True)
     start = NOW - timedelta(minutes=1)
     span = {"start": start.isoformat(), "end": (NOW + timedelta(hours=1)).isoformat()}
@@ -338,6 +379,7 @@ for fn in (t_current, t_forged_helper, t_private, t_tabs, t_about, t_injection, 
            *([t_surface] if surfaces else [])):
     with_tmp(fn)
 MC.capture_state = REAL_STATE
-with_tmp(t_hook)
+if (ROOT / ".claude" / "hooks" / "meeting-live.sh").exists():  # a product may carry no tab hook
+    with_tmp(t_hook)
 print("FAILED" if failed else "all ok")
 sys.exit(1 if failed else 0)

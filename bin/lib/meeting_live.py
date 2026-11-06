@@ -186,11 +186,7 @@ def tabs_on(home: Path) -> bool:
 
 
 def is_private(meeting: dict) -> bool:
-    people = [p for p in meeting.get("participants") or [] if isinstance(p, dict)]
-    event = meeting.get("calendar_event") if isinstance(meeting.get("calendar_event"), dict) else {}
-    return MP.is_private(meeting.get("title"), event.get("title"), event.get("calendar"),
-                         *[t for t in meeting.get("overlap_titles") or [] if isinstance(t, str)],
-                         *[p.get("display_name") for p in people], *[p.get("email") for p in people])
+    return MP.meeting_is_private(meeting)
 
 
 def calendar_unknown(meeting: dict) -> bool:

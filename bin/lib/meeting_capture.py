@@ -54,6 +54,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from transcript_filler import strip_transcript_filler  # noqa: E402
+import meeting_privacy as MP  # noqa: E402  stdlib only, like this module
 
 APP = "Chewbacca"
 # The same model bin/room-listen loads, so a meeting and a room transcript read
@@ -633,17 +634,17 @@ class Watcher:
                                       "seconds": round(seconds, 2), "text": text,
                                       "system_dbfs": levels.get("system_dbfs"), "mic_dbfs": levels.get("mic_dbfs")})
         self.last_heard = start + timedelta(seconds=seconds)
-        # Every chunk, even with a title: a call can run into a private slot, and a
-        # therapy session joined two minutes early must not stay "Meeting at 2:58pm".
-        # The titles stick, so meeting_live keeps it private for the rest of the call.
+        # Every chunk, over the whole call so far: a call can run into a private slot,
+        # a therapy session joined two minutes early must not stay "Meeting at 2:58pm",
+        # and a read that failed earlier gets its gap checked by the next good one.
         events = self.calendar(start)
         self.current["calendar_read"] = events is not None
-        seen = self.current.setdefault("overlap_titles", [])
-        for one in all_overlapping(events, start, self.last_heard):
-            title = clean(one.get("title"), 120)
-            if title and title not in seen:
-                seen.append(title)
-        if not self.current.get("calendar_event"):
+        began = parse_iso(self.current.get("started_at")) or start
+        if any(MP.event_is_private(one, attendees_of(one)) for one in all_overlapping(events, began, self.last_heard)):
+            self.current["private_overlap"] = True  # sticky: it never turns public again
+        if self.current.get("private_overlap"):
+            self.current["title"] = MP.OVERLAP_TITLE
+        elif not self.current.get("calendar_event"):
             event = overlapping(events, start, self.last_heard)
             if event:
                 self.titled(self.current, event, start.astimezone())
@@ -699,10 +700,18 @@ class Watcher:
         start = parse_iso(meeting["started_at"]) or self.now()
         end = self.last_heard or parse_iso(meeting.get("last_heard")) or self.now()
         meeting["ended_at"] = iso(end)
-        event = overlapping(self.calendar(start), start, end)
+        events = self.calendar(start)
+        if any(MP.event_is_private(one, attendees_of(one)) for one in all_overlapping(events, start, end)):
+            meeting["private_overlap"] = True
+        event = overlapping(events, start, end)
         if event or not meeting.get("calendar_event"):
             self.titled(meeting, event, start.astimezone())
-        if summary_off(self.env):
+        if meeting.get("private_overlap"):
+            # Decisive for the rest of this: no summary means no model reads it, no
+            # topic overwrites this title, and no action items reach the ledger.
+            meeting["title"] = MP.OVERLAP_TITLE
+            meeting["summary_note"] = "No summary: a private event overlapped this call, so nothing left this Mac."
+        elif summary_off(self.env):
             meeting["summary_note"] = "No summary: CHEWBACCA_MEETING_SUMMARY=0, so nothing left this Mac."
         elif not words_of(meeting):
             meeting["summary_note"] = "No summary: nothing was said."
@@ -715,7 +724,7 @@ class Watcher:
         meeting["updated_at"] = iso(self.now())
         self.save(meeting)
         if meeting.get("summary") and not summary_off(self.env):
-            # After the call, never during it (Joel Newton, 2026-10-25). The
+            # After the call, never during it (a mentor, 2026-10-25). The
             # summary is saved first: the reflection can take minutes, and a
             # failure in it must never cost the meeting its summary.
             try:

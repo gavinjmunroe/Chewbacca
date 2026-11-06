@@ -25,6 +25,10 @@ PRIVATE = re.compile(
     r"clinic\w*|diagnos\w*|mental health|health ?care|hospital|prescri\w*|rehab\w*|dentist\w*|dental|"
     r"ob-?gyn|pregnan\w*|osas|accommodations?|disabilit\w*|psych|intake)\b", re.I)
 PRIVATE_LABEL = "Private"
+# The title a meeting takes when an invite overlapping it reads as private. Every
+# reader (panel, ledger, reflection, tabs) decides from the title, so changing the
+# title is what makes one calendar hit count everywhere.
+OVERLAP_TITLE = "Private (calendar)"
 
 # Stems searched with every non-letter removed, so "thera-py", "t h e r a p y"
 # and "psych.iatric" are caught. Longer than the word list's short forms
@@ -85,6 +89,8 @@ def is_private(*texts) -> bool:  # noqa: F811  the stem check below widens the o
         text = decode(t)
         if not text:
             continue
+        if text == OVERLAP_TITLE:
+            return True
         folded = text.translate(CONFUSABLES).casefold()
         if PRIVATE.search(folded) or any(s in _letters(folded) for s in STEMS):
             return True
@@ -142,3 +148,27 @@ if __name__ == "__main__":
     if sys.argv[1:] != ["--redact"]:
         sys.exit("usage: meeting_privacy.py --redact < text")
     sys.stdout.write(redact(sys.stdin.read()))
+
+
+def event_is_private(event: dict, attendees: list[dict] | None = None) -> bool:
+    """Every field of one calendar event that can give it away, untruncated."""
+    fields = [event.get("title"), event.get("calendar"), event.get("notes"), event.get("location")]
+    # The raw list as well as the cleaned one: a cleaner can drop or trim an entry.
+    raw = event.get("attendees") if isinstance(event.get("attendees"), list) else []
+    for person in [*(attendees or []), *raw]:
+        if isinstance(person, dict):
+            fields.extend(str(v) for v in person.values() if isinstance(v, str))
+        elif person:
+            fields.append(str(person))
+    return is_private(*fields)
+
+
+def meeting_is_private(meeting: dict) -> bool:
+    """The one answer for a whole meeting: title, folder, its event, an overlapping
+    private event seen at any point, and everyone on it."""
+    event = meeting.get("calendar_event") if isinstance(meeting.get("calendar_event"), dict) else {}
+    people = [p for p in meeting.get("participants") or [] if isinstance(p, dict)]
+    return bool(meeting.get("private_overlap")) or is_private(
+        meeting.get("title"), meeting.get("folder_path"), event.get("title"), event.get("calendar"),
+        *[p.get("display_name") for p in people], *[p.get("email") for p in people])
+

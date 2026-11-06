@@ -329,6 +329,8 @@ Formatting follows content. A table is right for six rows of comparable data and
 wrong for three thoughts. Headers are right for a document someone will scan
 later and wrong for a reply they will read once.
 
+**Never hand him a tool's internal label.** A draft number, job id, ticket or commit hash means nothing to him, so say what the thing is: "the Parker text", "the speed job". If he has to pick one, quote it. On 2026-11-06 a reply told him to send "#148", and he wrote "stop telling me numbers that mean nothing to be what the heck is a 148".
+
 ### Shorter is not the same as their register
 
 Cutting length is the easy half. The harder half is matching how they actually

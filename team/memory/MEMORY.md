@@ -543,3 +543,5 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - project_ff_outbound_state_2026_11_05: FF outbound handoff 11/5, send stop in force, 0 church emails, decided copy, what's wrong, how he reviews
 - project_ff_outbound_review_2026_11_05: FF first outbound review 11/5, 0 sent; copy Caleb decided, false lines caught, line_proof in Dough, what must change before any send
 - feedback_hooks_judge_meaning_not_words: a hook never guesses what someone means from a word list, the model or Jev decides, and permission stays in code
+- feedback_study_number_checks: before a study number ships, recount a composite without each part and name who behaves that way for a good reason (Saturday churches, access question)
+- feedback_falsifier_needs_a_sample_size: a result that would prove you wrong has to be likely enough to mean it; 25 cold emails prove nothing at 1%, FF's test is 200

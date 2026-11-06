@@ -137,3 +137,7 @@ branch tip against what the remote has right now. On 2026-11-04 a storage
 cleanup trashed echo, grader and visualide as fully pushed: stale origin/*
 refs outlived the deleted GitHub repos, `git fetch -q` failed silently, the
 Trash got emptied, and those were the only copies.
+
+## Cleanup never follows a commit on a `;`
+
+In zsh, `git add $F` with several paths in `$F` passes one long path and fails. If the commit is joined with `&&` and cleanup comes after a `;`, the cleanup still runs. On 2026-11-05 that shape queued `git worktree remove --force` on a worktree holding the only copy of a finished fix, and it was caught by chance while the job waited on a deploy. Write paths out, and chain cleanup with `&&` so it only runs after the push worked.

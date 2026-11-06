@@ -595,3 +595,9 @@ iMessage send reads its own rows back from chat.db before it returns and prints
 Trust that line over `people texts`, which lags until its next sync.
 
 Never send a draft the user has not seen.
+
+## An update starts from what they last heard
+
+Before drafting an update, read what that person was last told and start there. On 2026-11-05 a text to Gavin opened on findings, and Caleb wrote "He has no clue what I did or rlly anything". The version he took said what he'd planned, what he found when he dug in, and what changes. Keep it to a few texts: a 15 line version drew "thats too many texts bruh". Every number says what it's out of, since he also asked "60 and 208 out of what".
+
+When a plan moves, list everyone who was told the old one and draft each of them in the same turn. The same night the Gavin texts were written and the advisor gc, told on 11/3 that outbound was starting, was missed until Caleb wrote "We never draftet that text for the FF gc". Before saying a text didn't go out, read the thread again. His replies can sit in an unnamed group, filed apart from the person (fixed 372819c2), so read `owed` as a starting list and check each name's thread before saying he owes them.

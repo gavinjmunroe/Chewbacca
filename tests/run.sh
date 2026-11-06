@@ -788,6 +788,7 @@ if group "tools"; then
   check  "amber-redact: known and pattern values never leak, the gap is measured" python3 "$ROOT/tests/test_amber_redact.py"
   check  "agent-history: one search over Claude Code and Codex transcripts, no fake secret survives" python3 "$ROOT/tests/test_agent_history.py"
   check  "tools answer --help and a bad argument without acting or a traceback" python3 "$ROOT/tests/test_stress_tools.py"
+  check  "a runtime setup never runs a checkout that's behind main" bash "$ROOT/tests/setup_stale_checkout.sh"
   check  "prayer-guard leaves a claude -p reply alone and still checks every session a person reads" bash "$ROOT/tests/test_prayer_guard_headless.sh"
   check  "the stress test's guard attacks stay refused and ordinary commands still pass" python3 "$ROOT/tests/test_stress_guards.py"
   check  "a runtime install refuses rm -rf ~ and a force push to main, and nothing a real session ran" python3 "$ROOT/tests/test_brake_guard.py"

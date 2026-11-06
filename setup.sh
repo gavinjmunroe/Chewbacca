@@ -79,8 +79,26 @@ if [ -f "$_kr_side" ]; then
     # leaves real local work alone.
     _kr_sha="$(git -C "$SCRIPT_DIR" rev-parse HEAD 2>/dev/null)"
     if [ -n "$_kr_sha" ] && [ -f "$SCRIPT_DIR/tools/source_sync.py" ]; then
-      python3 -I "$SCRIPT_DIR/tools/source_sync.py" "$_kr_src" "$_kr_sha" >&2 \
-        || echo "  ! $_kr_src is behind main, so hooks added since then won't register this run" >&2
+      # When the checkout can't catch up, its setup.sh is the wrong one to run. On 2026-11-06
+      # a `chewbacca update` ran it from 23 commits behind: every live hook went back to the
+      # old copies, and 16 registered hooks came off settings.json, minutes after they went
+      # in. So install from a clean worktree at this sha, kept at a stable path. Nothing in
+      # the shared checkout is touched, and skills and repo paths stay valid across updates.
+      if ! python3 -I "$SCRIPT_DIR/tools/source_sync.py" "$_kr_src" "$_kr_sha" >&2; then
+        _kr_clean="$HOME/.chewbacca/kit/setup-source"
+        if [ -e "$_kr_clean/.git" ]; then
+          git -C "$_kr_clean" checkout -q --detach "$_kr_sha" 2>/dev/null
+        else
+          git -C "$_kr_src" worktree add -q --detach "$_kr_clean" "$_kr_sha" 2>/dev/null
+        fi
+        if [ "$(git -C "$_kr_clean" rev-parse HEAD 2>/dev/null)" = "$_kr_sha" ]; then
+          echo "  $_kr_src is behind main with local work, so this installs from $_kr_clean" >&2
+          _kr_src="$_kr_clean"
+        else
+          echo "  ! $_kr_src is behind main and no clean copy could be made. Not running its old setup." >&2
+          exit 1
+        fi
+      fi
     fi
     exec bash "$_kr_src/setup.sh" "$@"
   fi

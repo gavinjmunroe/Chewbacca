@@ -82,7 +82,7 @@
     {
       "from": "person20@firm15.example",
       "body": "Sam (CC'd) is more on the business side for considering this kind of\napplication: Data with physical meet venues.",
-      "kind": "referral",
+      "kind": "forward",
       "step": null
     },
     {

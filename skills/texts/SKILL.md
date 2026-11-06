@@ -107,6 +107,8 @@ Do none of that. Run `owed --json`, write every reply in his chat register
 (core/voice.md) from that one read, add each to the queue, show the drafts, and
 send only the numbers he names.
 
+Never fill in what a plan is about from an old note. Read the thread, and if the thread doesn't say, write the draft without the guess. On 2026-11-05 Mark texted "yeah i'm free from 6:30-7:30", a draft said "Bet 6:30 gym", and Caleb wrote "6:30 isnt gym its when were prepping for our shared bday".
+
 Never show him a draft number. In chat, name the person and quote the words, and he answers with the person's name ("send Mark's"). You match that to the number yourself. Caleb, 2026-11-05, after "say send 123": "Bro never tell me a random number that means nothing to me", then "Bro number slop for texts bruh". `slop-check --chat` refuses it as `draft-number`.
 
 A draft keeps its number for life (b46dedf1). They used to be positions, and

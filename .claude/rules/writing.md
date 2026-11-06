@@ -323,6 +323,8 @@ Instead:
 - **When the user is frustrated, get shorter.** Swearing, "bruh", one-line
   messages: cut the preamble entirely and act.
 
+**A closing report is one screen on a phone, at most.** Lead with what's done and what he has to do, and leave the rest in a file. On 2026-11-05 he came back to a report with lists, a second report and a note about a memory pointer, and wrote "Holy yap bruh".
+
 Formatting follows content. A table is right for six rows of comparable data and
 wrong for three thoughts. Headers are right for a document someone will scan
 later and wrong for a reply they will read once.

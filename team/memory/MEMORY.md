@@ -550,3 +550,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - project_meeting_live_2026_11_06: live call reaches a tab or Kyber with no pasting (meeting-live) on room-capture; no Natively code, no interview mode, private calls reach nothing
 - feedback_shipped_into_a_live_event: four pushes hit his presenter window while he waited to present; a tool in use during a live event is frozen
 - feedback_railway_no_remote_waved_through: the Railway guard exited 0 when a repo had NO remote, which is the worst case, not the safe one
+- reference_chewie_screen_tools: chewie text (Vision OCR), chewie notifications (--open reads history, Focus hides banners) and the press marker: limits and measured timing

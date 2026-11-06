@@ -552,3 +552,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_railway_no_remote_waved_through: the Railway guard exited 0 when a repo had NO remote, which is the worst case, not the safe one
 - reference_chewie_screen_tools: chewie text (Vision OCR), chewie notifications (--open reads history, Focus hides banners) and the press marker: limits and measured timing
 - project_consumer_ai_research_2026_11_06: 162 consumer AI products scored: 0 better as a consumer product, 29 for one person, distribution is the top moat; build the shared graph no one has, take the rest as low hanging fruit
+- reference_chewbacca_recipe: chewbacca recipe runs typed JSON task files as argv, passes on exit codes, and stops for a press no file can waive; Hall has reads only

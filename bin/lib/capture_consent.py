@@ -57,7 +57,7 @@ def socket_path(env: dict | None = None) -> str:
 
 def capture_line(mic: bool = True, summary: bool = True) -> str:
     heard = "this Mac's mic and the call audio" if mic else "the call audio"
-    after = ("When it stops, the transcript goes to Claude for a summary." if summary
+    after = ("The transcript goes to Claude when you ask about the call and when it stops." if summary
              else "Nothing leaves this Mac.")
     return f"Recording now: {heard}, transcribed on this Mac. Audio is deleted once transcribed. {after}"
 

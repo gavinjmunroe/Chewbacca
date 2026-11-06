@@ -617,21 +617,31 @@ class Watcher:
                                       "seconds": round(seconds, 2), "text": text,
                                       "system_dbfs": levels.get("system_dbfs"), "mic_dbfs": levels.get("mic_dbfs")})
         self.last_heard = start + timedelta(seconds=seconds)
+        if not self.current.get("calendar_event"):
+            # A call that started early or got its invite late: a therapy session
+            # joined two minutes before its slot must not stay "Meeting at 2:58pm".
+            events = self.calendar(start)
+            self.current["calendar_read"] = events is not None
+            event = overlapping(events, start, self.last_heard)
+            if event:
+                self.titled(self.current, event, start.astimezone())
         self.current["updated_at"] = iso(self.now())
         self.current["last_heard"] = iso(self.last_heard)
         self.save(self.current)
 
     def calendar(self, moment: datetime) -> list[dict] | None:
         day = moment.astimezone().strftime("%Y-%m-%d")
-        if day != self._calendar_day:
+        # A failed read is retried: it's what stands between a private call and a tab.
+        if day != self._calendar_day or self._calendar is None:
             self._calendar_day, self._calendar = day, calendar_events(moment, self.run)
         return self._calendar
 
     def begin(self, start: datetime) -> dict:
         local = start.astimezone()
         mid = "rc-" + local.strftime("%Y%m%d-%H%M%S")
-        event = overlapping(self.calendar(start), start, start + timedelta(minutes=1))
-        meeting = {"schema": 1, "id": mid, "app": APP, "created_at": iso(self.now()), "updated_at": iso(self.now()),
+        events = self.calendar(start)
+        event = overlapping(events, start, start + timedelta(minutes=1))
+        meeting = {"schema": 1, "calendar_read": events is not None, "local_only": summary_off(self.env), "id": mid, "app": APP, "created_at": iso(self.now()), "updated_at": iso(self.now()),
                    "started_at": iso(start), "ended_at": "", "timezone": str(local.tzinfo or ""),
                    "lines": [], "summary": None, "action_items": [], "summary_note": ""}
         self.titled(meeting, event, local)

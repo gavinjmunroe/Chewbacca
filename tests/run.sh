@@ -664,6 +664,7 @@ fi
 if group "tools"; then
   check  "product sync: landed changes move, firewall holds personal files, red product tests push nothing" bash "$ROOT/tests/product_sync.sh"
   check  "chewie app: background driver refuses Return without --yes, Jev picks map back" python3 "$ROOT/tests/test_appctl.py"
+  check  "the dispatcher still reaches break-it, mcp, platforms, people-check, lockdown and present" bash "$ROOT/tests/dispatcher_commands.sh"
   check  "chewie text reads pixels offline, notifications are drawn and never obeyed, the press marker never blocks a press" python3 "$ROOT/tests/test_chewie_desktop.py"
   check "counts handles conflict stages and whitespace paths" python3 "$ROOT/tests/test_counts.py"
   check  "repo-safe-to-remove refuses a deleted remote with stale origin refs" bash "$ROOT/tests/repo_safe_to_remove.sh"

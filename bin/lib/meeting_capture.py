@@ -60,6 +60,7 @@ APP = "Chewbacca"
 # the same. small.en ran faster than real time on this Mac on 2026-09-29 with
 # 15 s chunks (room-listen kept up through a whole ACAD 185 class).
 MODEL = "mlx-community/whisper-small.en-mlx"
+CALENDAR_TTL_S = 300
 # Native ids are made here from the first spoken chunk's local time, so they
 # sort by time and can never be a path. Anarlog's ids never take this form.
 NATIVE_ID = re.compile(r"^rc-\d{8}-\d{6}$")
@@ -338,6 +339,17 @@ def calendar_events(day: datetime, run=None) -> list[dict] | None:
     return [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else None
 
 
+def all_overlapping(events: list[dict] | None, start: datetime, end: datetime) -> list[dict]:
+    """Every event that overlaps the span. `overlapping` picks one for the title; a
+    privacy check needs them all, since a work block can sit over a therapy slot."""
+    found = []
+    for event in events or []:
+        begin, stop = parse_iso(event.get("start") or ""), parse_iso(event.get("end") or "")
+        if begin and stop and begin < end and start < stop:
+            found.append(event)
+    return found
+
+
 def overlapping(events: list[dict] | None, start: datetime, end: datetime) -> dict | None:
     """The timed event that overlaps [start, end] the most, or None."""
     best, best_overlap = None, timedelta(0)
@@ -466,7 +478,10 @@ def queue_action_items(meeting: dict, run, env: dict) -> list[dict]:
     CHEWBACCA_MEETING_LEDGER=0 leaves them on the panel for a press instead."""
     if str(env.get("CHEWBACCA_MEETING_LEDGER", "")).strip().lower() in LEDGER_OFF:
         return []
-    import meeting_actions as MA  # noqa: PLC0415  it imports this module
+    try:
+        import meeting_actions as MA  # noqa: PLC0415  it imports this module
+    except ImportError:  # a product without a work ledger keeps the items on the meeting
+        return []
 
     by_human = {p.get("human_id"): p for p in meeting.get("participants") or []}
     names = [clean(p.get("display_name") or p.get("email"), 40) for p in meeting.get("participants") or []
@@ -548,6 +563,7 @@ class Watcher:
                       "meetings": [], "last": None}
         self._calendar_day: str = ""
         self._calendar: list[dict] | None = None
+        self._calendar_at = 0.0
 
     # one pass
 
@@ -617,11 +633,17 @@ class Watcher:
                                       "seconds": round(seconds, 2), "text": text,
                                       "system_dbfs": levels.get("system_dbfs"), "mic_dbfs": levels.get("mic_dbfs")})
         self.last_heard = start + timedelta(seconds=seconds)
+        # Every chunk, even with a title: a call can run into a private slot, and a
+        # therapy session joined two minutes early must not stay "Meeting at 2:58pm".
+        # The titles stick, so meeting_live keeps it private for the rest of the call.
+        events = self.calendar(start)
+        self.current["calendar_read"] = events is not None
+        seen = self.current.setdefault("overlap_titles", [])
+        for one in all_overlapping(events, start, self.last_heard):
+            title = clean(one.get("title"), 120)
+            if title and title not in seen:
+                seen.append(title)
         if not self.current.get("calendar_event"):
-            # A call that started early or got its invite late: a therapy session
-            # joined two minutes before its slot must not stay "Meeting at 2:58pm".
-            events = self.calendar(start)
-            self.current["calendar_read"] = events is not None
             event = overlapping(events, start, self.last_heard)
             if event:
                 self.titled(self.current, event, start.astimezone())
@@ -631,9 +653,14 @@ class Watcher:
 
     def calendar(self, moment: datetime) -> list[dict] | None:
         day = moment.astimezone().strftime("%Y-%m-%d")
-        # A failed read is retried: it's what stands between a private call and a tab.
-        if day != self._calendar_day or self._calendar is None:
+        # A failed read is retried, and a good one ages out, since this is what
+        # stands between a private call and a tab: an invite added at 2:55 for 3:00
+        # must be seen. 5 min is a guess at how late an invite matters, never
+        # measured, and one read is one local CLI call.
+        age = time.monotonic() - self._calendar_at
+        if day != self._calendar_day or self._calendar is None or age > CALENDAR_TTL_S:
             self._calendar_day, self._calendar = day, calendar_events(moment, self.run)
+            self._calendar_at = time.monotonic()
         return self._calendar
 
     def begin(self, start: datetime) -> dict:

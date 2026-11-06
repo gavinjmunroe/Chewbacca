@@ -153,3 +153,33 @@ def test_plain_studying_line_stays_clean():
     assert "not-just-contrast" not in rules_fired(
         "For basic studying any of them work fine. I care way more abt how it's set up", chat=True
     )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        'Say "send 123" for Mark.',
+        "Text is draft #134 to Dad.",
+        "The warm texts, #127 to #131, are ready.",
+        "#125 Ovunda and #119 Gavin are waiting.",
+    ],
+)
+def test_draft_number_fires_in_chat(text):
+    assert "draft-number" in rules_fired(text, chat=True)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Fixed in PR #123 Monday.",
+        "Send Mark's draft when you're ready.",
+        "Section 123 of the agreement.",
+        "We send 5 emails a day.",
+    ],
+)
+def test_draft_number_quiet_in_chat(text):
+    assert "draft-number" not in rules_fired(text, chat=True)
+
+
+def test_draft_number_quiet_in_files():
+    assert "draft-number" not in rules_fired('Run "send 123" from the queue.')

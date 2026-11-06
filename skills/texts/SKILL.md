@@ -107,6 +107,8 @@ Do none of that. Run `owed --json`, write every reply in his chat register
 (core/voice.md) from that one read, add each to the queue, show the drafts, and
 send only the numbers he names.
 
+Never show him a draft number. In chat, name the person and quote the words, and he answers with the person's name ("send Mark's"). You match that to the number yourself. Caleb, 2026-11-05, after "say send 123": "Bro never tell me a random number that means nothing to me", then "Bro number slop for texts bruh". `slop-check --chat` refuses it as `draft-number`.
+
 A draft keeps its number for life (b46dedf1). They used to be positions, and
 on 2026-10-09 one tab's `drop 42` deleted a Maggie reply another tab had just
 added. Show drafts to him as plain lines, one text per line, never bullets

@@ -101,6 +101,22 @@ RULES = [
         ),
     ),
     (
+        # Caleb, 2026-11-05, after "say send 123" and "#127 to #131": "Bro never
+        # tell me a random number that means nothing to me", "Bro number slop for
+        # texts bruh". A queue id means nothing to him. Name the person and quote
+        # the words; the id stays between the agent and the queue. Chat only.
+        "draft-number",
+        14,
+        "draft number in chat: name the person and quote the text instead",
+        re.compile(
+            r"(?:\b(?:send|drop)\s+#?\d{1,4}\b(?!\s+\w+s\b)"
+            r"|\bdrafts?\s+#?\d{1,4}\b"
+            r"|(?<![A-Za-z]\s)#\d{1,4}\s+(?:to|and|through)\s+#\d{1,4}\b"
+            r"|(?<!PR\s)(?<!PRs\s)(?<!issue\s)(?<![/\w])#\d{2,4}\s+(?:to\s+)?[A-Z][a-z]+)",
+            
+        ),
+    ),
+    (
         "throat-clearing",
         12,
         "throat-clearing: open on the point",
@@ -303,6 +319,8 @@ def scan(text, chat=False, essay=False):
         # 51 of the kit's own reference docs say "not just", so on plain files
         # this rule is noise. It is scored where it reads as generated: replies
         # and graded papers.
+        if rid == "draft-number" and not chat:
+            continue
         if rid == "not-just-contrast" and not (chat or essay):
             continue
         for m in pattern.finditer(prose):

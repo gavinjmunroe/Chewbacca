@@ -43,7 +43,7 @@ Write to `PLAN.md` from [TEMPLATE.md](TEMPLATE.md) as you go, with `Status: DRAF
 
 **8. Run the pre-mortem.** Write this as if it already happened: "it's a year from now and this failed." Give at least 5 specific reasons, and for each one, the signal that would show it early (`Catch:`). Klein's method. Anything with no possible catch becomes a change to the plan or a line in the riskiest assumptions.
 
-**9. Get it broken by someone else.** Hand the plan and the question "how does this fail?" to a fresh reviewer, with none of your reasoning, and tell them to attack the evidence and estimates too. Run `reviewing-changes` if code is involved. Put what they found and what you changed in the review log. Your own second read doesn't count. If the machine budget refuses a subagent, queue it and leave the plan DRAFT.
+**9. Get it broken by someone else.** Hand the plan and the question "how does this fail?" to a fresh reviewer, with none of your reasoning, and tell them to attack the evidence and estimates too. Expect it to hurt: Hall's first breaker changed the chosen plan, added a phase and found 8 real problems `plan-check` passed. Run `reviewing-changes` if code is involved. Put what they found and what you changed in the review log. Your own second read doesn't count. If the machine budget refuses a subagent, queue it and leave the plan DRAFT.
 
 **10. Say what can change.** Write who can change what: what the agent changes on its own, what needs a person, and what forces a replan (a Stop if fires, an estimate runs past double, a Decides answer flips). A replan edits this file, and the log says why.
 
@@ -58,6 +58,10 @@ Write to `PLAN.md` from [TEMPLATE.md](TEMPLATE.md) as you go, with `Status: DRAF
 - Every rival plan being a worse version of the one you already liked.
 - Phases sized to look tidy and not by what they'll teach.
 - Asking the person to review what a subagent could have attacked first.
+- Phase 1 testing an easier product than the one being built. On Hall's first run, a paste-a-draft page got picked because it needed no permission, and it said nothing about whether students want a school OS.
+- A count too small to mean anything. Work out what the sample can show before it's in an Exit: with a true 30% return rate, 5 people hit a "0 or 1 back" stop 53% of the time.
+- Applying the person's word unevenly, like letting it kill one rival plan and overriding it on another. List their calls as constraints, judge every shape by evidence, and show where the two disagree.
+- A test nobody owns. Every assumption's test needs someone who'll run it and a time, and legal or ownership questions count as assumptions.
 - Calling it committed because they said "looks good" to a summary. Show them the bets.
 
 ## Sources

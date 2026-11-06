@@ -20,31 +20,21 @@ type hook_init >/dev/null 2>&1 && hook_init archive-learn.sh 3
 # Auto-archive was off and no agent called archive_session, so the parent
 # archive took the child with it (archive_session docs: finished side sessions go with the parent).
 # Caleb: "a brightspace tab j randomly disappeared/archived?" Step 4 is that.
+#
+# 2026-11-05: this hook was never registered on his Mac, so "can I archive this
+# tab" got a bare yes. He then said "Ima archive should be the same as can i
+# archive" and "dont make it word hard coded! Close this tab, peace, so many
+# ways bro ur an llm not an if statement". So nothing here matches words. It
+# puts the question to the model already reading his message, every prompt.
 
-PAYLOAD=$(cat)
-export PAYLOAD
+
+cat >/dev/null
 exec python3 -I <<'PY'
-import json, os, re
-try:
-    prompt = (json.loads(os.environ.get("PAYLOAD") or "{}").get("prompt") or "")
-except ValueError:
-    raise SystemExit(0)
-low = prompt.lower()
-ASK = re.compile(r"\b(archiv\w*|close (this|the|these|all|my) (tab|tabs|session|sessions)|"
-                 r"safe to close|can i close|done with (this|these) tabs?|kill (this|these) tabs?)\b")
-if not ASK.search(low):
-    raise SystemExit(0)
+import json
 ctx = (
-    "Archive means LEARN FIRST (Caleb, 2026-10-29: \"I should never have to say this again\"). "
-    "Before answering: 1) list linked sessions (mcp__ccd_session_mgmt__list_sessions linked) and "
-    "SendMessage each one: list every correction and every break from its work, land each as a tool, "
-    "test, gate, default or skill section in Chewbacca with `chewbacca land`, FF/Amber/Chewbacca facts "
-    "in team/memory, and reply with one line per lesson and its commit. 2) Do the same for this "
-    "session's own lessons. 3) Answer the archive question only once those commits exist, naming them. "
-    "A memory note alone does not count. "
-    "4) KEEP THE CHILDREN: archiving a session can take the sessions it started with it. Before "
-    "archiving, list its linked children; any child Caleb didn't name stays open. After archiving, "
-    "run list_sessions include_archived and unarchive_session every child that went with it."
+    "If his message means he's finished with this tab, in any wording, get it ready before you answer, "
+    "without being asked. Judge the meaning: 'peace' and 'ima archive' are yes, peace of mind and "
+    "archiving an email are no. Steps are in do-it-yourself.md under ANY SIGN HE'S DONE WITH THIS TAB."
 )
 print(json.dumps({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": ctx}}))
 PY

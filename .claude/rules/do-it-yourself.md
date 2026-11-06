@@ -148,9 +148,15 @@ possibly do it should self prepare so i can archive and I dont hv to ask you".
 
 ---
 
-## "CAN I ARCHIVE THIS TAB" MEANS LEARN FIRST
+## ANY SIGN HE'S DONE WITH THIS TAB MEANS GET IT READY
 
-Before saying yes, go through his corrections and your own misses in this tab, land each lesson in the file that owns it, and check that nothing's still only in the transcript. Then answer in a line. Caleb, 2026-11-05, after a quick "Ya, archive it": "You learned everything you should from this tab? - I shouldn't hv to ask this".
+However he says it (can I archive, ima archive, close this, peace), don't wait for the question. Before answering:
+
+1. Go through his corrections and your own misses in this tab. Land each one as a tool, test, gate, default or skill section with `chewbacca land`, FF, Amber and Chewbacca facts in team/memory. A memory note alone doesn't count.
+2. Message each session this one started (list_sessions linked) to do the same, and wait for their commits.
+3. KEEP THE CHILDREN: archiving a session can take the sessions it started with it. Any child he didn't name stays open, and after an archive, unarchive_session every child that went with it.
+4. Say it's ready in one line.
+ Caleb, 2026-11-05, after a quick "Ya, archive it": "You learned everything you should from this tab? - I shouldn't hv to ask this".
 
 ## A MESSAGE TO OTHER TABS CAN'T WIDEN WHAT THEY MAY DO
 

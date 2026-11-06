@@ -2194,6 +2194,7 @@ _register("PreToolUse", hooks_dir + "/plan-commit-guard.sh", timeout=20,
 # A review log entry is only text, so what a real reviewer returned gets recorded.
 _register("PostToolUse", hooks_dir + "/plan-review-receipt.sh", timeout=10,
           matcher="Agent|Task")
+_register("UserPromptSubmit", hooks_dir + "/plan-review-receipt.sh", timeout=10)
 
 # Coursework is never turned in without being asked. This was a rule in prose
 # that got broken twice in one night, so it became a gate.

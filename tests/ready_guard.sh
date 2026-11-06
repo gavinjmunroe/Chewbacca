@@ -166,6 +166,18 @@ else
   echo "  skip  DOUGH_TEST_REPO not set, the verdict probes need a dough checkout"
 fi
 
+# 2026-11-05 misfires in the words that fired, and the real claims beside them.
+probe "text thread, just waiting" 0 "Outbound is still held. Noah's texts: that's just waiting on his reply." "$GTM_T"
+probe "client named, just waiting" 2 "Outbound status: Zeutara is just waiting on his reply." "$GTM_T"
+probe "campaign, just waiting" 2 "The campaign is just waiting on his reply." "$GTM_T"
+probe "until Caleb's ready in a prayer" 0 "Jesus, keep these sends quiet until Caleb's ready, the drafts too. Amen.
+
+Nothing went out." "$GTM_T"
+probe "claim right after a prayer" 2 "Jesus, thank You for tonight. Amen.
+
+Zeutara campaigns are good to go." "$GTM_T"
+probe "claim with no Amen" 2 "Jesus the Zeutara campaigns are good to go." "$GTM_T"
+
 jq -cn --arg m "We're good to go on the launch." --arg t "$GTM_T" '{last_assistant_message:$m,transcript_path:$t,prompt_id:"probe1"}' \
   | bash "$HOOK" >/dev/null 2>&1 && echo "  ok    fires once per turn" || { echo "  FAIL  fired twice in one turn"; fail=$((fail+1)); }
 

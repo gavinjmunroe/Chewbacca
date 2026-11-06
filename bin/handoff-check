@@ -162,6 +162,14 @@ def asked_for_a_command(user_text: str) -> bool:
         r"how do i run|paste(?:able)?|copy)\b", user_text, re.I))
 
 
+def already_ran(sentence: str) -> bool:
+    """True when the sentence says the run happened or isn't needed, and hands nothing on."""
+    if re.search(r"\b(?:no need|don'?t need|don'?t have|never have|didn'?t have) to run (?:this|these)\b", sentence, re.I):
+        return True
+    return bool(re.search(r"\b(?:already ran|i ran|i've run)\s+(?:it|this|these|that)\b", sentence, re.I)
+                and not re.search(r"\b(?:now|then|next|plz|please)\b", sentence, re.I))
+
+
 def check(message: str, user_text: str = "") -> list[str]:
     if not message:
         return []
@@ -180,6 +188,9 @@ def check(message: str, user_text: str = "") -> list[str]:
         text = message if pattern in ORIGINAL else prose
         m = re.search(pattern, text, re.I)
         if m and CREDENTIAL.search(sentence_at(text, m.start(), m.end())):
+            continue
+        # 2026-11-05: "run this" fired on a reply saying it had already been run.
+        if m and label == "'run this'" and already_ran(sentence_at(text, m.start(), m.end())):
             continue
         if m:
             line = text[:m.start()].count("\n") + 1

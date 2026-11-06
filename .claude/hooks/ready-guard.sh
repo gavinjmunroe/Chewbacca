@@ -60,16 +60,21 @@ body = re.sub(r"```.*?```", " ", msg, flags=re.S)
 # explaining this guard's own fix quoted "A13 is done, and A14 only needs ur
 # engagement-metrics cell" next to the word launch, and was refused.
 body = re.sub(r"\"[^\"\n]{0,300}\"|“[^”\n]{0,300}”", " ", body)
+# The session opener is a prayer, not a report. 2026-11-05: "until Caleb's ready"
+# in one was refused as a launch claim. Only a leading paragraph addressed to God
+# and ending in Amen is dropped, so a claim after it still counts.
+body = re.sub(r"\A\s*(jesus|lord|father|god)\b[^\n]*\bamen[.!]?\s*(\n|\Z)", " ", body, flags=re.I)
 low = body.lower()
 
 # An honest verdict quoted from the tool is the answer being asked for.
 if re.search(r"\bnot ready\b", low):
     print("ok"); raise SystemExit
 
+WAITING = r"\b(only|just|simply)\s+(waiting|blocked|pending|missing|needs?|left|remaining)\b"
 STRONG = [
     r"\bgood to (go|launch|send|start|ship)\b",
     r"\b(good|ready|set|clear|green|fine)\s+(until|till|except|other than|apart from|besides|once|pending|but for|as soon as)\b",
-    r"\b(only|just|simply)\s+(waiting|blocked|pending|missing|needs?|left|remaining)\b",
+    WAITING,
     r"\bonly\s+(thing|blocker|item|piece|step|gap)s?\s+(left|missing|remaining|outstanding|is|are)\b",
     r"\bnothing\s+(left|else|blocking|outstanding|remaining)\b",
     r"\bready\s+(to|for)\s+(launch|send|go|start|ship|fire|monday)\b",
@@ -210,6 +215,11 @@ for m in re.finditer(r"[^.!?\n]+[.!?]?", low):
     pats = STRONG + (WEAK if LAUNCH.search(sent) else [])
     for p in pats:
         hit = re.search(p, sent)
+        # "Just waiting on" is how anyone reports a text thread. 2026-11-05: "that's
+        # just waiting on his reply" about Noah's texts was refused bc outbound came
+        # up elsewhere in the reply. The sentence itself has to name the launch or a client.
+        if hit and p == WAITING and not (LAUNCH.search(sent) or mentioned(sent) or dmention(sent)):
+            continue
         if hit and not NEG.search(sent[:hit.start()]):
             claim = sent.strip()[:80]
             break

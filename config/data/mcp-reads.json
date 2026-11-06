@@ -1116,6 +1116,42 @@
           "required": true
         }
       }
+    },
+    {
+      "id": "discovery.usage",
+      "tool": "discovery",
+      "argv": [
+        "--help"
+      ],
+      "about": "Discovery for an AI engagement: readiness, measured baseline, ROI range and build order.",
+      "asks": "readiness assessment roi for an ai engagement discovery"
+    },
+    {
+      "id": "case-study.usage",
+      "tool": "case-study",
+      "argv": [
+        "--help"
+      ],
+      "about": "Build a client case study where every number carries its source and the math is computed.",
+      "asks": "write a client case study with sourced numbers"
+    },
+    {
+      "id": "rfp-extract.usage",
+      "tool": "rfp-extract",
+      "argv": [
+        "--help"
+      ],
+      "about": "Turn an RFP into a compliance matrix of every requirement, deadline and scoring rule.",
+      "asks": "rfp requirements compliance matrix"
+    },
+    {
+      "id": "llms-txt.usage",
+      "tool": "llms-txt",
+      "argv": [
+        "--help"
+      ],
+      "about": "Make a static site readable by AI agents: llms.txt plus a markdown twin of every page.",
+      "asks": "llms.txt make a site readable by ai agents"
     }
   ]
 }

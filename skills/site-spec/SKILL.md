@@ -98,21 +98,21 @@ check`, `story` and `idle` also pass on every route.
    auto-deploys from main (or `railway up` until the GitHub app can see the
    repo), the start script on `${PORT:-3000}`, then `railway-domain <name>`.
 10. **A deployed draft isn't delivered until the person has the link.** Text
-   it in the same turn the deploy goes live, then read the thread back. On
-   2026-10-23 Parker Manley's v3 went live at 10:33pm after "Will get you
-   draft 3 tn" and nobody sent it. He had to ask "Any update on draft 3?"
-   the next afternoon, and Caleb wrote "parker asked for draft 3 we never got
-   him it!"
+    it in the same turn the deploy goes live, then read the thread back. On
+    2026-10-23 Parker Manley's v3 went live at 10:33pm after "Will get you
+    draft 3 tn" and nobody sent it. He had to ask "Any update on draft 3?"
+    the next afternoon, and Caleb wrote "parker asked for draft 3 we never got
+    him it!"
 11. **Never ship a section that could have been a slideshow.** Crossfading
-   one image and caption after another on scroll is a slideshow, whatever it's
-   styled as. Each section is an object from the subject's own world that does
-   something only it can do: for a filmmaker, a marquee, a camera monitor whose
-   settings move, an edit timeline with live transitions, a call sheet. The
-   seams between sections are deliberate too (a splice, an intertitle), never a
-   hairline or a fade-to-ground gradient. Caleb on Parker Manley's site,
-   2026-10-25: "NEVER make anything that could've been a slideshow!",
-   "Uncreative unintentional ahh section transitions", "Unintentional ah lame
-   gradient".
+    one image and caption after another on scroll is a slideshow, whatever it's
+    styled as. Each section is an object from the subject's own world that does
+    something only it can do: for a filmmaker, a marquee, a camera monitor whose
+    settings move, an edit timeline with live transitions, a call sheet. The
+    seams between sections are deliberate too (a splice, an intertitle), never a
+    hairline or a fade-to-ground gradient. Caleb on Parker Manley's site,
+    2026-10-25: "NEVER make anything that could've been a slideshow!",
+    "Uncreative unintentional ahh section transitions", "Unintentional ah lame
+    gradient".
 
 ## Food and drink sites: what the practitioners agree on
 
@@ -190,10 +190,10 @@ questions, "More qustions bruh I want her to yap to make this awesome".
 
 - **Upload HTML to Drive as a Doc** with `gws drive files create`, the
   `application/vnd.google-apps.document` mimeType and `--upload doc.html
-  --upload-content-type text/html`; `files update` on the same id revises it.
+--upload-content-type text/html`; `files update` on the same id revises it.
   Questions are bold black. Under each goes a blue (`#1a73e8`) "Type here..."
   span, so what they type over it stays blue. Read the doc back with `gws docs
-  documents get` and count blue slots against questions.
+documents get` and count blue slots against questions.
 - **About 45 questions, mostly scenes and stories.** "Walk me through one class
   like I'm sitting in the corner", catchphrases, the funniest moment, one story
   about a student, "if they read the site and teared up, what would it have
@@ -358,3 +358,7 @@ decides what is theirs to show.
 ## Related
 
 - [launch-funnel](../launch-funnel/SKILL.md): for a product launch, waitlist or preorder page, the persona, messaging and section formulas come from there before any layout.
+- `llms-txt build|check`: when the site should be readable by AI agents, writes llms.txt and a markdown twin of every page. Needs a static export.
+- `case-study build|check`: when the page needs client proof, builds a case study where every number carries its source and the math is computed.
+- `discovery assess|roi|report`: before pitching an AI engagement, gives readiness, a measured baseline, an ROI range and a build order.
+- `rfp-extract <rfp>`: when a buyer sends an RFP, turns it into a compliance matrix of every requirement, deadline and scoring rule.

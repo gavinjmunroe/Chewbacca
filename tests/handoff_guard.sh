@@ -59,6 +59,12 @@ expect "a reply that reports a result" 0 \
 expect "an ordinary answer" 0 \
   'Your three unpushed commits are on feat/chatgpt-runtime.'
 
+echo "2026-11-05, run this when it already ran:"
+expect "no need, already ran" 0 'No need to run this, I already ran it.'
+expect "says it ran" 0 'I already ran it, so run this comes off ur list.'
+expect "ran it, then hands this over" 2 'I already ran it, now run this.'
+expect "plain handoff still refused" 2 'Run this before the call.'
+
 echo "permits it when he asked for something runnable:"
 expect "he asked for a prompt to paste" 0 \
   'Here is the prompt: cd ~/project && bin/closeout' \

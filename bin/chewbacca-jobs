@@ -629,13 +629,37 @@ def _tick(machine, started):
             start(j, started)
 
 
+# Guessed, never measured across jobs. The one case behind it: FF speed job
+# 1105-171813-9116 listed as running for 8 hours while its output stopped 4 minutes
+# in, at 20 of 1041 rows, with two renderers pinned. Nothing in the list showed it.
+QUIET_AFTER_S = int(os.environ.get("JOBS_QUIET_AFTER_S") or 2 * 3600)
+
+
+def quiet_for(j, now=None):
+    """Seconds since a running batch job last changed a file, or None. Top level of its
+    cwd only, so it stays cheap. A light job is often a server, quiet by design, so it's skipped."""
+    if j["status"] != "running" or j["class"] == "light":
+        return None
+    cwd = j.get("cwd") or ""
+    try:
+        newest = max((e.stat().st_mtime for e in os.scandir(cwd) if e.is_file()), default=0)
+    except OSError:
+        return None
+    now = time.time() if now is None else now
+    started = j.get("started") or 0
+    gap = now - max(newest, started)
+    return gap if newest and gap > QUIET_AFTER_S else None
+
+
 def list_jobs(argv):
     rows = jobs()
     if "--all" not in argv:
         cutoff = time.time() - 6 * 3600
         rows = [j for j in rows if j["status"] in ("queued", "running", "paused") or (j.get("ended") or 0) > cutoff]
     for j in rows:
-        print(f"{j['id']}  {j['status']:<8} {j['class']:<5}  {j['title']}")
+        quiet = quiet_for(j)
+        note = f"  QUIET {quiet / 3600:.1f}h, may be wedged: nothing changed in {j['cwd']}" if quiet else ""
+        print(f"{j['id']}  {j['status']:<8} {j['class']:<5}  {j['title']}{note}")
     prof, b = machine()
     print(f"{len(rows)} job(s). {machine_profile.describe(prof, b)}")
 

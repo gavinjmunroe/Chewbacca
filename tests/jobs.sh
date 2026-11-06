@@ -199,4 +199,18 @@ check "--title with no value is refused, not a traceback" "$rc$(printf '%s' "$ou
 "$J" kill "$id" >/dev/null 2>&1; rc=$?
 check "killing a finished job is refused" "$rc" 1
 check "and it stays done" "$(status "$id")" done
+
+# 2026-11-05: a speed job showed running for 8 hours after its output stopped at
+# 20 of 1041 rows. The list has to show that, and leave out what's quiet by design.
+qdir=$(mktemp -d); touch -t 202601010000 "$qdir/old.jsonl"
+qid=$(cd "$qdir" && "$J" submit --heavy -- sleep 30 | cut -d' ' -f1); settle "$qid" running
+lid=$(cd "$qdir" && "$J" submit --title server -- sleep 30 | cut -d' ' -f1); settle "$lid" running
+sleep 3
+check "a batch job with stale output is flagged" "$(JOBS_QUIET_AFTER_S=2 "$J" list | grep "$qid" | grep -c 'QUIET')" 1
+check "a light job is never flagged, servers are quiet by design" "$(JOBS_QUIET_AFTER_S=2 "$J" list | grep "$lid" | grep -c 'QUIET')" 0
+touch "$qdir/old.jsonl"
+check "fresh output clears the flag" "$(JOBS_QUIET_AFTER_S=2 "$J" list | grep "$qid" | grep -c 'QUIET')" 0
+rm -rf "$qdir"
+check "a deleted cwd doesn't break the list" "$(JOBS_QUIET_AFTER_S=2 "$J" list | grep -c "$qid")" 1
+"$J" kill "$qid" >/dev/null; "$J" kill "$lid" >/dev/null
 exit "$fail"

@@ -2121,6 +2121,8 @@ _register("PreToolUse", hooks_dir + "/ask-lookup-guard.sh", timeout=5,
           matcher="mcp__ccd_turn__wrap_up|AskUserQuestion")
 # 2026-10-12: 13 automated posts from Caleb's account in #zeutara-cold-replies.
 # "Everything should be togari": agents never post in client conversations.
+_register("PreToolUse", hooks_dir + "/contact-name-guard.sh", timeout=5, matcher="Bash",
+          status="Checking the contact name standard...")
 _register("PreToolUse", hooks_dir + "/client-post-guard.sh", timeout=5,
           matcher="Bash|mcp__claude_ai_Slack__slack_send_message|mcp__claude_ai_Slack__slack_schedule_message",
           status="Checking this isn't posting as Caleb in a client channel...")

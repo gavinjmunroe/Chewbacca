@@ -12,6 +12,13 @@ Both fail the same way, by reading the transcript alone and stopping there.
 
 ## Never
 
+- Never leave a pasted transcript only in the session. In the same turn, save
+  it whole to the project's folder in the brain, beside a RESUME.md with the
+  doc link, where things stand and the next step, and add a ledger task that
+  points at it. A session the user comes back to across days dies when the tab
+  is archived. On 2026-11-06, after a planning talk for a party, Caleb wrote "I
+  should NOT hv to give you that transcript or my answers again for context!
+  THis is a given with chewbs". The save happened only after he said it.
 - Never skim. Read every line, including the chatter around the plan. On
   2026-10-25 a Dad call had football, a haircut story and his sister's college
   app wrapped around the real asks, and the first pass went straight to the

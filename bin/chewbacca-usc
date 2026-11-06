@@ -465,6 +465,10 @@ def lockin(apply, out, days, retried=False):
         print(f"  {when:%a %b %d %H:%M}  {r['course']:<10} {r['title']}")
     if soon:
         print(f"  Start with: {soon[0]['course']} {soon[0]['title']}")
+    # On 2026-11-05 a real lockin missed an in-class talk and a poll due the next
+    # day, because neither was on the Brightspace calendar. A list that looks
+    # complete and isn't is what breaks trust, so it says what it can't see.
+    print("  This is what's posted on Brightspace. In-class work and syllabus-only dates can be missing.")
     print()
 
     have = ledger_codes()

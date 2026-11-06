@@ -30,6 +30,9 @@ characters on it, all on the same prompt.
   real ordinary turns against the old rule before shipping (`--replay`).
 - Live beats replay. Scope-guard passed 160 real turns at 0.7 and still refused 3 clean
   replies in one tab on its first night. Watch a new refusal live and raise the line.
+- Test a setup change in a throwaway HOME first, then apply it. On 2026-11-06 a stale
+  `chewbacca update` reverted every live hook minutes after a clean setup, so check that
+  the live copy matches main after any install. Passing tests prove main, never the Mac.
 - Scores go in private. Jev numbers don't go in the repo (TypeSafe 2.3(f)).
 
 Full sort: `docs/reference/INTENT-INVENTORY.md`.

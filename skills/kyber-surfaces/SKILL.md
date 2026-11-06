@@ -23,7 +23,7 @@ kyber-surfaces close all
 ```
 
 Kinds: `needs-you`, `missing`, `today`, `tasks`, `conversations`, `people`,
-`person <name>`, `space <name>`, `music`, `files`, `meetings`, `live`, `doc`, `setup`, `outbound`, `decisions`. `kyber-surfaces list` shows
+`person <name>`, `space <name>`, `music`, `files`, `meetings`, `live`, `doc`, `setup`, `outbound`, `decisions`, `notifications`. `kyber-surfaces list` shows
 what is open and where; `activity` shows what the panels did.
 
 `decisions` is the decision inbox: only the calls Caleb has to make, each with

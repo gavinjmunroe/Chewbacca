@@ -11,6 +11,7 @@ import AppKit
 import ApplicationServices
 import Foundation
 import ScreenCaptureKit
+import Vision
 
 @_silgen_name("_AXUIElementGetWindow")
 func _AXUIElementGetWindow(_ element: AXUIElement, _ wid: UnsafeMutablePointer<CGWindowID>) -> AXError
@@ -392,9 +393,10 @@ func keyCommits(_ combo: String) -> Bool {
 
 // MARK: screenshot by window id (works when hidden, minimized or off-Space)
 
-func capture(_ wid: CGWindowID, to path: String, scale: Double, region: CGRect? = nil) {
+func captureImage(_ wid: CGWindowID, scale: Double, region: CGRect? = nil) -> CGImage {
     let sem = DispatchSemaphore(value: 0)
     var problem: String?
+    var shot: CGImage?
     Task {
         do {
             let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
@@ -416,8 +418,7 @@ func capture(_ wid: CGWindowID, to path: String, scale: Double, region: CGRect? 
                 }
                 image = cut
             }
-            let rep = NSBitmapImageRep(cgImage: image)
-            try rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: path))
+            shot = image
         } catch {
             problem = "\(error.localizedDescription)"
         }
@@ -425,9 +426,63 @@ func capture(_ wid: CGWindowID, to path: String, scale: Double, region: CGRect? 
     }
     sem.wait()
     if let p = problem {
+        if p.hasPrefix("region") { fail(p, fix: "pick a region inside the window: x0,y0,x1,y1 in window points") }
         fail("screenshot failed: \(p)", code: 2,
              fix: "open \"x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture\"")
     }
+    return shot!
+}
+
+func capture(_ wid: CGWindowID, to path: String, scale: Double, region: CGRect? = nil) {
+    let rep = NSBitmapImageRep(cgImage: captureImage(wid, scale: scale, region: region))
+    do {
+        try rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: path))
+    } catch {
+        fail("screenshot failed: \(error.localizedDescription)", code: 2)
+    }
+}
+
+// Is this rectangle inside a window the window server is drawing now? Rules out
+// hidden, minimized and another Space in one read, so a HUD marker never frames
+// whatever happens to be in front.
+func isDrawn(_ app: NSRunningApplication, _ rect: CGRect) -> Bool {
+    let info = (CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]]) ?? []
+    let drawn = Set(info.compactMap { $0[kCGWindowNumber as String] as? Int })
+    let middle = CGPoint(x: rect.midX, y: rect.midY)
+    return windows(of: app).contains { drawn.contains(Int($0.id)) && ($0.frame?.contains(middle) ?? false) }
+}
+
+// MARK: text recognition, on this Mac with no model call
+
+// The Vision request is the idea from Thuki's src-tauri/src/ocr.rs (Apache-2.0,
+// quiet-node/thuki), written fresh for this driver. Runs on the window's own
+// pixels, so it reads what accessibility can't (canvas, video, images).
+func recognize(_ image: CGImage, fast: Bool, size: CGSize) -> [[String: Any]] {
+    let request = VNRecognizeTextRequest()
+    request.recognitionLevel = fast ? .fast : .accurate
+    request.usesLanguageCorrection = !fast
+    do {
+        try VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
+    } catch {
+        fail("text recognition failed: \(error.localizedDescription)", code: 2)
+    }
+    return (request.results ?? []).compactMap { line -> [String: Any]? in
+        guard let best = line.topCandidates(1).first else { return nil }
+        // Vision's box is 0 to 1 from the bottom-left; every other frame here
+        // is points from the top-left.
+        let b = line.boundingBox
+        return ["text": best.string, "confidence": (Double(best.confidence) * 100).rounded() / 100,
+                "box": [Int(b.minX * size.width), Int((1 - b.maxY) * size.height),
+                        Int(b.width * size.width), Int(b.height * size.height)]]
+    }
+}
+
+func loadImage(_ path: String) -> CGImage {
+    guard let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil),
+          let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+        fail("\(path) is not a readable image", fix: "pass a PNG or JPEG that exists")
+    }
+    return image
 }
 
 // MARK: keys to a pid
@@ -604,6 +659,9 @@ guard let cmd = args.first else {
                                         move the scroll bar holding N (or the first one) by dy
                                         tenths of its range; + is down/right
       read <app> [--window ID]          every visible text in reading order, for content
+      text [app] [--window ID] [--region x0,y0,x1,y1] [--fast] [--plain] [--image PNG]
+                                        visible text by on-device OCR, no model call; front app
+                                        by default, works on hidden windows
       where <app> <N|label>             the element's rectangle in screen points (for a HUD marker)
       drag <app> <N|label> <N|label|x,y> [--yes]
                                         drag between two elements (or to window point x,y)
@@ -670,7 +728,14 @@ case "press", "focus":
         gate(el, what: "element \(args[1])", yes: yes)
         // --check runs the gate and stops, so a caller can show the person
         // why a press needs their yes before asking for it.
-        if checkOnly { emit(["would_press": e, "gate": "clear"]); exit(0) }
+        if checkOnly {
+            var out: [String: Any] = ["would_press": e, "gate": "clear"]
+            if let f = frame(el) {
+                out["screen"] = [Int(f.minX), Int(f.minY), Int(f.width), Int(f.height)]
+                out["on_screen"] = isDrawn(app, f)
+            }
+            emit(out); exit(0)
+        }
         let acts = actions(el)
         let action = acts.contains("AXPress") ? "AXPress" : (acts.contains("AXConfirm") ? "AXConfirm" : (acts.first ?? "AXPress"))
         let r = AXUIElementPerformAction(el, action as CFString)
@@ -741,6 +806,41 @@ case "shot":
     let win = pickWindow(app, windowOpt)
     capture(win.id, to: out, scale: scaleOpt, region: regionOpt)
     emit(["shot": out, "window": Int(win.id)])
+
+case "text":
+    let plain = flag("--plain")
+    let fast = flag("--fast")
+    let started = Date()
+    var out: [String: Any] = [:]
+    let image: CGImage
+    var size: CGSize
+    if let path = option("--image") {
+        image = loadImage(path)
+        size = CGSize(width: image.width, height: image.height)
+        out["image"] = path
+    } else {
+        guard let app = args.first.map(resolveApp) ?? NSWorkspace.shared.frontmostApplication else {
+            fail("no app in front", fix: "name one: text <app>")
+        }
+        let win = pickWindow(app, windowOpt)
+        image = captureImage(win.id, scale: scaleOpt, region: regionOpt)
+        size = regionOpt?.size ?? win.frame?.size ?? CGSize(width: image.width, height: image.height)
+        out["app"] = app.localizedName ?? ""
+        out["window"] = Int(win.id)
+        out["title"] = win.title ?? ""
+    }
+    let captured = Date()
+    let lines = recognize(image, fast: fast, size: size)
+    let text = lines.compactMap { $0["text"] as? String }.joined(separator: "\n")
+    if plain {
+        if text.isEmpty { FileHandle.standardError.write("# no text found\n".data(using: .utf8)!) } else { print(text) }
+        exit(0)
+    }
+    out["text"] = text
+    out["lines"] = lines
+    out["box_space"] = "window points, top-left origin"
+    out["ms"] = ["capture": Int(captured.timeIntervalSince(started) * 1000), "ocr": Int(Date().timeIntervalSince(captured) * 1000)]
+    emit(out)
 
 case "scroll":
     guard args.count >= 2 else { fail("scroll needs an app and dy") }

@@ -13,6 +13,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import app_cursor  # noqa: E402
 
 # Below this `do` hands the candidates back instead of pressing. Measured
 # 2026-10-10 on 39 labeled picks over frozen snapshots of Calculator, TextEdit,
@@ -112,6 +114,8 @@ def main():
     # control Jev picked for it; a gated pick comes back for the person to
     # confirm by index (`chewie app press <app> <i> --yes`). Security review of
     # cbd074b3, 2026-10-09.
+    if verb == "press":
+        app_cursor.before_press(appctl, app, str(result["i"]), window)
     done = subprocess.run(cmd, capture_output=True, text=True)
     if done.returncode == 4:
         print(json.dumps({"found": result, "refused": done.stderr.strip(),

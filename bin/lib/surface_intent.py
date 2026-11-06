@@ -86,6 +86,7 @@ NOUNS = {
     # their own words.
     "files": r"(?:downloads|download folder|downloads folder|recent files)",
     "needs-you": r"(?:needs you|what needs me|inbox zero)",
+    "notifications": r"(?:notifications|notifs|banners|notification center)",
     "notes": r"(?:notes|apple notes|latest notes|recent notes)",
     "github": r"(?:github|prs|pull requests|reviews|review requests|ci)",
     "code": r"(?:code changes|changes|diffs?|what changed|repos)",

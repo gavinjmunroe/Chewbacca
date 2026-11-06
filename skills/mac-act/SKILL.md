@@ -83,3 +83,10 @@ usually happens on the step you were not watching.
 Send, pay, delete, post, submit, reply-all, purchase, confirm: **stop and ask.** State
 exactly what you are about to do. This does not lift because the user said to act
 without asking; what needs authorizing is the outbound consequence, not your autonomy.
+
+## Watching a background press
+
+`chewie app press`, `do` and `batch` put a marker on the control on Kyber's glass
+for about 300 ms before pressing, so a person can see what's about to happen. It
+never decides anything: Kyber closed means no marker and no wait, a gated press
+draws nothing, and a window that isn't on screen draws nothing.

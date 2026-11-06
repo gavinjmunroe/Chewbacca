@@ -3844,9 +3844,13 @@ else
   # Layer 3 is the accessibility-tree driver and it is the one worth having.
   # Everything below degrades to a screenshot without it.
   if command -v npm &>/dev/null; then
-    if command -v agent-desktop &>/dev/null; then
+    # agent-desktop floor: chewie notifications reads its 2.6 envelope, and refs
+    # older than 1.1.0 carry no capture proof. Installed-but-old isn't installed.
+    AGENT_DESKTOP_MIN=1.2.0
+    agent_desktop_have=$(agent-desktop version 2>/dev/null | sed -n 's/.*"version":"\([0-9.]*\)"}.*/\1/p')
+    if [ -n "$agent_desktop_have" ] && [ "$(printf '%s\n%s\n' "$AGENT_DESKTOP_MIN" "$agent_desktop_have" | sort -V | head -1)" = "$AGENT_DESKTOP_MIN" ]; then
       log "agent-desktop already installed"
-    elif npm install -g agent-desktop &>/dev/null; then
+    elif npm install -g agent-desktop@latest &>/dev/null; then
       log "agent-desktop installed (accessibility driver)"
     else
       warn "could not install agent-desktop: npm install -g agent-desktop"

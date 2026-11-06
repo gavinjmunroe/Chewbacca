@@ -39,7 +39,8 @@ Shipped inside this repo, or cloned onto the machine by `setup.sh`.
 | [zarazhangrui/frontend-slides](https://github.com/zarazhangrui/frontend-slides) | Zara Zhang | MIT | The stage size, reading-or-speaking question and no-process-labels rules in `crafts/deck.md`. Its public deploy script is not used |
 | [D4Vinci/Scrapling](https://github.com/D4Vinci/Scrapling) | Karim Shoair | BSD-3-Clause | The fetcher and hidden-text sanitizer under `scrape`, installed into its own venv on first run. Its stealth fetcher and Cloudflare solver are deliberately not used |
 | [browser-use/macOS-use](https://github.com/browser-use/macOS-use) | browser-use | MIT | The runtime under `mac-use`. Chewbacca owns the provider adapters, macOS-use supplies the agent loop |
-| [lahfir/agent-desktop](https://github.com/lahfir/agent-desktop) | lahfir | Apache-2.0 | The accessibility-tree driver. Stable element refs, JSON out |
+| [vercel-labs/agent-desktop](https://github.com/vercel-labs/agent-desktop) | lahfir, ctate | Apache-2.0 | The accessibility-tree driver and `chewie notifications`. Its cursor overlay is the idea behind the marker `chewie app press` draws |
+| [quiet-node/thuki](https://github.com/quiet-node/thuki) | quiet-node | Apache-2.0 | `src-tauri/src/ocr.rs` is the idea behind `chewie text`: macOS Vision OCR with no model call. Written fresh in `mac/appctl/appctl.swift` |
 | [BlueM/cliclick](https://github.com/BlueM/cliclick) | BlueM | custom | Synthetic input. Does one thing and has since forever |
 | [petergyang/no-ai-slop](https://github.com/petergyang/no-ai-slop) | Peter Yang | MIT | 20+ AI slop patterns, voice-preserving edit pass |
 | [conorbronsdon/avoid-ai-writing](https://github.com/conorbronsdon/avoid-ai-writing) | Conor Bronsdon | MIT | 61 pattern categories, a 112-word replacement table, and the deterministic Node detector that `ai-scan` wraps |

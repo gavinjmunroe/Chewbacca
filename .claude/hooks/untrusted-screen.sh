@@ -30,7 +30,7 @@ case "$TOOL" in
     ;;
   Bash)
     CMD=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty')
-    printf '%s' "$CMD" | grep -qE '(^|[;&|[:space:]/])(mac (messages|mail|notes)|people texts|chrome-js|summarize|scrape|chewie web|clay-inbox|browser-bridge|curl)([[:space:]]|$)' || exit 0
+    printf '%s' "$CMD" | grep -qE '(^|[;&|[:space:]/])(mac (messages|mail|notes)|people texts|chrome-js|summarize|scrape|chewie web|chewie text|chewie notifications|clay-inbox|browser-bridge|curl)([[:space:]]|$)' || exit 0
     ;;
   *) exit 0 ;;
 esac

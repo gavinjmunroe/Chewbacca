@@ -15,6 +15,10 @@ it means the person approved that step.
 import json
 import subprocess
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import app_cursor  # noqa: E402
 
 VERBS = {"press", "set", "focus", "key", "scroll", "menu", "see", "read", "shot", "raise"}
 
@@ -86,6 +90,8 @@ def main():
                 results.append({"step": n, "error": err})
                 print(json.dumps({"completed": n, "results": results}, indent=2))
                 sys.exit(code)
+        if step["do"] == "press":
+            app_cursor.before_press(appctl, app, args[2], args[3:])
         code, out, err = run(appctl, args)
         results.append({"step": n, "do": step["do"], "exit": code, "out": out, **({"error": err} if err else {})})
         if code != 0:

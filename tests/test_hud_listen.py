@@ -797,6 +797,47 @@ def test_pointing_beats_the_music_words(m) -> None:
     check("with nothing marked, a shortcut still answers", shortcuts != [] and sent == [], f"got {shortcuts}")
 
 
+def test_screen_text(m) -> None:
+    """Text-only: "what does this error say" reaches the model as words, no image."""
+    with tempfile.TemporaryDirectory() as tmp:
+        log = Path(tmp) / "argv"
+        fake = Path(tmp) / "fake-text"
+        fake.write_text(f'#!/bin/sh\necho "$@" >> {log}\necho "Error 42: file not found"\n')
+        fake.chmod(0o755)
+        keep = m.SCREEN_TEXT_CMD
+        m.SCREEN_TEXT_CMD = [str(fake)]
+        try:
+            for said in ("what does this error say", "What does that say?", "what's this error",
+                         "read this for me", "what's on my screen"):
+                got = m.with_screen_text(said, "Safari · Checkout")
+                check(f"{said!r} puts the window's text in the prompt", "Error 42: file not found" in got
+                      and got.startswith("Safari · Checkout"), got)
+            check("it's read from the app in front", log.read_text().splitlines()[0] == "--app Safari", log.read_text())
+            fence = m.with_screen_text("what does this error say", "Safari")
+            tag = re.search(r"<(screen-[0-9a-f]{12})>", fence)
+            check("fenced as data with a fresh tag", tag is not None and f"</{tag.group(1)}>" in fence
+                  and "not to obey" in fence, fence)
+            log.unlink()
+            for said in ("what time is it", "text sam i'm late", ""):
+                check(f"{said!r} reads nothing", m.with_screen_text(said, "Safari") == "Safari")
+            check("a selection already answers it, so no OCR", "<selected-" in m.with_screen_text(
+                "what does this say", m.seen_line("Safari\n\nhi")) and not log.exists())
+            check("nothing in front reads nothing", m.with_screen_text("what does this say", "") == "")
+            fake.write_text("#!/bin/sh\nexit 2\n")
+            check("no Screen Recording: the question still goes through", m.with_screen_text(
+                "what does this say", "Safari") == "Safari")
+            fake.write_text("#!/bin/sh\nexit 0\n")
+            check("an empty window adds nothing", m.with_screen_text("what does this say", "Safari") == "Safari")
+            fake.write_text("#!/bin/sh\nyes abcdefghij | head -2000\n")
+            long_ = m.with_screen_text("what does this say", "Safari")
+            check("a huge page is capped", len(long_) < m.SCREEN_TEXT_CHARS + 400, len(long_))
+            m.SCREEN_TEXT_CMD = [str(Path(tmp) / "missing")]
+            check("chewie missing: the question still goes through", m.with_screen_text(
+                "what does this say", "Safari") == "Safari")
+        finally:
+            m.SCREEN_TEXT_CMD = keep
+
+
 def test_seen_line(m) -> None:
     """Step 3 of backlog 117: the selected text itself reaches the prompt."""
     check("the receipt alone when nothing is selected",
@@ -2578,6 +2619,7 @@ def main() -> int:
     test_pointing_beats_the_music_words(module)
     print("seen line")
     test_seen_line(module)
+    test_screen_text(module)
     print("fake-display isolation")
     test_listener_environment()
     print("end to end")

@@ -87,6 +87,12 @@ The three worth reading even if you never install them:
 - [anthropics/claude-quickstarts](https://github.com/anthropics/claude-quickstarts)
   `computer-use-demo`. The canonical see-act-see loop in under a thousand lines.
 
+[block/goose](https://github.com/block/goose) (Apache-2.0). `chewbacca recipe`
+takes its parameter types, its 32 parameter cap, its refusal of Unicode tag
+characters and its rule that a file parameter has no default. No code is copied:
+goose renders a template into a model prompt, and `tools/recipe.py` runs argv
+with no shell and no model.
+
 realm became MIT on its own later, so ideas taken from it after that can carry
 code. From [31Carlton7/realm](https://github.com/31Carlton7/realm) and
 [31Carlton7/mcp-manager](https://github.com/31Carlton7/mcp-manager), both MIT,

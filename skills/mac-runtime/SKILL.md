@@ -63,6 +63,13 @@ chewie log --json     # the raw trace
 Every step is logged with its status and duration to `~/.chewie/runs/<ts>.jsonl`. When
 a task half-worked, this is how you find the step that failed instead of guessing.
 
+## A task the team repeats: a recipe
+
+A plan is one run. A task someone will run again with different values is a recipe:
+`chewbacca recipe run <file> --param key=value`. Parameters are typed and checked first,
+each step passes on its exit code, and anything not proven read only stops for a press.
+See `docs/reference/RECIPES.md`.
+
 ## When NOT to use a plan
 
 A single read (`chewie see`, `chewie texts`, `chewie brief`) or a single obvious action does

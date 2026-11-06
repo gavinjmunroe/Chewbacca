@@ -206,6 +206,11 @@ if group "chewbacca CLI"; then
   exits  "completion with no shell exits 2" 2 bash "$ROOT/bin/chewbacca" completion
 fi
 
+# Typed task files: parameters, exit-code checks, and a press no file turns off.
+if group "recipe"; then
+  check  "chewbacca recipe: injection, press, send hold, exit-code checks" bash "$ROOT/tests/recipe.sh"
+fi
+
 # Offline reusable math, graphs, and UX evidence. No live service calls.
 if group "learning tools"; then
   for tool in gtme-math gtme-graph gtme-learning gtme-library gtme-signals clay-fixture-check task-graph ux-learning; do

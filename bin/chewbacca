@@ -49,6 +49,7 @@ COMMANDS=(
   "ux-policy|learn offline action rewards and plan evidence-backed graph routes"
   "clay-review|verify at most five held Clay draft records without model calls"
   "task-graph|manage durable agent jobs and verification dependencies"
+  "recipe|run a task file with typed parameters, exit-code checks and a press no file can turn off"
   "work-ledger|preserve workspace commitments across messages and runtimes"
   "tabs|see what every other live agent tab is doing, in any runtime"
   "land|put your files or commits on origin/main without anyone else's"
@@ -163,6 +164,12 @@ task-graph|graph-fuse|review-gate|break-it|work-ledger|tabs|ux-learning|jev|deci
   tool="$1"
   shift
   exec python3 "$ROOT/bin/$tool" "$@"
+  ;;
+recipe)
+  # Typed task files. -I so nothing in the current directory can stand in for
+  # a module the press depends on. See tools/recipe.py.
+  shift
+  exec python3 -I "$ROOT/tools/recipe.py" "$@"
   ;;
 gtme-lookup)
   # Node: ZoomInfo's auth signs an RS256 JWT, which stdlib python can't.

@@ -97,7 +97,7 @@ client=<name>`, which needs his own chat message naming the number, or him
   refuses any shell command whose text names clay, sequencer or campaign
   unless it's a known read, and paths count. The allowance build on
   2026-10-16 lost most of 15 minutes to `wt-clay-budget`,
-  `tests/test_clay_allowance.py`, `cd`, `mv` and `rm` refusals, with no
+  a test named test_clay_allowance.py, `cd`, `mv` and `rm` refusals, with no
   update to Caleb in between: "15 mins doing what bro wtf?", then "Are you
   done with your work?". Name worktrees, tests and scratch scripts without
   those words, use `git -C <dir>` instead of `cd`, and send him a one-line

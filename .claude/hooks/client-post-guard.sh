@@ -25,6 +25,15 @@ tool="$(printf '%s' "$payload" | jq -r '.tool_name // empty' 2>/dev/null)"
 case "$tool" in
   Bash)
     cmd="$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null)"
+    # Send hold. On 2026-11-05 Caleb said no texts or emails from any tab, and the stress
+    # test that night found nothing in code stood behind that: every send got past every
+    # guard. ~/.chewbacca/policy/send-hold turns this on and deleting it lifts it. These
+    # names are exact commands, so this is a gate and reads no meaning.
+    if [ -f "$HOME/.chewbacca/policy/send-hold" ] && printf '%s' "$cmd" | grep -qE \
+      '(^|[;&|("'"'"'/][[:space:]]*)(mac[[:space:]]+messages[[:space:]]+send|people[[:space:]]+(texts[[:space:]]+(drafts[[:space:]]+)?)?send|wacli[[:space:]]+send|text-group|text-blast|send-file|twilio[[:space:]]+api|gog[[:space:]]+gmail[[:space:]]+send|chewbacca[[:space:]]+email[[:space:]]+send|slackcli[[:space:]]+(messages[[:space:]]+)?(send|post|schedule))([[:space:]]|$)|gmail\.googleapis\.com/[^[:space:]]*/send|tell[[:space:]]+(application|app)[[:space:]]+.?"?Messages'; then
+      echo "client-post-guard: the send hold is on ($HOME/.chewbacca/policy/send-hold). Draft it and show Caleb. He lifts the hold, and that file goes with it." >&2
+      exit 2
+    fi
     printf '%s' "$cmd" | grep -qE 'slackcli[[:space:]]+(messages[[:space:]]+)?(send|post|schedule)' || exit 0
     target="$cmd" ;;
   mcp__claude_ai_Slack__slack_send_message|mcp__claude_ai_Slack__slack_schedule_message)

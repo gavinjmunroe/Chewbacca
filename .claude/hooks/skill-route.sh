@@ -29,7 +29,7 @@ type hook_init >/dev/null 2>&1 && hook_init skill-route.sh "$([ -n "${SKILL_ROUT
 # speaks on every prompt is one that gets tuned out inside a week, which is the
 # failure it exists to prevent.
 
-SKILL_ROUTE_PAYLOAD=$(cat)
+SKILL_ROUTE_PAYLOAD=$(head -c 900000)  # macOS refuses a bigger env string, and exec then fails
 export SKILL_ROUTE_PAYLOAD
 export SKILL_ROUTE_SELF="${BASH_SOURCE[0]}"
 

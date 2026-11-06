@@ -117,7 +117,7 @@ Hypothosheet and redo A20 with generated images, and an attendance code
 Caleb asked for on Zoom was still unanswered.
 
 - Find the team in the course file (`~/coursework/courses/<course>.yml`)
-  and the project note in `second-brain/memory/`, then run `people texts`
+  and the project note in `~/second-brain/memory/`, then run `people texts`
   on the team gc and on each teammate by full name.
 - Match what the prof assigned against the ledger rows for that course.
   An in-class deliverable due "by end of class" is a Today row even after

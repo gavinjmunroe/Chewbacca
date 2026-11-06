@@ -342,7 +342,7 @@ def main():
 
         # A mistyped secret has a way out.
         W.reset()
-        put_tokens(secret="wrongSECRETsynthetic0000")
+        put_tokens(secret="wrongSECRETsynthetic0000")  # secret-scan: allow
         r = run("auth")
         check("a wrong secret says so", r.returncode == 1 and "wrong" in r.stderr, r.stderr)
         (tmp / "open.log").write_text("")

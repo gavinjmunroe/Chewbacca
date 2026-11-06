@@ -1,7 +1,7 @@
 #!/bin/bash
 # hookd skips this guard for a Bash call that names none of these words,
 # each one its first check requires. Proven by tools/hookd_replay.py.
-# gate: curl wget httpie requests.post urllib
+# gate: curl wget httpie requests.post urllib peekaboo chrome-js jev-browse cliclick chewie
 [ -z "${HOOKD_INNER:-}" ] && [ -x "$HOME/.local/bin/hookd" ] && exec "$HOME/.local/bin/hookd" gate "$0" "$@"
 # Timing, logging, a watchdog and an output cap. See lib.sh.
 # shellcheck source=/dev/null
@@ -47,6 +47,9 @@ lower="$(printf '%s' "$blob" | tr '[:upper:]' '[:lower:]')"
 if [ "$tool" = "Bash" ]; then
   case "$lower" in
     *curl\ *|*wget\ *|*httpie*|*"requests.post"*|*"urllib"*) ;;
+    # A click that presses submit. Stress test, 2026-11-05: `peekaboo click 'Submit'`
+    # on Brightspace passed bc the shell path only looked for HTTP.
+    *peekaboo\ *submit*|*chrome-js*submit*|*jev-browse*submit*|*cliclick*submit*|*chewie*submit*) ;;
     *) exit 0 ;;
   esac
 fi
@@ -60,7 +63,7 @@ esac
 # Is it a submitting action, as opposed to reading status?
 submitting=0
 case "$lower" in
-  *folder_submit_files*|*"add a file"*|*upload*|*'"submit"'*|*submitassignment*|*dropbox_submit*)
+  *folder_submit_files*|*"add a file"*|*upload*|*'"submit"'*|*submitassignment*|*dropbox_submit*|*peekaboo\ *submit*|*chrome-js*submit*|*jev-browse*submit*|*cliclick*submit*|*chewie*submit*)
     submitting=1 ;;
 esac
 [ "$tool" = "mcp__chrome-devtools__upload_file" ] && submitting=1

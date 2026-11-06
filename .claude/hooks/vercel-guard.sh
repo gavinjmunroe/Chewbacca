@@ -26,7 +26,7 @@ set -uo pipefail
 command -v jq >/dev/null 2>&1 || exit 0
 cmd="$(jq -r '.tool_input.command // empty' 2>/dev/null)"
 [ -n "$cmd" ] || exit 0
-printf '%s' "$cmd" | grep -qE '(^[[:space:]]*|[;&|(][[:space:]]*)(npx[[:space:]]+(-y[[:space:]]+)?)?vercel([[:space:]]|$)' || exit 0
+printf '%s' "$cmd" | grep -qE '(^[[:space:]]*|[;&|("'"'"'][[:space:]]*)(npx[[:space:]]+(-y[[:space:]]+)?)?vercel([[:space:]]|$)' || exit 0
 printf '%s' "$cmd" | grep -qE 'vercel[[:space:]]+(remove|rm|project[[:space:]]+(rm|remove|ls)|ls|list|whoami|inspect|logout)\b' && exit 0
 
 POLICY="$HOME/.chewbacca/policy/no-vercel"

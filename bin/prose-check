@@ -203,6 +203,9 @@ def main(paths, chat=False):
 
 if __name__ == "__main__":
     args = [a for a in sys.argv[1:] if a != "--chat"]
-    if not args:
+    if not args or "-h" in args or "--help" in args:
         sys.exit(__doc__)
+    missing = [a for a in args if not pathlib.Path(a).is_file()]
+    if missing:
+        sys.exit(f"prose-check: no such file: {missing[0]}")
     sys.exit(main(args, chat="--chat" in sys.argv[1:]))

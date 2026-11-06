@@ -5,7 +5,7 @@
 # -Users-rachel project folder, so both gated nothing (replay, 10/13: skip 0
 # of 800). The rm check below acts only on these spellings, so the gate is
 # sound: -rf covers -rf and -Rf (words match lowercased), -fr covers -fR.
-# gate: -rf -fr -vrf -rvf -fvr -vfr --recursive push
+# gate: -rf -fr -vrf -rvf -fvr -vfr --recursive base64 push
 [ -z "${HOOKD_INNER:-}" ] && [ -x "$HOME/.local/bin/hookd" ] && exec "$HOME/.local/bin/hookd" gate "$0" "$@"
 # shellcheck source=/dev/null
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" 2>/dev/null || true
@@ -221,7 +221,11 @@ def rm_home(w, here):
         return False
     shorts = [a.lower() for a in w[1:] if a.startswith("-") and not a.startswith("--") and a != "-"]
     long = {a for a in w[1:] if a.startswith("--")}
-    rf = any(g.startswith(RF_STARTS) for g in shorts) or (
+    # Split flags count when this runs: the stress test on 2026-11-05 got `rm -r -f ~` past
+    # it. hookd still skips that spelling bc no gate word can name it: -r and -f both
+    # hide in payload keys and repo paths.
+    split_rf = any("r" in g for g in shorts) and any("f" in g for g in shorts)
+    rf = split_rf or any(g.startswith(RF_STARTS) for g in shorts) or (
         "--recursive" in long and ("--force" in long or any("f" in g for g in shorts)))
     if not rf:
         return False
@@ -273,7 +277,11 @@ def force_main(w, here):
     args = [a for a in rest if not a.startswith("-")]
     forced = any((a.startswith("--force") and a != "--force-if-includes")
                  or (re.match(r"^-[a-zA-Z]+$", a) and "f" in a) for a in opts) \
-        or any(a.startswith("+") for a in args[1:])
+        or any(a.startswith("+") for a in args[1:]) \
+        or any(a in ("--mirror", "--delete", "-d") for a in opts) \
+        or any(a.startswith(":") for a in args[1:])
+    # Deleting main is worse than forcing it. Stress test, 2026-11-05: `git push origin
+    # :main`, `--delete main` and `--mirror` were all let through as not forced.
     if not forced:
         return False
     if any(a in ("--all", "--mirror", "--branches") for a in opts):
@@ -301,6 +309,11 @@ def force_main(w, here):
 
 
 def judge(text, here, depth=0):
+    # A command decoded into a shell cannot be read by this guard or any other, so it
+    # is refused for hiding. Stress test, 2026-11-05: a base64 launch reached sh past
+    # every guard. On the raw text: split_commands cuts it at the pipes.
+    if depth == 0 and re.search(r"base64\s+(-d|-D|--decode)\b[^;&]*\|\s*(\S*/)?(ba|z|da|k)?sh\b", text):
+        return "a decoded command piped into a shell, which hides it from every guard"
     for seg in split_commands(text):
         w = words(seg)
         if not w:

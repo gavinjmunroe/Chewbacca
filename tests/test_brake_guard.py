@@ -90,7 +90,7 @@ check("on Bash only", agent_runtime.CLAUDE_MATCHERS.get("brake-guard.sh") == "Ba
       and agent_runtime.CLAUDE_MATCHERS.get("destructive-guard.sh") == "Bash")
 head = HOOK.read_text()[:1500]
 check("its gate words can't hide in a payload key or a repo path",
-      "# gate: -rf -fr -vrf -rvf -fvr -vfr --recursive push" in head and "# gate: rm" not in head
+      "# gate: -rf -fr -vrf -rvf -fvr -vfr --recursive base64 push" in head and "# gate: rm" not in head
       and "# gate: -r " not in head)
 
 import shutil  # noqa: E402

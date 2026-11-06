@@ -97,6 +97,13 @@ A measured pattern, and the words are the thing being measured:
 
 ## Group 3: safety and permission gates, kept as code
 
+Tested by attack on 2026-11-05: `tests/test_stress_guards.py` and `tests/test_stress_tools.py`
+hold the ones that got through and were fixed. By design nothing stops a named send, a paid
+call or a plain `rm -rf` of a non-home folder, bc his standing rule is act without asking.
+`~/.chewbacca/policy/send-hold` turns on a refusal for named sends in `client-post-guard.sh`;
+no file, no effect. `rm -r -f ~` is refused only when hookd is absent: no gate word can name
+split flags.
+
 A classifier never grants permission. A miss here sends, spends or deletes:
 
 - Send and launch: `launch-guard.sh`, `chat-approval.sh`, `ready-guard.sh`,

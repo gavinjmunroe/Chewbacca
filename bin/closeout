@@ -661,6 +661,10 @@ class Checks:
 
 
 def main() -> int:
+    # Stress test, 2026-11-05: --help ran the whole closeout, past 15 s.
+    if "-h" in sys.argv or "--help" in sys.argv:
+        print(__doc__.strip())
+        return 0
     quiet = "--quiet" in sys.argv
     fast = "--fast" in sys.argv
     everything = "--all" in sys.argv

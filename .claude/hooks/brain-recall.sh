@@ -24,7 +24,7 @@ type hook_init >/dev/null 2>&1 && hook_init brain-recall.sh 3
 # so the bar can be set from labeled real traffic instead of two observations.
 # bin/route-label labels the rows, tools/route_tune.py reads the labels.
 
-BRAIN_RECALL_PAYLOAD=$(cat)
+BRAIN_RECALL_PAYLOAD=$(head -c 900000)  # macOS refuses a bigger env string, and exec then fails
 export BRAIN_RECALL_PAYLOAD
 
 type hook_unbuffer >/dev/null 2>&1 && hook_unbuffer  # stderr goes straight to the host from here on

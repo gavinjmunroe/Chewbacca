@@ -61,6 +61,10 @@
         "title": {
           "type": "string",
           "bindable": false
+        },
+        "ask": {
+          "type": "string",
+          "bindable": false
         }
       }
     },

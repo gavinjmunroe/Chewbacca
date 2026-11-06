@@ -43,6 +43,11 @@ import subprocess
 import sys
 import tempfile
 
+# Stress test, 2026-11-05: importing these took past 15 s just to print --help.
+if __name__ == "__main__" and ("-h" in sys.argv or "--help" in sys.argv):
+    print((__doc__ or "edit-cut: cut footage to a song in a measured style.").strip())
+    sys.exit(0)
+
 import cv2
 import librosa
 import numpy as np

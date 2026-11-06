@@ -12,7 +12,7 @@ type hook_init >/dev/null 2>&1 && hook_init kit-route.sh 5
 # The payload arrives on stdin, and the heredoc below also claims stdin, so it
 # has to be read first and handed over out of band. Without this the script runs
 # fine and silently never matches anything, because sys.stdin is the script.
-KIT_ROUTE_PAYLOAD=$(cat)
+KIT_ROUTE_PAYLOAD=$(head -c 900000)  # macOS refuses a bigger env string, and exec then fails
 export KIT_ROUTE_PAYLOAD
 
 type hook_unbuffer >/dev/null 2>&1 && hook_unbuffer  # stderr goes straight to the host from here on

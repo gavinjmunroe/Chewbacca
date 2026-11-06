@@ -1,7 +1,7 @@
 #!/bin/bash
 # hookd skips this guard for a Bash call that names none of these words,
 # each one its first check requires. Proven by tools/hookd_replay.py.
-# gate: create
+# gate: create pulls
 [ -z "${HOOKD_INNER:-}" ] && [ -x "$HOME/.local/bin/hookd" ] && exec "$HOME/.local/bin/hookd" gate "$0" "$@"
 # Timing, logging, a watchdog and an output cap. See lib.sh.
 # shellcheck source=/dev/null
@@ -22,10 +22,11 @@ command -v jq >/dev/null 2>&1 || exit 0
 input="$(cat)"
 cmd="$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/dev/null)"
 [ -n "$cmd" ] || exit 0
-printf '%s' "$cmd" | grep -qE '(^|[;&|(][[:space:]]*|[[:space:]])gh[[:space:]]+pr[[:space:]]+create\b' || exit 0
+# The API route opens the same PR: stress test, 2026-11-05.
+printf '%s' "$cmd" | grep -qE '(^|[;&|(][[:space:]]*|[[:space:]])gh[[:space:]]+(pr[[:space:]]+create\b|api[[:space:]].*pulls\b.*(-X[[:space:]]*POST|--method[[:space:]]+POST|-f[[:space:]]))' || exit 0
 
 ORGS='bluemodernadvisory|amberintelligence|amber-organization'
-if printf '%s' "$cmd" | grep -qiE "(--repo[= ]|-R[[:space:]]+)[^[:space:]]*($ORGS)/"; then
+if printf '%s' "$cmd" | grep -qiE "((--repo[= ]|-R[[:space:]]+)[^[:space:]]*|repos/)($ORGS)/"; then
   hit=1
 else
   dir="$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null)"

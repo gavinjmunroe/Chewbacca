@@ -22,17 +22,21 @@ type hook_init >/dev/null 2>&1 && hook_init ask-capture.sh 3
 #
 # Silent always. Never blocks, never prints, never fails a turn.
 
-ASK_PAYLOAD=$(cat)
+ASK_PAYLOAD=$(head -c 900000)  # macOS refuses a bigger env string, and exec then fails
 export ASK_PAYLOAD
 
 type hook_unbuffer >/dev/null 2>&1 && hook_unbuffer  # stderr goes straight to the host from here on
 exec python3 -I <<'PY'
 import json, os, pathlib, time
 
+raw = os.environ.get("ASK_PAYLOAD") or "{}"
 try:
-    payload = json.loads(os.environ.get("ASK_PAYLOAD") or "{}")
+    payload = json.loads(raw)
 except Exception:
-    raise SystemExit(0)
+    # The env cap cut a huge paste mid-string. It is still a request, and the first
+    # lines say what was wanted. Stress test, 2026-11-05: a 1.2 MB prompt was lost.
+    head = raw.split('"prompt"', 1)[-1].lstrip(' :"')[:1200]
+    payload = {"prompt": head.encode().decode("unicode_escape", "replace") if "prompt" in raw else ""}
 
 prompt = (payload.get("prompt") or "").strip()
 if not prompt:
@@ -68,7 +72,7 @@ try:
     links = list(dict.fromkeys(found))[:200]
     if links:
         row["links"] = links
-    with store.open("a", encoding="utf-8") as fh:
+    with store.open("a", encoding="utf-8", errors="backslashreplace") as fh:
         fh.write(json.dumps(row, ensure_ascii=False) + "\n")
 except OSError:
     pass

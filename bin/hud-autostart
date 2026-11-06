@@ -44,7 +44,11 @@ status() {
   fi
 }
 
+# Anything it doesn't know stops here. Stress test, 2026-11-05: --help and a typo both fell
+# through to the install below and reloaded the launch agent.
 case "${1:-install}" in
+  -h|--help) echo "usage: hud-autostart [install | status | remove]"; exit 0 ;;
+  install|--install) ;;
   --status|status) status; exit 0 ;;
   --remove|remove)
     launchctl unload "$PLIST" 2>/dev/null
@@ -54,6 +58,7 @@ case "${1:-install}" in
     echo "removed. Kyber is no longer kept alive."
     exit 0
     ;;
+  *) echo "hud-autostart: unknown '$1'. usage: hud-autostart [install | status | remove]" >&2; exit 2 ;;
 esac
 
 # The app has to exist before anything is promised about keeping it alive.

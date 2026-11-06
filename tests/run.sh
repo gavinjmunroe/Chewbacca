@@ -214,7 +214,8 @@ if group "learning tools"; then
     ln -s "$ROOT/bin/$tool" "$TMP/$tool"
     check "$tool resolves installed symlink" "$TMP/$tool" --help
     module="${tool//-/_}"
-    check "$tool unit tests" python3 "$ROOT/tests/test_$module.py"
+    # Their tests moved to the Dough repo with the engine, so only a test still here runs.
+    [ -f "$ROOT/tests/test_$module.py" ] && check "$tool unit tests" python3 "$ROOT/tests/test_$module.py"
   done
   check "agent-neutral export is current" python3 "$ROOT/tools/agents_md.py" --check
 fi
@@ -784,6 +785,8 @@ if group "tools"; then
   check  "amber agent: greets its own person, recalls across sessions, Jev off until opted in" python3 "$ROOT/tests/test_amber_agent.py"
   check  "amber-redact: known and pattern values never leak, the gap is measured" python3 "$ROOT/tests/test_amber_redact.py"
   check  "agent-history: one search over Claude Code and Codex transcripts, no fake secret survives" python3 "$ROOT/tests/test_agent_history.py"
+  check  "tools answer --help and a bad argument without acting or a traceback" python3 "$ROOT/tests/test_stress_tools.py"
+  check  "the stress test's guard attacks stay refused and ordinary commands still pass" python3 "$ROOT/tests/test_stress_guards.py"
   check  "a runtime install refuses rm -rf ~ and a force push to main, and nothing a real session ran" python3 "$ROOT/tests/test_brake_guard.py"
   check  "public-scan lists personal content in a repo and its history by file and commit, and changes nothing" python3 "$ROOT/tests/test_public_scan.py"
   check  "the stranger stopwatch counts prompts and errors right, keeps the host out of reach, and its stats match hand-worked values" python3 "$ROOT/tests/test_stranger_run.py"

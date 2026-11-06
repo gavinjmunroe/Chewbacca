@@ -80,7 +80,8 @@ for _ in 1 2 3 4 5 6 7 8; do
      && grep -q '"motion"' "$DIR/package.json" && grep -q '"lenis"' "$DIR/package.json"; then
     HAS_STACK=1; break
   fi
-  if [ -f "$DIR/research/INDEX.md" ]; then HAS_STACK=1; break; fi
+  _receipt="research/INDEX.md"  # in the target repo, from site-gate research
+  if [ -f "$DIR/$_receipt" ]; then HAS_STACK=1; break; fi
   [ -d "$DIR/.git" ] && break
   PARENT=$(dirname "$DIR"); [ "$PARENT" = "$DIR" ] && break; DIR="$PARENT"
 done

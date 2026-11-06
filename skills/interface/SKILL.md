@@ -691,7 +691,7 @@ Kyber landing, 2026-11-03, one night of corrections:
   16 ("This isn't how it actually looks on apple"). Apple's own entries are
   circles; third-party apps (GamePigeon, ours) keep a rounded-square icon.
 - Icons are the real ones: the third-party icon from the App Store
-  (`itunes.apple.com/search?entity=software`, artworkUrl), Apple's entries as
+  (`https://itunes.apple.com/search?entity=software`, artworkUrl), Apple's entries as
   SF Symbols rendered on their color with a short Swift script, Photos from
   the macOS app icon. Drawn look-alikes read fake ("Use the actual images
   bruh").

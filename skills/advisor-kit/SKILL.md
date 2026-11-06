@@ -1,6 +1,8 @@
 ---
 name: advisor-kit
-description: "Package what we've built into a private repo a mentor, advisor or exec can use in their own company, built from every word of the call. Use when someone says 'add me to your repo', 'share what you've got', or Caleb says to help an advisor any way we can."
+description: "Package what we've built into a private repo an advisor or exec can use in their own company, built from every word of the call."
+triggers: >-
+  Use when someone says 'add me to your repo', 'share what you've got', or Caleb says to help an advisor any way we can.
 ---
 
 # Advisor kit
@@ -26,7 +28,7 @@ Andrew Laffoon (Mixbook CEO) on 2026-10-30.
   Write `PLAN.md` with lanes by file before the second file, then fan out.
 - Never ship private material. No Caleb notes, client names or kit-only paths.
   Grep the repo for names and `~/code` before pushing. Third-party skills keep
-  their LICENSE and get a row in `skills/THIRD-PARTY.md`.
+  their LICENSE.
 
 ## Do
 

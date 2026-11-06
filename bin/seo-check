@@ -29,7 +29,11 @@ def main(argv):
         return 0 if argv and argv[0] in ("-h", "--help") else 1
     page = argv[0] if "://" in argv[0] else "https://" + argv[0]
     root = "{0.scheme}://{0.netloc}".format(urllib.parse.urlsplit(page))
-    status, headers, html = get(page)
+    try:
+        status, headers, html = get(page)
+    except OSError as err:
+        print(f"seo-check: can't reach {page}: {err}", file=sys.stderr)
+        return 1
     header = headers.get("x-robots-tag", "")
     metas = re.findall(r'<meta[^>]+name="robots"[^>]+content="([^"]+)"', html, re.I)
     blocked = "noindex" in header.lower() or any("noindex" in m.lower() for m in metas)

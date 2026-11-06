@@ -536,6 +536,8 @@ went out from that log, never from the thread.
 
 ### Show him the words, never the queue number
 
+Any ask to send a text or email prints the full message right above the ask, in that same reply. A pointer to a draft or an earlier message doesn't count. Caleb, 2026-11-05: "Whenever ur gonna ask me to send smth show it to me right abvoe the ask". The app's next-step box draws under the closing message, so the message ends the closing message.
+
 When a text needs his yes, print the whole text next to the person's name and let him answer in plain words ("send the John one"). A queue number means nothing to him. On 2026-11-05 a plan said "Say send 108 111 114", and he wrote "1. Huh?", then "why 108 111 114 what are those numbers". Map the name to the number yourself when you send.
 
 ### Before saying a partner's thread is open, read their unnamed groups

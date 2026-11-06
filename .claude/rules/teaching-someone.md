@@ -39,3 +39,6 @@ build with AI (a friend, a teammate, his dad), this is the bar.
   one: guards, reviewers, verification and hook tests at full strength. Where
   that pulls against the agency spine, the kit does checking and catching, and
   the person still does the predicting, deciding and explaining.
+- **A handoff means their accounts.** When the thing you built for someone becomes theirs, the repo transfers to their GitHub, the host runs on their account, and the domain record is changed with their login. The proof is their own push going live with your accounts out of the path. Keep your old deploy up until theirs holds, and grep the repo for your hosts first (the Parker site hard-coded the old Railway URL in `build.py`). Caleb, 2026-11-06: "We wanna fully handoff the site to him". The first plan only added Parker as a collaborator.
+- **What you tell them about a tool is checked in its code.** A README that says "it only reads" gets a grep for write commands before it ships. On 2026-11-06 a Hall README for Parker said that, and `bin/brightspace` installs `submit` and `post`.
+- **A private repo invite shows them everything.** On a personal account a collaborator gets write access and every file, including plans and notes about other people. For a one-person trial, give a zip from `git archive` with those left out, then rerun its install test on the zip.

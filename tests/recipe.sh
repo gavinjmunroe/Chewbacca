@@ -281,8 +281,12 @@ EOF
 run "a gated step can't take stdin" 2 "${RECIPE[@]}" run "$T/r/stdin.json"
 
 # --- a real press, redeemed with the code on a fake screen
-run "the press, end to end" 0 python3 "$ROOT/tests/test_recipe_press.py"
-printf '%s\n' "$OUT" | grep -q '^FAIL' && no "press test: $OUT"
+# A product that ships this runner without the press module (Hall) has no press:
+# every gated step below still refuses, and only reads can run there.
+if [ -f "$ROOT/tools/send_approval.py" ]; then
+  run "the press, end to end" 0 python3 "$ROOT/tests/test_recipe_press.py"
+  printf '%s\n' "$OUT" | grep -q '^FAIL' && no "press test: $OUT"
+fi
 
 cat > "$T/r/press.json" <<EOF
 {"version": 1, "title": "Press", "description": "x",
@@ -459,8 +463,10 @@ run "site-says: wrong type" 2 "${RECIPE[@]}" run "$SITE" --param "url=not a url"
 kill "$SRV" 2>/dev/null; wait "$SRV" 2>/dev/null
 
 # --- it runs through the dispatcher, on Apple's python, with no third party
-run "chewbacca recipe list" 0 bash "$ROOT/bin/chewbacca" recipe list
-says "the dispatcher reaches it" "site-says"
+if [ -f "$ROOT/bin/chewbacca" ]; then
+  run "chewbacca recipe list" 0 bash "$ROOT/bin/chewbacca" recipe list
+  says "the dispatcher reaches it" "site-says"
+fi
 if [ -x /usr/bin/python3 ]; then
   run "runs on /usr/bin/python3" 0 /usr/bin/python3 -I "$ROOT/tools/recipe.py" run "$T/r/greet.json" --param name=Ada --param count=1
 fi

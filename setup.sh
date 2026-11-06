@@ -1268,7 +1268,7 @@ link_tool chewbacca
 # `closeout --fast`, method-guard says `method debug`), but none were in a link
 # list, so tests/test_doc_commands_linked.py now reads hooks too. On 2026-10-29
 # the night wrap-up tab got "command not found: closeout".
-for _tool in closeout backlog method evolve clay-inbox app-revive chewbacca-daemon gtme-portfolio text-blast; do
+for _tool in closeout backlog method evolve clay-inbox app-revive chewbacca-daemon gtme-portfolio text-blast plan-check best-pass send-file text-group; do
   [ -f "$SCRIPT_DIR/bin/$_tool" ] && link_tool "$_tool"
 done
 if [ -f "$SCRIPT_DIR/bin/coursework" ]; then

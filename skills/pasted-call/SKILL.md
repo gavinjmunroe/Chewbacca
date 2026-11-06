@@ -28,6 +28,12 @@ Both fail the same way, by reading the transcript alone and stopping there.
   this method over at prompt time and refuses the Stop when the skill,
   `people texts`, the ledger or the brain save is missing.
 - Never hand back a flat list. A dozen rows in call order is a pile, not a plan.
+- Never repeat a sales call's claims in the follow-up unchecked. Check each one
+  against `dough/PITCH.md` and the public record, and walk back what doesn't
+  hold. On 2026-11-05 a Fresh Fire call said "that email's cooked" and called 20
+  a day a Google limit. Public DNS showed no SPF, which was the real finding, and
+  nothing showed a blacklist. Read DNS over HTTPS: `dig` returned empty for every
+  record from this Mac's shell that night, which would have read as no email set up.
 
 - Never work a transcript another tab already has. When he says he pasted
   it in a different tab too, or `tabs context` shows another tab whose

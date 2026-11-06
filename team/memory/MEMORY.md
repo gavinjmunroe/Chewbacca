@@ -548,3 +548,5 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_running_job_stale_output: a job marked running can be wedged; check its output file's age, and give scrape loops a per-item limit (FF speed job, 8h at 20 of 1041, 11/6)
 - project_ff_outbound_handoff_2026_11_06: FF outbound handoff to Gavin for Mon 11/9, what was checked 11/6, what's unproven, and why batch counts move on identical copy
 - project_meeting_live_2026_11_06: live call reaches a tab or Kyber with no pasting (meeting-live) on room-capture; no Natively code, no interview mode, private calls reach nothing
+- feedback_shipped_into_a_live_event: four pushes hit his presenter window while he waited to present; a tool in use during a live event is frozen
+- feedback_railway_no_remote_waved_through: the Railway guard exited 0 when a repo had NO remote, which is the worst case, not the safe one

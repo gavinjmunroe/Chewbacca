@@ -1,0 +1,125 @@
+#!/bin/bash
+# Build the thing he presents from, from one script file.
+#
+# 2026-11-06. The BISC presenter window was hand-built across the night and
+# still being changed at 10:13 while he sat in the room, because nothing in
+# the kit made one. Everything it needed was known the night before. This is
+# what assembles it, so the next talk is a command rather than a morning.
+#
+#   chewbacca present new <name> --script talk.md [--level script|sentence|bullets]
+#   chewbacca present build <dir> --script talk.md [--level ...]
+#   chewbacca present check <dir>
+#
+# `new` scaffolds a deployable Next.js app with four pages: the talk to share,
+# /notes to keep to himself, /train to learn it, /run for the morning. `build`
+# regenerates the data in an app that already exists. `check` reads the script
+# and says what is missing before any of it matters.
+#
+# Drawings are not generated. lib/scenes.tsx starts as a stub, because a
+# figure invented from a description is how things end up looking generated
+# (see skills/presenting/SKILL.md).
+set -uo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TPL="$ROOT/templates/present"
+BUILDER="$ROOT/tools/present_build.py"
+
+die() { echo "chewbacca present: $*" >&2; exit 1; }
+usage() { sed -n '/^#   chewbacca present/,/^#$/p' "$0" | sed 's/^# \{0,2\}//'; }
+
+cmd="${1:-}"; shift 2>/dev/null || true
+case "$cmd" in
+  -h|--help|help|"") usage; exit 0 ;;
+  new|build|check) ;;
+  *) die "unknown command '$cmd'. Try: new, build, check" ;;
+esac
+
+target=""; script=""; level="script"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --script) script="${2:?--script needs a file}"; shift 2 ;;
+    --level)  level="${2:?--level needs a value}"; shift 2 ;;
+    -*) die "unknown flag $1" ;;
+    *) [ -z "$target" ] && target="$1"; shift ;;
+  esac
+done
+
+command -v python3 >/dev/null 2>&1 || die "python3 is not on PATH"
+[ -f "$BUILDER" ] || die "missing $BUILDER"
+
+if [ "$cmd" = "check" ]; then
+  [ -n "$target" ] || die "check needs a script file or an app directory"
+  s="$target"
+  [ -d "$target" ] && s="$(ls "$target"/*.md 2>/dev/null | head -1)"
+  [ -f "$s" ] || die "no script to check at $target"
+  tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+  python3 -I "$BUILDER" "$s" "$tmp" --level "$level"
+  exit $?
+fi
+
+[ -n "$target" ] || die "$cmd needs a name or directory"
+[ -n "$script" ] || die "$cmd needs --script <file.md>. See $TPL/SCRIPT-FORMAT.md"
+[ -f "$script" ] || die "no script at $script"
+
+if [ "$cmd" = "new" ]; then
+  case "$target" in /*) dir="$target" ;; *) dir="$HOME/code/$target" ;; esac
+  [ -e "$dir" ] && die "$dir already exists. Use: chewbacca present build $dir --script $script"
+  [ -d "$TPL" ] || die "missing template at $TPL"
+  mkdir -p "$dir"
+  cp -R "$TPL"/. "$dir"/
+  rm -f "$dir/SCRIPT-FORMAT.md"
+  cp "$script" "$dir/$(basename "$script")"
+  # The drawings are his to make. A stub keeps the app building meanwhile, and
+  # says in the file what it is waiting for.
+  cat > "$dir/lib/scenes.tsx" <<'STUB'
+import type { State, SceneKey } from "@/lib/beats";
+
+// The drawings. `chewbacca present` does not generate these on purpose: a
+// figure invented from a text description reads as generated, and the talk is
+// the one place that shows. Replace each one with the real thing.
+//
+// Every scene is a pure function of its beat state, which carries { step, of }
+// so a scene can draw how far through it is. Keep each scene a plain SVG
+// fragment, no wrapper <svg>.
+function Placeholder({ s }: { s: State }) {
+  const step = Number(s.step ?? 0);
+  const of = Math.max(1, Number(s.of ?? 1));
+  return (
+    <g>
+      <rect x={120} y={120} width={1360} height={660} rx={28}
+        fill="var(--surface-1)" stroke="var(--hairline)" strokeWidth={2} />
+      <text x={800} y={420} textAnchor="middle" fontSize={34} fontWeight={800}
+        fill="var(--ink-subtle)">draw this scene in lib/scenes.tsx</text>
+      <text x={800} y={474} textAnchor="middle" fontSize={24}
+        fill="var(--label)">beat {step + 1} of {of + 1}</text>
+    </g>
+  );
+}
+
+export const SCENES: Record<SceneKey, (p: { s: State }) => React.ReactElement> =
+  new Proxy({} as Record<SceneKey, (p: { s: State }) => React.ReactElement>, {
+    get: () => Placeholder,
+  });
+STUB
+  echo "scaffolded $dir"
+else
+  dir="$target"
+  [ -d "$dir" ] || die "no app at $dir"
+fi
+
+python3 -I "$BUILDER" "$script" "$dir" --level "$level" || die "could not build the data files"
+
+if [ "$cmd" = "new" ]; then
+  ( cd "$dir" && git init -q 2>/dev/null \
+      && printf 'node_modules\n.next\n.design-gate-url\n' > .gitignore ) || true
+  cat <<MSG
+
+next, in $dir:
+  npm install && npx next build        make sure it compiles
+  draw the scenes in lib/scenes.tsx    the one thing this cannot do for you
+  railway-connect                      private repo, push, and a push is the deploy
+
+the aid level is "$level". it should match how much you have rehearsed out
+loud, not what sounds good. $ROOT/skills/presenting/SKILL.md says why.
+MSG
+fi

@@ -38,6 +38,7 @@ COMMANDS=(
   "open|the whole kit on one screen; add --week for your week in its own window"
   "apps|list, run or test anything the team built (apps/)"
   "doctor|check the install and say what is broken"
+  "lockdown|automatically pause ARD during LockDown Browser and restore it afterward"
   "status|what is installed, what is on, what is stale"
   "version|version installed here and in the repo"
   "setup|full setup on this machine (asks nothing)"
@@ -53,12 +54,9 @@ COMMANDS=(
   "work-ledger|preserve workspace commitments across messages and runtimes"
   "tabs|see what every other live agent tab is doing, in any runtime"
   "land|put your files or commits on origin/main without anyone else's"
-  "claude-jobs|scheduled Claude jobs on your own plan, no API key, laptop shut or not"
-  "cloud|your own always-on CRM and Claude connector on Railway, one command"
   "launch|open a new named, briefed session in the Claude desktop app"
   "graph-fuse|inspect possible entity matches without merging records"
   "review-gate|run independent code review and check its current receipt"
-  "break-it|attack the current change before calling it done, and write a receipt"
   "update|pull the latest, show what changed, re-run setup"
   "changelog|what changed between versions"
   "agents|the agents page in your browser tab (builds it on first run, no Kyber needed)"
@@ -74,31 +72,22 @@ COMMANDS=(
   "context|measure what the kit costs you before you type"
   "evals|run the skill evals"
   "gtme-math|compute offline cost, funnel, and heldout metrics"
-  "discovery|score AI readiness on evidence, baseline workflows, ROI ranges and build order"
-  "case-study|build a client case study where every number has a source and the change is computed"
-  "llms-txt|write llms.txt and a markdown twin of every page so AI agents read a site right"
-  "rfp-extract|turn an RFP into a verbatim compliance matrix with page and line per requirement"
   "gtme-graph|track GTM dependencies, budgets, and evidence"
   "gtme-learning|compare paired workflow experiments offline"
   "gtme-library|index and search a local source corpus"
   "gtme-dedupe|cluster duplicate people across contact CSVs"
   "gtme-signals|list recent SEC Form D raises as buying signals"
-  "gtme-investors|a client's seed investor list from the Prometheus file, deduped and audited"
   "gtme-grade|run the five pre-send gates on one campaign; launch-guard needs its pass"
   "gtme-reply|classify a cold-email reply, clean its text, and gate auto-send, offline"
   "rea|how another app does one thing: REA status, a scoped Electron trace, a native overview (optional)"
-  "mcp|add Figma, Notion, GitHub and 50 more MCP servers, sign in, check what's connected"
-  "people-check|contacts that aren't people, the same person filed twice, and who a sentence names (Amber's rules plus Jev)"
   "resolve|answer a fact question (an address, a phone, a site) from every source before asking a person"
-  "name-check|before pitching a product name: who holds the .com, free prefix .coms, the USPTO step"
-  "platforms|every outside platform (Cloudflare, Railway, Google...): connected or not, the fix, and sending-domain DNS"
   "gtme-rules|which client rulings run as code, and check text a client will read"
   "gtme-dnc|may we email this address: one check across the graph, DNC lists and the Clay blocklist"
   "gtme-score|Togari's lead, affiliation, primary-contact, tier and quality rubrics, offline"
   "gtme-lookup|ZoomInfo's free company and person search, Fireflies meetings, keys from the keychain"
   "gtme-interview|drill GTM engineer interview cases from sourced Clay procedures"
   "gtm|every client's campaigns, sends, replies and meetings, from the local graph"
-  "gtme|a hired growth engineer: a plan from your business, first list, brief, next, report, lessons"
+  "gtme|a hired growth engineer: a plan from your business, first list, brief, next, report"
   "gtm-memory|accounts, contacts, jobs, commitments, Clay columns and credits per client"
   "jobs|one queue for long and heavy work: runs it when the Mac has room"
   "ig|read every Instagram post of an account with his signed-in session"
@@ -108,13 +97,10 @@ COMMANDS=(
   "groupme|GroupMe group chats and DMs, read inside your own signed-in GroupMe web tab"
   "chat|one inbox for every chat network: local Matrix bridges (up, down, status, link)"
   "office|Microsoft 365 mail, calendar, files, docs and Teams, read through Graph after one Microsoft device-code sign-in"
-  "whoop|sleep, recovery, strain and workouts from WHOOP's official API, after one sign-in"
   "usc|a USC student's day; lockin pulls your courses, lecture files and what's due first"
   "browser|ChatGPT or Claude in Chrome as Chewbacca: install the Mac half, status, tools, log"
   "google|find and read Google Docs, Sheets and Slides as text"
   "docs|local Word, Excel and PowerPoint files through genoffice: read, preview an edit, apply it"
-  "call-doc|a call or pitch script as a spaced Google Doc: say lines black, actions blue"
-  "photo|people photos for a site: flag black-and-white ones, paste a copied image to a file"
   "clay|any Clay read without opening Clay, by the fastest surface (clay ops)"
   "clay-fixture-check|compare a CSV export with an expected fixture"
   "oss-apps|open source apps that replace a Mac app, and which can be remixed"
@@ -160,7 +146,7 @@ repo_version() { cat "$ROOT/VERSION" 2>/dev/null || echo "unknown"; }
 installed_version() { cat "$STATE/version" 2>/dev/null || echo "unrecorded"; }
 
 case "${1:-}" in
-task-graph|graph-fuse|review-gate|break-it|work-ledger|tabs|ux-learning|jev|decision-lab|ux-decision|ux-policy|clay-review|gtme-math|discovery|case-study|llms-txt|rfp-extract|gtme-graph|gtme-learning|gtme-library|gtme-signals|gtme-investors|gtme-grade|gtme-reply|gtme-rules|gtme-dnc|gtme-score|gtme-interview|resolve|name-check|platforms|gtm|gtm-memory|gtme|clay-fixture-check|oss-apps)
+task-graph|graph-fuse|review-gate|work-ledger|tabs|ux-learning|jev|decision-lab|ux-decision|ux-policy|clay-review|gtme-math|gtme-graph|gtme-learning|gtme-library|gtme-signals|gtme-grade|gtme-reply|gtme-rules|gtme-dnc|gtme-score|gtme-interview|resolve|gtm|gtm-memory|gtme|clay-fixture-check|oss-apps)
   tool="$1"
   shift
   exec python3 "$ROOT/bin/$tool" "$@"
@@ -184,16 +170,6 @@ gtme-dedupe)
 agent)
   shift
   exec python3 "$ROOT/tools/agent_runtime.py" "$@"
-  ;;
-people-check)
-  # Amber's people rules (bin/lib/people-amber) over the people store; Jev settles the unsure ones.
-  shift
-  exec python3 "$ROOT/tools/people_amber.py" "$@"
-  ;;
-mcp)
-  # The MCP catalog (config/mcp/catalog.json), added through each agent's own CLI.
-  shift
-  exec python3 "$ROOT/tools/mcp_setup.py" "$@"
   ;;
 agents)
   # Realm's agents page in a normal browser tab. On a Mac with Kyber the same
@@ -250,6 +226,17 @@ welcome|onboard|hello)
   shift
   exec python3 "$ROOT/bin/chewbacca-welcome" "$@"
   ;;
+lockdown)
+  shift
+  exec bash "$ROOT/bin/chewbacca-lockdown" "$@"
+  ;;
+present|presentation|talk)
+  # One script file becomes the talk to share, the presenter window, the
+  # trainer and the morning sheet. See skills/presenting/SKILL.md for which
+  # aid level to build at, which is decided by rehearsal and not by taste.
+  shift
+  exec bash "$ROOT/bin/chewbacca-present" "$@"
+  ;;
 permissions|permission|perms)
   # Every macOS grant Chewbacca needs, walked one at a time over System
   # Settings, each step moving on once detected. No args = the walk (a ring on
@@ -259,18 +246,6 @@ permissions|permission|perms)
   shift
   [ $# -eq 0 ] && set -- walk
   exec python3 "$ROOT/bin/chewbacca-permissions" "$@"
-  ;;
-cloud)
-  # A per-person deploy of the joel-os template: CRM, Claude connector, and
-  # the bridge that syncs this Mac's people store to it. See bin/chewbacca-cloud.
-  shift
-  exec bash "$ROOT/bin/chewbacca-cloud" "$@"
-  ;;
-claude-jobs)
-  # Scheduled Claude jobs on the user's own plan via claude setup-token, run
-  # on Railway so they keep going with the laptop shut. See apps/claude-jobs.
-  shift
-  exec node "$ROOT/bin/chewbacca-claude-jobs" "$@"
   ;;
 land)
   # The one way a tab pushes: builds on a fresh worktree of origin/main,
@@ -326,16 +301,6 @@ pdf)
   shift
   exec python3 "$ROOT/bin/chewbacca-pdf" "$@"
   ;;
-call-doc)
-  # A call script as a readable Google Doc. See bin/chewbacca-call-doc.
-  shift
-  exec python3 "$ROOT/bin/chewbacca-call-doc" "$@"
-  ;;
-photo)
-  # Colour checks and clipboard paste for people photos. See bin/chewbacca-photo.
-  shift
-  exec python3 "$ROOT/bin/chewbacca-photo" "$@"
-  ;;
 docs)
   # Local .docx, .xlsx and .pptx through genoffice. See bin/chewbacca-docs.
   shift
@@ -363,22 +328,11 @@ office)
   shift
   exec python3 "$ROOT/bin/chewbacca-office" "$@"
   ;;
-whoop)
-  # WHOOP's official OAuth API; the app's secret and the tokens live in the login keychain.
-  shift
-  exec python3 "$ROOT/bin/chewbacca-whoop" "$@"
-  ;;
 browser)
   # The native host a chat tab reaches through apps/extensions/chewbacca.
   # Reads run; writes need a press on the Mac. docs/reference/BROWSER-CHEWB.md
   shift
   exec python3 "$ROOT/bin/chewbacca-browser" "$@"
-  ;;
-products)
-  # The products built out of Chewbacca (anchored, usc-os): which shared files
-  # are behind, and a pull that tests each product before pushing its main.
-  shift
-  exec python3 "$ROOT/bin/chewbacca-products" "$@"
   ;;
 usc)
   # Any USC student's day from Brightspace, dining and the campus calendar,

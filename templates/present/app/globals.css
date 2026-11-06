@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+/* Tokens are Linear's, from the UX engine's own system file
+   (apps/ux-engine/systems/linear.app/DESIGN.md), picked by ux-pick for the
+   brief "dark scientific explainer projected in a lecture hall". Not invented
+   here: an earlier pass hand-rolled its own palette, which is the thing Caleb
+   has called slop twice.
+
+   The biology colours below are the one addition. They are data encoding, not
+   decoration: each one names a molecule and keeps that meaning in every scene,
+   so the room can read the diagrams without a legend. Linear's single accent
+   still carries "this is the point", and nothing else. */
+@layer base {
+  :root {
+    --canvas: #010102;
+    --surface-1: #0f1011;
+    --surface-2: #141516;
+    --surface-3: #18191a;
+    --ink: #f7f8f8;
+    --ink-muted: #d0d6e0;
+    --ink-subtle: #8a8f98;
+    --ink-tertiary: #62666d;
+    --hairline: #23252a;
+    --hairline-strong: #34343a;
+    /* ux-lint flagged #5e6ad2 as violet-accent-hex: "once a viewer can name
+       the style as generated, they have an attribution". In a deck whose
+       data colours already carry amber, green, blue and red, a brand accent
+       competing with them earns nothing. The chrome goes neutral warm, so
+       every chromatic mark on screen means a molecule. */
+    --accent: #cfc6b6;
+    --accent-hover: #ece4d6;
+
+    /* Figure ink. Linear's surface and hairline tokens are chrome for a lit
+       panel; used as marks on a #010102 stage they measured 1.2:1 to 1.7:1
+       and vanished on a projector (Caleb, 2026-11-05: "barely visible").
+       Every value below clears 3:1 against the canvas, text 4.5:1, checked
+       with tools/contrast.mjs. Chrome still uses Linear's own tokens. */
+    --fig-inert: #5a626e; /* 3.38:1, DNA that is not doing anything yet */
+    --fig-bar: #5a626e; /* 3.38:1, an inert strand or arm */
+    --fig-line: #646d7a; /* 3.98:1, connectors and forks */
+
+    /* molecules, fixed meaning across every scene */
+    --dna: var(--fig-inert);
+    --guide: #6fb3ff; /* 9.51:1 */
+    --paired: #4ec9a0; /* 10.12:1 */
+    --pam: #e2a340; /* 9.48:1 */
+    --cut: #ff6f5e; /* 7.64:1 */
+    --cell: #c04a3f; /* 4.26:1 */
+    --cell-dark: #b03c32; /* 3.52:1, was #8e2f2a at 2.57:1 */
+    --hb: #ff8a78; /* 9.10:1 */
+    --fetal: #4ec9a0;
+    --bcl: #6fb3ff;
+    --label: #7b818b; /* 5.32:1, the smallest type that must still be read */
+
+    --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  html,
+  body {
+    height: 100%;
+    background: #000;
+  }
+  body {
+    margin: 0;
+    color: var(--ink);
+    font-family:
+      "Inter var", Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+    font-feature-settings: "cv11", "ss01";
+    -webkit-font-smoothing: antialiased;
+  }
+}

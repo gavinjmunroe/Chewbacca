@@ -24,6 +24,15 @@ cmd="$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/dev/null)"
 [ -n "$cmd" ] || exit 0
 case "$cmd" in *RAILWAY_UP_OK=*) exit 0 ;; esac
 
+# A git commit whose message describes the incident contains the words this
+# guard greps for. 2026-11-06: the commit that FIXED this guard was refused by
+# it, because its message quoted "railway up". A git command deploys nothing,
+# so it is never what this guard is for.
+case "$cmd" in
+  git\ *|*[\;\&\|]\ git\ *) exit 0 ;;
+esac
+printf '%s' "$cmd" | grep -qE '(^|[;&|[:space:]])git[[:space:]]+(commit|log|show|tag|notes|rebase|merge|revert|cherry-pick)([[:space:]]|$)' && exit 0
+
 # The same bypass through the API. 2026-10-28, OPTRA: during Railway's
 # "deployments stuck in initializing" outage a session canceled the stuck
 # deploy and fired serviceInstanceDeployV2 at backboard.railway.com from a
@@ -46,7 +55,19 @@ dir="${dir/#\~/$HOME}"
 case "$dir" in "") dir="$cwd" ;; /*) ;; *) dir="$cwd/$dir" ;; esac
 [ -n "$dir" ] && [ -d "$dir" ] || exit 0
 origin="$(git -C "$dir" remote get-url origin 2>/dev/null)"
-case "$origin" in *github.com*) ;; *) exit 0 ;; esac
+# No GitHub origin used to exit 0 here, which waved through the worst case of
+# all: a project with no repo, where `railway up` is the ONLY way it has ever
+# deployed. 2026-11-06, bisc-talk-app: a whole night of deploys went up that
+# way with no history and no rollback, and this guard watched every one of them
+# go by because the repo had no remote. Caleb: "BRO NEVER USE RAILWAY W/O
+# GITHUB HOW MANY TIMES DO I HV TO TELL U?????????".
+case "$origin" in
+  *github.com*) ;;
+  *)
+    echo "railway-up-guard: this repo has no GitHub remote, so \`railway up\` would be the only record this deploy ever existed (Caleb, 2026-11-06: \"NEVER USE RAILWAY W/O GITHUB\"). Run railway-connect in this folder: it creates the private repo, pushes, and attaches the service, after which git push is the deploy. For a deliberate one-off upload, add RAILWAY_UP_OK='<reason>' to the command." >&2
+    exit 2
+    ;;
+esac
 
 echo "railway-up-guard: this repo is on GitHub, so deploy through GitHub (Caleb, 2026-10-27: \"ALWAYS make a github repo and deploy through there\"). Run railway-connect once in this folder to attach the service to $origin, then git push to main is the deploy. For a deliberate one-off upload, add RAILWAY_UP_OK='<reason>' to the command." >&2
 exit 2

@@ -2242,6 +2242,22 @@ _register("PreToolUse", hooks_dir + "/clay-native-guard.sh", timeout=5,
 _register("PreToolUse", hooks_dir + "/wait-loop-guard.sh", timeout=5,
           matcher="Bash")
 
+# Nothing ships while he is standing in front of a room. On 2026-11-06 four
+# changes were pushed to his presenter window between 9:59 and 10:14 while he
+# waited to present at 10:00, the last one after he had started. His ledger
+# had carried "type: presentation, at: 10:00" since the night before and
+# nothing read it. Registered here and not only in a local settings.json,
+# because a guard that exists on one machine is not a guard.
+_register("PreToolUse", hooks_dir + "/live-event-guard.sh", timeout=5,
+          matcher="Bash")
+
+# A commit never deletes files nobody asked it to. On 2026-11-06 commits built
+# in a temp index seeded with `cp .git/index`, in a checkout several tabs were
+# working in, wrote trees missing files HEAD already had. Nothing printed, and
+# 431 committed files were gone from the working tree before anyone looked.
+_register("PreToolUse", hooks_dir + "/commit-deletes-guard.sh", timeout=5,
+          matcher="Bash")
+
 # A deploy goes out on a clean name. On 2026-10-10 the prayer tool shipped as
 # web-production-331de.up.railway.app; bin/railway-domain renames it.
 _register("PostToolUse", hooks_dir + "/railway-domain-guard.sh", timeout=5,

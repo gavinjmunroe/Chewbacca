@@ -18,10 +18,10 @@ type hook_init >/dev/null 2>&1 && hook_init scope-guard.sh 10
 # about what's "enough" is not a limit.
 #
 # WHAT IT ENFORCES. When one of his recent prompts uses a totality word (all,
-# every, everything, entire, whole, a ton), a reply that carries scope-cut
-# language (top N, N of M picked, capped, tier 1, on hold, skipped, set aside,
-# not ingested) is refused unless it also has a BLOCKED: line naming the hard
-# limit. So the agent either keeps going at full scope or names the real
+# every, everything, entire, whole, a ton), a reply Jev reads as doing part of it
+# is refused unless it also has a BLOCKED: line naming the hard limit. His words
+# stay on this Mac, so that gate is still a word list, listed in
+# docs/reference/INTENT-INVENTORY.md. So the agent either keeps going at full scope or names the real
 # blocker.
 #
 # WHAT IT DOESN'T DO. It can't tell an honest blocker from an excuse dressed
@@ -66,75 +66,33 @@ total = re.search(r"\b(all|every|everything|entire|whole)\b|\ba ton\b|\btons of\
 if not total:
     print("ok"); raise SystemExit
 
-# "Top N" is also how ranking is described: a reranker re-sorting the top 30
-# candidates for every question cuts nothing. On 2026-10-10 that sentence was
-# refused twice. A top-N inside a sentence about ranking is a parameter.
-RANKING = re.compile(r"\b(rerank\w*|re-sort\w*|candidates?|recall@\d+|retriev\w*|ranked|results? per)\b", re.I)
-
-
-def ranking_param(m):
-    start = max(msg.rfind(".", 0, m.start()), msg.rfind("\n", 0, m.start())) + 1
-    ends = [i for i in (msg.find(".", m.end()), msg.find("\n", m.end())) if i != -1]
-    return bool(RANKING.search(msg[start:min(ends) if ends else len(msg)]))
-
-
-# 2026-10-28, one session, three refusals of replies that cut nothing: "Read the
-# top 3" (rows of a 164 list to read aloud on a call, his own script), "only
-# exist in the notes file for now" (where a file lives), and "only the 1 to 3
-# questions" inside a prompt fenced for another tab. Quoted words and fenced
-# blocks are someone else's text, and "top N" or "for now" is a cut only in a
-# sentence that does the work on fewer things.
-def blank(s):
-    return " " * len(s.group(0))
-
-
-# \x60 is a backtick: a literal one inside this $( heredoc ) breaks bash 3.2.
-scan = re.sub(r"\x60{3}.*?\x60{3}", blank, msg, flags=re.S)
-scan = re.sub(r"\x60[^\x60\n]*\x60|\"[^\"\n]*\"|“[^”\n]*”", blank, scan)
-WORK = re.compile(r"\b(ingest\w*|scrap\w*|pull\w*|process\w*|enrich\w*|send\w*|sent|kept|keep\w*|"
-                  r"build\w*|load\w*|queu\w*|focus\w*|skip\w*|hold|park\w*|drop\w*|leav\w* out|later)\b", re.I)
-
-
-def sentence(m):
-    start = max(scan.rfind(".", 0, m.start()), scan.rfind("\n", 0, m.start())) + 1
-    ends = [i for i in (scan.find(".", m.end()), scan.find("\n", m.end())) if i != -1]
-    return scan[start:min(ends) if ends else len(scan)]
-
-
-cut = None
-for m in re.finditer(
-        r"\btop \d+\b|\b\d+ of (the )?\d+\b.*\b(picked|chosen|closest|fit)|\bcapped\b|\bcap(ped)? at\b"
-        r"|\btier[- ]?1\b|\bon hold\b|\bset aside\b|\bnot ingested\b|\bskipped\b|\bfor now\b"
-        r"|\bonly the \d+\b|\bnarrow(ed)? (it|the scope)\b",
-        scan, re.I):
-    word = m.group(0).lower()
-    if word.startswith("top ") and ranking_param(m):
-        continue
-    if (word.startswith("top ") or word == "for now") and not WORK.search(sentence(m)):
-        continue
-    cut = m
-    break
-if cut and "BLOCKED:" not in msg:
-    print("cut:" + cut.group(0))
-else:
-    print("ok")
+print("check" if "BLOCKED:" not in msg else "ok")
 PY
 )
 
-case "$VERDICT" in
-  cut:*)
-    {
-      echo "scope-guard: refusing. Caleb asked for all of it (a recent prompt says all,"
-      echo "every, entire or a ton), and this reply cuts scope: \"${VERDICT#cut:}\"."
-      echo
-      echo "On 2026-10-09 a creator ingest he asked for in full was cut to 36 of 238,"
-      echo "10 videos each, with three platforms on hold, and he said \"You didn't"
-      echo "listen to me.\""
-      echo
-      echo "Either keep going at the scope he set, or name each hard limit on its own"
-      echo "line as BLOCKED: <what needs his hands or what refused>. Deciding what's"
-      echo "enough is his call."
-    } >&2
-    exit 2 ;;
-esac
-exit 0
+[ "$VERDICT" = "check" ] || exit 0
+
+# Whether a reply cuts scope is a judgment. A word list lost this one for a month:
+# "Read the top 3" (rows of his own script), "only exist in the notes file for now"
+# and a reranker's top 30 were all refused as cuts (2026-10-10, 10-28), and each
+# refusal showed Caleb the reply twice. Jev down means no refusal.
+# The line came from 160 real closing turns of 2026-10-16 (tests/eval_reply_judges_jev.py
+# --replay), not from incident cases: 0.5 fired far more than the word list did.
+# shellcheck disable=SC2016
+JUDGE_Q='An AI agent wrote this reply about a job it was given. Does it say the agent itself is doing only part of the work: only the top few, a capped amount, a sample, skipping the rest, leaving some for later, or putting some on hold? Say no if it did all of it, if the limit is a setting inside a tool such as a reranker, or if it only describes where something lives or a list someone else wrote.'
+P=$(printf '%s' "$MSG" | sed -E 's/"[^"]*"//g; s/`[^`]*`//g' | hook_judge scope-guard "$JUDGE_Q")
+hook_judge_yes "$P" "${SCOPE_GUARD_LINE:-0.7}" || exit 0
+
+{
+  echo "scope-guard: refusing. Caleb asked for all of it (a recent prompt says all,"
+  echo "every, entire or a ton), and this reply does part of it by its own choice."
+  echo
+  echo "On 2026-10-09 a creator ingest he asked for in full was cut to 36 of 238,"
+  echo "10 videos each, with three platforms on hold, and he said \"You didn't"
+  echo "listen to me.\""
+  echo
+  echo "Either keep going at the scope he set, or name each hard limit on its own"
+  echo "line as BLOCKED: <what needs his hands or what refused>. Deciding what's"
+  echo "enough is his call."
+} >&2
+exit 2

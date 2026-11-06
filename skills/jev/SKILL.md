@@ -69,6 +69,21 @@ Service token limits still apply. Errors exit 2 without returning a decision.
 There are no automatic retries or automatic actions. Handle failures explicitly
 with the existing deterministic path or the agent's reasoning.
 
+## Inside a hook
+
+A guard asks with `hook_judge <name> "<question>"` from `.claude/hooks/lib.sh`, text
+on stdin, then `hook_judge_yes "$P" <line>`. Facts first in code, Jev only when the
+fact holds, and no judgment means no refusal. Only the agent's own replies and briefs
+go: his typed prompts stay on the Mac, and go to the model reading them as a short
+note. `tests/eval_reply_judges_jev.py` scores new questions and
+`tests/eval_intent_notes.py` scores notes. `docs/reference/INTENT-INVENTORY.md` has
+the sort of what reads what.
+
+Before a question ships, run it over real ordinary turns
+(`tests/fixtures/steering/closing_turns_2026_10_16.json`) and compare with the rule it
+replaces. On 2026-11-05 three questions scored clean on incident cases and fired far
+past their word lists on real turns, so they didn't ship.
+
 ## Plan expensive, build cheap
 
 `model-route` tells a prompt which tier it wants. For work big enough to plan,

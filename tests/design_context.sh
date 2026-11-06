@@ -1,6 +1,7 @@
 #!/bin/bash
-# design-context must fire on work that renders something and stay silent on
-# work that does not. A shell-script session must not carry the animation rules.
+# design-context gives the model a short note on every prompt and the full block
+# only when the model asks. It matches none of his words; whether the model calls
+# work "renders" right is measured in tests/eval_intent_notes.py.
 set -uo pipefail
 HOOK="$(cd "$(dirname "$0")/.." && pwd)/.claude/hooks/design-context.sh"
 pass=0; fail=0
@@ -12,34 +13,21 @@ TEST_DIR="$(mktemp -d)"
 trap 'rm -rf "$TEST_DIR"' EXIT
 TEST_HOME="$TEST_DIR/home"
 mkdir -p "$TEST_HOME/code/chewbacca/apps/ux-engine"
+export HOME="$TEST_HOME" CHEWBACCA_LOG_DIR="$TEST_DIR/logs"
 
-run(){ printf '{"prompt":"%s"}' "$1" | env HOME="$TEST_HOME" CHEWBACCA_LOG_DIR="$TEST_DIR/logs" bash "$HOOK" 2>/dev/null; }
+run(){ jq -cn --arg p "$1" '{prompt:$p}' | bash "$HOOK" 2>/dev/null; }
 
 out=$(run "make the hero scroll animation smoother")
-printf '%s' "$out" | grep -q "400ms TOTAL" \
-  && ok "fires on design work and carries the stagger ceiling" \
-  || no "did not fire on obvious design work"
-
-printf '%s' "$out" | grep -q "Removal is free" \
-  && ok "carries the subtraction cue, which moved 41% to 61% on eight words" \
-  || no "missing the subtraction cue"
-
+printf '%s' "$out" | grep -q "design-context.sh --full" && ok "note names the command" || no "note lost the command"
+printf '%s' "$out" | grep -q "400ms TOTAL" && no "the full block leaked into the note" || ok "note stays short"
+[ "${#out}" -lt 400 ] && ok "note is under 400 characters" || no "note grew to ${#out}"
 out=$(run "fix the failing test in the argument parser")
-[ -z "$out" ] && ok "silent on non-design work" \
-  || no "fired on a parser bug"
+printf '%s' "$out" | grep -q "design-context.sh --full" && ok "same note on non-design work, the model decides" || no "no note on plain work"
 
-out=$(run "why is the deploy failing on railway")
-[ -z "$out" ] && ok "silent on a deploy question" \
-  || no "fired on a deploy question"
-
-# `ui` as a substring fired on 45 of 300 prompts on 2026-10-05.
-out=$(run "build a quick guide to the test suite")
-[ -z "$out" ] && ok "silent when ui only appears inside build, quick, guide and suite" \
-  || no "fired on ui inside another word"
-
-out=$(run "the ui on the settings page feels cramped")
-printf '%s' "$out" | grep -q "400ms TOTAL" && ok "still fires on ui as a word" \
-  || no "did not fire on ui as a word"
+full=$(bash "$HOOK" --full </dev/null 2>/dev/null)
+printf '%s' "$full" | grep -q "400ms TOTAL" && ok "--full carries the stagger ceiling" || no "--full lost the stagger ceiling"
+printf '%s' "$full" | grep -q "Removal is free" && ok "--full carries the subtraction cue, which moved 41% to 61% on eight words" || no "--full lost the subtraction cue"
+if grep -qE "grep -q[a-zA-Z]*E" "$HOOK"; then no "hook still matches words"; else ok "no word matching left"; fi
 
 printf '\n  %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

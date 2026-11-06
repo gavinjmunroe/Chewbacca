@@ -41,8 +41,12 @@ tool="$(printf '%s' "$payload" | jq -r '.tool_name // empty' 2>/dev/null)"
 
 if [ "$tool" = "Agent" ] || [ "$tool" = "Task" ]; then
   brief="$(printf '%s' "$payload" | jq -r '(.tool_input.prompt // "") + " " + (.tool_input.description // "")' 2>/dev/null)"
-  if printf '%s' "$brief" | grep -qiE '\b(blender|\.blend\b|3d (render|scene|model|art|asset|room|object|logo|print)|diorama|isometric (art|scene|room|render))' &&
-     ! printf '%s' "$brief" | grep -qi 'nalana'; then
+  # Whether a brief is 3D work is a judgment, and a brief is the agent's own text.
+  # Only a brief that never says Nalana gets asked. Jev down means no refusal.
+  # The word gate keeps a brief about anything else, health or a client, off the network.
+  if printf '%s' "$brief" | grep -qiE '3d|blender|\.blend|render|scene|diorama|isometric|mesh' && \
+     ! printf '%s' "$brief" | grep -qi 'nalana' && \
+     hook_judge_yes "$(printf '%s' "$brief" | hook_judge lesson-guard 'A subagent got this brief. Does it ask for 3D work: modeling, lighting or rendering a 3D scene, object or render? Say no for 3D printing logistics, charts, or plain web and image work.')" "${LESSON_3D_LINE:-0.5}"; then
     echo "lesson-guard: a 3D brief that never names Nalana. Caleb, 2026-10-11: \"Bro we hv NALANA never forget\" (third time in a week). Put it in the brief: drive Nalana, the live Blender at /Applications/Nalana.app, through the blender MCP tools (get_scene_info, execute_blender_code, look), never headless blender renders." >&2
     exit 2
   fi

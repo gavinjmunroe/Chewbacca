@@ -21,8 +21,8 @@ type hook_init >/dev/null 2>&1 && hook_init blocked-route-guard.sh 10
 # API, no tab), jev-browse (his signed-in Chrome) and the browser pane. One
 # route failing became a blocker, and the click became his.
 #
-# WHAT IT ENFORCES. A reply whose BLOCKED: line hands him a UI step (click, sort,
-# hide, toggle, "on ur screen", "has to be done by u") must name at least two
+# WHAT IT ENFORCES. A reply whose BLOCKED: line hands him a UI step, as Jev reads
+# it, must name at least two
 # of the kit's routes it tried and how each failed. One failure is a reason to
 # try the next route, not a blocker. Refuses once per stop.
 
@@ -35,13 +35,11 @@ printf '%s' "$MSG" | grep -q 'BLOCKED:' || exit 0
 VERDICT=$(BR_MSG="$MSG" python3 -I - <<'PY'
 import os, re
 msg = os.environ["BR_MSG"]
-UI = re.compile(r"\bclick\b|\bon (?:ur|your) screen\b|\bin (?:its|the) UI\b|\bhas to (?:be done by|happen on) (?:u|you|ur)\b"
-                r"|\b(?:sort|hide|toggle|drag) (?:the|it|them)\b", re.I)
 # Only a BLOCKED: that opens a line hands something over. On 2026-10-16 the
 # steering-study reply describing this guard ("a BLOCKED: that hands him a
 # click") was refused by it: a mention mid-sentence is not a handoff.
 blocks = [m.group(0) for m in re.finditer(r"(?m)^[ \t>*-]*BLOCKED:.*(?:\n(?![ \t]*\n).*)*", msg)]
-if not any(UI.search(b) for b in blocks):
+if not blocks:
     print("ok"); raise SystemExit
 ROUTES = {
     "chewbacca clay": r"chewbacca clay|clay(?:'s)? (?:api|cli)\b|\bclay [a-z-]+ op\b",
@@ -57,6 +55,13 @@ tried = [k for k, p in ROUTES.items() if re.search(p, msg, re.I)]
 print("ok" if len(tried) >= 2 else "one:" + (",".join(tried) or "none"))
 PY
 )
+
+[ "${VERDICT#one:}" != "$VERDICT" ] || exit 0
+# Under two routes named is the fact. Whether the BLOCKED: hands him a step on a screen
+# is a judgment, so Jev reads it. Jev down means no refusal.
+JUDGE_Q='An AI agent wrote this reply. Does its BLOCKED line hand the user a step to do by hand in an app or on a screen, such as clicking, sorting, hiding or dragging something? Say no if what is blocked is a signature, a decision, a payment, or a credential only the user has.'
+P=$(printf '%s' "$MSG" | hook_judge blocked-route-guard "$JUDGE_Q")
+hook_judge_yes "$P" "${BLOCKED_ROUTE_LINE:-0.7}" || exit 0
 
 case "$VERDICT" in
   one:*)

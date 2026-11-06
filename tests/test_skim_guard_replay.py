@@ -17,6 +17,9 @@ CORPUS = os.path.join(ROOT, "tests/fixtures/steering/skim_replies_2026_10_22.jso
 
 
 def run(case, tmp):
+    # Whether the reply claims a full read is Jev's call, scored in
+    # tests/eval_reply_judges_jev.py. The stub carries the recorded verdict, so this
+    # replay checks the part in code: which reads count as partial.
     t = os.path.join(tmp, "t.jsonl")
     with open(t, "w") as fh:
         fh.write(json.dumps({"type": "user", "message": {"role": "user", "content": "ingest all of it"}}) + "\n")
@@ -26,7 +29,7 @@ def run(case, tmp):
             fh.write(json.dumps({"type": "assistant", "message": {"content": [
                 {"type": "tool_use", "name": name, "input": inp}]}}) + "\n")
     payload = json.dumps({"last_assistant_message": case["reply"], "transcript_path": t})
-    env = dict(os.environ, CHEWBACCA_LOG_DIR=os.path.join(tmp, "logs"))
+    env = dict(os.environ, CHEWBACCA_LOG_DIR=os.path.join(tmp, "logs"), HOOK_JUDGE_STUB="0.9" if case["expect"] == 2 else "0.1")
     return subprocess.run(["bash", HOOK], input=payload, text=True, capture_output=True, env=env).returncode
 
 

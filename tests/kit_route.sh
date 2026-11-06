@@ -1,13 +1,11 @@
 #!/bin/bash
-# kit-route must stay silent on long messages that merely contain English a
-# kit's use-when happens to share, and must still route a real one.
+# kit-route names the kits and projects on every prompt and matches none of his
+# words. The model reading his message routes it. Its phrasings and score are in
+# tests/eval_intent_notes.py; this checks the hook's own side of that deal.
 #
-# On 2026-09-22 a 17,000-character message about building a club website routed
-# into apply-kit on six scattered stems at 1.0% density, with no phrase match
-# and no kit named. accommodations-kit matched the same message on four. Both
-# passed because `len(hits) >= 3` had no length normalization and because
-# "claimed by exactly one kit" is true of everything when two kits are
-# installed. The fixtures below are that message's shape and a genuine one.
+# What the word matcher got wrong, kept as eval cases: a 17,000-character club
+# message routed to apply-kit (2026-09-22), and 25 of 28 routes in two days sent
+# Firm Foundation video work to colin-kit on "intro vid" (2026-10-19).
 set -uo pipefail
 HOOK="$(cd "$(dirname "$0")/.." && pwd)/.claude/hooks/kit-route.sh"
 pass=0; fail=0
@@ -15,103 +13,30 @@ ok(){ printf '  \033[0;32mpass\033[0m  %s\n' "$1"; pass=$((pass+1)); }
 no(){ printf '  \033[0;31mfail\033[0m  %s\n' "$1"; fail=$((fail+1)); }
 
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
-
-# Two kits with the real markers, so `claims` has the same tiny population
-# that made every hit look distinctive.
-mkdir -p "$TMP/apply-kit" "$TMP/accommodations-kit"
-cat > "$TMP/apply-kit/.kit" <<'K'
-name: apply-kit
-domain: Applications: clubs, jobs and internships, fellowships, grad school, grants, accelerators
-use-when: applying anywhere, a deadline for an application, an essay or personal statement, a cover letter, a resume for a specific role, an interview for something they applied to
-status: ready
-K
-cat > "$TMP/accommodations-kit/.kit" <<'K'
-name: accommodations-kit
-domain: Disability accommodations across higher ed, K-12, workplace, and standardized tests
-use-when: needing extra time or any accommodation, a professor ignoring an accommodation letter, registering with a disability office, an IEP or 504 ending, requesting something from an employer, accommodations for the LSAT MCAT GRE SAT or bar
-status: ready
-K
-
-# Stand in for the `kits` binary the hook shells out to.
-mkdir -p "$TMP/bin"
-printf '#!/bin/sh\nprintf "%%s\\n" "%s/apply-kit" "%s/accommodations-kit"\n' "$TMP" "$TMP" > "$TMP/bin/kits"
+mkdir -p "$TMP/apply-kit" "$TMP/colin-kit" "$TMP/draft-kit" "$TMP/bin"
+printf 'name: apply-kit\nuse-when: applying anywhere\nstatus: ready\n' > "$TMP/apply-kit/.kit"
+printf 'name: colin-kit\nuse-when: colin, intro vid\nstatus: ready\n' > "$TMP/colin-kit/.kit"
+printf 'name: draft-kit\nuse-when: x\nstatus: template\n' > "$TMP/draft-kit/.kit"
+printf '#!/bin/sh\nprintf "%%s\\n" "%s/apply-kit" "%s/colin-kit" "%s/draft-kit"\n' "$TMP" "$TMP" "$TMP" > "$TMP/bin/kits"
 chmod +x "$TMP/bin/kits"
 export PATH="$TMP/bin:$PATH"
-# The hook asks ~/.local/bin/kits before PATH, so on a machine with kits
-# installed the stub above was never consulted and the real apply-kit answered
-# instead (found 2026-10-10). A temporary HOME makes the stub the only kits.
-export HOME="$TMP/home" CHEWBACCA_ROOT="$TMP/no-kit"
-mkdir -p "$HOME"
+# The hook asks ~/.local/bin/kits before PATH, so a temporary HOME makes the stub
+# the only kits (found 2026-10-10).
+export HOME="$TMP/home" CHEWBACCA_ROOT="$TMP/no-kit" CHEWBACCA_VERDICTS=0
+mkdir -p "$HOME/code/kits/hall-demo"
+printf 'name: hall-demo\nuse-when: y\n' > "$HOME/code/kits/hall-demo/.project"
 
-run(){ python3 -c '
-import json,sys
-print(json.dumps({"prompt": open(sys.argv[1]).read(), "cwd": "/nowhere"}))
-' "$1" | sh "$HOOK" 2>/dev/null; }
+run(){ jq -cn --arg p "$1" --arg c "${2:-/nowhere}" '{prompt:$p, cwd:$c}' | sh "$HOOK" 2>/dev/null; }
 
-# A long message about running a club: scattered application-adjacent English
-# (interview, application, role, club, person, specific) and no kit named.
-cat > "$TMP/noise.txt" <<'T'
-TTS will be the ai implementation lab, T Combinator is free contract work for
-YC companies, and will technically be part of TTS for now. Two different sites,
-same team, same mentors, same alumni network. We need to build a cabinet:
-treasurer, marketing, operations, internal affairs, external affairs,
-publicity, recruitment, industry relations, alumni director of community.
-Only make roles based on needs. I want the recruiting to be the weirdest
-recruiting, where the application is a ten minute video and they just submit
-something. My friend got rejected during the interview and argued his way back
-in. Emily is not recruiting IB anymore, she is going the startup route into
-growth, design and marketing. Use your connections, show how tough you are,
-say we can build something tough for you. Once we have one good client
-everything else follows. I am going to download every club directory, enrich
-their LinkedIn, and scan who is at which companies so the outreach is specific
-to each person. Prioritize the USC network because that actually works. The
-site we have now is mid, it has no animations anywhere and it is not tasteful.
-Make sure the new one dogs on the consulting clubs, because a consulting club
-does not give anyone real ownership over a client.
-T
-
-# The message this hook exists for.
-cat > "$TMP/signal.txt" <<'T'
-I need to apply to three clubs, the deadline is Friday, and I have to write an
-essay plus update my resume.
-T
-
-out=$(run "$TMP/noise.txt")
-if [ -z "$out" ]; then ok "silent on a long club-website message"
-else no "routed a club-website message into: $(printf '%s' "$out" | head -c 120)"; fi
-
-out=$(run "$TMP/signal.txt")
-if printf '%s' "$out" | grep -q 'apply-kit'; then ok "still routes a real application"
-else no "missed a genuine application prompt"; fi
-
-# A short message that names one kit's words but means the other thing.
-printf 'can you cover the letter I got from my landlord\n' > "$TMP/decoy.txt"
-out=$(run "$TMP/decoy.txt")
-if [ -z "$out" ]; then ok "silent on cover plus letter with no application"
-else no "routed a landlord letter into: $(printf '%s' "$out" | head -c 120)"; fi
-
-# A kit has to be named. 2026-10-17 to 10-19: 25 of 28 routes sent Firm
-# Foundation video sessions to colin-kit on "intro vid" and "rough cut", words
-# from its use-when line, with Colin never mentioned.
-mkdir -p "$TMP/colin-kit"
-cat > "$TMP/colin-kit/.kit" <<'K'
-name: colin-kit
-use-when: colin, iya portfolio, intro vid, the third lap, slideroom, usc early action, my portfolio pieces, rough cut, what do I do today, open loops, college apps, nov 1
-status: ready
-K
-printf '#!/bin/sh\nprintf "%%s\\n" "%s/apply-kit" "%s/accommodations-kit" "%s/colin-kit"\n' "$TMP" "$TMP" "$TMP" > "$TMP/bin/kits"
-printf 'The scrap paper popping in and out in the intro vid is bad, the rough cut needs smoother section to section transitions\n' > "$TMP/ffvid.txt"
-out=$(run "$TMP/ffvid.txt")
-if [ -z "$out" ]; then ok "silent on video work that never names Colin"
-else no "routed video work into: $(printf '%s' "$out" | head -c 120)"; fi
-printf 'Colin needs his iya portfolio pieces sorted before nov 1\n' > "$TMP/colin.txt"
-out=$(run "$TMP/colin.txt")
-if printf '%s' "$out" | grep -q 'colin-kit'; then ok "routes when the kit is named"
-else no "missed a prompt that names Colin"; fi
-printf 'apply the fix to the hook and rerun the tests\n' > "$TMP/applyfix.txt"
-out=$(run "$TMP/applyfix.txt")
-if [ -z "$out" ]; then ok "silent on apply as a plain verb"
-else no "routed apply-the-fix into: $(printf '%s' "$out" | head -c 120)"; fi
+out=$(run "fix the css on the site")
+printf '%s' "$out" | grep -q 'apply-kit .*colin-kit' && ok "names the kits on plain work, the model decides" || no "no kit names: $out"
+printf '%s' "$out" | grep -q 'Projects: hall-demo' && ok "names projects" || no "no project: $out"
+printf '%s' "$out" | grep -q 'draft-kit' && no "listed a template kit" || ok "skips a template kit"
+printf '%s' "$out" | grep -q 'judge the work' && ok "tells the model to judge" || no "note lost its judge line"
+[ -n "$(run "ava essays")" ] && ok "a short message gets the note too" || no "short message got nothing"
+[ -z "$(run "/ship it now please")" ] && ok "silent on a slash command" || no "fired on a slash command"
+[ -z "$(run "fix the css on the site" "$TMP/colin-kit")" ] && ok "silent when already in a kit" || no "fired inside a kit"
+if grep -qE 'stems\(|prompt_stems|GENERIC' "$HOOK"; then no "hook still matches words"; else ok "no word matching left"; fi
 
 printf '\n  %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -285,7 +285,7 @@ class RouterRows(Base):
         self.assertEqual(sorted(r['name'] for r in rows), ['kit-route.sh', 'skill-route.sh'])
         for row in rows:
             self.assertEqual((row['kind'], row['session'], row['event']), ('router', 'sess-r', 'UserPromptSubmit'))
-            self.assertIn(row['decision'], ('route', 'require', 'skip'))
+            self.assertIn(row['decision'], ('route', 'require', 'skip', 'note'))
             self.assertNotIn('product demo', row['reason'] + row['subject'], 'the prompt stays out of the log')
 
 

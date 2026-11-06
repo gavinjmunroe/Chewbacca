@@ -21,7 +21,8 @@ def main():
     fail = 0
     for c in cases:
         payload = json.dumps({"tool_name": "Agent", "tool_input": {"prompt": c["prompt"]}})
-        out = subprocess.run(["bash", HOOK], input=payload, capture_output=True, text=True, env=env).stdout
+        out = subprocess.run(["bash", HOOK], input=payload, capture_output=True, text=True,
+                             env=dict(env, HOOK_JUDGE_STUB="0.9" if c.get("lead_work", c["expect"] == "deny") else "0.1")).stdout
         got = "deny" if '"permissionDecision": "deny"' in out else "allow"
         ok = got == c["expect"]
         fail += not ok

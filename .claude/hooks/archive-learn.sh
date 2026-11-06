@@ -29,6 +29,7 @@ type hook_init >/dev/null 2>&1 && hook_init archive-learn.sh 3
 
 
 cat >/dev/null
+type hook_unbuffer >/dev/null 2>&1 && hook_unbuffer  # stderr goes straight to the host from here on
 exec python3 -I <<'PY'
 import json
 ctx = (

@@ -199,6 +199,41 @@ hook_verdict_row() {
 # row for one run, which made every cache hit look like two hook invocations.
 hook_note() { _HOOK_DETAIL="$1"; }
 
+# Ask Jev one yes/no question about text on stdin. Prints a probability, or
+# nothing when there's no judgment (no key, down, slow), and the guard treats
+# nothing as no refusal. A judgment can add a refusal, never grant anything
+# (agent-neutral.md). For the agent's own replies and briefs only: his typed
+# prompts stay on this Mac, a security review pulled them off Jev (822ed4c).
+#   p=$(printf '%s' "$MSG" | hook_judge scope-guard "Does this reply ...?")
+# HOOK_JUDGE_STUB is the test seam: a probability instead of a network call.
+hook_judge() {
+  if [ -n "${HOOK_JUDGE_STUB+set}" ]; then printf '%s' "$HOOK_JUDGE_STUB"; return 0; fi
+  local here; here="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+  python3 -I -c '
+import os, sys
+name, question = sys.argv[1], sys.argv[2]
+# Both ends: a closing recap and a BLOCKED: line sit at the end of a long reply.
+raw = sys.stdin.buffer.read()
+if len(raw) > 4000:
+    raw = raw[:1500] + b"\n...\n" + raw[-2500:]
+text = raw.decode("utf-8", "replace")
+for d in sys.argv[3:]:
+    if os.path.isfile(os.path.join(d, "jev.py")):
+        sys.path.insert(0, d)
+        break
+else:
+    raise SystemExit(0)
+import jev
+a = jev.ask({"text": text}, {"q": {"type": "noul", "instructions": question}},
+            timeout=3.0, decision="hook:" + name)
+if a and isinstance(a.get("q"), dict) and jev.probability(a["q"].get("noul")) is not None:
+    print(a["q"]["noul"])
+' "$1" "$2" "$here/../../bin/lib" "${CHEWBACCA_ROOT:-/nonexistent}/bin/lib" "$HOME/.chewbacca/kit/current/bin/lib" 2>/dev/null
+}
+
+# True when a hook_judge probability clears the line. Empty is false.
+hook_judge_yes() { [ -n "$1" ] && python3 -I -c 'import sys; sys.exit(0 if float(sys.argv[1]) >= float(sys.argv[2]) else 1)' "$1" "${2:-0.85}" 2>/dev/null; }
+
 # Print, but never more than the cap. Context the user did not ask for is
 # still context the user pays for.
 hook_emit() {

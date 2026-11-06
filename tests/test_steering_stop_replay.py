@@ -25,6 +25,9 @@ HOOKS = os.path.join(ROOT, ".claude", "hooks")
 
 def run(hook, payload):
     env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "CHEWBACCA_LOG_DIR": tempfile.gettempdir()}
+    # blocked-route-guard asks Jev if a BLOCKED: is a UI step. Stay off the network: 0.9
+    # tests the code side.
+    env["HOOK_JUDGE_STUB"] = "0.9"
     p = subprocess.run(["bash", os.path.join(HOOKS, hook)], input=json.dumps(payload),
                        capture_output=True, text=True, env=env, timeout=30)
     return p.returncode == 2
@@ -87,8 +90,9 @@ def test_open_work_and_blocked_route_on_the_real_day():
     assert sum(pushed(t["next_label"]) for t in ow) >= 0.55 * len(ow), [t["next_label"] for t in ow]
     br_caught = {(t["session"], t["time"]) for t in br}
     assert ("faf1c561", "12:35") in br_caught and ("faf1c561", "12:42") in br_caught, br_caught
-    # It fired on 3 turns that day, all in the demo tab before 12:44.
-    assert len(br) <= 4, [(t["session"], t["time"]) for t in br]
+    # With the stub this counts turns that pass the facts (a BLOCKED: line, under two
+    # routes named): 7 that day. Real Jev at the hook's line kept 4, the word list 3.
+    assert len(br) <= 7, [(t["session"], t["time"]) for t in br]
 
 
 def test_learn_on_land_on_the_real_day():

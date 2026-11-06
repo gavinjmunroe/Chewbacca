@@ -12,7 +12,7 @@ ok(){ printf '  \033[0;32mpass\033[0m  %s\n' "$1"; pass=$((pass+1)); }
 no(){ printf '  \033[0;31mfail\033[0m  %s\n' "$1"; fail=$((fail+1)); }
 command -v jq >/dev/null 2>&1 || { echo "  skip: jq not installed"; exit 0; }
 
-run(){ jq -n --arg t "$1" --arg p "$2" '{tool_name:$t, tool_input:{prompt:$p}}' | bash "$HOOK"; }
+run(){ jq -n --arg t "$1" --arg p "$2" '{tool_name:$t, tool_input:{prompt:$p}}' | HOOK_JUDGE_STUB="${STUB-0.9}" bash "$HOOK"; }
 denied(){ printf '%s' "$1" | grep -q '"permissionDecision": "deny"'; }
 
 BLIND="Enrich the 145 leads: find a why-now for each, the decision maker and buyer email. Web search is fine. Then write a first cold email per lead."
@@ -28,6 +28,8 @@ GOOD="Enrich the 145 leads: why-now via togari exa and gtme_score.signal_strengt
 [ -z "$(run Task "$BLIND")" ] && no "Task tool should be gated too" || ok "gates Task the same way"
 [ -z "$(run Bash "$BLIND")" ] && ok "ignores non-agent tools" || no "should ignore Bash"
 [ -z "$(run Agent "Fix the CSS on the team page so the photos line up on mobile.")" ] && ok "ignores unrelated briefs" || no "should ignore non-GTM work"
+[ -z "$(STUB=0.1 run Agent "$BLIND")" ] && ok "Jev reads no lead work, no refusal" || no "refused against Jev"
+[ -z "$(STUB="" run Agent "$BLIND")" ] && ok "Jev down means no refusal" || no "refused with no judgment"
 [ -z "$(CHEWBACCA_DOUGH_BRIEF_GATE=0 run Agent "$BLIND")" ] && ok "off switch works" || no "env off switch should exit quietly"
 
 printf '\n  %d passed, %d failed\n' "$pass" "$fail"

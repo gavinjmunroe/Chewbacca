@@ -27,10 +27,13 @@ case "$(printf '%s' "$INPUT" | jq -r '.tool_name // empty')" in Agent|Task|Workf
 PROMPT=$(printf '%s' "$INPUT" | jq -r '[.tool_input.prompt, .tool_input.script, .tool_input.description] | map(select(. != null)) | join("\n")')
 [ -n "$PROMPT" ] || exit 0
 
-# 3 words: the Medrano brief carried 20+; a one-off mention of "leads" in an
-# unrelated brief stays under it. Guessed from that one brief, never measured wider.
-WORK=$(printf '%s' "$PROMPT" | grep -oiE "\b(leads?|lead list|prospects?|prospecting|enrich(ment|ed|ing)?|why[_ -]?now|icp|outbound|cold email|decision makers?|buyer emails?|buying signals?|lookalikes?)\b" | wc -l | tr -d ' ')
-[ "${WORK:-0}" -ge 3 ] || exit 0
+# Is this brief lead work? A count of 3 GTM words decided that, guessed from one
+# brief. The word gate keeps an unrelated brief off the network, Jev decides, and
+# Jev down means no refusal. A brief is the agent's own text.
+printf '%s' "$PROMPT" | grep -qiE "lead|prospect|enrich|why[_ -]?now|icp|outbound|cold email|decision maker|buyer|signal|lookalike" || exit 0
+JUDGE_Q='A subagent got this brief. Is its job go-to-market lead work: finding or enriching leads, finding buyers or their emails, why-now signals, or writing outbound? Say no if it only researches a topic or builds software that happens to mention leads.'
+P=$(printf '%s' "$PROMPT" | hook_judge dough-brief-gate "$JUDGE_Q")
+hook_judge_yes "$P" "${DOUGH_BRIEF_LINE:-0.5}" || exit 0
 
 # Each kind of GTM work the brief asks for needs its engine tool named. The real
 # 10/29 Medrano brief named gtme_score and Togari Exa (two tools) and still sent

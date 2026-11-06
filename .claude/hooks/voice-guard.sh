@@ -31,42 +31,55 @@ try:
 except ValueError:
     sys.exit(0)
 msg = d.get("last_assistant_message") or ""
+LINE = float(os.environ.get("VOICE_GUARD_LINE", "0.3"))
+QUESTION = ("An AI agent shows `block` to its user, introduced by `lead_in`. Is `block` a message the user will send to "
+            "another person by text or chat? Say no if it is a prompt for another AI agent or session, an email with a "
+            "subject line, code, notes, or a quote of something someone else said.")
 pid = d.get("prompt_id") or d.get("session_id") or "unknown"
 guard = os.path.join(os.environ.get("TMPDIR", "/tmp"), "voice-guard-" + re.sub(r"[^A-Za-z0-9_-]", "", pid))
 if os.path.exists(guard):
     sys.exit(0)
-if not re.search(r"\b(text|texts|whatsapp|imessage|slack|dm|dms|send|sending|gc|linkedin|message)\b", msg, re.I):
-    sys.exit(0)
 bodies = []
-for blk in re.findall(r"((?:^[ \t]*> ?.*\n?)+)", msg, re.M):
-    bodies.append(" ".join(l.strip()[1:].strip() for l in blk.splitlines()).strip())
+for m in re.finditer(r"((?:^[ \t]*> ?.*\n?)+)", msg, re.M):
+    bodies.append((" ".join(l.strip()[1:].strip() for l in m.group(1).splitlines()).strip(), msg[max(0, m.start() - 160):m.start()]))
 # 2026-10-26: a gc text for his P4a team went out in a ``` block, which this
 # never read, and he wrote "Bro that doesnt sound human" (apostrophe dropped: this runs inside a single-quoted shell string). A fence with no
 # language, or text/plain/txt, holding prose is a draft too. Code-shaped
 # fences (shell prompts, braces, assignments, a command first word) are not.
 CODEY = re.compile(r"^\s*(\$ |cd |git |npm |python|bash |#!|[A-Za-z_]+=|import |def |function |const |let |\{|\[|<)|[;{}]\s*$", re.M)
-# 2026-10-28: three prompts meant for other agent tabs ("Paste this in the
-# OPTRA tab") were graded as texts, 300 to 480 words each, and refused twice.
-# A fence the reply introduces as a prompt or for a tab or session is for an
-# agent, not a person.
-FOR_AGENT = re.compile(r"\b(prompt|tab|session|agent|claude|codex)\b", re.I)
 for m in re.finditer(r"^```[ \t]*([A-Za-z]*)[ \t]*\n(.*?)^```", msg, re.M | re.S):
     lang, blk = m.group(1), m.group(2)
     if lang.lower() not in ("", "text", "txt", "plain"):
         continue
     if CODEY.search(blk):
         continue
-    # 2026-11-05: a cold email shown for review, footer and all, was graded as a text and
-    # refused 8 times, with "send it as two or three short ones". A fence opening on a
-    # Subject line is an email, and emails have their own gates (gtme ready, dough ready).
-    if re.match(r"\s*subject:", blk, re.I):
-        continue
     lead = msg[max(0, m.start() - 160):m.start()].rsplit("```", 1)[-1]
-    if FOR_AGENT.search(lead):
-        continue
-    bodies.append(" ".join(l.strip() for l in blk.splitlines() if l.strip()))
+    bodies.append((" ".join(l.strip() for l in blk.splitlines() if l.strip()), lead))
+
+
+# A drafted text, or something else in a quote or fence? Word lists got this wrong
+# both ways: three prompts for other tabs graded as texts and refused twice
+# (2026-10-28), a cold email refused 8 times (2026-11-05). Asked only for a body
+# that already failed voice-check. Jev down means no refusal.
+def is_text(body, lead):
+    stub = os.environ.get("HOOK_JUDGE_STUB")
+    if stub is not None:
+        return stub != "" and float(stub) >= LINE
+    for d in sys.argv[2:]:
+        if os.path.isfile(os.path.join(d, "jev.py")):
+            sys.path.insert(0, d)
+            break
+    else:
+        return False
+    import jev
+    a = jev.ask({"lead_in": lead, "block": body[:2000]},
+                {"q": {"type": "noul", "instructions": QUESTION}}, timeout=3.0, decision="hook:voice-guard")
+    p = jev.probability((a or {}).get("q", {}).get("noul")) if a else None
+    return p is not None and p >= LINE
+
+
 bad = []
-for body in bodies:
+for body, lead in bodies:
     if len(body.split()) < 6:
         continue
     r = subprocess.run(["python3", "-I", sys.argv[1], "--json", body], capture_output=True, text=True, timeout=20)
@@ -75,13 +88,14 @@ for body in bodies:
             why = json.loads(r.stdout).get("reasons", [])
         except ValueError:
             why = []
-        bad.append((body[:80], why))
+        if is_text(body, lead):
+            bad.append((body[:80], why))
 if not bad:
     sys.exit(0)
 open(guard, "w").close()
 for body, why in bad:
     print(f"- \"{body}...\": " + "; ".join(why))
-' "$VC")
+' "$VC" "$(dirname "${BASH_SOURCE[0]}")/../../bin/lib" "${CHEWBACCA_ROOT:-/nonexistent}/bin/lib" "$HOME/.chewbacca/kit/current/bin/lib")
 
 [ -n "$OUT" ] || exit 0
 {

@@ -542,3 +542,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_church_site_shows_who_they_are: untested hypothesis (Caleb 11/5), first page should show mission, beliefs, who leads; say your own read of his takes before building
 - project_ff_outbound_state_2026_11_05: FF outbound handoff 11/5, send stop in force, 0 church emails, decided copy, what's wrong, how he reviews
 - project_ff_outbound_review_2026_11_05: FF first outbound review 11/5, 0 sent; copy Caleb decided, false lines caught, line_proof in Dough, what must change before any send
+- feedback_hooks_judge_meaning_not_words: a hook never guesses what someone means from a word list, the model or Jev decides, and permission stays in code

@@ -15,7 +15,7 @@ bash_call() {  # command, background(true|false)
 }
 agent_call() { jq -nc --arg p "$1" '{tool_name:"Agent", session_id:"s1", tool_input:{prompt:$p, description:"x"}}'; }
 expect() {  # code, label, payload
-  got=$(printf '%s' "$3" | bash "$HOOK" 2>"$T/err"; echo $?)
+  got=$(printf '%s' "$3" | HOOK_JUDGE_STUB="${STUB-0.9}" bash "$HOOK" 2>"$T/err"; echo $?)
   [ "$got" = "$1" ] || { echo "FAIL: expected $1, got $got: $2"; cat "$T/err"; fail=1; }
 }
 expect 2 "whole suite in the foreground" "$(bash_call 'bash tests/run.sh > /tmp/x.log 2>&1')"
@@ -31,8 +31,11 @@ expect 0 "an ordinary command" "$(bash_call 'ls -la')"
 expect 2 "headless blender" "$(bash_call 'blender -b scene.blend -o //out -f 1')"
 expect 0 "blender version check" "$(bash_call 'blender --version')"
 expect 2 "3D brief without Nalana" "$(agent_call 'Make a 3D render of the dorm room diorama for the hero')"
+# Whether a brief is 3D work is Jev's call: tests/eval_reply_judges_jev.py scores it.
+STUB="" expect 0 "Jev down means no refusal" "$(agent_call 'Make a 3D scene')"
 expect 0 "3D brief naming Nalana" "$(agent_call 'Make a 3D scene in Nalana via the blender MCP tools')"
-expect 0 "React render is not 3D" "$(agent_call 'Fix the list so it does not re-render on every keystroke')"
+expect 0 "a brief with no 3D word never reaches Jev" "$(agent_call 'Summarize the counseling notes')"
+STUB=0.1 expect 0 "no refusal when Jev reads no 3D work" "$(agent_call 'Fix the list so it does not re-render on every keystroke')"
 expect 2 "new repo, first time" "$(bash_call 'git init amber-keyboard')"
 grep -q "amber-circles" "$T/err" || { echo "FAIL: the closest existing repo was not named"; fail=1; }
 expect 0 "same new repo, second time" "$(bash_call 'git init amber-keyboard')"

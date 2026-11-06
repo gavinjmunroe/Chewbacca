@@ -90,3 +90,7 @@ without asking; what needs authorizing is the outbound consequence, not your aut
 for about 300 ms before pressing, so a person can see what's about to happen. It
 never decides anything: Kyber closed means no marker and no wait, a gated press
 draws nothing, and a window that isn't on screen draws nothing.
+
+Attacking a press means `chewie app see` first. An index or label reads the last
+snapshot, so after an app relaunch the driver answers `window N not found`, which
+is the driver being right, not the marker breaking (2026-11-06).

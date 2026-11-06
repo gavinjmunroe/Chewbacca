@@ -89,6 +89,11 @@
       "type": "replay",
       "test": "tests/test_lecture_gate_replay.py",
       "corpus": "tests/fixtures/lecture_gate/corpus.json"
+    },
+    ".claude/hooks/plan-commit-guard.sh": {
+      "type": "replay",
+      "test": "tests/test_plan_commit_guard_replay.py",
+      "corpus": "tests/fixtures/plan_commit/corpus.json"
     }
   },
   "grandfathered": [

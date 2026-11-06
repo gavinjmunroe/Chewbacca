@@ -47,7 +47,7 @@ Write to `PLAN.md` from [TEMPLATE.md](TEMPLATE.md) as you go, with `Status: DRAF
 
 **10. Say what can change.** Write who can change what: what the agent changes on its own, what needs a person, and what forces a replan (a Stop if fires, an estimate runs past double, a Decides answer flips). A replan edits this file, and the log says why.
 
-**11. A person commits.** Bring the choice in one short message: the chosen shape, what it bets, what it can't promise, and the one-way doors ahead. Only they change `Status` to COMMITTED, with their name and the date. `plan-check` refuses it while the top assumption is untested and phase 1 skips it, while a `[NEED: ...]` is left, or with no independent review.
+**11. A person commits.** Bring the choice in one short message: the chosen shape, what it bets, what it can't promise, and the one-way doors ahead. Only they change `Status` to COMMITTED, with their name and the date. `plan-check` refuses it while the top assumption is untested and phase 1 skips it, while a `[NEED: ...]` is left, with no independent review, or with no receipt: `plan-commit-guard` only lets `COMMITTED` be written when the person's own last message commits, and it writes the receipt then. On 2026-11-05 a junk plan, marked COMMITTED by an agent, passed the exact checks, which is why Jev now reads what each part says too.
 
 **12. Make it hold.** Prose doesn't enforce itself. In a code repo, add the `PLAN-GATES` block so `plan-guard` refuses work that skips the active phase, and add the near phases to the work ledger. At each phase's end, compare what happened to the plan's estimate, write it in the review log, and read Decides before starting the next one.
 

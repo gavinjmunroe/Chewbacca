@@ -6,7 +6,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 fail=0; ok() { printf '  ok   %s\n' "$1"; }; no() { printf '  FAIL %s\n' "$1"; fail=1; }
 has() { grep -qF -- "$1" <<<"$out"; }
-check() { python3 "$ROOT/bin/plan-check" "$@"; }
+export PLAN_COMMIT_DIR="$T/receipts"
+check() { python3 "$ROOT/bin/plan-check" --structure-only "$@"; }
 
 cat > "$T/good.md" <<'EOF'
 # Thing: the plan
@@ -110,8 +111,8 @@ Replan when: a Stop if fires
 - 2026-11-05, independent reviewer: found the install gap, added phase 2 check
 EOF
 
-out="$(check "$T/good.md")"; [ $? = 0 ] && has "complete, status DRAFT" && has "Complete isn't good" && ok "a complete draft passes and says complete isn't good" || no "good: $out"
-python3 "$ROOT/bin/plan-check" "$T/good.md" --json | python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d["problems"]==[] and d["counts"]["shapes"]==3 and d["counts"]["premortem"]==5 else 1)' && ok "--json carries the same answer" || no "json"
+out="$(check "$T/good.md")"; [ $? = 0 ] && has "structure complete, status DRAFT" && has "That isn't right" && ok "a complete draft passes and says that isn't right" || no "good: $out"
+python3 "$ROOT/bin/plan-check" --structure-only "$T/good.md" --json | python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d["problems"]==[] and d["counts"]["shapes"]==3 and d["counts"]["premortem"]==5 else 1)' && ok "--json carries the same answer" || no "json"
 check "$T/nope.md" > /dev/null 2>&1; [ $? = 2 ] && ok "a missing file is exit 2, never a pass" || no "missing file"
 
 # Each removal has to name what's gone. eval here only runs the literal edits in
@@ -144,6 +145,9 @@ without "a bad status fails" 't.replace("DRAFT","MAYBE")' "Status has to start"
 out="$(check "$T/good.md")"; has "Phase 3" && no "phase 3 was held to full detail: $out" || ok "a later phase can stay rough"
 
 commit='t.replace("DRAFT","COMMITTED\n\ncommitted by Caleb, 2026-11-05")'
+# The file name is fixed, so one receipt covers every committed fixture below.
+receipt() { python3 -c 'import hashlib,os,sys; print(hashlib.sha256(os.path.realpath(sys.argv[1]).encode()).hexdigest()[:24])' "$T/bad.md"; }
+mkdir -p "$PLAN_COMMIT_DIR"; printf '{}' > "$PLAN_COMMIT_DIR/$(receipt).json"
 without_ok() { python3 -c 'import re,sys; t=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(eval(sys.argv[3]))' "$T/good.md" "$T/bad.md" "$1"; }
 without_ok "$commit"; out="$(check "$T/bad.md")"; [ $? = 0 ] && ok "a person, a review and a scheduled test can commit" || no "commit: $out"
 without "the agent can't commit it alone" 't.replace("DRAFT","COMMITTED")' "committed by"
@@ -151,6 +155,12 @@ without "no independent review, no commit" "$commit"'.replace("independent revie
 without "an open NEED blocks commit" "$commit"'.replace("Ten people","[NEED: a number] people")' "NEED"
 without "an untested top assumption phase 1 skips blocks commit" "$commit"'.replace("Tests: assumption 1","Tests: assumption 3")' "phase 1 doesn"
 without_ok "$commit"'.replace("Status: untested","Status: tested 2026-11-05, 4 of 5 wanted it").replace("Tests: assumption 1","Tests: assumption 3")'; out="$(check "$T/bad.md")"; [ $? = 0 ] && ok "a tested top assumption lets phase 1 test something else" || no "tested: $out"
+
+rm "$PLAN_COMMIT_DIR/$(receipt).json"
+without "typing COMMITTED with no receipt fails" "$commit" "has no receipt"
+
+# The read: filler fails, real text passes, and a read that can't run is no pass.
+python3 "$ROOT/tests/test_plan_check.py" > "$T/py" 2>&1 && ok "the Jev read fails filler and never calls a failed read a pass" || no "read: $(tail -5 "$T/py")"
 
 # The skill has to name its tool and its template has to exist.
 grep -q 'plan-check PLAN.md' "$ROOT/skills/big-plan/SKILL.md" && [ -f "$ROOT/skills/big-plan/TEMPLATE.md" ] && ok "the skill points at its tool and template" || no "skill wiring"

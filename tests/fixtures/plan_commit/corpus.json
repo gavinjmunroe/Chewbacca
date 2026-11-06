@@ -1,0 +1,131 @@
+{
+ "about": "What Jev scored each message on 2026-11-05, replayed through plan-commit-guard. Rerun the measure when the question changes.",
+ "rows": [
+  {
+   "said": "Yes, fix it",
+   "want": "no",
+   "source": "real, Caleb 2026-11-05",
+   "score": 0.81
+  },
+  {
+   "said": "Ok start making hall real!!!!!!!!",
+   "want": "no",
+   "source": "real, Caleb 2026-11-05",
+   "score": 0.81
+  },
+  {
+   "said": "Wait systematically plan and evaluate plz.",
+   "want": "no",
+   "source": "real, Caleb 2026-11-05",
+   "score": 0.15
+  },
+  {
+   "said": "Is this gonna work",
+   "want": "no",
+   "source": "real, Caleb 2026-11-05",
+   "score": 0.05
+  },
+  {
+   "said": "Did you stress test it",
+   "want": "no",
+   "source": "real, Caleb 2026-11-05",
+   "score": 0.04
+  },
+  {
+   "said": "Ok whats the fat plan I dont wanna even have anyone test it until I think its ready to be rolled out to all of usc",
+   "want": "no",
+   "source": "real, Caleb 2026-11-05",
+   "score": 0.17
+  },
+  {
+   "said": "Screw that im still building all of hall everyone wants it",
+   "want": "no",
+   "source": "real, Caleb 2026-11-05",
+   "score": 0.58
+  },
+  {
+   "said": "Pause I needa close my computer",
+   "want": "no",
+   "source": "real, Caleb 2026-11-05",
+   "score": 0.44
+  },
+  {
+   "said": "Continue",
+   "want": "no",
+   "source": "real, Caleb 2026-11-05",
+   "score": 0.4
+  },
+  {
+   "said": "Start piece 6",
+   "want": "no",
+   "source": "real, Caleb 2026-11-05",
+   "score": 0.6
+  },
+  {
+   "said": "Commit to this plan",
+   "want": "yes",
+   "source": "written for this test",
+   "score": 0.89
+  },
+  {
+   "said": "Yes, commit to it",
+   "want": "yes",
+   "source": "written for this test",
+   "score": 0.88
+  },
+  {
+   "said": "Ok im committing to this plan, shape 1 lets go",
+   "want": "yes",
+   "source": "written for this test",
+   "score": 0.94
+  },
+  {
+   "said": "Lock this plan in, we're doing this one",
+   "want": "yes",
+   "source": "written for this test",
+   "score": 0.95
+  },
+  {
+   "said": "I commit",
+   "want": "yes",
+   "source": "written for this test",
+   "score": 0.59
+  },
+  {
+   "said": "Looks good",
+   "want": "no",
+   "source": "written for this test",
+   "score": 0.09
+  },
+  {
+   "said": "Nice plan",
+   "want": "no",
+   "source": "written for this test",
+   "score": 0.04
+  },
+  {
+   "said": "Should we commit to this?",
+   "want": "no",
+   "source": "written for this test",
+   "score": 0.05
+  },
+  {
+   "said": "Dont commit yet",
+   "want": "no",
+   "source": "written for this test",
+   "score": 0.05
+  },
+  {
+   "said": "What would committing mean",
+   "want": "no",
+   "source": "written for this test",
+   "score": 0.03
+  },
+  {
+   "said": "This plan is fire",
+   "want": "no",
+   "source": "written for this test",
+   "score": 0.06
+  }
+ ]
+}

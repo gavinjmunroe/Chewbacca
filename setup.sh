@@ -2185,6 +2185,12 @@ _register("PreToolUse", hooks_dir + "/plan-guard.sh", timeout=10,
           matcher="Write|Edit",
           status="Checking this is the phase the plan is actually on...")
 
+# A person commits a big plan. On 2026-11-05 an agent marked a junk plan COMMITTED
+# and plan-check passed it, so writing the word now needs their own message.
+_register("PreToolUse", hooks_dir + "/plan-commit-guard.sh", timeout=20,
+          matcher="Write|Edit",
+          status="Checking a person committed this plan...")
+
 # Coursework is never turned in without being asked. This was a rule in prose
 # that got broken twice in one night, so it became a gate.
 _register("PreToolUse", hooks_dir + "/submit-guard.sh", timeout=10,

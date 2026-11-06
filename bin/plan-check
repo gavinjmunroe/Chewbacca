@@ -1,19 +1,28 @@
 #!/usr/bin/env python3
 """plan-check: is this plan complete enough to argue with, and can it be committed?
 
-  plan-check PLAN.md            what's missing, exit 0 clean, 1 with problems
-  plan-check PLAN.md --json     the same as data
+  plan-check PLAN.md                what's missing or empty, exit 0 clean, 1 with problems
+  plan-check PLAN.md --json         the same as data
+  plan-check PLAN.md --structure-only   skip the read, for tests and quick checks
 
 The method is skills/big-plan/SKILL.md. On 2026-11-05 Caleb read a scored list of
 builds and wrote "create a way to make the plan that is robust and we are CONFIDENT".
 That day docs/plans held 43 files, none with a pre-mortem and none with a gate block.
 
-This reads structure and never meaning. Passing says every part is there, not that
-the thinking is any good: that's the independent reviewer's job, which is why a
-plan can't reach COMMITTED without one in its review log.
+Two layers. Exact checks say every part is there. Then Jev reads what each part says,
+because on the same day a plan of pure filler ("thing 1", "Bets on: x"), marked
+COMMITTED by an agent with "independent me: fine" as its review, passed the exact
+checks. Exit 2 means the read couldn't run, so nothing was judged and it's no pass.
+
+A pass still doesn't say the plan is right. That's the fresh reviewer's job, and a
+person's. COMMITTED also needs the receipt plan-commit-guard writes when a person
+really said so, because anyone can type "committed by Caleb".
 """
 import argparse
+import hashlib
+import importlib.util
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -31,6 +40,54 @@ PHASE_FIELDS = ("Goal", "Exit", "Stop if", "Decides", "Effort", "Confidence")
 ROUGH_FIELDS = ("Goal", "Exit")
 # An exit nobody can fail. One of these alone, with no number, command or file.
 VAGUE_EXIT = re.compile(r"^(it |the \w+ )?(works?( well| fine| great)?|((is|looks) )?(good|done|ready|working|complete|finished|solid|shipped))\.?$", re.I)
+
+
+# Guessed, never measured beyond one junk plan and one real one: best-pass's bar.
+PASS_AT = 0.8
+READ = {
+    "outcome can be checked": "Does the outcome name who it's for and a result someone could check, instead of a vague hope?",
+    "evidence is real": "Do the evidence bullets state specific facts about this project, with real sources, instead of filler?",
+    "comparables are real": "Does the reference class name real comparable work with real costs or say honestly that none exists?",
+    "risks are specific": "Are the riskiest assumptions and pre-mortem failures specific to this project, each with a test or signal someone could really carry out?",
+    "shapes really differ": "Are the shapes really different bets, each with a stated reason, instead of placeholders or worse versions of the chosen one?",
+    "phases can fail": "Do the near phases have exits and stop results that could really come out badly, and does the first phase test the real product?",
+    "review really happened": "Does the review log describe someone else finding specific problems and what changed because of them, instead of a claim that it's fine?",
+}
+RECEIPTS = os.environ.get("PLAN_COMMIT_DIR") or os.path.expanduser("~/.chewbacca/state/plan-commits")
+
+
+def jev_ask(state, questions):
+    path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "lib", "jev.py")
+    spec = importlib.util.spec_from_file_location("kit_jev", path)
+    jev = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(jev)
+    return jev.ask(state, questions, decision="plan-check"), jev.probability
+
+
+def read_plan(text, ask=jev_ask):
+    """Every part that says nothing real. None means the read couldn't run."""
+    plan = {name: body.strip()[:2500] for name, body in sections_of(text).items()}
+    questions = {name: {"type": "noul", "instructions": q} for name, q in READ.items()}
+    try:
+        answers, prob = ask({"plan": plan}, questions)
+    except Exception:
+        return None
+    if not answers:
+        return None
+    weak = []
+    for name in READ:
+        a = answers.get(name)
+        p = prob(a.get("noul")) if isinstance(a, dict) else None
+        if p is None:
+            weak.append(f"{name}: no answer")
+        elif p < PASS_AT:
+            weak.append(f"{name} ({p:.2f})")
+    return weak
+
+
+def receipt_path(file):
+    digest = hashlib.sha256(os.path.realpath(file).encode()).hexdigest()[:24]
+    return os.path.join(RECEIPTS, digest + ".json")
 
 
 def sections_of(text):
@@ -182,6 +239,7 @@ def main():
     ap = argparse.ArgumentParser(prog="plan-check", description="Is this plan complete enough to argue with?")
     ap.add_argument("file")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--structure-only", action="store_true", help="skip the read")
     a = ap.parse_args()
     try:
         text = Path(a.file).read_text(errors="replace")
@@ -189,14 +247,27 @@ def main():
         print(f"plan-check: can't read {a.file}: {e.strerror}", file=sys.stderr)
         return 2
     result = check(text)
+    if result["state"] == "COMMITTED" and not os.path.exists(receipt_path(a.file)):
+        result["problems"].append("COMMITTED has no receipt: plan-commit-guard writes one when a person says commit in chat")
+    # The read costs a call, so it only runs once the exact checks are clean.
+    result["read"] = None if a.structure_only or result["problems"] else read_plan(text)
+    could_not_read = not a.structure_only and not result["problems"] and result["read"] is None
+    weak = result["read"] or []
     if a.json:
         print(json.dumps(result, indent=2))
     else:
         for p in result["problems"]:
             print(f"  {p}")
-        if not result["problems"]:
-            print(f"{a.file}: complete, status {result['state']}. Complete isn't good: the review log is what says that.")
-    return 1 if result["problems"] else 0
+        for w in weak:
+            print(f"  says nothing real: {w}")
+        if could_not_read:
+            print("plan-check: the read couldn't run, so what the plan says wasn't judged. Not a pass.")
+        elif not result["problems"] and not weak:
+            word = "structure complete" if a.structure_only else "complete and it says something"
+            print(f"{a.file}: {word}, status {result['state']}. That isn't right: a fresh reviewer and a person decide that.")
+    if result["problems"] or weak:
+        return 1
+    return 2 if could_not_read else 0
 
 
 if __name__ == "__main__":

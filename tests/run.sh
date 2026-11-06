@@ -1053,6 +1053,10 @@ if group "installer"; then
     bash "$ROOT/tests/plan_guard.sh"
   check  "plan-check passes a complete plan and refuses a commit with no person or review" \
     bash "$ROOT/tests/plan_check.sh"
+  check  "plan-commit-guard refuses an agent's COMMITTED and permits a person's" \
+    bash "$ROOT/tests/plan_commit_guard.sh"
+  check  "plan-commit-guard lets no recorded non-commit through" \
+    python3 "$ROOT/tests/test_plan_commit_guard_replay.py"
   check  "wait-loop-guard refuses an uncapped polling loop and permits a capped one" \
     bash "$ROOT/tests/wait_loop_guard.sh"
   check  "railway-domain-guard sends a generated Railway domain to railway-domain" \

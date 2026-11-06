@@ -86,6 +86,10 @@ downloaded clip, the SIGGRAPH PDF and side-by-side frame checks.
 
 Anything that takes weeks, spans several builds or can't be undone gets the `big-plan` skill before a phase is named, and `plan-check` before it's shown. A scored list isn't a plan. Caleb, 2026-11-05, on a table of 8 Hall builds: "create a way to make the plan that is robust and we are CONFIDENT". A person commits it, never the agent.
 
+## Anything scored: read the rubric before the first draft
+
+A grant, contest or application page usually links how it's judged. Open every link on the page and find the weights before building. On 2026-11-06 an IYA Ignite pitch was drafted, turned into slides and deployed as a site before anyone opened the rubric linked on the grant's page. It gave 20% to milestones and projections and 10% to competition, and the site had neither. Caleb asked "Wait there's no parameters for the pitch deck?", and that question is what found it. The first version also got "It reads more like a pdf rn than a pitch", because each new section was a heading over numbers. So build each scored part as something that happens on screen, and check that every number squares with the others: its $500 plan and $100K math disagreed with the projection above it until a read as the judge caught that.
+
 ## Never one-shot creative work
 
 Anything creative, meaning an essay section, a personal statement, a script, a

@@ -539,3 +539,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_ff_push_to_main_not_pr: Firm Foundation site work goes straight to main, never a PR; Gavin always says push to main (Caleb 11/5)
 - feedback_stat_needs_felt_problem: FF copy and outbound never state a stat alone; say what it costs the reader, or they answer "it's in the footer, isn't that ok?" (Caleb 11/5)
 - project_gavin_call_followups_2026_11_05: after the 11/5 Gavin call: Andrew OK as lead advisor, Firebox call being set w an NDA, footers need Chase and Reagan asked, gtme ready wants a recorded read
+- feedback_church_site_shows_who_they_are: untested hypothesis (Caleb 11/5), first page should show mission, beliefs, who leads; say your own read of his takes before building

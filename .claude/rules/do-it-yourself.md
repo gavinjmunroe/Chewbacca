@@ -122,6 +122,13 @@ wrote "What is taking so long?", then asked again after it had landed because
 the "it's live" line was buried in a long audit report. Lead with the state:
 "Fixed and live" or "Found it, fixing now", then the detail.
 
+## PARKED ON A QUEUE, SAY WHAT'S AHEAD
+
+A job behind another job can sit for an hour, and from his side that's silence. When a
+turn ends waiting on the queue, say what it's behind and what happens when it clears, and
+do any other work that doesn't need it. On 2026-11-05 a full suite sat queued behind
+another tab's run while a tab went quiet, and he wrote "?" and then "Yo?".
+
 ## PAUSE MEANS REPLY FIRST
 
 When he says pause, stop, save or consolidate, the next thing he sees is a

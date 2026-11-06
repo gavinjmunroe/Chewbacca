@@ -33,3 +33,5 @@ characters on it, all on the same prompt.
 - Scores go in private. Jev numbers don't go in the repo (TypeSafe 2.3(f)).
 
 Full sort: `docs/reference/INTENT-INVENTORY.md`.
+
+Three more misfires from 2026-11-05 and 11-06, for whoever moves these next. voice-guard scored a blockquoted email to Reed as a text, twice. ready-guard read "once this is all set up", about an Instantly account, as calling Firm Foundation SoCal launch ready. scope-guard read "held for now" inside that same email as cutting scope.

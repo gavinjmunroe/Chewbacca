@@ -47,7 +47,7 @@ Anything going in front of Caleb or out under his name gets an expert read first
 
 On 2026-11-05 a Junto email and LinkedIn sequence reached him accurate and weak. The rules that would have fixed them were already in the kit, and they got used only after he asked "Is this as good as possible". He wrote: "fix dough to systematically eliminate this from ever being the case on anything we ever do - same w chewbs".
 
-A pass doesn't make it ready. Before showing a reply, read the whole thread as the recipient: square every number with what we promised before, thank them for what they sent, and answer what they asked. That same night the short Reed email passed and got called ready. He asked "Is it really ready to send?", and one read found 120 with no word on the 164 we'd promised, no thanks for his key or list, and a HubSpot ask that read like he'd sent nothing. Also give `--for` the real reader when you score a control: the same email dropped .05 to .29 under another reader's description.
+A pass doesn't make it ready. Before showing a reply, read the whole thread as the recipient: square every number with what we promised before, thank them for what they sent, and answer what they asked. That same night the short Reed email passed and got called ready. He asked "Is it really ready to send?", and one read found 120 with no word on the 164 we'd promised, no thanks for his key or list, and a HubSpot ask that read like he'd sent nothing. Also give `--for` the real reader when you score a control: Caleb's John Knox email fell from .74 to .40 on "fits this reader" when it was scored against Reed's description.
 
 ## When the brief contradicts the craft
 

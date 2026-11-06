@@ -62,36 +62,6 @@ Caleb, 2026-10-26, on the USC Codex guide: "Assume the user doesn't hv a github.
 
 On 2026-10-09 a call prep was handed over as full sentences in a notes folder. The user's fixes, in order: "save them to downloads", ".md if I might edit, PDF if it's for someone else", "it's a fat wall of text", "it just needed more spacing", and "go through the progression of what I should say in the call". Then he said "all chewb files should be given like this".
 
-## A list of people or companies someone will work from
+## A PDF for someone: render it and look
 
-Any CSV or sheet of people, companies or leads handed to someone (a friend, a
-teammate, a client, Dough's own lead tables) carries every useful field we hold
-and the columns to work it over time. A name, title and company is a dump.
-
-- **Group it by what the reader needs first.** `Priority` is the group number
-  and `Group` names it. Hand-picked groups come first, in the order that fits the
-  reader's goal (for Langston: people to learn under, then door-openers, then
-  pilot orgs, then peers). The long tail follows: senior leaders we know, senior
-  leaders on LinkedIn only, founders and operators we know, everyone else. Top
-  rows are written by hand from the brain and the threads; the tail comes from
-  the people store with honest, category-level reasons.
-- **Columns, in this order:** Priority, Group, Name, Title, Organization,
-  Location, Category (a fixed set, so it filters), Seniority, How they help <their goal>, Suggested
-  ask, How we know them, Relationship (Close, Know them, LinkedIn only), Last
-  contact, Intro path, LinkedIn, Status, Next step, Next step date, Notes,
-  Source. Status starts at `Not started` and moves through `Intro asked`,
-  `Intro made`, `Met`, `Follow-up`, `Not a fit`.
-- **Every claim has a source.** The Source column names where the why came
-  from (a call note, a thread, a LinkedIn title). A fact with no source stays
-  out, and a missing one is a `[NEED: ...]`, never a guess.
-- **No third party's phone or email.** Intros go through us, double opt-in. A
-  public LinkedIn URL is fine.
-- **Cut the noise before it ships.** Drop interns, students and members unless
-  hand-picked, dedupe by name and organization, and spot-check 25 random long-tail
-  rows. Regex tagging lies: `india` matched Indiana and `cto` matched Doctoral on
-  the first pass of the Dream list.
-- **utf-8 with BOM**, so Excel and Sheets open names with accents cleanly.
-
-Caleb, 2026-11-03, on the network list for Langston's Dream: "The csv needs to
-hv all useful data! Great columns and organization too ... this is the standard
-we operate on". The generator that produced it is `tools/people_list_csv.py`.
+`chewbacca pdf` leaves markdown links and `>` quotes as raw text, and `--out` is a folder, not a filename. For anything with links or callouts, write HTML, send `--out` to a folder, copy the file to its final name, then open the page image before handing it over. On 2026-11-06 Parker's cheat sheet came out with `[github.com](https://...)` printed literally, sitting at `Parker site cheat sheet.pdf/parker-keep.pdf`, and the page count alone looked fine.

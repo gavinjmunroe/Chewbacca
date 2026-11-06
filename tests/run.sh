@@ -1051,6 +1051,8 @@ if group "installer"; then
 
   check  "plan-guard refuses a skipped phase and permits the active one" \
     bash "$ROOT/tests/plan_guard.sh"
+  check  "plan-check passes a complete plan and refuses a commit with no person or review" \
+    bash "$ROOT/tests/plan_check.sh"
   check  "wait-loop-guard refuses an uncapped polling loop and permits a capped one" \
     bash "$ROOT/tests/wait_loop_guard.sh"
   check  "railway-domain-guard sends a generated Railway domain to railway-domain" \

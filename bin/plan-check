@@ -1,0 +1,203 @@
+#!/usr/bin/env python3
+"""plan-check: is this plan complete enough to argue with, and can it be committed?
+
+  plan-check PLAN.md            what's missing, exit 0 clean, 1 with problems
+  plan-check PLAN.md --json     the same as data
+
+The method is skills/big-plan/SKILL.md. On 2026-11-05 Caleb read a scored list of
+builds and wrote "create a way to make the plan that is robust and we are CONFIDENT".
+That day docs/plans held 43 files, none with a pre-mortem and none with a gate block.
+
+This reads structure and never meaning. Passing says every part is there, not that
+the thinking is any good: that's the independent reviewer's job, which is why a
+plan can't reach COMMITTED without one in its review log.
+"""
+import argparse
+import json
+import re
+import sys
+from pathlib import Path
+
+SECTIONS = ("status", "outcome", "not doing", "evidence", "reference class", "riskiest assumptions",
+            "shapes", "pre-mortem", "one-way doors", "phases", "adapting", "review log")
+# Each is the smallest count that still forces the thinking. Guessed, never
+# measured: nothing has been graded with these yet.
+MIN_EVIDENCE = 3
+MIN_SHAPES = 3
+MIN_PREMORTEM = 5
+MIN_PHASES = 2
+DETAILED_PHASES = 2  # later phases stay rough on purpose, they'll change
+PHASE_FIELDS = ("Goal", "Exit", "Stop if", "Decides", "Effort", "Confidence")
+ROUGH_FIELDS = ("Goal", "Exit")
+# An exit nobody can fail. One of these alone, with no number, command or file.
+VAGUE_EXIT = re.compile(r"^(it |the \w+ )?(works?( well| fine| great)?|((is|looks) )?(good|done|ready|working|complete|finished|solid|shipped))\.?$", re.I)
+
+
+def sections_of(text):
+    found, name, body = {}, None, []
+    for line in text.split("\n"):
+        m = re.match(r"^##\s+(.+?)\s*$", line)
+        if m:
+            if name:
+                found[name] = "\n".join(body)
+            name, body = m.group(1).strip().lower(), []
+        elif name:
+            body.append(line)
+    if name:
+        found[name] = "\n".join(body)
+    return found
+
+
+def bullets(body):
+    """Top-level bullets, each with the indented lines under it."""
+    out = []
+    for line in body.split("\n"):
+        if re.match(r"^[-*]\s+\S", line):
+            out.append(line)
+        elif out and line.startswith((" ", "\t")) and line.strip():
+            out[-1] += "\n" + line
+    return out
+
+
+def subs(body, pattern=r"^###\s+(.+?)\s*$"):
+    found, title, lines = [], None, []
+    for line in body.split("\n"):
+        m = re.match(pattern, line)
+        if m:
+            if title is not None:
+                found.append((title, "\n".join(lines)))
+            title, lines = m.group(1), []
+        elif title is not None:
+            lines.append(line)
+    if title is not None:
+        found.append((title, "\n".join(lines)))
+    return found
+
+
+def field(body, name):
+    m = re.search(rf"^\s*[-*]?\s*{re.escape(name)}:[ \t]*(.*)$", body, re.M | re.I)
+    return m.group(1).strip() if m else None
+
+
+def check(text):
+    problems, s = [], sections_of(text)
+    for name in SECTIONS:
+        if not (s.get(name) or "").strip():
+            problems.append(f"missing section: ## {name.title()}")
+
+    status = (s.get("status") or "").strip()
+    state = status.split()[0].strip(".:").upper() if status else ""
+    if status and state not in ("DRAFT", "COMMITTED"):
+        problems.append("Status has to start with DRAFT or COMMITTED")
+
+    evidence = bullets(s.get("evidence", ""))
+    if s.get("evidence") and len(evidence) < MIN_EVIDENCE:
+        problems.append(f"Evidence has {len(evidence)} bullet(s), needs {MIN_EVIDENCE}")
+    for b in evidence:
+        if not re.search(r"https?://|`[^`]+`|\bSource:|\[[^\]]+\]\(", b):
+            problems.append(f"Evidence with no source: {b.strip()[:70]}")
+
+    refs = bullets(s.get("reference class", ""))
+    if s.get("reference class") and not refs:
+        problems.append("Reference class needs a bullet per comparable, or one saying none exists and why")
+    for b in refs:
+        if not re.search(r"\d", b) and not re.search(r"(?i)\bnone\b", b):
+            problems.append(f"Reference class with no number: {b.strip()[:70]}")
+
+    assumptions = bullets(s.get("riskiest assumptions", ""))
+    if s.get("riskiest assumptions") and not assumptions:
+        problems.append("Riskiest assumptions needs at least one bullet")
+    for b in assumptions:
+        for key in ("If false", "Test", "Status"):
+            if not field(b, key):
+                problems.append(f"Assumption missing {key}: {b.strip().splitlines()[0][:70]}")
+
+    shapes = subs(s.get("shapes", ""))
+    if s.get("shapes"):
+        if len(shapes) < MIN_SHAPES:
+            problems.append(f"Shapes has {len(shapes)}, needs {MIN_SHAPES} really different plans")
+        chosen = [t for t, _ in shapes if re.search(r"(?i)\bchosen\b", t)]
+        if len(chosen) != 1:
+            problems.append(f"Exactly one shape's heading has to say chosen, found {len(chosen)}")
+        for title, body in shapes:
+            if not field(body, "Bets on"):
+                problems.append(f"Shape missing Bets on: {title[:60]}")
+            if not re.search(r"(?i)\bchosen\b", title) and not field(body, "Rejected because"):
+                problems.append(f"Shape missing Rejected because: {title[:60]}")
+
+    pre = bullets(s.get("pre-mortem", ""))
+    if s.get("pre-mortem") and len(pre) < MIN_PREMORTEM:
+        problems.append(f"Pre-mortem has {len(pre)} failure(s), needs {MIN_PREMORTEM}")
+    for b in pre:
+        if not field(b, "Catch"):
+            problems.append(f"Pre-mortem failure with no Catch: {b.strip().splitlines()[0][:70]}")
+
+    if s.get("one-way doors") and not bullets(s["one-way doors"]):
+        problems.append("One-way doors needs bullets, or one saying none and why")
+
+    phases = subs(s.get("phases", ""))
+    if s.get("phases") and len(phases) < MIN_PHASES:
+        problems.append(f"Phases has {len(phases)}, needs {MIN_PHASES}")
+    for n, (title, body) in enumerate(phases):
+        for key in PHASE_FIELDS if n < DETAILED_PHASES else ROUGH_FIELDS:
+            if not field(body, key):
+                problems.append(f"{title[:50]} missing {key}")
+        exit_line = field(body, "Exit")
+        if exit_line and VAGUE_EXIT.match(exit_line):
+            problems.append(f"{title[:50]} has an Exit nobody can fail: {exit_line}")
+        effort = field(body, "Effort")
+        if effort and n < DETAILED_PHASES and not re.search(r"(?i)reference class|guess|measured", effort):
+            problems.append(f"{title[:50]} Effort has to say reference class, measured or guessed")
+        conf = field(body, "Confidence")
+        if conf and n < DETAILED_PHASES and not re.search(r"(?i)\b(low|medium|high)\b.*\bbecause\b", conf):
+            problems.append(f"{title[:50]} Confidence has to read low, medium or high, because ...")
+    if phases and not field(phases[0][1], "Tests"):
+        problems.append("The first phase has to say what it Tests, from Riskiest assumptions")
+
+    adapting = s.get("adapting", "")
+    if adapting:
+        for key in ("Change without asking", "Ask first", "Replan when"):
+            if not field(adapting, key):
+                problems.append(f"Adapting missing {key}")
+
+    review = s.get("review log", "")
+    independent = [b for b in bullets(review) if re.search(r"(?i)\bindependent\b", b)]
+    if state == "COMMITTED":
+        if not independent:
+            problems.append("COMMITTED needs an independent review in the log")
+        if "[NEED" in text:
+            problems.append("COMMITTED can't have a [NEED: ...] left in it")
+        if not re.search(r"(?i)committed by \S+.*\d{4}-\d{2}-\d{2}", status):
+            problems.append("COMMITTED needs: committed by <person>, <date>. A person commits, never the agent")
+        if assumptions and phases:
+            first = field(assumptions[0], "Status") or ""
+            if not re.search(r"(?i)\btested\b", first) or re.search(r"(?i)\buntested\b", first):
+                if not re.search(r"(?i)\b(1|first|top)\b", field(phases[0][1], "Tests") or ""):
+                    problems.append("The riskiest assumption is untested and phase 1 doesn't test it")
+    return {"state": state or None, "problems": problems,
+            "counts": {"evidence": len(evidence), "shapes": len(shapes), "premortem": len(pre), "phases": len(phases)}}
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="plan-check", description="Is this plan complete enough to argue with?")
+    ap.add_argument("file")
+    ap.add_argument("--json", action="store_true")
+    a = ap.parse_args()
+    try:
+        text = Path(a.file).read_text(errors="replace")
+    except OSError as e:
+        print(f"plan-check: can't read {a.file}: {e.strerror}", file=sys.stderr)
+        return 2
+    result = check(text)
+    if a.json:
+        print(json.dumps(result, indent=2))
+    else:
+        for p in result["problems"]:
+            print(f"  {p}")
+        if not result["problems"]:
+            print(f"{a.file}: complete, status {result['state']}. Complete isn't good: the review log is what says that.")
+    return 1 if result["problems"] else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

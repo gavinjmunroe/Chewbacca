@@ -80,6 +80,10 @@ vid", then "Make sure you use our research, especially the research paper!!!!!!"
 and "a hand is not cubical lmao". The version that held up came from the
 downloaded clip, the SIGGRAPH PDF and side-by-side frame checks.
 
+## A big plan goes through big-plan
+
+Anything that takes weeks, spans several builds or can't be undone gets the `big-plan` skill before a phase is named, and `plan-check` before it's shown. A scored list isn't a plan. Caleb, 2026-11-05, on a table of 8 Hall builds: "create a way to make the plan that is robust and we are CONFIDENT". A person commits it, never the agent.
+
 ## Never one-shot creative work
 
 Anything creative, meaning an essay section, a personal statement, a script, a

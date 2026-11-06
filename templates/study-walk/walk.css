@@ -1,0 +1,265 @@
+:root {
+  --g0: #0e0d0c;
+  --g1: #161412;
+  --g2: #1f1c19;
+  --g3: #2a2622;
+  --hair: #ffffff14;
+  --tx: #f1ece4;
+  --mut: #a59d92;
+  --dim: #6f685f;
+  --acc: #f4b24a;
+  --accInk: #1c1204;
+  --good: #7bd88f;
+  --bad: #ff7a66;
+  --mom: #ff7a66;
+  --dad: #6fb3ff;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+html,
+body {
+  height: 100%;
+}
+html {
+  -webkit-text-size-adjust: 100%;
+}
+body {
+  background: var(--g0);
+  color: var(--tx);
+  font-family: Inter, ui-sans-serif, sans-serif;
+  line-height: 1.35;
+}
+button {
+  font: inherit;
+  color: inherit;
+  border: 0;
+  cursor: pointer;
+  background: none;
+}
+.app {
+  height: 100svh;
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 12px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.back {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--mut);
+  text-decoration: none;
+  padding: 7px 11px;
+  border-radius: 10px;
+  background: var(--g2);
+  transition:
+    background-color 0.12s ease-out,
+    color 0.12s ease-out;
+}
+.ttl {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--mut);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.step {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  color: var(--dim);
+  white-space: nowrap;
+}
+.track {
+  height: 3px;
+  background: var(--g2);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.track i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--acc);
+  transition: width 0.3s var(--ease);
+}
+.stage {
+  flex: 1 1 auto;
+  min-height: 140px;
+  position: relative;
+  background: var(--g1);
+  border: 1px solid var(--hair);
+  border-radius: 18px;
+  overflow: hidden;
+}
+.stage svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.tag {
+  position: absolute;
+  left: 12px;
+  top: 10px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--accInk);
+  background: var(--acc);
+  padding: 4px 9px;
+  border-radius: 8px;
+}
+.say {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.3;
+  min-height: 2.6em;
+}
+.say b {
+  color: var(--acc);
+  font-weight: 800;
+}
+.say.q {
+  font-weight: 800;
+}
+.opts {
+  display: grid;
+  gap: 8px;
+}
+.opts:empty {
+  display: none;
+}
+.opt {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--g2);
+  font-weight: 700;
+  font-size: 16px;
+  text-align: left;
+  transition:
+    transform 0.12s var(--ease),
+    background-color 0.12s ease-out;
+}
+.opt:active {
+  transform: scale(0.97);
+}
+.opt.right {
+  background: #1d3a24;
+  color: var(--good);
+}
+.opt.wrong {
+  background: #40201b;
+  color: var(--bad);
+}
+.opt:disabled {
+  cursor: default;
+}
+.fb {
+  font-size: 15px;
+  color: var(--mut);
+  min-height: 0;
+}
+.fb:empty {
+  display: none;
+}
+.fb.good {
+  color: var(--good);
+}
+.fb.bad {
+  color: var(--bad);
+}
+.nav {
+  display: flex;
+  gap: 8px;
+}
+.btn {
+  padding: 14px 16px;
+  border-radius: 14px;
+  font-weight: 800;
+  font-size: 16px;
+  background: var(--g2);
+  flex: 1;
+  transition:
+    transform 0.12s var(--ease),
+    background-color 0.12s ease-out,
+    opacity 0.12s ease-out;
+}
+.btn.pri {
+  background: var(--acc);
+  color: var(--accInk);
+  flex: 2.4;
+}
+.btn:active {
+  transform: scale(0.97);
+}
+.btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.btn:focus-visible,
+.opt:focus-visible,
+.back:focus-visible {
+  outline: 2px solid var(--acc);
+  outline-offset: 2px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .btn:not(:disabled):hover {
+    background: var(--g3);
+  }
+  .btn.pri:not(:disabled):hover {
+    background: #ffc363;
+  }
+  .opt:not(:disabled):hover {
+    background: var(--g3);
+  }
+  .back:hover {
+    background: var(--g3);
+    color: var(--tx);
+  }
+}
+.lbl {
+  font-family: Inter, sans-serif;
+  font-size: 13px;
+  font-weight: 800;
+  fill: var(--tx);
+  paint-order: stroke;
+  stroke: var(--g1);
+  stroke-width: 3.5px;
+}
+.lblline {
+  stroke: var(--acc);
+  stroke-width: 1;
+}
+@media (max-height: 700px) {
+  .say {
+    font-size: 17px;
+  }
+  .opt {
+    padding: 10px 12px;
+    font-size: 15px;
+  }
+  .btn {
+    padding: 12px 14px;
+  }
+}
+/* Phone portrait left the landscape drawing floating in a tall empty box,
+   so the stage takes the drawing's own shape and the buttons sit at the bottom. */
+.stage { flex: 0 1 auto; aspect-ratio: 400 / 270; max-height: 60svh; min-height: 0; }
+.nav { margin-top: auto; }
+/* Audit 6:35am: labels near the top of the drawing sat under the stage tag
+   on 26 beats. The tag now sits above the drawing instead of on top of it. */
+.stage { display: flex; flex-direction: column; }
+.stage .tag { position: relative; left: auto; top: auto; align-self: flex-start; margin: 10px 0 0 12px; flex: none; order: -1; }
+.stage svg { position: relative; inset: auto; flex: 1 1 auto; min-height: 0; height: 100%; }

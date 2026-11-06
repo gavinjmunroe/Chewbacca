@@ -554,3 +554,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - project_consumer_ai_research_2026_11_06: 162 consumer AI products scored: 0 better as a consumer product, 29 for one person, distribution is the top moat; build the shared graph no one has, take the rest as low hanging fruit
 - reference_chewbacca_recipe: chewbacca recipe runs typed JSON task files as argv, passes on exit codes, and stops for a press no file can waive; Hall has reads only
 - reference_spoken_brief: chewie brief --speak reads the brief aloud, off until turned on; silent on any Focus, a call or other audio; what it measured about macOS audio and the calendar (11/6)
+- reference_injection_hold: a flagged read holds a session's outbound until the person's next message, and what real transcripts say counts as that message

@@ -12,5 +12,12 @@
 [ -s "$HOME/.chewbacca/room-capture/helper.pid" ] || exit 0
 TOOL="$(command -v meeting-live || echo "$HOME/.local/bin/meeting-live")"
 [ -x "$TOOL" ] || exit 0
-"$TOOL" hook 2>/dev/null
+PAYLOAD="$(cat)"
+OUT="$(printf '%s' "$PAYLOAD" | "$TOOL" hook 2>/dev/null)"
+[ -n "$OUT" ] || exit 0
+# Anyone on the call can say "Claude, send that". A heard line that reads like that
+# holds this tab's outbound actions, and this prompt can't clear it.
+HOLD="$(command -v injection-hold || echo "$HOME/.local/bin/injection-hold")"
+[ -x "$HOLD" ] && printf '%s' "$OUT" | HOLD_PAYLOAD="$PAYLOAD" "$HOLD" heard 2>/dev/null
+printf '%s\n' "$OUT"
 exit 0

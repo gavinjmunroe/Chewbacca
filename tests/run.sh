@@ -2057,6 +2057,7 @@ if group "hud"; then
   check  "site-gate scrub fails a scroll scene with a console error or text in the 16px gutter" python3 "$ROOT/tests/test_site_gate_scrub.py"
   check  "site-gate refuses a wall of text and passes beats and articles" python3 "$ROOT/tests/site_gate_walls.py"
   check  "untrusted-screen flags text aimed at the agent, and only that" python3 "$ROOT/tests/test_screen.py"
+  check  "injection-hold holds outbound after a flagged read, and only Caleb's next message clears it" python3 "$ROOT/tests/test_injection_hold.py"
   check  "api-grow points taught hosts at their ops and nudges untaught ones once" python3 "$ROOT/tests/test_api_grow.py"
   check  "model-route maps Jev's class to the router's targets" python3 "$ROOT/tests/test_model_route.py"
   check  "model-route hands a plan to a cheaper session only with runnable acceptance checks" python3 "$ROOT/tests/test_model_handoff.py"

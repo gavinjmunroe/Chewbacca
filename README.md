@@ -26,7 +26,7 @@ rerun: [three showcases](docs/showcases/README.md).
 
 <!-- BEGIN GENERATED: counts -->
 
-One command installs **1 slash command, 206 skills (85 written here, 8 cloned from upstream, 113 from 8 skill packs), 7 MCP servers, 107 hooks, 4 subagents, 9 command-line tools and 13 always-on standards (plus 4 that load only when the work calls for them).** About 918,000 lines, every one of them plain text you can read.
+One command installs **1 slash command, 206 skills (85 written here, 8 cloned from upstream, 113 from 8 skill packs), 7 MCP servers, 108 hooks, 4 subagents, 9 command-line tools and 13 always-on standards (plus 4 that load only when the work calls for them).** About 920,000 lines, every one of them plain text you can read.
 
 <!-- END GENERATED: counts -->
 

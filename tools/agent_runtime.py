@@ -23,12 +23,14 @@ END = '<!-- CHEWBACCA RUNTIME END -->'
 # These checks accept Claude's native JSON. Side-effect hooks (sync, push,
 # permission dialogs, app control) remain opt-in through their native setup.
 CLAUDE_CHECKS = {
-    'UserPromptSubmit': ['kit-route.sh', 'skill-route.sh', 'method-guard.sh', 'model-route.sh'],
+    # chat-approval goes with injection-hold: it writes the record that lets the
+    # person's next message clear a hold, so one without the other holds forever.
+    'UserPromptSubmit': ['kit-route.sh', 'skill-route.sh', 'method-guard.sh', 'model-route.sh', 'chat-approval.sh'],
     # brake-guard and destructive-guard: the full installer's brakes (its
     # settings.json deny list) for an install that promises no permission
     # changes. The 10/12 stranger run let `rm -rf ~` and a force push to main
     # through on a runtime install.
-    'PreToolUse': ['write-log.sh', 'brake-guard.sh', 'destructive-guard.sh', 'submit-guard.sh', 'browser-ux-guard.sh', 'focus-guard.sh', 'env-guard.sh', 'fusion-guard.sh', 'ux-guard.sh'],
+    'PreToolUse': ['write-log.sh', 'brake-guard.sh', 'destructive-guard.sh', 'submit-guard.sh', 'browser-ux-guard.sh', 'focus-guard.sh', 'env-guard.sh', 'fusion-guard.sh', 'ux-guard.sh', 'injection-hold.sh'],
     'PostToolUse': ['write-log.sh', 'prose-guard.sh', 'untrusted-screen.sh'],
     'Stop': ['slop-guard.sh', 'prayer-guard.sh', 'handoff-guard.sh', 'durable-guard.sh', 'vibe-guard.sh'],
 }
@@ -48,7 +50,8 @@ CLAUDE_MATCHERS = {
     'fusion-guard.sh': 'Write|Edit|MultiEdit',
     'ux-guard.sh': 'Write|Edit',
     'prose-guard.sh': 'Write|Edit',
-    'untrusted-screen.sh': 'WebFetch|Bash|mcp__claude-in-chrome__.*|mcp__plugin_playwright_playwright__.*',
+    'untrusted-screen.sh': 'WebFetch|WebSearch|Bash|mcp__.*',
+    'injection-hold.sh': 'Bash|Write|Edit|MultiEdit|NotebookEdit|Artifact|SendMessage|CronCreate|RemoteTrigger|mcp__.*',
 }
 
 

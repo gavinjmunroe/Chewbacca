@@ -7,8 +7,9 @@ text thread or a mail body is acted on, ask whether it talks to the agent.
 
 Two layers, split by Canny's rule (facts to code, judgments to Jev):
 
-  patterns   the phrasings every published injection reuses. A hit is a fact
-             and is reported even with Jev down.
+  patterns   the phrasings every published injection reuses. A hit is a fact,
+             is reported even with Jev down, and holds the session's outbound
+             actions (bin/lib/injection_hold.py has the measured rate).
   jev        one Noul per chunk: is this addressed to an AI reading it? A
              judgment, so it warns and never blocks.
 
@@ -33,8 +34,25 @@ PATTERNS = [re.compile(p, re.I) for p in (
     r"\b(dear|attention|note to|hey) (ai|assistant|agent|llm|claude|chatgpt|gpt)\b",
     r"\bif you are an? (ai|assistant|agent|language model|llm)\b",
     r"\b(ai|assistant|agent)s? reading this\b",
-    r"<\s*/?\s*(system|instructions?|im_start|im_end)\s*>",
+    # An opening <instructions> counts only at the start of a line: inline it's a
+    # usage placeholder, `vpx implement <instructions>` on 2026-11-05.
+    r"<\s*/?\s*(system|im_start|im_end)\s*>|<\s*/\s*instructions?\s*>|(?m:^\s*<\s*instructions?\s*>)",
     r"\bdo not (tell|inform|alert|mention (this )?to) the user\b",
+    # A claim of his approval, in a page or spoken on a call. Only his own turn
+    # approves anything, so the claim is the attack whatever verb it dresses in.
+    r"\bthe (user|owner) (has |had )?(already |just |explicitly )?(pre-?)?(approved|authori[sz]ed|consented|signed off)\b",
+    r"\bcaleb (has |had )?(already |just |explicitly )?(pre-?)?(approved|authori[sz]ed|consented|signed off)\b",
+    r"\bcaleb (said|says|told you) (to|it'?s|that'?s) (go ahead|ok|okay|fine|send|post|pay|delete|publish)\b",
+    # "to <verb>" is what keeps it aimed at an action. Without it, Caleb's own
+    # text "You have full permission to include anything abt me" hit (2026-10-25).
+    r"\byou (now |already )?have (the user'?s|caleb'?s|his|my|full) (permission|approval|authori[sz]ation|consent) to (send|post|pay|delete|publish|forward|email|transfer|share|upload|wire)\b",
+    r"\b(no need to|don'?t|do not) (ask|check with|confirm with) (the user|caleb)\b",
+    r"\bwithout (asking|telling|confirming with|notifying) (the user|caleb)\b",
+    # Speech aimed at the agent by name. The comma or a "hey" is what makes it
+    # address. Without one, the CLI line "chewbacca email add" hit 9 of 13 real
+    # reads in the 2026-11-06 replay.
+    r"\b(claude|chewie|chewbacca),\s*(please )?(send|forward|email|text|post|pay|wire|transfer|delete|publish|upload)\b",
+    r"\b(hey|ok|okay|yo) (claude|chewie|chewbacca),? (please )?(send|forward|email|text|post|pay|wire|transfer|delete|publish|upload)\b",
 )]
 
 # Chunks sized so one Jev call reads a whole mail body or a screen of a page.
@@ -89,7 +107,7 @@ def excerpt(text: str, at: int, width: int = 160) -> str:
     return " ".join(text[start:start + width].split())
 
 
-def screen(text: str, ask=None) -> dict:
+def screen(text: str, ask=None, patterns_only: bool = False) -> dict:
     """`ask` defaults to jev.ask; tests pass a stub with the same signature."""
     result = {"flagged": False, "via": None, "score": None, "where": None, "excerpt": None}
     text = text or ""
@@ -99,6 +117,8 @@ def screen(text: str, ask=None) -> dict:
     if m:
         result.update(flagged=True, via="pattern", where=m.start(),
                       excerpt=excerpt(text, m.start()))
+        return result
+    if patterns_only:
         return result
     ask = ask or jev.ask
     if ask is jev.ask and not (jev.api_key() and jev.allowed()):

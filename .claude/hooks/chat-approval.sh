@@ -249,6 +249,34 @@ if why:
             open(launched_mark, "w").write(json.dumps({"at": int(time.time()), "why": "born headless"}))
     raise SystemExit(0)
 
+# injection-hold's half of a clear. A person's prompt, stop or not, by the id the
+# harness also writes on its transcript line. Neither one alone clears a hold.
+# Twenty ids is far more than the one the hold reads; a flag older than the file
+# keeps holding, which is the safe side of losing one.
+_prompt_id = str(payload.get("prompt_id") or "")
+if session and _prompt_id:
+    _turns = os.path.join(recdir, "human-turns")
+    _path = os.path.join(_turns, re.sub(r"[^A-Za-z0-9_-]", "", session)[:80] + ".json")
+    try:
+        os.makedirs(_turns, exist_ok=True)
+        try:
+            _old_rec = json.load(open(_path))
+            _ids, _shas = _old_rec.get("ids") or [], _old_rec.get("shas") or []
+        except (OSError, ValueError, AttributeError):
+            _ids, _shas = [], []
+        # A message sent mid-turn lands as an attachment with no id of its own, so
+        # the hash of what he typed is what joins it.
+        _sha = hashlib.sha256(prompt.strip().encode()).hexdigest()
+        with open(_path + ".tmp", "w") as f:
+            json.dump({"ids": (list(_ids) + [_prompt_id])[-20:], "shas": (list(_shas) + [_sha])[-20:]}, f)
+        os.replace(_path + ".tmp", _path)
+        _cut = time.time() - 14 * 86400
+        for _old in glob.glob(os.path.join(_turns, "*.json")):
+            if os.path.getmtime(_old) < _cut:
+                remove(_old)
+    except OSError:
+        pass
+
 # A stop aimed at the work, or a whole message that is just "stop". "Never tell
 # me what to do" is not a stop: the version that read any "never" or "don't" as
 # one refused a blocklist write he had plainly asked for (2026-10-10).

@@ -1174,7 +1174,7 @@ fi
 # bare name; none were linked, so each was "command not found" on a fresh
 # install (backlog 26 audit, 2026-10-16). tests/test_doc_commands_linked.py
 # fails when a doc names a bin/ tool this file never links.
-for _tool in orphan-reap list-audit list-gate gtme-dedupe gtme-reply gtme-rules gtme-dnc gtme-score gtme-lookup kit-debt handoff-check learn durable-check corpus preflight gtme-graph gtme-math discovery case-study llms-txt rfp-extract gtme-library gtme-signals gtme-grade gtme-learning clay-fixture-check review-gate task-graph graph-fuse work-ledger ux-learning jev decision-lab ux-decision ux-policy clay-review clay-build fanout site-fast untrusted-screen api-grow model-route intro list-sift ux-do decisions web-record bb brand-grab oss-apps team peel ig-read call-listen chewbacca-permissions clay-go decision-inbox gtm gtme gtme-interview gtme-investors kyber-surfaces qr railway-domain railway-attach logo-fetch texts-photos recur reel-assemble reel-check tabs contacts-bulk; do
+for _tool in orphan-reap list-audit list-gate gtme-dedupe gtme-reply gtme-rules gtme-dnc gtme-score gtme-lookup kit-debt handoff-check learn durable-check corpus preflight gtme-graph gtme-math discovery case-study llms-txt rfp-extract gtme-library gtme-signals gtme-grade gtme-learning clay-fixture-check review-gate task-graph graph-fuse work-ledger ux-learning jev decision-lab ux-decision ux-policy clay-review clay-build fanout site-fast untrusted-screen api-grow model-route intro list-sift ux-do decisions web-record bb brand-grab oss-apps team peel ig-read call-listen chewbacca-permissions clay-go decision-inbox injection-hold gtm gtme gtme-interview gtme-investors kyber-surfaces qr railway-domain railway-attach logo-fetch texts-photos recur reel-assemble reel-check tabs contacts-bulk; do
   if [ -f "$SCRIPT_DIR/bin/$_tool" ]; then
     link_tool "$_tool"
     log "$_tool installed to ~/.local/bin/"
@@ -2468,8 +2468,14 @@ _register("PostToolUse", hooks_dir + "/clay-reply-guard.sh", timeout=5,
 # Above: an analytics reply category is not a reply. On 2026-10-05 "Interested"
 # was a canned apply-on-our-site redirect and got reported as a lead.
 _register("PostToolUse", hooks_dir + "/untrusted-screen.sh", timeout=15,
-          matcher="WebFetch|Bash|mcp__claude-in-chrome__.*|mcp__plugin_playwright_playwright__.*",
+          matcher="WebFetch|WebSearch|Bash|mcp__.*",
           status="Screening what was just read for instructions aimed at the agent...")
+
+# What that flag does: a send, post, pay, delete or publish in the session waits
+# for Caleb's next message. The rules and measured rate are in bin/lib/injection_hold.py.
+_register("PreToolUse", hooks_dir + "/injection-hold.sh", timeout=10,
+          matcher="Bash|Write|Edit|MultiEdit|NotebookEdit|Artifact|SendMessage|CronCreate|RemoteTrigger|mcp__.*",
+          status="Checking outbound against this session's flagged reads...")
 
 # Every site browsed grows the API layer (Caleb, 2026-10-11: "it should
 # reverse engineer an api so moving forward it gets more and more cracked").

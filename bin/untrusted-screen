@@ -20,11 +20,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("file", nargs="?")
     parser.add_argument("--source", default="")
+    parser.add_argument("--patterns-only", action="store_true", help="skip Jev")
     args = parser.parse_args()
     if args.file and not Path(args.file).is_file():
         parser.error(f"no such file: {args.file}")
     text = Path(args.file).read_text(errors="replace") if args.file else sys.stdin.read()
-    result = screen.screen(text)
+    result = screen.screen(text, patterns_only=args.patterns_only)
     if args.source:
         result["source"] = args.source
     print(json.dumps(result))

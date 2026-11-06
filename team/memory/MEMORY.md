@@ -540,3 +540,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_stat_needs_felt_problem: FF copy and outbound never state a stat alone; say what it costs the reader, or they answer "it's in the footer, isn't that ok?" (Caleb 11/5)
 - project_gavin_call_followups_2026_11_05: after the 11/5 Gavin call: Andrew OK as lead advisor, Firebox call being set w an NDA, footers need Chase and Reagan asked, gtme ready wants a recorded read
 - feedback_church_site_shows_who_they_are: untested hypothesis (Caleb 11/5), first page should show mission, beliefs, who leads; say your own read of his takes before building
+- project_ff_outbound_state_2026_11_05: FF outbound handoff 11/5, send stop in force, 0 church emails, decided copy, what's wrong, how he reviews

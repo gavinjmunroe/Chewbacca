@@ -1,0 +1,18 @@
+---
+name: project_ff_outbound_state_2026_11_05
+description: FF outbound handoff 11/5 evening, send stop in force, 0 church emails, copy he decided, what's wrong, how he reviews; the ledger's autosend would answer a yes once anything sends
+metadata:
+  type: project
+---
+
+Send stop from Caleb, 11/5 4:23pm: "dont start FF outbound for now dont send texts or emails just draft them". Then at 5:17pm, after the study's blind spots: "We're def not ready for outbound lol this all changes everything". The outbound tab reported 0 church emails from either inbox at 5:18pm, and only test sends of an older draft from caleb@ to his own Gmail and USC.
+
+**State.** Live ledger is ~/code/ff-ledger/ops/gtme/{socal,dfw}, run through bin/dough in a Dough checkout (calebnewtonusc/dough). ff-inbox-socal, ff-inbox-dfw and ff-week-socal keep running, and autosend is set in both plans, so a yes reply would get an automatic email once anything has sent. SoCal batch b21b9dda01 expired unapproved, don't reuse it. Candidates, none approved: ~/Downloads/FF worst sites rechecked.md. Trinity and Renew are in leads-held. Bible Baptist's streaming 404 looks false. Peninsula is held by the skeptic. His call on the 592 unreviewed screenshots is open, with the advice that it waits on the pitch.
+
+**Copy he decided 11/5 (SoCal role and direct email 1).** Names Epicentre Church in Pasadena, never Generations, since that shows he's in college. No "a Christian" and no faith blurb. Andrew Laffoon "of Mixbook", name and Mixbook only. Chase Durkin stays, not rechecked. Popoff cut for length. Durango out until its site is live. No link, video, CC or BCC in email 1. pastor@ and first-name inboxes get "Want the full list? It's free, no call needed", office inboxes keep the pass-along ask. Subject stays "your church website". The footer Wyoming address is an 11/2 ruling in DECISIONS.json.
+
+**Still wrong.** "turn first-time guests into second visits" reads as an outcome with no proof behind it, his pitch call. Step 2's "688 sites, 100 forms" line is a script number with no cost to the reader. DFW has line_proof off and no copy_direct_inbox. 16 SoCal leads hold for lack of proof. Gavin hasn't clearly okayed DFW, tho Caleb can send DFW from his Mac per his 11/3 ruling.
+
+**Why:** The study changed the pitch: see [[project_ff_search_2026_11_05]]. Audit lines also go stale fast. Renew's 404 was fixed within 2 days.
+
+**How to apply:** Nothing sends until he lifts the stop in chat. He reviews one email at a time: `bin/dough show --client X --n I`, link the page every time, still-running proof above, copy in a fenced block, short comments. Pick from the worst sites. Each line says what it costs a visitor, without guilt. `dough plan --max N`, or a held email pulls in an unread church. `dough ready` must print READY before anyone calls it ready. The skeptic and grader are rough, so read as a visitor first. Related: [[feedback_ff_outbound_one_email_at_a_time]], [[feedback_stat_needs_felt_problem]].

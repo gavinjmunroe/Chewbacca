@@ -207,6 +207,12 @@ and say who to ask.
 
 ---
 
+## A FREE WINDOW ISN'T A PLAN
+
+Someone saying they're free at a time doesn't say what it's for. Before a plan or a draft text names the purpose, find it in the thread or ask, and never add his availability to a draft unless he gave it. On 2026-11-05 a roommate texted "free from 6:30-7:30", and a life plan and a draft reply both said gym because the same thread mentioned the gym. Caleb: "6:30 isnt gym its when were prepping for our shared bday". A draft to another friend in that tab also claimed "I'm free most Fridays" with no source, caught only on a reread.
+
+---
+
 ## ONE AUDIT, NOT FIVE
 
 A second full review pass that finds things the first should have caught is not

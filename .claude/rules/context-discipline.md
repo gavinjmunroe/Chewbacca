@@ -23,6 +23,14 @@ wrong, correcting the file is the whole response.
 
 ---
 
+## READ THE THREAD BEFORE BUILDING ON A NOTE
+
+A plan in the ledger or memory can be hours old. Before building for a person, read that thread from the note's date forward. On 2026-11-05 a note said "lawyer first" while the Dad thread from that afternoon said no lawyers for now, and the session had started a lawyer packet and told another tab the old plan before it read the thread.
+
+Before arguing a side, check his own documents for the opposite line. His 10/7 expense sheet says "Chewbacca is Amber work", which cuts against both the breach point and his 11/5 text to Dad.
+
+---
+
 ## NEVER RECORD INTENT AS FACT
 
 "I'm about to ship it." "I'm submitting them all." "I'll push tonight."

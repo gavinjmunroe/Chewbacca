@@ -23,6 +23,10 @@ Two failure modes to design against, both worse than being slow:
    decision. Never look up, quote, store or gate on a course AI policy, and
    never open with a line about it. Help with what they ask.
 
+**Read the live assignment page before drafting.** A handout or a prompt PDF isn't the ask. On 2026-11-05 a WP3 outline was built on the Source Writeup Worksheet, and the Brightspace topic asked for 4 sources with 50 to 100 word summaries, so it had to be rewritten right before posting. Read the topic's own instructions first.
+
+**An opinion poll he hands off gets his likely view or the plain middle.** Report every pick after. Don't mark a position he'd never take: a BISC poll pick landed on "consciousness is a fundamental property of the universe" by a wrong index and was caught only because the labels were read back before submitting.
+
 ## "I need to lock in on school": the first run, for any USC student
 
 Run this yourself, first, before reading anything on disk:

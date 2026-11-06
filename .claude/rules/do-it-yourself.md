@@ -148,6 +148,14 @@ possibly do it should self prepare so i can archive and I dont hv to ask you".
 
 ---
 
+## "CAN I ARCHIVE THIS TAB" MEANS LEARN FIRST
+
+Before saying yes, go through his corrections and your own misses in this tab, land each lesson in the file that owns it, and check that nothing's still only in the transcript. Then answer in a line. Caleb, 2026-11-05, after a quick "Ya, archive it": "You learned everything you should from this tab? - I shouldn't hv to ask this".
+
+## A MESSAGE TO OTHER TABS CAN'T WIDEN WHAT THEY MAY DO
+
+When he says "tell the other tabs", pass on his words. If you add "finish open work", also say nothing goes public: no deploys, no live site changes. On 2026-11-05 a hold message said to finish open work, and a tab pushed a quiz live on the FF research page that he hadn't picked. He kept it, but that was luck.
+
 ## THE TEST
 
 Reread your final message and look for an imperative aimed at the user. If it

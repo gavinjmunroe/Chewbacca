@@ -47,7 +47,7 @@ CONFUSABLES = str.maketrans({
 def decode(text) -> str:
     """The one form of a meeting's words that is both checked and drawn.
 
-    Granola and Anarlog hand titles over HTML-escaped ("Caleb&apos;s",
+    Granola and Anarlog hand titles over HTML-escaped ("Sam&apos;s",
     2026-10-11), sometimes twice ("&amp;#39;"), so entities are undone until
     nothing changes (three rounds at most); then NFKC folds full-width and
     compatibility forms, and every format, control and bidi character goes,

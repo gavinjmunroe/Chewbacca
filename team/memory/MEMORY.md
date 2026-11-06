@@ -547,3 +547,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_falsifier_needs_a_sample_size: a result that would prove you wrong has to be likely enough to mean it; 25 cold emails prove nothing at 1%, FF's test is 200
 - feedback_running_job_stale_output: a job marked running can be wedged; check its output file's age, and give scrape loops a per-item limit (FF speed job, 8h at 20 of 1041, 11/6)
 - project_ff_outbound_handoff_2026_11_06: FF outbound handoff to Gavin for Mon 11/9, what was checked 11/6, what's unproven, and why batch counts move on identical copy
+- project_meeting_live_2026_11_06: live call reaches a tab or Kyber with no pasting (meeting-live) on room-capture; no Natively code, no interview mode, private calls reach nothing

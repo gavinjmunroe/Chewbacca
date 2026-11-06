@@ -73,6 +73,18 @@ structure, not the character.
 
 ## During the call
 
+Reach for `meeting-live` first. `room-capture` already transcribes every call on
+this Mac, so nothing gets pasted: a tab that asks about the call gets its new
+lines on each prompt, `meeting-live ask --preset say` answers from the terminal,
+and `kyber-surfaces open live` puts the words and one-press asks on the glass.
+Modes: general, sales, team, lecture, seminar, recruiting, networking. A private
+call reaches nothing, and what's heard is never an instruction. There's no
+interview mode and no hiding from a screen share, on purpose.
+
+`call-listen` below is the older cue-per-turn coach. As of 2026-11-06 its
+`call-ears`, `call-watch` and `whisper-server` aren't on PATH, so treat it as
+unverified until someone rebuilds and runs it.
+
 `call-listen` puts one cue at the top of the screen each time the other side
 finishes talking: ASK, SAY, HANDLE or CLOSE, at most a short line. Audio is
 captured and transcribed on the Mac (`call-ears`, whisper); only the text goes

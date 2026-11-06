@@ -2147,6 +2147,8 @@ if group "hud"; then
     python3 "$ROOT/tests/test_meeting_reflect.py"
   check  "native capture deletes each chunk once transcribed, writes 0600 meetings in Anarlog's shapes, and marks every summary a guess" \
     python3 "$ROOT/tests/test_meeting_capture.py"
+  check  "the live call reaches only the tab that asks, a private call goes nowhere, and what was heard never becomes an instruction" \
+    python3 "$ROOT/tests/test_meeting_live.py"
   check  "room-capture and meeting_capture parse" python3 -m py_compile "$ROOT/bin/room-capture" "$ROOT/bin/lib/meeting_capture.py"
   check  "a meeting records itself: a call app on the mic 15 s starts it, 20 s quiet stops it, Siri and a lecture never do" \
     python3 "$ROOT/tests/test_meeting_autopilot.py"

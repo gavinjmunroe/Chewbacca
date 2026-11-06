@@ -1,6 +1,6 @@
 """meeting_autopilot: start recording when a meeting starts, stop when it ends.
 
-Caleb, 2026-10-10: "Ofc star and stop on itself!!!!!!!!", and "I never wanna
+The owner, 2026-10-10: "Ofc star and stop on itself!!!!!!!!", and "I never wanna
 use granola again". Nobody presses anything.
 
 HOW A MEETING IS NOTICED. Ported from Anarlog (MIT, Copyright (c)
@@ -30,7 +30,7 @@ so it records only on evidence nobody else can forge (security review,
    made by anyone; Zoom's signature cannot. Unknown, unsigned or mismatched:
    no recording.
 2. Nothing else. A calendar event never starts a recording (anyone can put
-   one on Caleb's calendar), a window or tab title never does (any web page
+   one on the owner's calendar), a window or tab title never does (any web page
    sets its own), and a browser or a personal call app (FaceTime, WhatsApp,
    Discord) never does. Those calls are recorded with the Start press on the
    meetings panel. The calendar only names a meeting afterwards
@@ -61,7 +61,7 @@ STOP_AFTER_S = 20.0
 
 # Work call apps: bundle id -> (name, Team ID, the signing identifiers its
 # own processes carry). All read with `codesign -dv` from the copies on
-# Caleb's Mac on 2026-10-10: zoom.us.app's main binary is us.zoom.xos; Teams'
+# The owner's Mac on 2026-10-10: zoom.us.app's main binary is us.zoom.xos; Teams'
 # MSTeams is com.microsoft.teams2 and its WebView helper .helper; Slack's
 # main binary and every Slack Helper are slackmacgap and slackmacgap.helper.
 # Webex, classic Teams and the App Store Slack were not installed, so they are

@@ -18,7 +18,7 @@ and Screen & System Audio Recording grants to the app at the top of the
 launch chain. Kyber (dev.bobthebuilder.hud) already holds both on this Mac
 (TCC, 2026-10-10), and Kyber is itself a KeepAlive launch agent. A separate
 launch agent would be its own TCC client, an unbundled binary whose grant
-breaks on every rebuild, and would need Caleb's hands in Settings twice. So
+breaks on every rebuild, and would need the owner's hands in Settings twice. So
 Kyber spawns `meeting-autopilot run` at launch and again whenever it exits;
 `run` holds a lock, so a second copy exits at once.
 
@@ -104,7 +104,7 @@ def is_off() -> bool:
 
 def carry_over() -> bool:
     """A Mac that ran the loop before "on" existed was recording with no flag,
-    and on Caleb's Mac that was his answer ("Ofc star and stop on itself",
+    and on the owner's Mac that was his answer ("Ofc star and stop on itself",
     2026-10-10). Keep what it had: a state.json written by the old loop (no
     "consent" key) and no flag either way becomes "on". A fresh install has no
     state.json yet, so it stays off. Runs from `run` only; status never writes."""
@@ -220,7 +220,7 @@ class Loop:
 def run(args) -> int:
     replay = os.environ.get("MEETING_AUTOPILOT_WATCH_CMD", "").strip()
     if replay and real_home():
-        # A replay is a test, and a test recording landed in Caleb's real
+        # A replay is a test, and a test recording landed in the owner's real
         # meetings and ledger on 2026-10-10 ("Meeting at 10:28pm", two
         # queued tasks). Replays run only with HOME set to a scratch folder.
         log("refusing: MEETING_AUTOPILOT_WATCH_CMD needs HOME set to a scratch folder, never the real one")

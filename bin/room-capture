@@ -6,7 +6,7 @@
                                               stop; wait for the last lines and the summary
     room-capture status [--json]              recording or not, what was heard, the last meeting
 
-This is what replaced Anarlog as a separate app (Caleb, 2026-10-05: "Anarlog
+This is what replaced Anarlog as a separate app (the owner, 2026-10-05: "Anarlog
 shouldn't be it's own app"). Two processes run while it records:
 
 - mac/room-capture, a Swift helper built here on first use, which hears the

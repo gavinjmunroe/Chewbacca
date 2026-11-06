@@ -1,0 +1,184 @@
+#!/usr/bin/env python3
+"""The call happening right now: read it from anywhere, ask about it, no pasting.
+
+    meeting-live status [--json]            on a call or not, how far behind
+    meeting-live tail [-n 40] [--json]      the newest lines heard
+    meeting-live follow                     print lines as they land, until it ends
+    meeting-live ask "<question>" [--mode sales] [--card file]
+    meeting-live ask --preset say           one of: say missed decided objection next-step
+                                            owners explain testable question followup
+    meeting-live modes                      list the modes and what each is for
+    meeting-live mode [name]                show or set the mode
+    meeting-live tabs on|off                whether Claude tabs get the call on their own
+    meeting-live hook                       the UserPromptSubmit hook's body (reads its JSON)
+
+This never records. room-capture does that, with its consent line on the glass,
+and bin/meeting-autopilot starts it when a call takes the mic. Rules and why:
+bin/lib/meeting_live.py.
+
+Exit codes: 0 done, 1 failed, 2 usage, 3 no call is recording.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import time
+from pathlib import Path
+
+sys.dont_write_bytecode = True
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "bin" / "lib"))
+import meeting_capture as MC  # noqa: E402
+import meeting_live as ML  # noqa: E402
+
+# A chunk lands every 15 s (bin/room-capture CHUNK_S), so 3 s shows each within a
+# fifth of a chunk without reading the file much. Guessed, cheap either way.
+FOLLOW_POLL_S = 3.0
+
+
+def readable_meeting(home: Path) -> tuple[dict | None, int]:
+    meeting = ML.current(home)
+    if meeting is None:
+        print("Nothing is recording right now.")
+        return None, 3
+    if ML.is_private(meeting):
+        print("This call is private, so its words aren't shown.")
+        return None, 3
+    return meeting, 0
+
+
+def cmd_status(home: Path, a) -> int:
+    body = ML.status(home)
+    if a.json:
+        print(json.dumps(body))
+    elif not body["live"]:
+        print(f"No call recording. Mode {body['mode']}. Tabs {'on' if body['tabs'] else 'off'}.")
+    elif body.get("private"):
+        print("A private call is recording. Nothing from it reaches a tab or the panel.")
+    else:
+        behind = "nothing heard yet" if body["behind_s"] is None else f"newest line started {body['behind_s']}s ago"
+        print(f"{body['title']}: {body['minutes']} min, {body['lines']} lines, {behind}. "
+              f"Mode {body['mode']}. Tabs {'on' if body['tabs'] else 'off'}.")
+    return 0 if body["live"] else 3
+
+
+def cmd_tail(home: Path, a) -> int:
+    meeting, code = readable_meeting(home)
+    if meeting is None:
+        return code
+    lines = ML.lines_of(meeting)[-max(a.n, 1):]
+    if a.json:
+        print(json.dumps([{"clock": MC.clean(x.get("clock"), 12), "who": ML.who(x), "text": ML.heard_text(x)}
+                          for x in lines]))
+    else:
+        print(ML.render(lines) or "Nothing heard yet.")
+    return 0
+
+
+def cmd_follow(home: Path, _a) -> int:
+    meeting, code = readable_meeting(home)
+    if meeting is None:
+        return code
+    mid, seen = meeting["id"], 0
+    try:
+        while meeting is not None and meeting["id"] == mid and not ML.is_private(meeting):
+            lines = ML.lines_of(meeting)
+            if len(lines) > seen:
+                print(ML.render(lines[seen:]), flush=True)
+                seen = len(lines)
+            time.sleep(FOLLOW_POLL_S)
+            meeting = ML.current(home)
+    except KeyboardInterrupt:
+        return 0
+    print("The call ended.")
+    return 0
+
+
+def cmd_ask(home: Path, a) -> int:
+    if a.preset:
+        if a.preset not in ML.ASKS:
+            print(f"Unknown preset. Pick one of: {', '.join(ML.ASKS)}.", file=sys.stderr)
+            return 2
+        question = ML.ASKS[a.preset][1]
+    else:
+        question = " ".join(a.question).strip()
+    if not question:
+        print('Say what to ask: meeting-live ask "what did they just object to?"', file=sys.stderr)
+        return 2
+    if a.mode and a.mode not in ML.MODES:
+        print(f"Unknown mode. Pick one of: {', '.join(ML.MODES)}.", file=sys.stderr)
+        return 2
+    ok, answer = ML.ask(home, question, mode=a.mode, card=Path(a.card) if a.card else None)
+    print(answer)
+    if ok:
+        return 0
+    return 3 if ML.current(home) is None else 1
+
+
+def cmd_modes(home: Path, _a) -> int:
+    now = ML.mode_of(home)
+    for key, mode in ML.MODES.items():
+        print(f"{'*' if key == now else ' '} {key}: {mode['brief']}")
+    return 0
+
+
+def cmd_mode(home: Path, a) -> int:
+    if not a.name:
+        print(ML.mode_of(home))
+        return 0
+    if a.name not in ML.MODES:
+        print(f"Unknown mode. Pick one of: {', '.join(ML.MODES)}.", file=sys.stderr)
+        return 2
+    ML.set_setting(home, "mode", a.name)
+    print(f"Mode {a.name}.")
+    return 0
+
+
+def cmd_tabs(home: Path, a) -> int:
+    ML.set_setting(home, "tabs", a.state == "on")
+    print(f"Tabs {a.state}.")
+    return 0
+
+
+def cmd_hook(home: Path, _a) -> int:
+    """Never fails a prompt: a hook that errors here would tax every tab."""
+    try:
+        body = json.loads(sys.stdin.read() or "{}")
+        text = ML.for_tab(home, str(body.get("session_id") or ""), str(body.get("prompt") or ""))
+    except Exception as err:  # noqa: BLE001
+        print(f"meeting-live hook: {err}", file=sys.stderr)
+        return 0
+    if text:
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": text}}))
+    return 0
+
+
+def main() -> int:
+    p = argparse.ArgumentParser(prog="meeting-live", description=__doc__.splitlines()[0])
+    sub = p.add_subparsers(dest="cmd", required=True)
+    s = sub.add_parser("status")
+    s.add_argument("--json", action="store_true")
+    t = sub.add_parser("tail")
+    t.add_argument("-n", type=int, default=40)
+    t.add_argument("--json", action="store_true")
+    sub.add_parser("follow")
+    k = sub.add_parser("ask")
+    k.add_argument("question", nargs="*")
+    k.add_argument("--preset")
+    k.add_argument("--mode")
+    k.add_argument("--card")
+    sub.add_parser("modes")
+    m = sub.add_parser("mode")
+    m.add_argument("name", nargs="?")
+    b = sub.add_parser("tabs")
+    b.add_argument("state", choices=["on", "off"])
+    sub.add_parser("hook")
+    a = p.parse_args()
+    fn = {"status": cmd_status, "tail": cmd_tail, "follow": cmd_follow, "ask": cmd_ask, "modes": cmd_modes,
+          "mode": cmd_mode, "tabs": cmd_tabs, "hook": cmd_hook}[a.cmd]
+    return fn(Path.home(), a)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

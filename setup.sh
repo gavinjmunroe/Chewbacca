@@ -1198,7 +1198,7 @@ unset _tool
 # under Kyber's own Microphone and Screen Recording grants, and it drives
 # room-capture; granola-import brings Granola's past meetings across once.
 _installed_hud=""
-for _tool in hud hud-listen hud-runtime hud-codex hud-gemini hud-ollama hud-accounts hud-context hud-watch hud-verse hud-speak hud-guide hud-music kyber-sessions text-command superassistant chewbacca-mcp portal hud-autostart meeting-autopilot room-capture granola-import realm-engine realm-ui; do
+for _tool in hud hud-listen hud-runtime hud-codex hud-gemini hud-ollama hud-accounts hud-context hud-watch hud-verse hud-speak hud-guide hud-music kyber-sessions text-command superassistant chewbacca-mcp portal hud-autostart meeting-autopilot room-capture meeting-live granola-import realm-engine realm-ui; do
   if [ -f "$SCRIPT_DIR/bin/$_tool" ]; then
     link_tool "$_tool"
     _installed_hud="$_installed_hud $_tool"
@@ -2329,6 +2329,10 @@ _register("Stop", hooks_dir + "/kit-autopush.sh", timeout=30,
 # no transcript. This hook makes that automatic instead of something to
 # remember, and it had never been registered on any machine at all.
 _register("UserPromptSubmit", hooks_dir + "/youtube-transcript-ready.sh", timeout=8)
+
+# The call he's on reaches the tab he asks about it in, so nobody copies a
+# transcript by hand mid-call. Stops at one file check when nothing is recording.
+_register("UserPromptSubmit", hooks_dir + "/meeting-live.sh", timeout=5)
 
 # The kit learns from the session or the session did not finish. Caleb asked
 # four times on 2026-09-20 whether Chewbacca had been updated with what a

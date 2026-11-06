@@ -5,7 +5,7 @@
     meeting_capture.py finalize-stale              close meetings a dead watcher left open
 
 Anarlog (github.com/fastrepl/anarlog, MIT) was a second app with its own
-window and database; Caleb, 2026-10-05: "Anarlog shouldn't be it's own app".
+window and database; the owner, 2026-10-05: "Anarlog shouldn't be it's own app".
 mac/room-capture records this Mac's microphone and its system audio (the other
 side of a call) into 15 s chunks; this file is the other half. It transcribes
 each chunk with the same mlx-whisper model bin/room-listen uses, deletes the
@@ -75,7 +75,7 @@ MAX_TRIES = 3
 # One chunk gets this long in whisper, then it's dropped without a retry.
 # On 2026-11-02 a watcher stopped at the chunk after 11:28 and sat in
 # mlx_whisper.transcribe for 2.5 hours at ~40% CPU, never returning, with 96
-# chunks queued behind it, while Caleb asked why the Mac was so loud. A 15 s
+# chunks queued behind it, while the owner asked why the Mac was so loud. A 15 s
 # chunk normally takes a few seconds (small.en ran faster than real time on
 # 2026-09-29); two minutes leaves room for a Mac at load 50.
 CHUNK_TIMEOUT_S = 120
@@ -433,7 +433,7 @@ def apply_summary(meeting: dict, body: dict, at: datetime) -> None:
         md += "## Decisions\n" + "".join(f"- {x}\n" for x in decided)
     meeting["summary"] = {"markdown": md, "at": iso(at), "by": "claude -p", "guess": True}
     # A calendar title wins; with none, the model's 3 to 5 word topic beats
-    # "Meeting at 10:28pm" (Caleb, 2026-10-10, on a panel of untitled calls).
+    # "Meeting at 10:28pm" (the owner, 2026-10-10, on a panel of untitled calls).
     topic = clean(body.get("title"), 60)
     if topic and not meeting.get("calendar_event") and 1 <= len(topic.split()) <= 8:
         meeting["title"] = topic
@@ -460,7 +460,7 @@ MAX_QUEUED = 8
 
 def queue_action_items(meeting: dict, run, env: dict) -> list[dict]:
     """Every action item, queued in the work ledger the moment the meeting
-    closes, with the meeting named as the source (Caleb, 2026-10-10: no press
+    closes, with the meeting named as the source (the owner, 2026-10-10: no press
     after a call). The key is meeting_actions' own, "meeting:<id>:<item>", so a
     later Go on the same row reads "Already in" instead of adding a twin.
     CHEWBACCA_MEETING_LEDGER=0 leaves them on the panel for a press instead."""
@@ -681,8 +681,8 @@ class Watcher:
             # After the call, never during it (Joel Newton, 2026-10-25). The
             # summary is saved first: the reflection can take minutes, and a
             # failure in it must never cost the meeting its summary.
-            import meeting_reflect as MR  # noqa: PLC0415  it imports this module
             try:
+                import meeting_reflect as MR  # noqa: PLC0415  it imports this module; a product may not carry it
                 MR.reflect(meeting, self.run, self.env, self.home, self.now())
             except Exception as err:  # noqa: BLE001  a reflection failure is the reflection's, not the meeting's
                 meeting["reflection_note"] = f"No reflection: {clean(str(err), 120)}"

@@ -291,7 +291,7 @@ def note_for(data, error: str | None, empty: str, stale_at: datetime | None = No
 
 KINDS = ("needs-you", "missing", "today", "tasks", "conversations", "people", "person", "space", "music", "files",
          "oss", "engine", "code", "notes", "github", "whatsapp", "meetings", "agents", "apps", "dash-notes",
-         "doc", "setup", "realm", "outbound", "decisions")
+         "doc", "setup", "realm", "outbound", "decisions", "live")
 # Kinds that need an argument: `person karthik`, `space school`, `engine ollama-models`.
 # `oss` is not one: it opens empty, and "what replaces Notion" seeds its query
 # with the preset {"/oss/q": "Notion"} instead.
@@ -301,7 +301,7 @@ PARAMETRIC = ("person", "space", "engine")
 def make(kind: str, arg: str = "") -> Provider:
     """A provider instance. Walk surfaces read the graph; music and files are
     thin surfaces over their own CLI and folder."""
-    from . import agents, apps, code, decisions, engine, files, github, meetings, music, notes, oss, outbound, setup, walks, whatsapp  # noqa: PLC0415  cycle-free lazy load
+    from . import agents, apps, code, decisions, engine, files, github, live, meetings, music, notes, oss, outbound, setup, walks, whatsapp  # noqa: PLC0415  cycle-free lazy load
     if kind == "realm":
         from . import realm_app  # noqa: PLC0415  Carlton's own interface, served by bin/realm-ui
 
@@ -325,7 +325,7 @@ def make(kind: str, arg: str = "") -> Provider:
         "music": music.Music, "files": files.Files,
         "code": code.Code, "notes": notes.Notes, "github": github.GitHub, "whatsapp": whatsapp.WhatsApp,
         "meetings": meetings.Meetings, "agents": agents.Agents, "apps": apps.Apps, "setup": setup.Setup,
-        "outbound": outbound.Outbound, "decisions": decisions.Decisions,
+        "outbound": outbound.Outbound, "decisions": decisions.Decisions, "live": live.Live,
     }
     if kind == "person":
         return walks.Person(arg)
@@ -357,6 +357,7 @@ ALIASES = {
     "launcher": "apps", "launchpad": "apps", "dock": "apps", "surfaces": "apps", "wa": "whatsapp", "whats-app": "whatsapp", "gh": "github", "prs": "github", "pulls": "github", "pull-requests": "github", "reviews": "github",
     "granola": "meetings", "anarlog": "meetings", "meeting": "meetings", "calls": "meetings", "call": "meetings",
     "notes-from-meetings": "meetings", "meeting-notes": "meetings",
+    "on-this-call": "live", "live-call": "live", "this-call": "live", "copilot": "live", "meeting-copilot": "live",
     # VS Code was opened to talk to Claude; the code panel only reads diffs.
     "vscode": "agents", "vs-code": "agents", "claude": "agents", "sessions": "agents", "agent": "agents",
     "agent-sessions": "agents", "carlton": "realm", "realm-app": "realm",

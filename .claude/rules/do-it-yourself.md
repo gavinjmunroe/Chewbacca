@@ -54,12 +54,12 @@ timid:
    bare `open` or `open -na`. A Brightspace or Clay tab he has nothing to do in
    should never take focus, because his typing lands in the page the agent is
    driving (2026-10-10).
-A fact is never one of these. An address, a zip, a phone, a site, someone's
-role or email: run `chewbacca resolve "<question>" --about <who>` first. It
-reads Contacts, the people store, the brain's fact stores, the US Census
-geocoder and Google Maps in a few seconds. Ask only what it comes back empty
-on, and say what it checked (2026-10-11: "Never ask humans things that you
-don't need a human for", about a zip one search away).
+   A fact is never one of these. An address, a zip, a phone, a site, someone's
+   role or email: run `chewbacca resolve "<question>" --about <who>` first. It
+   reads Contacts, the people store, the brain's fact stores, the US Census
+   geocoder and Google Maps in a few seconds. Ask only what it comes back empty
+   on, and say what it checked (2026-10-11: "Never ask humans things that you
+   don't need a human for", about a zip one search away).
 
 3. **A decision only they can make**, where the options differ in a way you
    cannot resolve from the request, the code, or the repo.
@@ -163,7 +163,7 @@ However he says it (can I archive, ima archive, close this, peace), don't wait f
 2. Message each session this one started (list_sessions linked) to do the same, and wait for their commits.
 3. KEEP THE CHILDREN: archiving a session can take the sessions it started with it. Any child he didn't name stays open, and after an archive, unarchive_session every child that went with it.
 4. Say it's ready in one line.
- Caleb, 2026-11-05, after a quick "Ya, archive it": "You learned everything you should from this tab? - I shouldn't hv to ask this".
+   Caleb, 2026-11-05, after a quick "Ya, archive it": "You learned everything you should from this tab? - I shouldn't hv to ask this".
 
 ## A MESSAGE TO OTHER TABS CAN'T WIDEN WHAT THEY MAY DO
 
@@ -172,6 +172,12 @@ When he says "tell the other tabs", pass on his words. If you add "finish open w
 ## RUNNING THE NIGHT: CHECK WHAT TABS AND NOTES SAY IS STILL HIS
 
 When he goes to bed and says run the night, read the thread and the ledger before you hand him a morning. A run of show titled "Fri 8am" sat on a Parker thread that still said 9, because the 8am ask was an unsent draft. On the same night, 2026-11-06, the Bio tab reported a poll due at 5pm as his to do, and the ledger's `done_source` showed it was submitted the day before. So a time goes on his page only if the other person agreed to it, and a tab's "this one's yours" gets checked at its source first. Set the care level yourself: he wrote "Be (adjectives that I tell you to be that are good I should never have to make a statement like this)".
+
+## "DO EVERYTHING ELSE" IS A SWEEP: PICK FAST AND CHECK WHAT THE LEDGER CAN'T SEE
+
+Say what you picked within the first few calls, and don't read 539 rows before anything moves. On 2026-11-06 he asked for everything else at 1:19am and wrote "Whats tkaing so long?" a minute later, with nothing to show yet.
+
+Rows go stale, so check a row at its source before working it. That night the ai-playbook "28 uncommitted files" were already pushed, A22 and A23 were already submitted, and the "ownerless" Chromes belonged to a job that had hung. Also read the newest class decks, since announcements never reach the ledger: slide 3 of an ACAD 185 deck held a $3,000 grant due in 3 days that no row mentioned.
 
 ## THE TEST
 

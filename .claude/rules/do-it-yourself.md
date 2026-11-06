@@ -177,7 +177,7 @@ When he goes to bed and says run the night, read the thread and the ledger befor
 
 Say what you picked within the first few calls, and don't read 539 rows before anything moves. On 2026-11-06 he asked for everything else at 1:19am and wrote "Whats tkaing so long?" a minute later, with nothing to show yet.
 
-Rows go stale, so check a row at its source before working it. That night the ai-playbook "28 uncommitted files" were already pushed, A22 and A23 were already submitted, and the "ownerless" Chromes belonged to a job that had hung. Also read the newest class decks, since announcements never reach the ledger: slide 3 of an ACAD 185 deck held a $3,000 grant due in 3 days that no row mentioned.
+Rows go stale, so check a row at its source before working it. That night the ai-playbook "28 uncommitted files" were already pushed, A22 and A23 were already submitted, and the "ownerless" Chromes belonged to a job that had hung. Also read the newest class decks, since announcements never reach the ledger: an ACAD 185 deck held a $3,000 grant due in 3 days that no row mentioned.
 
 ## THE TEST
 

@@ -94,6 +94,23 @@ in `cf billing profiles get`); `-z` takes a zone id, and a domain name there bui
    has no documented API and needs a Clay sequencer workspace, so it is not the default
    (Caleb, 2026-11-02: "We shouldnt be dependent on clay!"). A brand's own aged domain with
    real inboxes (FF wave 1 on firmfoundation.tech) skips warmup and uses the 5/10/15/20 ramp.
+7. Connecting Workspace inboxes to Instantly, as run 2026-11-06. Check the real layout in Admin
+   first (Users, Domains): the AuraPath tenant had 3 inboxes on each of 2 domains, not the 2 on
+   each of 3 that Travis was told, and the third domain's "failing DKIM" was just it never being
+   added. The steps that need him, in order:
+   - Billing: send him to the Outbound tab. The page opens on Bundles, so "buy Growth $47" became
+     the $85 Starter Bundle. Read the plan on the billing page: the API's `plan_id` said
+     `pid_free` on a paid workspace.
+   - Trust: in Admin, API controls, Configure new app, search the client ID from Instantly's OAuth
+     screen. Searching the name only finds the phone apps. Pick the Web one and set Trusted.
+   - Sign-in: "This app is blocked" with Trusted set means the wrong account got picked. Trust covers
+     this tenant only, so tell him up front to use "Use another account".
+   - Code prompt: a new user's recovery email is its own inbox, so the code goes where he can't read
+     it. Before he signs in, have him open each user's Security page and turn off Login challenge
+     for 10 minutes. Only caleb@ had ever signed in, and no passwords were in Keychain.
+     Then enable warmup yourself: `POST /api/v2/accounts/warmup/enable` with `{"emails": [...]}`, only
+     for that client's domains, and read `warmup_status` back from `/api/v2/accounts`. Instantly can
+     also hold accounts nobody asked for (an AirMail one showed up), so never use include-all.
 
 ## Who uses what
 

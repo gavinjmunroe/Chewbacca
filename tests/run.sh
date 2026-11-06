@@ -1055,6 +1055,8 @@ if group "installer"; then
     bash "$ROOT/tests/plan_check.sh"
   check  "plan-commit-guard refuses an agent's COMMITTED and permits a person's" \
     bash "$ROOT/tests/plan_commit_guard.sh"
+  check  "plan-review-receipt records a real review and ignores a launch notice" \
+    bash "$ROOT/tests/plan_review_receipt.sh"
   check  "plan-commit-guard lets no recorded non-commit through" \
     python3 "$ROOT/tests/test_plan_commit_guard_replay.py"
   check  "wait-loop-guard refuses an uncapped polling loop and permits a capped one" \

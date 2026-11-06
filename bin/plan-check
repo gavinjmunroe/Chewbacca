@@ -21,8 +21,10 @@ person's. COMMITTED also needs the receipt plan-commit-guard writes when a perso
 really said so, and that receipt covers the outcome, chosen shape, one-way doors and
 exits, so changing those after a commit needs a new one.
 
-The review log still can't be verified: a reviewer's receipt isn't built, so an agent
-could write a believable review it never got. That's the known hole.
+A review needs its own receipt, written by plan-review-receipt from what a real
+subagent call returned, and a shared plan's "Commits needed" has to match who signed.
+Both can be forged by hand-writing the files: they catch mistakes and shortcuts, not
+someone set on faking it.
 """
 import argparse
 import datetime as dt
@@ -304,14 +306,29 @@ def check(text, base=None, today=None):
             "counts": {"evidence": len(evidence), "shapes": len(shapes), "premortem": len(pre), "phases": len(phases)}}
 
 
-def receipt_problem(file, text):
+def receipt_problems(file, text):
+    out = []
     try:
         receipt = json.load(open(plan_core.receipt_path(file)))
     except (OSError, ValueError):
-        return "COMMITTED has no receipt: plan-commit-guard writes one when a person says commit in chat"
-    if receipt.get("core") != plan_core.core_hash(text):
-        return "The outcome, chosen shape, one-way doors or an exit changed since the commit, so it needs a new one"
-    return None
+        out.append("COMMITTED has no receipt: plan-commit-guard writes one when a person says commit in chat")
+        receipt = None
+    if receipt is not None:
+        if receipt.get("core") != plan_core.core_hash(text):
+            out.append("The outcome, chosen shape, one-way doors or an exit changed since the commit, so it needs a new one")
+        needed = field(sections_of(text).get("status", ""), "Commits needed")
+        if needed:
+            signed = {str(s.get("who", "")).casefold() for s in receipt.get("signers", [])}
+            still = [n.strip() for n in needed.split(",") if n.strip() and n.strip().casefold() not in signed]
+            if still:
+                out.append("Still needs a commit from: " + ", ".join(still))
+    try:
+        reviews = json.load(open(plan_core.review_path(file))).get("reviews", [])
+    except (OSError, ValueError):
+        reviews = []
+    if not reviews:
+        out.append("COMMITTED has no review receipt: hand the plan's full path to a foreground subagent, and plan-review-receipt records what it finds")
+    return out
 
 
 def active_phase(text, s):
@@ -380,9 +397,7 @@ def main():
         return due_view(text)
     result = check(text, base=os.path.dirname(os.path.abspath(a.file)))
     if result["state"] == "COMMITTED":
-        problem = receipt_problem(a.file, text)
-        if problem:
-            result["problems"].append(problem)
+        result["problems"].extend(receipt_problems(a.file, text))
     # The read costs a call, so it only runs once the exact checks are clean.
     result["read"] = None if a.structure_only or result["problems"] else read_plan(text)
     could_not_read = not a.structure_only and not result["problems"] and result["read"] is None

@@ -172,7 +172,7 @@ out="$(check "$T/good.md")"; has "Phase 3" && no "phase 3 was held to full detai
 
 commit='t.replace("DRAFT","COMMITTED\n\ncommitted by Caleb, 2026-11-05\nActive phase: 1")'
 # Writes the receipt the guard would, for whatever bad.md says now.
-receipt() { python3 -c 'import json,sys; sys.path.insert(0,sys.argv[1]+"/bin/lib"); import plan_core as p; t=open(sys.argv[2]).read(); json.dump({"core":p.core_hash(t)},open(p.receipt_path(sys.argv[2]),"w"))' "$ROOT" "$T/bad.md"; }
+receipt() { python3 -c 'import json,sys; sys.path.insert(0,sys.argv[1]+"/bin/lib"); import plan_core as p; t=open(sys.argv[2]).read(); json.dump({"core":p.core_hash(t),"signers":[{"who":"Caleb"}]},open(p.receipt_path(sys.argv[2]),"w")); json.dump({"reviews":[{"findings":"x"}]},open(p.review_path(sys.argv[2]),"w"))' "$ROOT" "$T/bad.md"; }
 without_receipt() { python3 -c 'import re,sys; t=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(eval(sys.argv[3]))' "$T/good.md" "$T/bad.md" "$1"; receipt; }
 committed() {  # label, expression, phrase: the receipt is fresh, so only the plan's own problem can fail it
   without_receipt "$2"; out="$(check "$T/bad.md")"; rc=$?
@@ -191,7 +191,15 @@ without_receipt "$commit"'.replace("Status: untested","Status: tested: 4 of 5 wa
 without_receipt "$commit"; sed -i '' 's/Ten people use it weekly./Sell one church t-shirts./' "$T/bad.md"; out="$(check "$T/bad.md")"; [ $? = 1 ] && has "needs a new one" && ok "changing the outcome after a commit needs a new commit" || no "outcome drift: $out"
 without_receipt "$commit"; sed -i '' 's/Exit: 20 real files read with no crash/Exit: anything/' "$T/bad.md"; out="$(check "$T/bad.md")"; has "needs a new one" && ok "so does changing an exit" || no "exit drift: $out"
 without_receipt "$commit"; sed -i '' 's/- It runs on stock python/- It really runs on stock python/' "$T/bad.md"; out="$(check "$T/bad.md")"; [ $? = 0 ] && ok "updating evidence doesn't" || no "evidence edit: $out"
-mkdir -p "$T/moved"; without_receipt "$commit"; cp "$T/bad.md" "$T/bad.commit.json" "$T/moved/"; out="$(check "$T/moved/bad.md")"; [ $? = 0 ] && ok "a committed plan moved with its receipt still passes" || no "moved: $out"
+mkdir -p "$T/moved"; without_receipt "$commit"; cp "$T/bad.md" "$T/bad.commit.json" "$T/bad.review.json" "$T/moved/"; out="$(check "$T/moved/bad.md")"; [ $? = 0 ] && ok "a committed plan moved with its receipt still passes" || no "moved: $out"
+
+# A review has to have really come back.
+without_receipt "$commit"; rm "$T/bad.review.json"; out="$(check "$T/bad.md")"; [ $? = 1 ] && has "no review receipt" && ok "a review log line with no real review can't commit" || no "no review: $out"
+
+# A shared plan needs everyone it names.
+need="$commit"'.replace("Active phase: 1","Active phase: 1\nCommits needed: Caleb, Gavin")'
+without_receipt "$need"; out="$(check "$T/bad.md")"; [ $? = 1 ] && has "Still needs a commit from: Gavin" && ok "a shared plan waits for the other person" || no "shared: $out"
+python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["signers"].append({"who":"gavin"}); json.dump(d,open(p,"w"))' "$T/bad.commit.json"; out="$(check "$T/bad.md")"; [ $? = 0 ] && ok "and passes once they've both committed" || no "both: $out"
 
 # One phone screen, and a stalled plan says so.
 without_receipt "$commit"; out="$(python3 "$ROOT/bin/plan-check" "$T/bad.md" --now)"; has "Phase 1: skeleton" && has "Owner: Caleb" && has "Stop if: 5 people shrug" && ! has "harden" && ok "--now shows only the active phase" || no "now: $out"

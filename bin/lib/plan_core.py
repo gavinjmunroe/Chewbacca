@@ -27,6 +27,11 @@ def core_hash(text):
     return hashlib.sha256(json.dumps(core(text), sort_keys=True).encode()).hexdigest()[:24]
 
 
+def review_path(plan_file):
+    base, _ = os.path.splitext(plan_file)
+    return base + ".review.json"
+
+
 def receipt_path(plan_file):
     """Next to the plan, so it moves and merges with it. A worktree's commit survives."""
     base, _ = os.path.splitext(plan_file)

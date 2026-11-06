@@ -32,6 +32,20 @@ class BestPass(unittest.TestCase):
         self.assertTrue(out)
         self.assertTrue(all("no answer" in w for w in out))
 
+    def test_a_real_longer_email_clears_the_length_rule_and_a_padded_one_doesnt(self):
+        # Real scores: Caleb's sent Travis email 0.34, the padded Reed draft 0.19. At one flat bar of
+        # 0.8 every email Caleb really sent failed.
+        def scoring(needs):
+            return lambda s, qs: ({k: {"noul": needs if k == "only says what it needs" else 0.7} for k in qs}, lambda v: v)
+
+        self.assertEqual(bp.review("email", "hi", "a partner", ask=scoring(0.34)), [])
+        out = bp.review("email", "hi", "a founder", ask=scoring(0.19))
+        self.assertEqual(out, ["only says what it needs (0.19)"])
+
+    def test_every_other_rule_still_fails_below_the_common_bar(self):
+        out = bp.review("email", "hi", "a founder", ask=answering(0.49))
+        self.assertIn("readable on a phone (0.49)", out)
+
     def test_every_kind_has_its_own_rules(self):
         for kind, rules in bp.KINDS.items():
             self.assertTrue(rules, kind)

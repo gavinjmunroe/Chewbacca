@@ -19,14 +19,17 @@ import importlib.util
 import os
 import sys
 
-# Guessed, never measured: the 0.8 bar Dough's expert read and opener check use. On the real Junto
-# copy the weak draft scored 0.01 and 0.11 on the rules it broke.
-PASS_AT = 0.8
+# Set from three emails Caleb really sent (John 11/5, Travis 11/3 and 11/4). They bottomed out at 0.59
+# on most rules, and the same draft moves about 0.05 between runs. The weak 11/5 Reed email scored
+# 0.49 on "readable on a phone". Three controls, so recheck against more real messages.
+PASS_AT = 0.55
+# This rule tracks length more than padding: the two longer Travis emails scored 0.34 and 0.35, the
+# two-line John email 0.69, and the weak Reed email, with a paragraph of test math, 0.19.
+PASS_AT_BY_RULE = {"only says what it needs": 0.3}
 
 ALL = {
     "only says what it needs":
-        "Could anything be cut from this draft without losing what the reader needs in order to act?"
-        " Answer yes only if nothing could be cut.",
+        "Is everything in this draft something the reader needs, with no padding or extra detail?",
     "clear next step":
         "Would the reader know exactly what they're being asked to do or decide after one read?",
     "fits this reader now":
@@ -76,7 +79,7 @@ def review(kind, text, audience, ask=jev_ask):
         p = prob(a.get("noul")) if isinstance(a, dict) else None
         if p is None:
             out.append(f"{name}: no answer")
-        elif p < PASS_AT:
+        elif p < PASS_AT_BY_RULE.get(name, PASS_AT):
             out.append(f"{name} ({p:.2f})")
     return out
 

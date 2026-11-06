@@ -262,6 +262,21 @@ for an upgrade, the bar is the one he names ("doesn't look as good as smth
 apple would make", same night): screenshot two or three of those reference
 pages and the current page first, and keep every fact and rubric section.
 
+**Score him against the rubric PDF, never the ledger's paraphrase.** The
+ledger note for the CRISPR talk said "Oral Delivery 2 (does not read the
+slides)", and the actual PDF reads "Speaks clearly, at an appropriate pace and
+volume, and does not simply read the slides." Three conditions, not one. On
+2026-11-06 he came off that presentation sure he had tanked it by reading his
+notes, and the paraphrase could not answer him: the criterion penalises reading
+the SLIDES, which his grader could not even see him do, while the pace clause
+is what actually cost him. `pdftotext` the rubric and quote it clause by
+clause. A number without the wording behind it is a guess wearing a decimal.
+
+When he asks how it went, count what he actually said against the rubric's
+checkable items before offering a number, and say which criteria you cannot
+score from a transcript (delivery, preparedness). 42 of 42 items were in his
+talk, which is the fact that answered him, not reassurance.
+
 A quiz's questions 403 until the student opens an attempt, so no tool can
 read them first. Ask them to paste the questions; never start an attempt.
 On 2026-10-11 a quiz check took six tool calls across four tools (grep,

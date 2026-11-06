@@ -1084,6 +1084,9 @@ if group "installer"; then
     bash "$ROOT/tests/call_prep_guard.sh"
   check  "railway-up-guard sends a GitHub repo's deploys through a push" \
     bash "$ROOT/tests/railway_up_guard.sh"
+  check "nothing ships while he is standing in front of a room" bash "$ROOT/tests/live_event_guard.sh"
+  check "a commit never deletes files nobody asked it to" bash "$ROOT/tests/commit_deletes_guard.sh"
+  check "one script file becomes the talk, the presenter window and the trainer" bash "$ROOT/tests/present_build.sh"
   check  "ask-lookup-guard won't ask Caleb a fact a lookup finds" \
     bash "$ROOT/tests/ask_lookup_guard.sh"
   check  "vercel-guard refuses Vercel deploys and allows teardown" \

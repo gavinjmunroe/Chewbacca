@@ -10,6 +10,12 @@ What's true at the end, for whom, and the result that proves it.
 
 Their calls, in their words: "..."
 
+## Capacity
+
+Hours per week: real hours left after school, health, fixed commitments and other committed plans
+Deadline: none, or a date that can't move
+Cut first: what gets dropped when a deadline slips
+
 ## Not doing
 
 - What this plan refuses, and why
@@ -74,20 +80,26 @@ It's a year from now and this failed, for these reasons.
 ### Phase 1: the smallest real thing
 
 Goal: what this proves
+Owner: one person
+Due: 2026-01-31
 Tests: assumption 1
-Exit: a check a stranger could run
+Exit: a check a stranger could run, and an outside person's response if the risk is demand
 Stop if: the result that ends or changes this plan
 Decides: what this answers about phase 2
-Effort: N days, from the reference class (or guessed)
+Work hours: N, from the reference class (or guessed)
+Calendar wait: N days waiting on someone else, or none
 Confidence: low because ...
 
 ### Phase 2: name
 
 Goal: what this proves
+Owner: one person
+Due: 2026-02-28
 Exit: a check a stranger could run
 Stop if: the result that ends or changes this plan
 Decides: what this answers about phase 3
-Effort: N days, from the reference class (or guessed)
+Work hours: N, from the reference class (or guessed)
+Calendar wait: N days waiting on someone else, or none
 Confidence: medium because ...
 
 ### Phase 3: rough on purpose

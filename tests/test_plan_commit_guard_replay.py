@@ -23,7 +23,7 @@ def verdict(said, score):
         payload = {"transcript_path": str(log), "tool_input": {
             "file_path": str(plan), "old_string": "DRAFT", "new_string": "COMMITTED, committed by Caleb, 2026-11-05"}}
         env = {k: v for k, v in os.environ.items() if k not in ("CLAUDE_CODE_SESSION_ATTENDED", "CHEWBACCA_AGENT_LAUNCHED")}
-        env.update(PLAN_COMMIT_FAKE_SCORE=str(score), PLAN_COMMIT_DIR=str(Path(t, "r")))
+        env.update(PLAN_COMMIT_FAKE_SCORE=str(score))
         return subprocess.run(["bash", str(HOOK)], input=json.dumps(payload), text=True, capture_output=True, env=env).returncode
 
 

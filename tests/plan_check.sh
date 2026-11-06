@@ -6,7 +6,6 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 fail=0; ok() { printf '  ok   %s\n' "$1"; }; no() { printf '  FAIL %s\n' "$1"; fail=1; }
 has() { grep -qF -- "$1" <<<"$out"; }
-export PLAN_COMMIT_DIR="$T/receipts"
 check() { python3 "$ROOT/bin/plan-check" --structure-only "$@"; }
 
 cat > "$T/good.md" <<'EOF'
@@ -20,13 +19,18 @@ DRAFT
 
 Ten people use it weekly.
 
+## Capacity
+
+Hours per week: 10
+Deadline: none
+
 ## Not doing
 
 - A mobile app, too early
 
 ## Evidence
 
-- It runs on stock python. Source: `bin/thing`
+- It runs on stock python. Source: `thing.py`
 - Competitor is free. https://example.test/a
 - Nobody has used it. Source: from memory, unverified
 
@@ -79,20 +83,26 @@ Rejected because: they have not
 ### Phase 1: skeleton
 
 Goal: prove it runs end to end
+Owner: Caleb
+Due: 2031-01-31
 Tests: assumption 1
 Exit: `thing run` prints a result on a real file
 Stop if: 5 people shrug
 Decides: whether phase 2 is the app or the service
-Effort: 2 days, from the reference class
+Work hours: 8, from the reference class
+Calendar wait: none
 Confidence: low because nobody has used it
 
 ### Phase 2: harden
 
 Goal: survive real data
+Owner: Caleb
+Due: 2031-03-31
 Exit: 20 real files read with no crash
 Stop if: under 15 read
 Decides: when to go public
-Effort: guessed, 1 week
+Work hours: 20, guessed
+Calendar wait: 5 days waiting on a reader
 Confidence: medium because the parser exists
 
 ### Phase 3: public
@@ -128,35 +138,67 @@ without "two chosen shapes fails" 't.replace("### Shape 2: a service","### Shape
 without "a losing shape has to say why" 't.replace("Rejected because: no time\n","")' "missing Rejected because"
 without "a short pre-mortem fails" 't.replace("- Founder ran out of time\n  - Catch: weekly hours\n","")' "Pre-mortem has 4"
 without "a failure with no catch fails" 't.replace("  - Catch: week 4 count\n","")' "no Catch"
-without "evidence with no source fails" 't.replace(" Source: `bin/thing`","")' "Evidence with no source"
+without "evidence with no source fails" 't.replace(" Source: `thing.py`","")' "Evidence with no source"
 without "a comparable with no number fails" 't.replace("took 1 day, 3 commits","was fine").replace("Hall piece 4","Hall piece")' "Reference class with no number"
 without "an assumption with no test fails" 't.replace("  - Test: show 5 people\n","")' "missing Test"
 without "a phase with no Stop if fails" 't.replace("Stop if: 5 people shrug\n","")' "missing Stop if"
 without "a vague exit fails" 't.replace("Exit: `thing run` prints a result on a real file","Exit: works")' "Exit nobody can fail"
-without "effort with no source fails" 't.replace("Effort: 2 days, from the reference class","Effort: 2 days")' "Effort has to say"
+without "hours with no source fails" 't.replace("Work hours: 8, from the reference class","Work hours: 8")' "Work hours has to say"
+without "a phase with no owner fails" 't.replace("Owner: Caleb\nDue: 2031-01-31\n","Due: 2031-01-31\n")' "missing Owner"
+without "a phase with no calendar wait fails" 't.replace("Calendar wait: none\n","")' "missing Calendar wait"
+without "no capacity fails" 't.replace("Hours per week: 10\n","Later: maybe\n")' "Capacity has to say"
+without "hours that don't fit the calendar fail" 't.replace("Due: 2031-01-31","Due: 2020-01-31")' "doesn't fit"
+without "a deadline needs a cut order" 't.replace("Deadline: none","Deadline: 2031-01-31")' "Cut first"
+without "not tested isn't tested" 't.replace("Status: untested","Status: not tested")' "Assumption Status has to be"
+without "evidence that's mostly unverified fails" 't.replace("Source: `thing.py`","Source: from memory, unverified").replace("https://example.test/a","Source: from memory, unverified")' "evidence bullets are unverified"
 without "confidence with no reason fails" 't.replace("Confidence: low because nobody has used it","Confidence: high")' "Confidence has to read"
 without "phase 1 has to test something" 't.replace("Tests: assumption 1\n","")' "has to say what it Tests"
 without "adapting has to say what forces a replan" 't.replace("Replan when: a Stop if fires\n","")' "Adapting missing Replan when"
 python3 -c 'import sys; t=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(t.replace("DRAFT","DRAFT, made on 2026-11-05 and not committed"))' "$T/good.md" "$T/bad.md"
 out="$(check "$T/bad.md")"; [ $? = 0 ] && has "status DRAFT" && ok "a status can carry a note after it" || no "status note: $out"
 without "a bad status fails" 't.replace("DRAFT","MAYBE")' "Status has to start"
+without "killed has to say why" 't.replace("DRAFT","KILLED")' "has to say why"
+python3 -c 'import sys; t=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(t.replace("DRAFT","KILLED because nobody wanted it"))' "$T/good.md" "$T/bad.md"
+out="$(check "$T/bad.md")"; [ $? = 0 ] && ok "a plan can be marked dead with a reason" || no "killed: $out"
+mkdir -p "$T/repo/real"; touch "$T/repo/real/file.txt"; sed 's#Source: `thing.py`#Source: `real/file.txt`#' "$T/good.md" > "$T/repo/p.md"
+out="$(check "$T/repo/p.md")"; [ $? = 0 ] && ok "a cited path that exists passes" || no "real path: $out"
+sed 's#Source: `thing.py`#Source: `does/not/exist.md`#' "$T/good.md" > "$T/repo/p.md"
+out="$(check "$T/repo/p.md")"; has "isn't there: does/not/exist.md" && ok "a cited path that doesn't exist fails" || no "fake path: $out"
+sed 's#Source: `thing.py`#Source: `git log`#' "$T/good.md" > "$T/repo/g.md"
+out="$(check "$T/repo/g.md")"; [ $? = 0 ] && ok "a command in backticks isn't read as a path" || no "git log: $out"
 
 # Later phases stay rough on purpose.
 out="$(check "$T/good.md")"; has "Phase 3" && no "phase 3 was held to full detail: $out" || ok "a later phase can stay rough"
 
-commit='t.replace("DRAFT","COMMITTED\n\ncommitted by Caleb, 2026-11-05")'
-# The file name is fixed, so one receipt covers every committed fixture below.
-receipt() { python3 -c 'import hashlib,os,sys; print(hashlib.sha256(os.path.realpath(sys.argv[1]).encode()).hexdigest()[:24])' "$T/bad.md"; }
-mkdir -p "$PLAN_COMMIT_DIR"; printf '{}' > "$PLAN_COMMIT_DIR/$(receipt).json"
+commit='t.replace("DRAFT","COMMITTED\n\ncommitted by Caleb, 2026-11-05\nActive phase: 1")'
+# Writes the receipt the guard would, for whatever bad.md says now.
+receipt() { python3 -c 'import json,sys; sys.path.insert(0,sys.argv[1]+"/bin/lib"); import plan_core as p; t=open(sys.argv[2]).read(); json.dump({"core":p.core_hash(t)},open(p.receipt_path(sys.argv[2]),"w"))' "$ROOT" "$T/bad.md"; }
+without_receipt() { python3 -c 'import re,sys; t=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(eval(sys.argv[3]))' "$T/good.md" "$T/bad.md" "$1"; receipt; }
+committed() {  # label, expression, phrase: the receipt is fresh, so only the plan's own problem can fail it
+  without_receipt "$2"; out="$(check "$T/bad.md")"; rc=$?
+  if [ "$rc" = 1 ] && has "$3"; then ok "$1"; else no "$1: rc=$rc $out"; fi
+}
 without_ok() { python3 -c 'import re,sys; t=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(eval(sys.argv[3]))' "$T/good.md" "$T/bad.md" "$1"; }
-without_ok "$commit"; out="$(check "$T/bad.md")"; [ $? = 0 ] && ok "a person, a review and a scheduled test can commit" || no "commit: $out"
-without "the agent can't commit it alone" 't.replace("DRAFT","COMMITTED")' "committed by"
-without "no independent review, no commit" "$commit"'.replace("independent reviewer","my second read")' "needs an independent review"
-without "an open NEED blocks commit" "$commit"'.replace("Ten people","[NEED: a number] people")' "NEED"
-without "an untested top assumption phase 1 skips blocks commit" "$commit"'.replace("Tests: assumption 1","Tests: assumption 3")' "phase 1 doesn"
-without_ok "$commit"'.replace("Status: untested","Status: tested 2026-11-05, 4 of 5 wanted it").replace("Tests: assumption 1","Tests: assumption 3")'; out="$(check "$T/bad.md")"; [ $? = 0 ] && ok "a tested top assumption lets phase 1 test something else" || no "tested: $out"
+without_receipt "$commit"; out="$(check "$T/bad.md")"; [ $? = 0 ] && ok "a person, a review and a scheduled test can commit" || no "commit: $out"
+committed "the agent can't commit it alone" 't.replace("DRAFT","COMMITTED\nActive phase: 1")' "committed by"
+committed "no independent review, no commit" "$commit"'.replace("independent reviewer","my second read")' "needs an independent review"
+committed "an open NEED blocks commit" "$commit"'.replace("Ten people","[NEED: a number] people")' "NEED"
+committed "an untested top assumption phase 1 skips blocks commit" "$commit"'.replace("Tests: assumption 1","Tests: assumption 3")' "phase 1 doesn"
+committed "committed needs an active phase" "$commit"'.replace("Active phase: 1","")' "Active phase"
+without_receipt "$commit"'.replace("Status: untested","Status: tested: 4 of 5 wanted it").replace("Tests: assumption 1","Tests: assumption 3")'; out="$(check "$T/bad.md")"; [ $? = 0 ] && ok "a tested top assumption lets phase 1 test something else" || no "tested: $out"
 
-rm "$PLAN_COMMIT_DIR/$(receipt).json"
+# The receipt covers what they agreed to.
+without_receipt "$commit"; sed -i '' 's/Ten people use it weekly./Sell one church t-shirts./' "$T/bad.md"; out="$(check "$T/bad.md")"; [ $? = 1 ] && has "needs a new one" && ok "changing the outcome after a commit needs a new commit" || no "outcome drift: $out"
+without_receipt "$commit"; sed -i '' 's/Exit: 20 real files read with no crash/Exit: anything/' "$T/bad.md"; out="$(check "$T/bad.md")"; has "needs a new one" && ok "so does changing an exit" || no "exit drift: $out"
+without_receipt "$commit"; sed -i '' 's/- It runs on stock python/- It really runs on stock python/' "$T/bad.md"; out="$(check "$T/bad.md")"; [ $? = 0 ] && ok "updating evidence doesn't" || no "evidence edit: $out"
+mkdir -p "$T/moved"; without_receipt "$commit"; cp "$T/bad.md" "$T/bad.commit.json" "$T/moved/"; out="$(check "$T/moved/bad.md")"; [ $? = 0 ] && ok "a committed plan moved with its receipt still passes" || no "moved: $out"
+
+# One phone screen, and a stalled plan says so.
+without_receipt "$commit"; out="$(python3 "$ROOT/bin/plan-check" "$T/bad.md" --now)"; has "Phase 1: skeleton" && has "Owner: Caleb" && has "Stop if: 5 people shrug" && ! has "harden" && ok "--now shows only the active phase" || no "now: $out"
+out="$(python3 "$ROOT/bin/plan-check" "$T/good.md" --due)"; [ $? = 0 ] && has "nothing to chase" && ok "--due leaves a draft alone" || no "due draft: $out"
+without_receipt "$commit"'.replace("2026-11-05, independent","2020-01-01, independent").replace("Due: 2031-01-31","Due: 2020-02-02")'; out="$(python3 "$ROOT/bin/plan-check" "$T/bad.md" --due)"; [ $? = 1 ] && has "was due 2020-02-02" && has "nothing in the review log" && ok "--due calls out a stalled plan" || no "stalled: $out"
+
+rm -f "$T/bad.commit.json"
 without "typing COMMITTED with no receipt fails" "$commit" "has no receipt"
 
 # The read: filler fails, real text passes, and a read that can't run is no pass.

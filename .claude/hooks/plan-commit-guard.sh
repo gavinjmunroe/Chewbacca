@@ -20,7 +20,7 @@ type hook_init >/dev/null 2>&1 && hook_init plan-commit-guard.sh 20
 set -uo pipefail
 PAYLOAD="$(cat)"
 PAYLOAD="$PAYLOAD" HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" python3 -I - <<'PY'
-import hashlib, importlib.util, json, os, re, sys, time
+import importlib.util, json, os, re, sys, time
 
 try:
     payload = json.loads(os.environ["PAYLOAD"])
@@ -100,16 +100,21 @@ if os.environ.get("CLAUDE_CODE_SESSION_ATTENDED") == "0" or os.environ.get("CHEW
 question = {"commits": {"type": "noul", "instructions":
                         "Does this message clearly tell the agent to commit to this plan now, as a decision? "
                         "Discussing it, asking a question or praising it isn't committing."}}
+
+
+def lib_path():
+    home = os.path.expanduser("~/.chewbacca/kit/current/bin/lib/jev.py")
+    near = os.path.join(os.environ.get("HOOK_DIR", ""), "..", "..", "bin", "lib", "jev.py")
+    return near if os.path.exists(near) else home
+
+
 score = None
 fake = os.environ.get("PLAN_COMMIT_FAKE_SCORE")
 if fake is not None:
     score = float(fake)
 else:
-    home = os.path.expanduser("~/.chewbacca/kit/current/bin/lib/jev.py")
-    near = os.path.join(os.environ.get("HOOK_DIR", ""), "..", "..", "bin", "lib", "jev.py")
-    lib = near if os.path.exists(near) else home
     try:
-        spec = importlib.util.spec_from_file_location("kit_jev", lib)
+        spec = importlib.util.spec_from_file_location("kit_jev", lib_path())
         jev = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(jev)
         answers = jev.ask({"message": said[:2000]}, question, decision="plan-commit-guard")
@@ -124,10 +129,11 @@ if score is None:
 # and costs one more ask. A wrong commit costs more than that. A small set, so re-measure.
 if score < 0.85:
     refuse(f"Their last message doesn't read as committing ({score:.2f}): {said[:80]!r}.")
-receipts = os.environ.get("PLAN_COMMIT_DIR") or os.path.expanduser("~/.chewbacca/state/plan-commits")
-os.makedirs(receipts, exist_ok=True)
-digest = hashlib.sha256(os.path.realpath(path).encode()).hexdigest()[:24]
-with open(os.path.join(receipts, digest + ".json"), "w") as out:
-    json.dump({"file": os.path.realpath(path), "said": said[:500], "score": score, "at": time.time()}, out)
+# The plan as it'll read after this write, so the receipt covers what they agreed to.
+after = new if "content" in tool else before.replace(tool.get("old_string") or "", new, 1)
+sys.path.insert(0, os.path.dirname(lib_path()))
+import plan_core
+with open(plan_core.receipt_path(path), "w") as out:
+    json.dump({"core": plan_core.core_hash(after), "said": said[:500], "score": score, "at": time.time()}, out, indent=1)
 sys.exit(0)
 PY

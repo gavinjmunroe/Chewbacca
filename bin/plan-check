@@ -4,6 +4,8 @@
   plan-check PLAN.md                what's missing or empty, exit 0 clean, 1 with problems
   plan-check PLAN.md --json         the same as data
   plan-check PLAN.md --structure-only   skip the read, for tests and quick checks
+  plan-check PLAN.md --now          one phone screen: the active phase and what's next
+  plan-check PLAN.md --due          has this stalled? exit 1 when it has
 
 The method is skills/big-plan/SKILL.md. On 2026-11-05 Caleb read a scored list of
 builds and wrote "create a way to make the plan that is robust and we are CONFIDENT".
@@ -16,10 +18,14 @@ checks. Exit 2 means the read couldn't run, so nothing was judged and it's no pa
 
 A pass still doesn't say the plan is right. That's the fresh reviewer's job, and a
 person's. COMMITTED also needs the receipt plan-commit-guard writes when a person
-really said so, because anyone can type "committed by Caleb".
+really said so, and that receipt covers the outcome, chosen shape, one-way doors and
+exits, so changing those after a commit needs a new one.
+
+The review log still can't be verified: a reviewer's receipt isn't built, so an agent
+could write a believable review it never got. That's the known hole.
 """
 import argparse
-import hashlib
+import datetime as dt
 import importlib.util
 import json
 import os
@@ -27,8 +33,17 @@ import re
 import sys
 from pathlib import Path
 
-SECTIONS = ("status", "outcome", "not doing", "evidence", "reference class", "riskiest assumptions",
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "lib"))
+import plan_core  # noqa: E402
+
+SECTIONS = ("status", "outcome", "capacity", "not doing", "evidence", "reference class", "riskiest assumptions",
             "shapes", "pre-mortem", "one-way doors", "phases", "adapting", "review log")
+STATES = ("DRAFT", "COMMITTED", "PAUSED", "KILLED", "DONE")
+# A review of the method, 2026-11-05: a plan waiting on someone never reaches a phase's
+# end, so it can read COMMITTED for weeks. 7 days is a guess, never measured.
+STALE_DAYS = 7
+# The same review: "from memory, unverified" could fill every evidence bullet. Half is a guess.
+MAX_UNVERIFIED = 0.5
 # Each is the smallest count that still forces the thinking. Guessed, never
 # measured: nothing has been graded with these yet.
 MIN_EVIDENCE = 3
@@ -36,7 +51,9 @@ MIN_SHAPES = 3
 MIN_PREMORTEM = 5
 MIN_PHASES = 2
 DETAILED_PHASES = 2  # later phases stay rough on purpose, they'll change
-PHASE_FIELDS = ("Goal", "Exit", "Stop if", "Decides", "Effort", "Confidence")
+# Work hours and Calendar wait are apart because 2 days of commits can take 5 weeks when
+# someone else has to answer. A deadline-bound phase also says what gets cut first.
+PHASE_FIELDS = ("Goal", "Owner", "Due", "Exit", "Stop if", "Decides", "Work hours", "Calendar wait", "Confidence")
 ROUGH_FIELDS = ("Goal", "Exit")
 # An exit nobody can fail. One of these alone, with no number, command or file.
 VAGUE_EXIT = re.compile(r"^(it |the \w+ )?(works?( well| fine| great)?|((is|looks) )?(good|done|ready|working|complete|finished|solid|shipped))\.?$", re.I)
@@ -53,7 +70,6 @@ READ = {
     "phases can fail": "Do the near phases have exits and stop results that could really come out badly, and does the first phase test the real product?",
     "review really happened": "Does the review log describe someone else finding specific problems and what changed because of them, instead of a claim that it's fine?",
 }
-RECEIPTS = os.environ.get("PLAN_COMMIT_DIR") or os.path.expanduser("~/.chewbacca/state/plan-commits")
 
 
 def jev_ask(state, questions):
@@ -83,11 +99,6 @@ def read_plan(text, ask=jev_ask):
         elif p < PASS_AT:
             weak.append(f"{name} ({p:.2f})")
     return weak
-
-
-def receipt_path(file):
-    digest = hashlib.sha256(os.path.realpath(file).encode()).hexdigest()[:24]
-    return os.path.join(RECEIPTS, digest + ".json")
 
 
 def sections_of(text):
@@ -136,16 +147,46 @@ def field(body, name):
     return m.group(1).strip() if m else None
 
 
-def check(text):
+def hours_of(value):
+    m = re.search(r"\d+(?:\.\d+)?", value or "")
+    return float(m.group()) if m else None
+
+
+def date_of(value):
+    m = re.search(r"\d{4}-\d{2}-\d{2}", value or "")
+    if not m:
+        return None
+    try:
+        return dt.date.fromisoformat(m.group())
+    except ValueError:
+        return None
+
+
+def missing_paths(evidence, base):
+    """Cited paths that aren't there. Only path-shaped things, so `git log` is fine."""
+    bad = []
+    for b in evidence:
+        for cited in re.findall(r"`([^`\s]+/[^`\s]*)`", b):
+            where = Path(os.path.expanduser(cited))
+            where = where if where.is_absolute() else Path(base) / where
+            if not where.exists():
+                bad.append(cited)
+    return bad
+
+
+def check(text, base=None, today=None):
     problems, s = [], sections_of(text)
+    today = today or dt.date.today()
     for name in SECTIONS:
         if not (s.get(name) or "").strip():
             problems.append(f"missing section: ## {name.title()}")
 
     status = (s.get("status") or "").strip()
     state = status.split()[0].strip(".:,;").upper() if status else ""
-    if status and state not in ("DRAFT", "COMMITTED"):
-        problems.append("Status has to start with DRAFT or COMMITTED")
+    if status and state not in STATES:
+        problems.append("Status has to start with " + ", ".join(STATES))
+    if state in ("PAUSED", "KILLED", "DONE") and len(status.split()) < 3:
+        problems.append(f"{state} has to say why")
 
     evidence = bullets(s.get("evidence", ""))
     if s.get("evidence") and len(evidence) < MIN_EVIDENCE:
@@ -153,6 +194,14 @@ def check(text):
     for b in evidence:
         if not re.search(r"https?://|`[^`]+`|\bSource:|\[[^\]]+\]\(", b):
             problems.append(f"Evidence with no source: {b.strip()[:70]}")
+
+    if evidence:
+        unverified = [b for b in evidence if re.search(r"(?i)\bunverified\b|\bfrom memory\b", b)]
+        if len(unverified) / len(evidence) > MAX_UNVERIFIED:
+            problems.append(f"{len(unverified)} of {len(evidence)} evidence bullets are unverified, so go check more of them")
+        if base:
+            for cited in missing_paths(evidence, base):
+                problems.append(f"Evidence cites a path that isn't there: {cited}")
 
     refs = bullets(s.get("reference class", ""))
     if s.get("reference class") and not refs:
@@ -168,6 +217,9 @@ def check(text):
         for key in ("If false", "Test", "Status"):
             if not field(b, key):
                 problems.append(f"Assumption missing {key}: {b.strip().splitlines()[0][:70]}")
+        said = field(b, "Status")
+        if said and not re.match(r"(?i)^(untested\b|partly tested\b|tested:\s*\S)", said):
+            problems.append(f"Assumption Status has to be untested, partly tested, or tested: <result>: {said[:50]}")
 
     shapes = subs(s.get("shapes", ""))
     if s.get("shapes"):
@@ -202,14 +254,29 @@ def check(text):
         exit_line = field(body, "Exit")
         if exit_line and VAGUE_EXIT.match(exit_line):
             problems.append(f"{title[:50]} has an Exit nobody can fail: {exit_line}")
-        effort = field(body, "Effort")
+        effort = field(body, "Work hours")
         if effort and n < DETAILED_PHASES and not re.search(r"(?i)reference class|guess|measured", effort):
-            problems.append(f"{title[:50]} Effort has to say reference class, measured or guessed")
+            problems.append(f"{title[:50]} Work hours has to say reference class, measured or guessed")
         conf = field(body, "Confidence")
         if conf and n < DETAILED_PHASES and not re.search(r"(?i)\b(low|medium|high)\b.*\bbecause\b", conf):
             problems.append(f"{title[:50]} Confidence has to read low, medium or high, because ...")
     if phases and not field(phases[0][1], "Tests"):
         problems.append("The first phase has to say what it Tests, from Riskiest assumptions")
+
+    # The hours have to fit the calendar. Needs a number in Capacity and a date on the phase.
+    weekly = hours_of(field(s.get("capacity", ""), "Hours per week"))
+    if s.get("capacity") and not field(s["capacity"], "Hours per week"):
+        problems.append("Capacity has to say Hours per week, after school, other plans and fixed commitments")
+    total = 0.0
+    if weekly is not None:
+        for title, body in phases:
+            spend, due = hours_of(field(body, "Work hours")), date_of(field(body, "Due"))
+            total += spend or 0
+            if due and total > weekly * max((due - today).days, 0) / 7:
+                problems.append(f"{title[:50]} doesn't fit: {total:g} hours by {due} at {weekly:g} hours a week")
+    deadline = field(s.get("capacity", ""), "Deadline")
+    if deadline and not re.search(r"(?i)^none", deadline) and not field(s.get("capacity", ""), "Cut first"):
+        problems.append("A plan with a Deadline has to say what gets Cut first when it slips")
 
     adapting = s.get("adapting", "")
     if adapting:
@@ -220,6 +287,8 @@ def check(text):
     review = s.get("review log", "")
     independent = [b for b in bullets(review) if re.search(r"(?i)\bindependent\b", b)]
     if state == "COMMITTED":
+        if not field(status, "Active phase"):
+            problems.append("COMMITTED has to say Active phase")
         if not independent:
             problems.append("COMMITTED needs an independent review in the log")
         if "[NEED" in text:
@@ -228,11 +297,68 @@ def check(text):
             problems.append("COMMITTED needs: committed by <person>, <date>. A person commits, never the agent")
         if assumptions and phases:
             first = field(assumptions[0], "Status") or ""
-            if not re.search(r"(?i)\btested\b", first) or re.search(r"(?i)\buntested\b", first):
+            if not re.match(r"(?i)^tested:", first):
                 if not re.search(r"(?i)\b(1|first|top)\b", field(phases[0][1], "Tests") or ""):
                     problems.append("The riskiest assumption is untested and phase 1 doesn't test it")
     return {"state": state or None, "problems": problems,
             "counts": {"evidence": len(evidence), "shapes": len(shapes), "premortem": len(pre), "phases": len(phases)}}
+
+
+def receipt_problem(file, text):
+    try:
+        receipt = json.load(open(plan_core.receipt_path(file)))
+    except (OSError, ValueError):
+        return "COMMITTED has no receipt: plan-commit-guard writes one when a person says commit in chat"
+    if receipt.get("core") != plan_core.core_hash(text):
+        return "The outcome, chosen shape, one-way doors or an exit changed since the commit, so it needs a new one"
+    return None
+
+
+def active_phase(text, s):
+    want = field(s.get("status", ""), "Active phase")
+    phases = subs(s.get("phases", ""))
+    if not phases:
+        return None
+    for title, body in phases:
+        if want and re.search(rf"(?i)\bphase\s+{re.escape(want.strip())}\b", title):
+            return title, body
+    return phases[0]
+
+
+def now_view(text):
+    s = sections_of(text)
+    name = re.search(r"(?m)^#\s+(.+)$", text)
+    print(name.group(1) if name else "Plan")
+    print((s.get("status") or "").strip().split("\n")[0][:80])
+    active = active_phase(text, s)
+    if not active:
+        return 1
+    print(f"\n{active[0]}")
+    for key in ("Goal", "Owner", "Due", "Exit", "Stop if", "Decides"):
+        print(f"{key}: {field(active[1], key) or '[not set]'}")
+    return 0
+
+
+def due_view(text, today=None):
+    today = today or dt.date.today()
+    s = sections_of(text)
+    state = ((s.get("status") or "").strip().split() or [""])[0].strip(".:,;").upper()
+    if state != "COMMITTED":
+        print(f"{state or 'No status'}: nothing to chase.")
+        return 0
+    late = []
+    active = active_phase(text, s)
+    due = date_of(field(active[1], "Due")) if active else None
+    if due and due < today:
+        late.append(f"{active[0][:50]} was due {due}")
+    dates = [d for d in (date_of(b) for b in bullets(s.get("review log", ""))) if d]
+    if not dates or (today - max(dates)).days > STALE_DAYS:
+        late.append(f"nothing in the review log for over {STALE_DAYS} days")
+    for line in late:
+        print(f"  stalled: {line}")
+    if not late:
+        print("On track by its own dates.")
+    return 1 if late else 0
 
 
 def main():
@@ -240,15 +366,23 @@ def main():
     ap.add_argument("file")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--structure-only", action="store_true", help="skip the read")
+    ap.add_argument("--now", action="store_true", help="one phone screen: the active phase")
+    ap.add_argument("--due", action="store_true", help="has this stalled?")
     a = ap.parse_args()
     try:
         text = Path(a.file).read_text(errors="replace")
     except OSError as e:
         print(f"plan-check: can't read {a.file}: {e.strerror}", file=sys.stderr)
         return 2
-    result = check(text)
-    if result["state"] == "COMMITTED" and not os.path.exists(receipt_path(a.file)):
-        result["problems"].append("COMMITTED has no receipt: plan-commit-guard writes one when a person says commit in chat")
+    if a.now:
+        return now_view(text)
+    if a.due:
+        return due_view(text)
+    result = check(text, base=os.path.dirname(os.path.abspath(a.file)))
+    if result["state"] == "COMMITTED":
+        problem = receipt_problem(a.file, text)
+        if problem:
+            result["problems"].append(problem)
     # The read costs a call, so it only runs once the exact checks are clean.
     result["read"] = None if a.structure_only or result["problems"] else read_plan(text)
     could_not_read = not a.structure_only and not result["problems"] and result["read"] is None

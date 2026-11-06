@@ -28,6 +28,8 @@ characters on it, all on the same prompt.
   clean on their incident cases, then fired far past their word lists on real turns,
   and a refusal shows him the reply twice. Those three kept their lists. Measure on
   real ordinary turns against the old rule before shipping (`--replay`).
+- Live beats replay. Scope-guard passed 160 real turns at 0.7 and still refused 3 clean
+  replies in one tab on its first night. Watch a new refusal live and raise the line.
 - Scores go in private. Jev numbers don't go in the repo (TypeSafe 2.3(f)).
 
 Full sort: `docs/reference/INTENT-INVENTORY.md`.

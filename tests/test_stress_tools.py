@@ -36,6 +36,8 @@ with tempfile.TemporaryDirectory() as tmp:
     r = run("hud-autostart", "instal")
     check("hud-autostart typo stops", r.returncode == 2, r.returncode)
     check("neither one touched launchctl", not log.exists(), "launchctl ran")
+    r = run("chewbacca", "update", "--help")
+    check("chewbacca update --help only prints", r.returncode == 0 and "usage" in r.stdout and "runtime" not in r.stderr, r.stderr)
     r = run("closeout", "--help")
     check("closeout --help", r.returncode == 0 and r.stdout.strip(), r.stderr)
     r = run("edit-cut", "--help")

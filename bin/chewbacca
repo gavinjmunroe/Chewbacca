@@ -419,6 +419,8 @@ uninstall)
   ;;
 update)
   shift
+  # Stress test, 2026-11-06: `chewbacca update --help` swapped the runtime before setup printed help.
+  case "${1:-}" in -h|--help) echo "usage: chewbacca update [setup.sh options]: new snapshot of origin/main, then setup"; exit 0 ;; esac
   # From PATH this runs inside the kit runtime, a detached snapshot that has
   # no branch to pull. Updating it means a new snapshot of origin/main.
   if [ -f "$ROOT.kit-runtime.json" ]; then

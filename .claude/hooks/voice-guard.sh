@@ -56,6 +56,11 @@ for m in re.finditer(r"^```[ \t]*([A-Za-z]*)[ \t]*\n(.*?)^```", msg, re.M | re.S
         continue
     if CODEY.search(blk):
         continue
+    # 2026-11-05: a cold email shown for review, footer and all, was graded as a text and
+    # refused 8 times, with "send it as two or three short ones". A fence opening on a
+    # Subject line is an email, and emails have their own gates (gtme ready, dough ready).
+    if re.match(r"\s*subject:", blk, re.I):
+        continue
     lead = msg[max(0, m.start() - 160):m.start()].rsplit("```", 1)[-1]
     if FOR_AGENT.search(lead):
         continue

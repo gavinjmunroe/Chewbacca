@@ -69,4 +69,7 @@ reply=$(python3 -I -c 'import json,sys; print(json.dumps({"prompt_id": "p6", "la
 printf '%s' "$reply" | bash "$hook" >/dev/null 2>&1; [ $? -eq 0 ] && ok "a fence introduced as a tab prompt is left alone" || bad "voice-guard graded a tab prompt as a text"
 reply=$(python3 -I -c 'import json,sys; print(json.dumps({"prompt_id": "p7", "last_assistant_message": "Prompt for the GTM OS session:\n\n```\n" + sys.argv[1] + "\n```\n\nAnd the text for Jonah:\n\n```\n" + sys.argv[1] + "\n```"}))' "$FORMAL")
 printf '%s' "$reply" | bash "$hook" >/dev/null 2>&1; [ $? -eq 2 ] && ok "a text fence after a prompt fence is still read" || bad "the text fence after a prompt slipped through"
+# 2026-11-05: a church email under review was refused as a text 8 times.
+reply=$(python3 -I -c 'import json,sys; print(json.dumps({"prompt_id": "p8", "last_assistant_message": "A yes sends this:\n\n```text\nSubject: your church website\n\n" + sys.argv[1] + "\n```"}))' "$FORMAL")
+printf '%s' "$reply" | bash "$hook" >/dev/null 2>&1; [ $? -eq 0 ] && ok "an email fence with a Subject line is left alone" || bad "voice-guard graded an email as a text"
 exit $fail

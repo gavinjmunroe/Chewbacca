@@ -59,6 +59,28 @@ t "--amend named in an echo, not on the commit"   2 "echo --amend && git commit 
 t "a clustered -am still sees the deletions"      2 "git commit -am x"
 git -C "$repo" reset -q >/dev/null 2>&1
 
+# A commit can wipe work without deleting a file: a stale copy in a shared
+# checkout writes over everything landed since. 2026-11-06, setup.sh, 261
+# lines. The repo needs an origin for this check, so it runs on its own clone.
+bare="$tmp/bare"; git clone -q --bare "$repo" "$bare"
+clone="$tmp/clone"; git clone -q "$bare" "$clone"
+git -C "$clone" config user.email t@t; git -C "$clone" config user.name t
+python3 -I -c "
+open('$clone/big.md','w').write('\n'.join('line %d' % i for i in range(300)))"
+git -C "$clone" add big.md >/dev/null; git -C "$clone" commit -q -m big; git -C "$clone" push -q origin HEAD:main 2>/dev/null
+python3 -I -c "open('$clone/big.md','w').write('line 0\n')"   # the stale copy
+git -C "$clone" add big.md >/dev/null
+rc=0
+printf '{"tool_name":"Bash","tool_input":{"command":"git commit -m x"},"cwd":"%s"}' "$clone" \
+  | HOOKD_INNER=1 bash "$H" >/dev/null 2>&1 || rc=$?
+if [ "$rc" = 2 ]; then echo "  ok   a stale file reverting 100+ landed lines (exit 2)"; pass=$((pass+1))
+else echo "  FAIL a stale file reverting 100+ landed lines (exit $rc, wanted 2)"; fail=$((fail+1)); fi
+rc=0
+printf '{"tool_name":"Bash","tool_input":{"command":"git commit -m x -- big.md"},"cwd":"%s"}' "$clone" \
+  | HOOKD_INNER=1 bash "$H" >/dev/null 2>&1 || rc=$?
+if [ "$rc" = 0 ]; then echo "  ok   the same revert, named after -- (exit 0)"; pass=$((pass+1))
+else echo "  FAIL the same revert, named after -- (exit $rc, wanted 0)"; fail=$((fail+1)); fi
+
 echo "SHOULD PASS (exit 0):"
 git -C "$repo" rm -q --cached e.md >/dev/null 2>&1
 t "the deletion is named after --"      0 "git commit -m x -- e.md"

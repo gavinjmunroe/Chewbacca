@@ -23,7 +23,7 @@ d02147af3d0573e3970975d37c0c951d045f165fa9582fdffc25f1ee5ac3431f  .claude/hooks/
 f4bbc63f30c4c816558f987535988ce6b62f82ebe66d700a8c23cf4db5eb7046  .claude/hooks/client-ask-guard.sh
 dee17c6fc35cf6be0494f157ca3aa849c0d6250c7a0973ce709b27f4d8807a5f  .claude/hooks/client-post-guard.sh
 c5d7b0db396449034ca4b4010f04aa5644dd19268abb83d3ccb4230bb004bddb  .claude/hooks/client-rulings.sh
-c8eb222d56b99ed3797509613c9fe30c8a119b903f53a98cdaaf7656a8adde64  .claude/hooks/commit-deletes-guard.sh
+8849db86c2dcedc1d0839c788a3de3ca3609d67f15b3b7845a3ba6debf54e743  .claude/hooks/commit-deletes-guard.sh
 10fe6d33e88a418b47f894abae9d4b87e92ed97472c148d3f47b5fa3204646ce  .claude/hooks/contact-name-guard.sh
 4f672620fc9ae3899a8bd134fbad1ab8c49bc3f3b37706ec3682aed243ab1692  .claude/hooks/coursework-context.sh
 d19a52208b45f9135908efae7dd64355e754682ae0f196bfe9042a03b17e83c1  .claude/hooks/design-context.sh

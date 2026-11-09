@@ -1099,11 +1099,11 @@ fi
 # The opener gate reads the word a reply must open with from here. Written
 # only when the person's own CLAUDE.md asks for a prayer ending in Amen, so
 # prayer-guard.sh stays inert for everyone who did not ask for one.
-if grep -qiE "prayer|pray" "$HOME/.claude/CLAUDE.md" 2>/dev/null && grep -q "Amen" "$HOME/.claude/CLAUDE.md" 2>/dev/null; then
-  mkdir -p "$HOME/.chewbacca"
-  echo "Amen" > "$HOME/.chewbacca/opener-marker"
-  log "opener gate on: replies must open with a prayer, as CLAUDE.md asks"
-fi
+# ~/.chewbacca/opener-off keeps it off for good; bin/lib/opener-marker.sh says why.
+case "$(bash "$SCRIPT_DIR/bin/lib/opener-marker.sh" "$HOME/.claude/CLAUDE.md" 2>/dev/null || true)" in
+  on)  log "opener gate on: replies must open with a prayer, as CLAUDE.md asks" ;;
+  off) log "opener gate off: ~/.chewbacca/opener-off is set" ;;
+esac
 
 # ux-engine lives in apps/ux-engine, outside this repo's bin/, so its tools
 # cannot go through link_tool. Link them from the same path ux-guard.sh reads.

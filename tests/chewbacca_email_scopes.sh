@@ -77,7 +77,7 @@ grep -q "^$tmp/home/.config/gws auth login" "$tmp/gws.log" ||
 # never-signed-in main config in. Without one, it names the console steps for the
 # project gws set up and never starts a login.
 fresh="$tmp/fresh"; mkdir -p "$fresh/Downloads" "$fresh/Library/Logs"
-printf '#!/bin/bash\nexit 0\n' >"$tmp/bin/gcloud"; chmod +x "$tmp/bin/gcloud"
+printf '#!/bin/bash\n[ "$*" = "config get-value account" ] && echo owner@example.com\nexit 0\n' >"$tmp/bin/gcloud"; chmod +x "$tmp/bin/gcloud"
 cat >"$tmp/bin/gws" <<'EOF3'
 #!/bin/bash
 echo "$GOOGLE_WORKSPACE_CLI_CONFIG_DIR $*" >>"$FAKE_GWS_LOG"
@@ -89,10 +89,11 @@ case "$1 $2" in
 esac
 EOF3
 : >"$tmp/gws.log"
-out=$(CHEWBACCA_GWS="$tmp/bin/gws" HOME="$fresh" CHEWBACCA_EMAIL_HOME="$fresh/.chewbacca/email" FAKE_GWS_LOG="$tmp/gws.log" \
+out=$(CHEWBACCA_GWS="$tmp/bin/gws" CHEWBACCA_GCLOUD="$tmp/bin/gcloud" HOME="$fresh" CHEWBACCA_EMAIL_HOME="$fresh/.chewbacca/email" FAKE_GWS_LOG="$tmp/gws.log" \
   PATH="$tmp/bin:$PATH" bash "$f" add new@example.com 2>&1)
 printf '%s' "$out" | grep -q 'Desktop app' || { echo "FAIL: a fresh Mac with no client JSON got no console steps: $out"; fail=1; }
 printf '%s' "$out" | grep -q 'project=proj-x' || { echo "FAIL: the console steps don't name the project gws set up: $out"; fail=1; }
+printf '%s' "$out" | grep -q 'authuser=owner@example.com' || { echo "FAIL: the console link doesn't open as the account that owns the project: $out"; fail=1; }
 grep -q 'auth login' "$tmp/gws.log" && { echo "FAIL: a login started with no OAuth client"; fail=1; }
 echo '{"installed":{"client_id":"1-abc.apps.googleusercontent.com","project_id":"proj-x"}}' >"$fresh/Downloads/client_secret_1-abc.apps.googleusercontent.com.json"
 : >"$tmp/gws.log"

@@ -65,12 +65,19 @@ console_steps() {
   local project
   project=$(grep -o 'project=[A-Za-z0-9_-]*' "$1" 2>/dev/null | head -1 | cut -d= -f2)
   [ -n "$project" ] || project=$(gcloud config get-value project 2>/dev/null)
-  say "Google won't let a CLI make the sign-in app, so this part is three clicks in the Cloud console:"
-  say "  1. https://console.cloud.google.com/auth/overview?project=$project  Get started: any app name, your email, audience External"
+  # The project belongs to gcloud's account, so the page has to open as that
+  # account. On 2026-11-09 it opened in his loyola.mp3 Chrome profile instead:
+  # "dont use that chrome tab, use gavinjmunroe".
+  local acct url
+  acct=$("${CHEWBACCA_GCLOUD:-gcloud}" config get-value account 2>/dev/null)
+  url="https://console.cloud.google.com/auth/overview?project=$project&authuser=$acct"
+  say "Google won't let a CLI make the sign-in app, so this part is three clicks in the Cloud console."
+  say "Open it in the Chrome profile signed in as ${acct:-the account that owns the project}:"
+  say "  1. $url  Get started: any app name, your email, audience External"
   say "  2. Audience: Publish app, or every sign-in dies after 7 days"
   say "  3. Clients: Create client, Desktop app, Create, Download JSON"
   say "Then run this again. It picks the JSON up from Downloads."
-  [ -n "$project" ] && open -g "https://console.cloud.google.com/auth/overview?project=$project" 2>/dev/null
+  [ -n "$project" ] && open -g "$url" 2>/dev/null
 }
 
 # The account a config is signed in as, from `gws auth status`. Needs no API

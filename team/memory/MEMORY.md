@@ -558,3 +558,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_ff_ready_check_explain_2026_11_08: FF readiness command per region, why batches go stale in 2h, explain 1583 and gates in plain words
 - feedback_text_guard_needs_index_backstop: command-text guards lose to script code; decisive check goes in pre-commit on the index with an explicit ALLOW_DELETES rule
 - project_google_sign_in_app_fresh_mac: fresh-Mac Google sign-in app: gws can't make the client, Publish needs a privacy link so it runs in Testing, chrome-js drives the console in one profile only (Gavin's Mac, 11/9)
+- feedback_ff_email1_be_real_2026_11_09: FF church email 1 per Gavin's 11/9 rewrite: first-person opener of what happened on their site, plain words (no REDES, no agentic), website plus the systems behind it, Durango Vineyard and staff at UPPERROOM Dallas, tagline under his name; 125 cap counts the footer

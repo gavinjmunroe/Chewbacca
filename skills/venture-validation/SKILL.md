@@ -93,6 +93,18 @@ show how they handle it now, what they love and hate about it, what they've
 tried, and whether they're looking for a replacement. Take notes with their
 exact words and mark the emotion.
 
+When he's running interviews live (friends in the room, Granola on), the
+reply is the question list and nothing else. Open on questions they can answer
+in two seconds, about a specific fact: "Who's your top artist right now, would
+your friends guess it?", "Who'd you last send a song to?" A broad memory
+question gets "I have no idea" and stalls the interview. On 2026-11-09 the
+SoundCheck opener "Last time music came up with your friends, what happened?"
+got exactly that, and Caleb wrote "1st questions are trash". Pitch a concept
+with one vivid example ("you're on PCH at sunset, what song?"), never an
+abstract description: the friend he was interviewing re-explained the scenario
+mode himself because the written one "explained it horribly". Ask questions one
+person at a time, because a second friend in earshot answers for them.
+
 Run at least 3 recorded 15 minute calls, 5 is better, and log every outreach.
 Set the bar before the calls, then score each call against it. The course's
 gate (A8) is that a majority of the team has a recorded conversation that

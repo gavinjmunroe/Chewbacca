@@ -72,6 +72,36 @@ grep -q "^$tmp/home/.config/gws auth login" "$tmp/gws.log" ||
   { echo "FAIL: a dead main sign-in was not re-consented"; cat "$tmp/gws.log"; fail=1; }
 [ -d "$tmp/home/.chewbacca/email/other@example.com" ] && { echo "FAIL: dead main left the add in a per-inbox copy"; fail=1; }
 
+# Behaviour, fresh Mac (Gavin's, 2026-11-09): gws 0.22.5 can't create the OAuth
+# client. With a Desktop client JSON in Downloads, add adopts it and signs the
+# never-signed-in main config in. Without one, it names the console steps for the
+# project gws set up and never starts a login.
+fresh="$tmp/fresh"; mkdir -p "$fresh/Downloads" "$fresh/Library/Logs"
+printf '#!/bin/bash\nexit 0\n' >"$tmp/bin/gcloud"; chmod +x "$tmp/bin/gcloud"
+cat >"$tmp/bin/gws" <<'EOF3'
+#!/bin/bash
+echo "$GOOGLE_WORKSPACE_CLI_CONFIG_DIR $*" >>"$FAKE_GWS_LOG"
+case "$1 $2" in
+  "auth setup") echo "https://console.cloud.google.com/apis/credentials/consent?project=proj-x"; exit 3 ;;
+  "auth status") echo '{}' ;;
+  "gmail users") exit 1 ;;
+  "auth login") echo "https://accounts.google.com/o/oauth2/auth?x=1"; exit 1 ;;
+esac
+EOF3
+: >"$tmp/gws.log"
+out=$(CHEWBACCA_GWS="$tmp/bin/gws" HOME="$fresh" CHEWBACCA_EMAIL_HOME="$fresh/.chewbacca/email" FAKE_GWS_LOG="$tmp/gws.log" \
+  PATH="$tmp/bin:$PATH" bash "$f" add new@example.com 2>&1)
+printf '%s' "$out" | grep -q 'Desktop app' || { echo "FAIL: a fresh Mac with no client JSON got no console steps: $out"; fail=1; }
+printf '%s' "$out" | grep -q 'project=proj-x' || { echo "FAIL: the console steps don't name the project gws set up: $out"; fail=1; }
+grep -q 'auth login' "$tmp/gws.log" && { echo "FAIL: a login started with no OAuth client"; fail=1; }
+echo '{"installed":{"client_id":"1-abc.apps.googleusercontent.com","project_id":"proj-x"}}' >"$fresh/Downloads/client_secret_1-abc.apps.googleusercontent.com.json"
+: >"$tmp/gws.log"
+CHEWBACCA_GWS="$tmp/bin/gws" HOME="$fresh" CHEWBACCA_EMAIL_HOME="$fresh/.chewbacca/email" FAKE_GWS_LOG="$tmp/gws.log" \
+  PATH="$tmp/bin:$PATH" bash "$f" add new@example.com >/dev/null 2>&1
+grep -q '1-abc' "$fresh/.config/gws/client_secret.json" 2>/dev/null || { echo "FAIL: the Downloads client JSON was not adopted"; fail=1; }
+grep -q 'auth setup' "$tmp/gws.log" && { echo "FAIL: setup ran again with a client JSON in Downloads"; fail=1; }
+grep -q "^$fresh/.config/gws auth login" "$tmp/gws.log" || { echo "FAIL: the first add didn't sign in the main config"; cat "$tmp/gws.log"; fail=1; }
+
 # The consent tab opens in the background, never in front of him (2026-10-22).
 grep -q 'open -g "$url' "$f" || { echo "FAIL: the consent tab no longer opens in the background"; fail=1; }
 

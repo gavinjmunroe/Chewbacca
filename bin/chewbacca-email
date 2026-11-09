@@ -47,7 +47,30 @@ ensure_gws() {
 client_secret() {
   [ -f "$DEFAULT_CFG/client_secret.json" ] && { echo "$DEFAULT_CFG/client_secret.json"; return 0; }
   for d in "$HOME_DIR"/*/; do [ -f "$d/client_secret.json" ] && { echo "$d/client_secret.json"; return 0; }; done
+  # gws 0.22.5 can't create the OAuth client itself, so on a fresh Mac the person
+  # makes a Desktop client in the Cloud console and downloads its JSON. Adopt the
+  # newest one in Downloads (Gavin's Mac, 2026-11-09).
+  local f
+  for f in $(ls -t "$HOME"/Downloads/client_secret_*.json 2>/dev/null); do
+    python3 -c 'import json,sys; c=json.load(open(sys.argv[1]))["installed"]; sys.exit(not c["client_id"].endswith(".apps.googleusercontent.com"))' "$f" 2>/dev/null || continue
+    mkdir -p "$DEFAULT_CFG" && chmod 700 "$DEFAULT_CFG" && cp "$f" "$DEFAULT_CFG/client_secret.json" &&
+      { echo "$DEFAULT_CFG/client_secret.json"; return 0; }
+  done
   return 1
+}
+
+# The console clicks gws can't do, with the project it just set up. Without
+# Publish, Testing status expires every sign-in after 7 days (see chewbacca-google).
+console_steps() {
+  local project
+  project=$(grep -o 'project=[A-Za-z0-9_-]*' "$1" 2>/dev/null | head -1 | cut -d= -f2)
+  [ -n "$project" ] || project=$(gcloud config get-value project 2>/dev/null)
+  say "Google won't let a CLI make the sign-in app, so this part is three clicks in the Cloud console:"
+  say "  1. https://console.cloud.google.com/auth/overview?project=$project  Get started: any app name, your email, audience External"
+  say "  2. Audience: Publish app, or every sign-in dies after 7 days"
+  say "  3. Clients: Create client, Desktop app, Create, Download JSON"
+  say "Then run this again. It picks the JSON up from Downloads."
+  [ -n "$project" ] && open -g "https://console.cloud.google.com/auth/overview?project=$project" 2>/dev/null
 }
 
 # The account a config is signed in as, from `gws auth status`. Needs no API
@@ -107,8 +130,11 @@ add() {
   if ! secret=$(client_secret); then
     command -v gcloud >/dev/null 2>&1 || brew install --cask google-cloud-sdk >/dev/null 2>&1
     say "First inbox on this Mac: setting up Google sign-in (a browser opens once for Google Cloud)..."
-    gws auth setup --login || { say "Google sign-in setup didn't finish."; return 1; }
-    secret=$(client_secret) || return 1
+    local setup_log="$HOME/Library/Logs/chewbacca-email-setup.log"
+    # Enables the APIs on gcloud's project, then stops at the OAuth client it
+    # can't create (exit 3, "requires manual setup in the Google Cloud Console").
+    gws auth setup </dev/null >"$setup_log" 2>&1
+    secret=$(client_secret) || { console_steps "$setup_log"; return 1; }
   fi
 
   # The main gws config (~/.config/gws) is the one `chewbacca google`, the Doc
@@ -121,8 +147,10 @@ add() {
   # still invalid_grant). A dead main gets re-consented by whichever add runs.
   local cfg="$HOME_DIR/$addr" backup="" main_user
   main_user=$(status_user "$DEFAULT_CFG")
-  if [ "$main_user" = "$addr" ] ||
-     { [ -z "$main_user" ] && [ -f "$DEFAULT_CFG/credentials.enc" ] && [ -z "$(whoami_in "$DEFAULT_CFG")" ]; }; then
+  # A main config that was never signed in takes the first add, since
+  # `gws auth setup --login` no longer signs it in on a fresh Mac.
+  if [ "$main_user" = "$addr" ] || [ ! -f "$DEFAULT_CFG/credentials.enc" ] ||
+     { [ -z "$main_user" ] && [ -z "$(whoami_in "$DEFAULT_CFG")" ]; }; then
     cfg="$DEFAULT_CFG"
     if [ -f "$cfg/credentials.enc" ]; then
       backup="$cfg/credentials.enc.before-reconsent"

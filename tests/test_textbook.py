@@ -44,6 +44,10 @@ def main() -> int:
                '---\ntitle: "One"\n---\n\n<!-- s. 1 Introduction -->\n\nopening\n\n'
                "<!-- s. 1.2 -->\n\n## 1.2 Norms\n\nanomie means normlessness\n\n"
                "<!-- s. 1 Key Terms -->\n\n- **folkway**: direction for everyday behavior\n")
+        (root / "texts" / "web-book" / "GLOSSARY.md").write_text(
+            "# Glossary: Web Book\n\n## 1. One\n\n- folkway: direction for everyday behavior\n")
+        (root / "texts" / "pdf-book" / "GLOSSARY.md").write_text(
+            "# Glossary: Paper Book\n\n## 1. One\n\n- kula: a ring of ceremonial exchange\n")
         env = {**os.environ, "COURSEWORK_DIR": str(root), "PYTHONDONTWRITEBYTECODE": "1"}
 
         books = run(env, "books")
@@ -64,6 +68,16 @@ def main() -> int:
 
         before = run(env, "--book", "web", "show", "01-one", "--at", "0", "--chars", "10")
         check("text before any marker is still p. ?", "(p. ?)" in before.stdout, before.stdout)
+
+        # A second book must not turn a bare search into "pass --book".
+        bare = run(env, "search", "kula")
+        check("a search with no --book still answers once two books exist",
+              bare.returncode == 0 and "(p. 71)" in bare.stdout, bare.stdout + bare.stderr)
+        check("a hit names its book when several were searched", "--book pdf-book" in bare.stdout,
+              bare.stdout)
+        term = run(env, "glossary", "folkway")
+        check("a glossary lookup with no --book searches every book",
+              term.returncode == 0 and "Web Book, 1. One" in term.stdout, term.stdout + term.stderr)
     return 1 if failed else 0
 
 

@@ -60,6 +60,16 @@ def resolve(name: str | None) -> Path:
     return matches[0]
 
 
+def targets(name: str | None) -> list[Path]:
+    """Every book when none is named, so search and glossary keep answering once a
+    second book lands. With two corpora ingested (2026-10-30), resolve() turned a
+    bare `textbook search kula` into "more than one book" and nothing else."""
+    found = books()
+    if name is None and len(found) > 1:
+        return found
+    return [resolve(name)]
+
+
 def meta(book: Path) -> dict:
     return json.loads((book / "book.json").read_text())
 
@@ -113,30 +123,32 @@ def cmd_toc(args: argparse.Namespace) -> int:
 
 
 def cmd_search(args: argparse.Namespace) -> int:
-    book = resolve(args.book)
+    shelf = targets(args.book)
     try:
         pattern = re.compile(args.query if args.regex else re.escape(args.query), re.I)
     except re.error as exc:
         sys.exit(f"bad pattern: {exc}")
 
-    paths = chapters(book, args.chapter)
+    paths = [(book, path) for book in shelf for path in chapters(book, args.chapter)]
     if not paths:
         sys.exit(f"no chapter matching {args.chapter!r}; try `textbook toc`")
 
     hits = 0
-    for path in paths:
+    for book, path in paths:
         text = path.read_text()
         title = title_of(text, path.stem)
+        # Named, so `show` can be pointed at the right book when several answered.
+        which = f"  --book {book.name}" if len(shelf) > 1 else ""
         for match in pattern.finditer(text):
             if hits >= args.limit:
-                print(f"\nstopped at {args.limit} hits; narrow with --chapter or raise --limit")
+                print(f"\nstopped at {args.limit} hits; narrow with --book, --chapter or raise --limit")
                 return 0
             hits += 1
             start = max(0, match.start() - WINDOW // 2)
             passage = PLACE_MARK.sub("", text[start:match.start() + WINDOW // 2])
             passage = " ".join(passage.split())
             print(f"\n{title}  ({place_at(text, match.start())})")
-            print(f"  {path.stem}  --at {match.start()}")
+            print(f"  {path.stem}  --at {match.start()}{which}")
             print(f"  ...{passage}...")
     print("\nno matches" if not hits else f"\n{hits} hits")
     return 0
@@ -157,23 +169,27 @@ def cmd_show(args: argparse.Namespace) -> int:
 
 
 def cmd_glossary(args: argparse.Namespace) -> int:
-    book = resolve(args.book)
-    path = book / "GLOSSARY.md"
-    if not path.exists():
-        sys.exit(f"no glossary in {book.name}")
-    lines = path.read_text().splitlines()
     if not args.term:
-        print("\n".join(lines))
+        book = resolve(args.book)
+        path = book / "GLOSSARY.md"
+        if not path.exists():
+            sys.exit(f"no glossary in {book.name}")
+        print(path.read_text())
         return 0
+    shelf = [b for b in targets(args.book) if (b / "GLOSSARY.md").exists()]
+    if not shelf:
+        sys.exit("no glossary in " + ", ".join(b.name for b in targets(args.book)))
     pattern = re.compile(re.escape(args.term), re.I)
-    chapter = ""
     hits = 0
-    for line in lines:
-        if line.startswith("## "):
-            chapter = line[3:]
-        elif line.startswith("- ") and pattern.search(line):
-            hits += 1
-            print(f"\n{chapter}\n  {line[2:]}")
+    for book in shelf:
+        prefix = f"{meta(book)['title']}, " if len(shelf) > 1 else ""
+        chapter = ""
+        for line in (book / "GLOSSARY.md").read_text().splitlines():
+            if line.startswith("## "):
+                chapter = line[3:]
+            elif line.startswith("- ") and pattern.search(line):
+                hits += 1
+                print(f"\n{prefix}{chapter}\n  {line[2:]}")
     print("\nno matches" if not hits else f"\n{hits} entries")
     return 0
 

@@ -94,7 +94,11 @@ def corrections(transcript):
                 ev = transcript_rows.as_user_row(json.loads(line))
             except ValueError:
                 continue
-            if ev.get("type") != "user":
+            # isMeta rows are harness text in a user row: Stop hook feedback
+            # opens "Stop hook feedback:", which matched "stop ". On 2026-11-09
+            # all five "corrections" in one session were hook feedback and
+            # none were his, so the turn was refused for lessons nobody taught.
+            if ev.get("type") != "user" or ev.get("isMeta"):
                 continue
             msg = ev.get("message", {})
             content = msg.get("content", msg) if isinstance(msg, dict) else msg

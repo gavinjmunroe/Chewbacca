@@ -58,6 +58,15 @@ assert kd.main() == 0, "should clear once this session wrote a skill"
 t.write_text(json.dumps({"type": "user", "message": {"content": "make it blue"}}))
 kd.session_taught = lambda s: False
 assert kd.main() == 0, "a session with no corrections owes nothing on that count"
+# 2026-11-09: Stop hook feedback is an isMeta user row that opens "Stop hook
+# feedback:", and it was counted as him saying "stop ".
+t.write_text("\n".join(json.dumps(e) for e in [
+    {"type": "user", "isMeta": True, "message": {"content": "Stop hook feedback:\n[prayer-guard.sh]: 4 visible blocks"}},
+    {"type": "user", "isMeta": True, "message": {"content": "Stop hook feedback:\n[handoff-guard.sh]: handoff-check"}},
+    {"type": "user", "message": {"content": "turn off the always praying feature"}},
+]))
+assert kd.corrections(str(t)) == 0, kd.corrections(str(t))
+assert kd.main() == 0, "hook feedback alone must not owe a lesson"
 print("LOGIC_OK")
 PY
 if [ $? -eq 0 ]; then ok "fires when owed, quiet when clear"; else no "logic wrong"; fi
